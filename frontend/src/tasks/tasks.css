@@ -2056,3 +2056,99 @@
   font-size: 0.8rem;
   color: var(--color-text-secondary);
 }
+
+/* ── Right-side edit drawer ──────────────────────────────────────────
+   Clicking an item's name on a drawer-enabled board (User Stories,
+   Tickets) opens its edit form here instead of the centered modal. A
+   dim overlay keeps the list visible behind it (matching the reference
+   detail panel) and catches outside clicks to close. */
+.task-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgb(15, 23, 42, 0.28);
+}
+
+.task-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  width: min(460px, 92vw);
+  height: 100%;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border);
+  box-shadow: -12px 0 32px rgb(15, 23, 42, 0.18);
+  animation: task-drawer-in 0.16s ease-out;
+}
+
+@keyframes task-drawer-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.task-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.task-drawer-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.task-drawer-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.task-drawer-expand,
+.task-drawer-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-sm, 8px);
+  background: none;
+  color: var(--color-text-muted);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.task-drawer-expand {
+  font-size: 18px;
+}
+
+.task-drawer-close {
+  font-size: 22px;
+}
+
+.task-drawer-expand:hover,
+.task-drawer-close:hover {
+  background: var(--color-surface-hover, var(--color-primary-soft));
+  color: var(--color-text-primary);
+}
+
+.task-drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px;
+}

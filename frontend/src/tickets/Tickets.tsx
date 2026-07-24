@@ -34,7 +34,9 @@ const TICKETS_CONFIG: TasksConfig = {
     aiFix: true,
   },
   storageKey: "tickets",
-  // Clicking a ticket opens its own page (see TicketDetail) instead of a modal.
+  // Name click opens the ticket in a right-side drawer; Edit (and deep links)
+  // opens its full page (see TicketDetail).
+  detailDrawer: true,
   detailPath: (id) => `/tickets/${id}`,
   labels: {
     title: "Tickets",

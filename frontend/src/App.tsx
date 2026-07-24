@@ -43,6 +43,7 @@ const ComingSoon = lazy(() => import("./components/ComingSoon"));
 const NotFound = lazy(() => import("./components/NotFound"));
 const Reminders = lazy(() => import("./reminders/Reminders"));
 const TicketDetail = lazy(() => import("./tickets/TicketDetail"));
+const StoryDetail = lazy(() => import("./userstories/StoryDetail"));
 const Profile = lazy(() => import("./profile/Profile"));
 const Settings = lazy(() => import("./profile/Settings"));
 const Integrations = lazy(() => import("./integrations/Integrations"));
@@ -245,6 +246,11 @@ export default function App() {
               {/* A single ticket opens on its own page (Tickets board routes here
                   via config.detailPath) instead of the edit modal. */}
               <Route path="/tickets/:id" element={<TicketDetail />} />
+
+              {/* A single user story opens on its own page (User Stories board
+                  routes here via config.detailPath) when Edit is clicked; a name
+                  click opens the in-page drawer instead. */}
+              <Route path="/user-stories/:id" element={<StoryDetail />} />
 
               <Route path="/home" element={redirectToAccountHome ?? <Home />} />
               <Route
