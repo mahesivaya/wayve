@@ -1,0 +1,1 @@
+Throwaway file to verify the pr-notify workflow emails on PR open. Safe to delete.
