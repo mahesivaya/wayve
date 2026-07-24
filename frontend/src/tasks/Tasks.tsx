@@ -69,6 +69,19 @@ const formatCreatedAt = (value: string | null | undefined): string => {
   });
 };
 
+// Date only (no time), for the table's Created column. "" when unparseable so
+// the cell shows a dash.
+const formatCreatedDate = (value: string | null | undefined): string => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+};
+
 const normalizePriority = (value: unknown): TaskPriority => {
   const n = Number(value);
   if (n === 1 || n === 2 || n === 3 || n === 4 || n === 5) return n;
@@ -478,7 +491,15 @@ export default function Tasks({
   });
   // The status, priority and date filters combine, and apply to both the list
   // and the board.
-  const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all");
+  // Status filter is multi-select: an empty list means "all statuses", any
+  // entries mean "only these". Priority/date stay single-choice.
+  const [statusFilter, setStatusFilter] = useState<TaskStatus[]>([]);
+  const toggleStatusFilter = (slug: TaskStatus) =>
+    setStatusFilter((prev) =>
+      prev.includes(slug)
+        ? prev.filter((s) => s !== slug)
+        : [...prev, slug]
+    );
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "all">(
     "all"
   );
@@ -491,13 +512,15 @@ export default function Tasks({
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // The status multi-select is collapsed behind a dropdown inside the popover.
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const filtersRef = useRef<HTMLDivElement>(null);
   const activeFilterCount =
-    (statusFilter !== "all" ? 1 : 0) +
+    (statusFilter.length > 0 ? 1 : 0) +
     (priorityFilter !== "all" ? 1 : 0) +
     (dateMode !== "any" ? 1 : 0);
   const clearFilters = () => {
-    setStatusFilter("all");
+    setStatusFilter([]);
     setPriorityFilter("all");
     setDateMode("any");
     setDateFrom("");
@@ -505,6 +528,21 @@ export default function Tasks({
   };
   // Column hovered during a drag, for the drop-target highlight.
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
+  // Table-view (☰) column sort. `null` keeps the default order (priority, then
+  // oldest first). Clicking a sortable header sets the key and toggles asc/desc.
+  const [sortKey, setSortKey] = useState<
+    "created" | "assignee" | "priority" | "status" | null
+  >(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const toggleSort = (key: "created" | "assignee" | "priority" | "status") => {
+    if (sortKey !== key) {
+      setSortKey(key);
+      // Priority reads most-useful high→low first; the rest read A→Z / oldest.
+      setSortDir(key === "priority" ? "desc" : "asc");
+      return;
+    }
+    setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+  };
 
   // Close the Filters popover on outside click or Escape.
   useEffect(() => {
@@ -1077,7 +1115,7 @@ export default function Tasks({
     () =>
       visibleTasks.filter(
         (t) =>
-          (statusFilter === "all" || t.status === statusFilter) &&
+          (statusFilter.length === 0 || statusFilter.includes(t.status)) &&
           (priorityFilter === "all" || t.priority === priorityFilter) &&
           inDateRange(t)
       ),
@@ -1207,6 +1245,262 @@ export default function Tasks({
     }
   };
 
+  // The list view (☰) renders as an aligned, column-based table on the full
+  // page — the same shape a logs/observability table has: header row, one row
+  // per item, subtle dividers and per-row hover. A split pane is too narrow for
+  // columns, so it keeps the stacked cards + inline expand. Grid view (⊞) keeps
+  // the card layout.
+  const useTable = view === "list" && !inSplitPane;
+  // The Assignee column is a team feature; personal boards drop it (and its
+  // grid column) entirely.
+  const showAssignee = !isPersonal;
+  const tableCols = showAssignee
+    ? "124px minmax(0, 1fr) 176px 64px 168px 128px"
+    : "124px minmax(0, 1fr) 64px 168px 128px";
+
+  // The team member behind a task's assignee email, for the Assignee column.
+  // Falls back to the raw stored value (silhouette avatar) when it isn't a
+  // known member, and null when unassigned.
+  const assigneeInfo = (
+    task: Task
+  ): { name: string; userId: number | null } | null => {
+    const email = (task.assignee ?? "").trim();
+    if (!email) return null;
+    const match = assignableUsers.find(
+      (u) => u.email.toLowerCase() === email.toLowerCase()
+    );
+    return {
+      name: match?.username || email,
+      userId: match?.user_id ?? task.assignee_id ?? null,
+    };
+  };
+
+  // Applies the active column sort to a table row list. A stable base order is
+  // assumed (the caller passes the already-sorted active/completed lists), so an
+  // equal comparison preserves it.
+  const sortForTable = (list: Task[]): Task[] => {
+    if (!sortKey) return list;
+    const dir = sortDir === "asc" ? 1 : -1;
+    const keyOf = (t: Task): string | number => {
+      switch (sortKey) {
+        case "created":
+          return new Date(t.created_at ?? 0).getTime();
+        case "priority":
+          return t.priority;
+        case "assignee":
+          return (assigneeInfo(t)?.name ?? "").toLowerCase();
+        case "status":
+          return lookupStatus(t.status).name.toLowerCase();
+      }
+    };
+    return [...list].sort((a, b) => {
+      const va = keyOf(a);
+      const vb = keyOf(b);
+      if (va < vb) return -dir;
+      if (va > vb) return dir;
+      return 0;
+    });
+  };
+
+  // Direction glyph for a header: a faint up/down when inactive, a solid arrow
+  // for the active column.
+  const sortArrow = (key: "created" | "assignee" | "priority" | "status") => {
+    if (sortKey !== key) return "↕";
+    return sortDir === "asc" ? "↑" : "↓";
+  };
+
+  const sortHeader = (
+    key: "created" | "assignee" | "priority" | "status",
+    label: string,
+    extra = ""
+  ) => (
+    <button
+      type="button"
+      className={`task-th task-th--sort${extra ? ` ${extra}` : ""}${
+        sortKey === key ? " is-active" : ""
+      }`}
+      onClick={() => toggleSort(key)}
+      aria-label={`Sort by ${label.toLowerCase()}${
+        sortKey === key
+          ? sortDir === "asc"
+            ? " (ascending)"
+            : " (descending)"
+          : ""
+      }`}
+    >
+      {label}
+      <span className="task-th-arrow" aria-hidden="true">
+        {sortArrow(key)}
+      </span>
+    </button>
+  );
+
+  // The table's column headers, reused above the active and completed rows.
+  const tableHead = (
+    <div className="task-thead" role="row">
+      {sortHeader("created", "Created", "task-th--created")}
+      <div className="task-th task-th--title">{config.labels.singular}</div>
+      {showAssignee && sortHeader("assignee", "Assignee", "task-th--assignee")}
+      {sortHeader("priority", "Priority", "task-th--center")}
+      {sortHeader("status", "Status")}
+      <div className="task-th task-th--actions" />
+    </div>
+  );
+
+  // One table row. `completed` dims the row and strikes the title, mirroring the
+  // completed-card treatment.
+  const renderRow = (task: Task, completed: boolean) => {
+    const who = showAssignee ? assigneeInfo(task) : null;
+    const st = lookupStatus(task.status);
+    return (
+      <div
+        key={task.id}
+        className={`task-trow${completed ? " task-trow--completed" : ""}`}
+        role="row"
+      >
+        <div className="task-tcell task-tcell--created">
+          {formatCreatedDate(task.created_at) || "—"}
+        </div>
+
+        <div className="task-tcell task-tcell--title">
+          <TaskKeyBadge
+            value={taskKey(task)}
+            tooltip={config.labels.numberBadgeTooltip}
+          />
+          <button
+            type="button"
+            className="task-card-title-link task-trow-title"
+            onClick={() => openEdit(task)}
+            data-tooltip={`Open ${config.labels.lowerSingular} details`}
+          >
+            {task.name}
+          </button>
+          <TaskBadge kind={task.badge_kind} />
+          <JiraBadge task={task} />
+          <GitlabBadge task={task} />
+          <CopyLinkButton
+            copied={copiedTaskId === task.id}
+            onCopy={() => copyTaskLink(task)}
+            label={task.name}
+          />
+        </div>
+
+        {showAssignee && (
+          <div className="task-tcell task-tcell--assignee">
+            {who ? (
+              <>
+                <Avatar
+                  name={who.name}
+                  src={
+                    who.userId
+                      ? `${getApiBase()}/api/users/${who.userId}/avatar`
+                      : undefined
+                  }
+                  size={22}
+                />
+                <span className="task-trow-assignee-name">{who.name}</span>
+              </>
+            ) : (
+              <span className="task-trow-muted">Unassigned</span>
+            )}
+          </div>
+        )}
+
+        <div className="task-tcell task-tcell--priority">
+          <span
+            className={`task-priority-badge priority-${task.priority}`}
+            data-tooltip={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
+          >
+            P{task.priority}
+          </span>
+        </div>
+
+        <div className="task-tcell task-tcell--status">
+          <TaskStatusIcon category={st.category} color={st.color} />
+          <select
+            className="task-status-select"
+            style={{
+              borderColor: st.color,
+              color: st.color,
+              backgroundColor: `${st.color}1a`,
+            }}
+            value={task.status}
+            onChange={(event) =>
+              void changeStatus(task, event.target.value as TaskStatus)
+            }
+            aria-label={`Status of ${task.name}`}
+          >
+            {statusRows.map((row) => (
+              <option key={row.id} value={row.slug}>
+                {row.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="task-tcell task-tcell--actions">
+          <button
+            type="button"
+            className="task-edit-btn"
+            onClick={() => openEdit(task)}
+            aria-label={`Edit ${task.name}`}
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            className="task-delete-btn"
+            onClick={() => deleteTask(task)}
+            aria-label={`Delete ${task.name}`}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // Loading / error / empty states, shared by the table and card layouts. Null
+  // means "render the actual rows".
+  const listPlaceholder = loading ? (
+    <div className="tasks-empty">
+      <strong>{`Loading ${config.labels.lowerPlural}…`}</strong>
+    </div>
+  ) : loadError ? (
+    <div className="tasks-empty">
+      <strong>{`Couldn't load ${config.labels.lowerPlural}`}</strong>
+      <span>{loadError}</span>
+      <button
+        type="button"
+        className="task-edit-btn"
+        onClick={() => void loadTasks()}
+      >
+        Try again
+      </button>
+    </div>
+  ) : filteredTasks.length === 0 ? (
+    <div className="tasks-empty">
+      <strong>
+        {tasks.length === 0
+          ? `No ${config.labels.lowerPlural} yet`
+          : `No matching ${config.labels.lowerPlural}`}
+      </strong>
+      <span>
+        {tasks.length === 0
+          ? `Use ${config.labels.createButton} to add your first ${config.labels.lowerSingular}.`
+          : "Try a different search term."}
+      </span>
+    </div>
+  ) : activeTasks.length === 0 ? (
+    <div className="tasks-empty">
+      <strong>All caught up</strong>
+      <span>
+        Every {config.labels.lowerSingular} is done. See the completed section
+        below.
+      </span>
+    </div>
+  ) : null;
+
   return (
     <div className={`tasks-app${isPersonal ? " tasks-app--personal" : ""}`}>
       <main className="tasks-main">
@@ -1257,7 +1551,10 @@ export default function Tasks({
                     aria-expanded={filtersOpen}
                     data-tooltip={config.labels.filtersTooltip}
                   >
-                    <span aria-hidden="true">⌄</span> Filters
+                    <span className="tasks-filters-caret" aria-hidden="true">
+                      ⌄
+                    </span>
+                    <span>Filters</span>
                     {activeFilterCount > 0 && (
                       <span className="tasks-filters-badge">
                         {activeFilterCount}
@@ -1270,25 +1567,75 @@ export default function Tasks({
                       role="dialog"
                       aria-label={config.labels.filtersAria}
                     >
-                      <label className="tasks-filter-row">
+                      <div className="tasks-filter-row">
                         <span>Status</span>
-                        <select
-                          value={statusFilter}
-                          onChange={(e) =>
-                            setStatusFilter(
-                              e.target.value as TaskStatus | "all"
-                            )
-                          }
-                          aria-label="Filter by status"
-                        >
-                          <option value="all">All statuses</option>
-                          {statusRows.map((row) => (
-                            <option key={row.id} value={row.slug}>
-                              {row.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                        <div className="tasks-filter-dropdown">
+                          <button
+                            type="button"
+                            className="tasks-filter-dropdown-btn"
+                            onClick={() =>
+                              setStatusMenuOpen((open) => !open)
+                            }
+                            aria-haspopup="true"
+                            aria-expanded={statusMenuOpen}
+                          >
+                            <span className="tasks-filter-dropdown-value">
+                              {statusFilter.length === 0
+                                ? "All statuses"
+                                : statusFilter.length === 1
+                                  ? lookupStatus(statusFilter[0]).name
+                                  : `${statusFilter.length} selected`}
+                            </span>
+                            <span
+                              className="tasks-filter-dropdown-caret"
+                              aria-hidden="true"
+                            >
+                              ⌄
+                            </span>
+                          </button>
+                          {statusMenuOpen && (
+                            <div className="tasks-filter-menu">
+                              <div
+                                className="tasks-filter-checks"
+                                role="group"
+                                aria-label="Filter by status"
+                              >
+                                {statusRows.map((row) => (
+                                  <label
+                                    key={row.id}
+                                    className="tasks-filter-check"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={statusFilter.includes(row.slug)}
+                                      onChange={() =>
+                                        toggleStatusFilter(row.slug)
+                                      }
+                                    />
+                                    <span
+                                      className="tss-dot"
+                                      style={{ background: row.color }}
+                                      aria-hidden="true"
+                                    />
+                                    <span className="tasks-filter-check-name">
+                                      {row.name}
+                                    </span>
+                                  </label>
+                                ))}
+                              </div>
+                              {statusFilter.length > 0 && (
+                                <button
+                                  type="button"
+                                  className="tasks-filter-multi-clear"
+                                  onClick={() => setStatusFilter([])}
+                                >
+                                  Clear selection
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                       <label className="tasks-filter-row">
                         <span>Priority</span>
                         <select
@@ -1987,45 +2334,23 @@ export default function Tasks({
           )
         ) : (
           <>
-            <div className={`task-list task-list--${view}`}>
-              {loading ? (
-                <div className="tasks-empty">
-                  <strong>{`Loading ${config.labels.lowerPlural}…`}</strong>
+            {useTable ? (
+              listPlaceholder ?? (
+                <div
+                  className="task-table"
+                  style={{ "--task-cols": tableCols } as React.CSSProperties}
+                  role="table"
+                >
+                  {tableHead}
+                  {sortForTable(activeTasks).map((task) =>
+                    renderRow(task, false)
+                  )}
                 </div>
-              ) : loadError ? (
-                <div className="tasks-empty">
-                  <strong>{`Couldn't load ${config.labels.lowerPlural}`}</strong>
-                  <span>{loadError}</span>
-                  <button
-                    type="button"
-                    className="task-edit-btn"
-                    onClick={() => void loadTasks()}
-                  >
-                    Try again
-                  </button>
-                </div>
-              ) : filteredTasks.length === 0 ? (
-                <div className="tasks-empty">
-                  <strong>
-                    {tasks.length === 0
-                      ? `No ${config.labels.lowerPlural} yet`
-                      : `No matching ${config.labels.lowerPlural}`}
-                  </strong>
-                  <span>
-                    {tasks.length === 0
-                      ? `Use ${config.labels.createButton} to add your first ${config.labels.lowerSingular}.`
-                      : "Try a different search term."}
-                  </span>
-                </div>
-              ) : activeTasks.length === 0 ? (
-                <div className="tasks-empty">
-                  <strong>All caught up</strong>
-                  <span>
-                    Every task is done. See the Completed tasks section below.
-                  </span>
-                </div>
-              ) : (
-                activeTasks.map((task) => {
+              )
+            ) : (
+              <div className={`task-list task-list--${view}`}>
+                {listPlaceholder ??
+                  activeTasks.map((task) => {
                   const expanded = inSplitPane && expandedId === task.id;
                   return (
                     <article
@@ -2131,20 +2456,32 @@ export default function Tasks({
                       )}
                     </article>
                   );
-                })
-              )}
-            </div>
+                })}
+              </div>
+            )}
 
             {!loading && !loadError && completedTasks.length > 0 && (
               <section className="task-completed-section">
                 <h3 className="task-completed-title">
-                  Completed tasks
+                  Completed
                   <span className="task-completed-count">
                     {completedTasks.length}
                   </span>
                 </h3>
-                <div className={`task-list task-list--${view}`}>
-                  {completedTasks.map((task) => (
+                {useTable ? (
+                  <div
+                    className="task-table"
+                    style={{ "--task-cols": tableCols } as React.CSSProperties}
+                    role="table"
+                  >
+                    {tableHead}
+                    {sortForTable(completedTasks).map((task) =>
+                      renderRow(task, true)
+                    )}
+                  </div>
+                ) : (
+                  <div className={`task-list task-list--${view}`}>
+                    {completedTasks.map((task) => (
                     <article
                       key={task.id}
                       className="task-card task-card--completed"
@@ -2206,7 +2543,8 @@ export default function Tasks({
                       </div>
                     </article>
                   ))}
-                </div>
+                  </div>
+                )}
               </section>
             )}
           </>
