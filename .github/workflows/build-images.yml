@@ -69,24 +69,23 @@ jobs:
           REG="${{ steps.ecr.outputs.registry }}/${{ matrix.repo }}"
           echo "tags=$REG:$SHA" >> "$GITHUB_OUTPUT"
 
-      # Persist the backend's BuildKit cache mounts (cargo registry/git +
-      # the workspace target dir) across runs. type=gha caches image LAYERS
-      # but NOT `RUN --mount=type=cache` dirs, so without this a backend code
-      # change = full recompile (~15 min). The dance extracts these dirs from
-      # the gha cache before the build and injects them back after, keeping
-      # incremental Rust builds ~3-5 min. No-op for the frontend (npm deps are
-      # already covered by layer cache).
-      - name: Restore/save Rust build caches
+      # Persist only the cargo DEPENDENCY caches (registry + git) across runs.
+      # type=gha caches image LAYERS but NOT `RUN --mount=type=cache` dirs, so
+      # this keeps dep downloads warm. We deliberately DO NOT persist the compiled
+      # `/app/target` dir: sharing it across commits let incremental cargo reuse
+      # stale artifacts, so a frontend-only push (which still rebuilds the backend
+      # image and tags it with the new SHA) could bake an OLD backend binary —
+      # shipping code that predates the latest backend commit. Recompiling the
+      # workspace from source every run is slower but makes the SHA-tagged image
+      # always match its source. No-op for the frontend (npm deps are covered by
+      # layer cache).
+      - name: Restore/save Rust dependency caches
         uses: reproducible-containers/buildkit-cache-dance@v3
         with:
           cache-map: |
             {
               "cargo-registry": "/usr/local/cargo/registry",
-              "cargo-git": "/usr/local/cargo/git",
-              "cargo-target": {
-                "target": "/app/target",
-                "id": "rwayve-workspace-target-v1"
-              }
+              "cargo-git": "/usr/local/cargo/git"
             }
           skip-extraction: ${{ matrix.name != 'backend' }}
 
