@@ -1070,6 +1070,54 @@ pub async fn open_ai_fix_pr(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "pr_url": pr_url })))
 }
 
+#[derive(serde::Deserialize)]
+pub struct PrNotifyInput {
+    number: i64,
+    title: String,
+    url: String,
+    #[serde(default)]
+    author: String,
+    #[serde(default)]
+    branch: String,
+}
+
+/// POST /pr-notify — email the platform mailbox that a pull request was opened.
+/// Called by the `pr-notify` CI workflow for every PR (it excludes `ai-fix/*`
+/// branches, which `open_ai_fix_pr` already emails), authenticated with an
+/// internal API key. GitHub never emails you about PRs your own token opened, so
+/// this is what actually delivers the "new PR" notification. Gated with the
+/// un-downscoped platform check because API keys are forced to Normal mode.
+#[post("/pr-notify")]
+#[instrument(target = "http", skip(req, pool, body))]
+pub async fn pr_notify(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    body: web::Json<PrNotifyInput>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    if !can_manage_bug_tickets_service(pool.get_ref(), user_id).await {
+        return Err(AppError::Forbidden);
+    }
+    // The platform SMTP `from` is the owner's own mailbox — send the notice there.
+    let smtp = crate::config::smtp().map_err(AppError::internal)?;
+    let author = if body.author.is_empty() {
+        "unknown"
+    } else {
+        &body.author
+    };
+    let subject = format!("New PR #{}: {}", body.number, body.title);
+    let text = format!(
+        "A new pull request was opened on the repository.\n\n\
+         #{} {}\nBy: {}\nBranch: {}\n\n{}\n",
+        body.number, body.title, author, body.branch, body.url
+    );
+    if let Err(e) = crate::email::sender::send_mail(&smtp.from, &subject, &text).await {
+        warn!(target: "worker", error = ?e, pr = body.number, "pr-notify email failed");
+        return Ok(HttpResponse::BadGateway().json(serde_json::json!({ "sent": false })));
+    }
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "sent": true })))
+}
+
 #[post("/workspace-tickets")]
 #[instrument(target = "http", skip(req, pool, data))]
 pub async fn create_ticket(

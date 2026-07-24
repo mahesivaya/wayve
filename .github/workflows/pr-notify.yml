@@ -1,0 +1,54 @@
+name: PR Notify
+
+# Emails the platform owner whenever a pull request is opened. GitHub does not
+# notify you about PRs your own token/account opened, so this is what actually
+# delivers a "new PR" email. It posts to the backend (POST /api/pr-notify), which
+# sends the mail via the app's own SMTP — no mail credentials live in GitHub.
+#
+# AI-fix PRs (head branch `ai-fix/ticket-*`) are skipped here because the backend
+# already emails the actor from `open_ai_fix_pr` with richer, in-app context.
+#
+# Setup (repository secrets, already present for the AI-fix pipeline):
+#   - WAYVE_BASE_URL  e.g. https://fluxze.com
+#   - WAYVE_API_KEY   an internal API key mapped to a platform tickets:manage user
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  notify:
+    if: ${{ !startsWith(github.event.pull_request.head.ref, 'ai-fix/ticket-') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Email the owner via the app SMTP
+        env:
+          BASE_URL: ${{ secrets.WAYVE_BASE_URL }}
+          API_KEY: ${{ secrets.WAYVE_API_KEY }}
+          # Passed via env (not inline) so a crafted PR title can't inject shell.
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE_URL:-}" ] || [ -z "${API_KEY:-}" ]; then
+            echo "WAYVE_BASE_URL / WAYVE_API_KEY not configured; skipping."
+            exit 0
+          fi
+          jq -n \
+            --argjson number "$PR_NUMBER" \
+            --arg title "$PR_TITLE" \
+            --arg url "$PR_URL" \
+            --arg author "$PR_AUTHOR" \
+            --arg branch "$PR_BRANCH" \
+            '{number:$number, title:$title, url:$url, author:$author, branch:$branch}' \
+          | curl -fsS -X POST "$BASE_URL/api/pr-notify" \
+              -H "X-API-KEY: $API_KEY" \
+              -H "Content-Type: application/json" \
+              --data @-
+          echo "Notified owner of PR #$PR_NUMBER"

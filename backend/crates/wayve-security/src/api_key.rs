@@ -163,7 +163,7 @@ pub fn required_scope(method: &str, path: &str) -> Option<&'static str> {
         // ai-fix-diff) authenticate with an internal management key; the handlers
         // then enforce tickets:manage on the key's user.
         "admin" | "keys" | "audit" | "organizations" | "platform" | "billing" | "v1"
-        | "workspace-tickets" => "admin",
+        | "workspace-tickets" | "pr-notify" => "admin",
         _ => return None,
     };
     Some(scope)
