@@ -1,7 +1,9 @@
 //! AI usage and cost governance, backed by per-turn metering from
-//! `ai_usage_events`. Every query is owner-scoped, so an org sees only its own
-//! rows and the platform dashboard sees platform-scope rows. Gated by
-//! `require_ai_owner`, like the config endpoints.
+//! `ai_usage_events`. An org owner sees only its own rows; the platform owner
+//! sees the whole website (site-wide totals) plus a per-tenant breakdown
+//! (`by_scope`: personal users, each organization, the platform team,
+//! unattributed) and the platform team member list (`platform_members`). Gated
+//! by `require_ai_owner`, like the config endpoints.
 
 use crate::ai::config_handler::{AiOwner, require_ai_owner};
 use crate::prelude::*;
@@ -48,6 +50,11 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         AiOwner::Org(org_id) => Some(org_id),
         AiOwner::Platform => None,
     };
+    // The platform owner sees the whole website (every tenant); an org owner stays
+    // scoped to its own rows. `site_wide` short-circuits the scope predicate below
+    // so the platform dashboard's totals/models cover all usage, not just
+    // platform-scope events.
+    let site_wide = matches!(owner, AiOwner::Platform);
 
     let totals = sqlx::query(
         "SELECT
@@ -58,9 +65,10 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
            COUNT(DISTINCT user_id)::bigint        AS active_users
          FROM ai_usage_events
         WHERE created_at >= NOW() - INTERVAL '30 days'
-          AND (($1::int IS NULL AND organization_id IS NULL) OR organization_id = $1)",
+          AND ($2::bool OR (($1::int IS NULL AND organization_id IS NULL) OR organization_id = $1))",
     )
     .bind(scope)
+    .bind(site_wide)
     .fetch_one(pool.get_ref())
     .await?;
     let requests: i64 = totals.get("requests");
@@ -82,11 +90,12 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
            LEFT JOIN ai_usage_events e
              ON e.created_at >= d.day
             AND e.created_at <  d.day + INTERVAL '1 day'
-            AND (($1::int IS NULL AND e.organization_id IS NULL) OR e.organization_id = $1)
+            AND ($2::bool OR (($1::int IS NULL AND e.organization_id IS NULL) OR e.organization_id = $1))
           GROUP BY d.day
           ORDER BY d.day",
     )
     .bind(scope)
+    .bind(site_wide)
     .fetch_all(pool.get_ref())
     .await?
     .iter()
@@ -106,12 +115,13 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
                 COALESCE(SUM(cost_micro_cents), 0)::bigint AS cost_micro
            FROM ai_usage_events
           WHERE created_at >= NOW() - INTERVAL '30 days'
-            AND (($1::int IS NULL AND organization_id IS NULL) OR organization_id = $1)
+            AND ($2::bool OR (($1::int IS NULL AND organization_id IS NULL) OR organization_id = $1))
           GROUP BY model
           ORDER BY tokens DESC
           LIMIT 10",
     )
     .bind(scope)
+    .bind(site_wide)
     .fetch_all(pool.get_ref())
     .await?
     .iter()
@@ -157,6 +167,118 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     })
     .collect();
 
+    // Platform-owner only: a site-wide breakdown of "complete website usage" by
+    // tenant scope — all personal users summed, each organization, the platform
+    // team, and any usage not attributed to a live user. Categorized by the
+    // *user's* identity (org membership / platform membership), because an event's
+    // `organization_id` is only set when the org runs its own AI config, so it
+    // can't distinguish personal vs platform-team usage on its own. The platform
+    // team is also listed member by member.
+    let mut by_scope: Vec<Value> = Vec::new();
+    let mut platform_members: Vec<Value> = Vec::new();
+    if site_wide {
+        // personal / platform / unattributed category totals in one pass.
+        let cats = sqlx::query(
+            "SELECT CASE
+                      WHEN e.user_id IS NULL       THEN 'unattributed'
+                      WHEN pm.user_id IS NOT NULL  THEN 'platform'
+                      WHEN u.organization_id IS NOT NULL THEN 'organization'
+                      ELSE 'personal'
+                    END                                  AS category,
+                    COALESCE(SUM(e.input_tokens + e.output_tokens), 0)::bigint AS tokens,
+                    COUNT(*)::bigint                     AS requests
+               FROM ai_usage_events e
+               LEFT JOIN users u            ON u.id = e.user_id
+               LEFT JOIN platform_members pm ON pm.user_id = e.user_id
+              WHERE e.created_at >= NOW() - INTERVAL '30 days'
+              GROUP BY category",
+        )
+        .fetch_all(pool.get_ref())
+        .await?;
+        let mut cat: HashMap<String, (i64, i64)> = HashMap::new();
+        for r in &cats {
+            cat.insert(
+                r.get::<String, _>("category"),
+                (r.get::<i64, _>("tokens"), r.get::<i64, _>("requests")),
+            );
+        }
+
+        // Personal users (aggregate). Always shown, even at zero, since it's a
+        // fixed top-level scope the dashboard promises.
+        let (pt, pq) = cat.get("personal").copied().unwrap_or((0, 0));
+        by_scope.push(serde_json::json!({
+            "label": "Personal users", "kind": "personal", "tokens": pt, "requests": pq,
+        }));
+
+        // One row per organization (platform-team members excluded to match the
+        // category precedence platform > organization).
+        for r in sqlx::query(
+            "SELECT o.name                                AS label,
+                    COALESCE(SUM(e.input_tokens + e.output_tokens), 0)::bigint AS tokens,
+                    COUNT(*)::bigint                     AS requests
+               FROM ai_usage_events e
+               JOIN users u          ON u.id = e.user_id
+               JOIN organizations o  ON o.id = u.organization_id
+               LEFT JOIN platform_members pm ON pm.user_id = e.user_id
+              WHERE e.created_at >= NOW() - INTERVAL '30 days'
+                AND pm.user_id IS NULL
+              GROUP BY o.id, o.name
+              ORDER BY tokens DESC",
+        )
+        .fetch_all(pool.get_ref())
+        .await?
+        .iter()
+        {
+            by_scope.push(serde_json::json!({
+                "label": r.get::<String, _>("label"),
+                "kind": "organization",
+                "tokens": r.get::<i64, _>("tokens"),
+                "requests": r.get::<i64, _>("requests"),
+            }));
+        }
+
+        // Platform team (aggregate, always shown) then any unattributed usage.
+        let (plt, plq) = cat.get("platform").copied().unwrap_or((0, 0));
+        by_scope.push(serde_json::json!({
+            "label": "Platform team", "kind": "platform", "tokens": plt, "requests": plq,
+        }));
+        if let Some(&(t, q)) = cat.get("unattributed")
+            && (t > 0 || q > 0)
+        {
+            by_scope.push(serde_json::json!({
+                "label": "Unattributed", "kind": "unattributed", "tokens": t, "requests": q,
+            }));
+        }
+
+        // Each platform-team member individually.
+        platform_members = sqlx::query(
+            "SELECT COALESCE(
+                        NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), ''),
+                        u.username, u.email
+                    )                                    AS name,
+                    COALESCE(SUM(e.input_tokens + e.output_tokens), 0)::bigint AS tokens,
+                    COUNT(*)::bigint                     AS requests
+               FROM ai_usage_events e
+               JOIN users u             ON u.id = e.user_id
+               JOIN platform_members pm ON pm.user_id = u.id
+              WHERE e.created_at >= NOW() - INTERVAL '30 days'
+              GROUP BY u.id
+              ORDER BY tokens DESC
+              LIMIT 50",
+        )
+        .fetch_all(pool.get_ref())
+        .await?
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "name": r.get::<Option<String>, _>("name").unwrap_or_else(|| "Unknown".into()),
+                "tokens": r.get::<i64, _>("tokens"),
+                "requests": r.get::<i64, _>("requests"),
+            })
+        })
+        .collect();
+    }
+
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "sample": false,
         "provider": provider,
@@ -177,6 +299,8 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         "daily": daily,
         "by_model": by_model,
         "by_member": by_member,
+        "by_scope": by_scope,
+        "platform_members": platform_members,
     })))
 }
 
