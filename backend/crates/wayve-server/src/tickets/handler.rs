@@ -1046,6 +1046,27 @@ pub async fn open_ai_fix_pr(
     )
     .await;
 
+    // Email the actor that the PR is open. GitHub never notifies you about a PR
+    // your own token opened (the fixer authors it as the token's account), so
+    // without this the owner gets no "new PR" mail at all. Best-effort — a mail
+    // failure must not fail the PR that already succeeded on GitHub.
+    if let Ok(Some(urow)) = sqlx::query("SELECT email FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_optional(pool.get_ref())
+        .await
+    {
+        let recipient: String = urow.get("email");
+        let subject = format!("AI fix PR opened — ticket #{id}: {name}");
+        let body = format!(
+            "The AI-fix pipeline opened a pull request for Workspace ticket #{id} ({name}).\n\n\
+             Review and merge it here:\n{pr_url}\n\n\
+             Branch: {branch}\n\nCI must pass before merge.\n— Wayve AI fix"
+        );
+        if let Err(e) = crate::email::sender::send_mail(&recipient, &subject, &body).await {
+            warn!(target: "worker", error = ?e, ticket_id = id, "ai-fix PR email notification failed");
+        }
+    }
+
     Ok(HttpResponse::Ok().json(serde_json::json!({ "pr_url": pr_url })))
 }
 
