@@ -57,11 +57,45 @@ export default function AiUsageGovernance() {
     ? usage.totals.input_tokens + usage.totals.output_tokens
     : 0;
 
+  // The platform owner gets the site-wide, per-tenant breakdown; org owners get
+  // the classic by-member view. `by_scope`/`platform_members` are only populated
+  // for the platform dashboard.
+  const platformView =
+    (usage?.by_scope?.length ?? 0) > 0 ||
+    (usage?.platform_members?.length ?? 0) > 0;
+
+  // Shared between both layouts so the "By model" table isn't duplicated.
+  const modelCard = usage ? (
+    <section className="ai-card">
+      <h2>By model</h2>
+      <table className="ai-table">
+        <thead>
+          <tr>
+            <th>Model</th>
+            <th>Tokens</th>
+          </tr>
+        </thead>
+        <tbody>
+          {usage.by_model.map((m) => (
+            <tr key={m.model}>
+              <td>{m.model}</td>
+              <td>{num(m.tokens)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  ) : null;
+
   return (
     <div className="ai-usage">
       <header className="ai-settings-header">
         <h1>AI Token Usage</h1>
-        <p>Token consumption for your AI provider, by member and by model.</p>
+        <p>
+          {platformView
+            ? "Complete website usage across your whole platform — by scope, by team member, and by model."
+            : "Token consumption for your AI provider, by member and by model."}
+        </p>
         <button
           type="button"
           className="ai-link-btn"
@@ -106,47 +140,81 @@ export default function AiUsageGovernance() {
             </div>
           </div>
 
-          <div className="ai-table-row">
-            <section className="ai-card">
-              <h2>By member</h2>
-              <table className="ai-table">
-                <thead>
-                  <tr>
-                    <th>Member</th>
-                    <th>Tokens</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {usage.by_member.map((m) => (
-                    <tr key={m.name}>
-                      <td>{m.name}</td>
-                      <td>{num(m.tokens)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
+          {platformView ? (
+            <>
+              <div className="ai-table-row">
+                <section className="ai-card">
+                  <h2>Complete website usage — by scope</h2>
+                  <table className="ai-table">
+                    <thead>
+                      <tr>
+                        <th>Scope</th>
+                        <th>Tokens</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {usage.by_scope!.map((s) => (
+                        <tr key={s.label}>
+                          <td>{s.label}</td>
+                          <td>{num(s.tokens)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </section>
 
-            <section className="ai-card">
-              <h2>By model</h2>
-              <table className="ai-table">
-                <thead>
-                  <tr>
-                    <th>Model</th>
-                    <th>Tokens</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {usage.by_model.map((m) => (
-                    <tr key={m.model}>
-                      <td>{m.model}</td>
-                      <td>{num(m.tokens)}</td>
+                <section className="ai-card">
+                  <h2>Platform team members</h2>
+                  <table className="ai-table">
+                    <thead>
+                      <tr>
+                        <th>Member</th>
+                        <th>Tokens</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {usage.platform_members!.length ? (
+                        usage.platform_members!.map((m) => (
+                          <tr key={m.name}>
+                            <td>{m.name}</td>
+                            <td>{num(m.tokens)}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={2}>No platform-team usage yet.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </section>
+              </div>
+              <div className="ai-table-row">{modelCard}</div>
+            </>
+          ) : (
+            <div className="ai-table-row">
+              <section className="ai-card">
+                <h2>By member</h2>
+                <table className="ai-table">
+                  <thead>
+                    <tr>
+                      <th>Member</th>
+                      <th>Tokens</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-          </div>
+                  </thead>
+                  <tbody>
+                    {usage.by_member.map((m) => (
+                      <tr key={m.name}>
+                        <td>{m.name}</td>
+                        <td>{num(m.tokens)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </section>
+              {modelCard}
+            </div>
+          )}
         </>
       ) : null}
     </div>

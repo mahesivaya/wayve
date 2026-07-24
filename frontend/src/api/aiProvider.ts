@@ -99,6 +99,20 @@ export type AiUsage = {
     tokens: number;
     cost_cents: number;
   }[];
+  // Platform-owner only: "complete website usage" broken down by tenant scope
+  // (personal users, each organization, the platform team, unattributed), plus
+  // the platform team listed member by member. Empty for org owners.
+  by_scope?: {
+    label: string;
+    kind: "personal" | "organization" | "platform" | "unattributed";
+    tokens: number;
+    requests: number;
+  }[];
+  platform_members?: {
+    name: string;
+    tokens: number;
+    requests: number;
+  }[];
 };
 
 export const getAiUsage = async () => apiFetchJson<AiUsage>("/api/ai/usage");
