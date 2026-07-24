@@ -63,8 +63,11 @@ echo "    Pulling $BRANCH..."
 git fetch --quiet origin "$BRANCH"
 git checkout --quiet "$BRANCH"
 git reset --quiet --hard "origin/$BRANCH"
-SHA=$(git rev-parse --short HEAD)
-echo "    HEAD: $SHA"
+# Full 40-char SHA to match the CI image tag exactly. `--short` is
+# machine-dependent in length (see build-images.yml) and could look for a tag
+# CI never pushed.
+SHA=$(git rev-parse HEAD)
+echo "    HEAD: $(git rev-parse --short HEAD) ($SHA)"
 
 compose() {
   docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
