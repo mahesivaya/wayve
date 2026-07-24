@@ -60,10 +60,13 @@ jobs:
       - name: Compute tags
         id: meta
         run: |
-          SHA=$(git rev-parse --short HEAD)
+          # Full 40-char SHA, NOT `--short`: git's short abbreviation length is
+          # machine-dependent (grows with a repo's object count), so a runner and
+          # the prod box can abbreviate the same commit to different lengths — the
+          # deploy would then look for a tag CI never pushed. The full SHA is
+          # identical everywhere. Immutable; no moving `latest`.
+          SHA=$(git rev-parse HEAD)
           REG="${{ steps.ecr.outputs.registry }}/${{ matrix.repo }}"
-          # SHA-only: immutable, reproducible, and the deploy pins this exact
-          # tag. No moving `latest` (the ECR repos are IMMUTABLE).
           echo "tags=$REG:$SHA" >> "$GITHUB_OUTPUT"
 
       # Persist the backend's BuildKit cache mounts (cargo registry/git +
