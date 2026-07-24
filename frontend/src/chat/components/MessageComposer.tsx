@@ -1,6 +1,7 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Conversation } from "../types";
 import EmojiPicker from "./EmojiPicker";
+import { AttachmentIcon, EmojiIcon } from "../../icons";
 
 // `label` is what gets inserted after the `@`; `email` is shown in the dropdown to
 // disambiguate people who share a label.
@@ -28,6 +29,9 @@ type Props = {
 
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const MAX_MENTION_SUGGESTIONS = 6;
+// Upper bound the textarea grows to before it starts scrolling internally.
+// Keep in sync with the `max-height` on `.chat-input textarea` in chat.css.
+const MAX_TEXTAREA_PX = 120;
 
 function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -73,6 +77,17 @@ export default function MessageComposer({
   const [mentionStart, setMentionStart] = useState(0);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [emojiOpen, setEmojiOpen] = useState(false);
+
+  // Auto-grow the textarea to fit multi-line content, up to MAX_TEXTAREA_PX,
+  // after which it scrolls internally. Runs on every `input` change — typing,
+  // emoji/mention insertion, and the reset-to-empty after a message is sent.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, MAX_TEXTAREA_PX)}px`;
+  }, [input]);
+
   if (!conversation || !canChat) return null;
 
   const disabled = !isConnected || uploading;
@@ -197,50 +212,6 @@ export default function MessageComposer({
       )}
 
       <div className="chat-input-row">
-        {allowAttachments && (
-          <>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              hidden
-              onChange={(e) => {
-                handlePick(e.target.files);
-                e.target.value = "";
-              }}
-            />
-            <button
-              type="button"
-              className="chat-attach-btn"
-              data-tooltip="Attach files"
-              aria-label="Attach files"
-              disabled={disabled}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              📎
-            </button>
-          </>
-        )}
-        <div className="chat-emoji-anchor" ref={emojiAnchorRef}>
-          {emojiOpen && (
-            <EmojiPicker
-              anchorRef={emojiAnchorRef}
-              onSelect={insertEmoji}
-              onClose={() => setEmojiOpen(false)}
-            />
-          )}
-          <button
-            type="button"
-            className="chat-emoji-btn-toggle"
-            data-tooltip="Emoji"
-            aria-label="Emoji"
-            aria-expanded={emojiOpen}
-            disabled={disabled}
-            onClick={() => setEmojiOpen((open) => !open)}
-          >
-            🙂
-          </button>
-        </div>
         {mentionOpen && (
           <ul className="chat-mention-menu" role="listbox">
             {matches.map((candidate, i) => (
@@ -268,57 +239,113 @@ export default function MessageComposer({
             ))}
           </ul>
         )}
-        <textarea
-          ref={textareaRef}
-          rows={1}
-          value={input}
-          onChange={(e) => {
-            onInputChange(e.target.value);
-            syncMention(e.target);
-          }}
-          onClick={(e) => syncMention(e.currentTarget)}
-          onKeyUp={(e) => {
-            // Arrow/Home/End move the caret without changing text — resync.
-            if (
-              e.key.startsWith("Arrow") ||
-              e.key === "Home" ||
-              e.key === "End"
-            ) {
-              syncMention(e.currentTarget);
-            }
-          }}
-          disabled={!isConnected}
-          onKeyDown={(e) => {
-            if (mentionOpen) {
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                setMentionIndex((i) => (i + 1) % matches.length);
-                return;
+        {/* Border + background live on this wrapper so the attach/emoji icons
+            sit *inside* the textbox; the textarea itself is borderless. */}
+        <div className="chat-input-field">
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            value={input}
+            onChange={(e) => {
+              onInputChange(e.target.value);
+              syncMention(e.target);
+            }}
+            onClick={(e) => syncMention(e.currentTarget)}
+            onKeyUp={(e) => {
+              // Arrow/Home/End move the caret without changing text — resync.
+              if (
+                e.key.startsWith("Arrow") ||
+                e.key === "Home" ||
+                e.key === "End"
+              ) {
+                syncMention(e.currentTarget);
               }
-              if (e.key === "ArrowUp") {
-                e.preventDefault();
-                setMentionIndex(
-                  (i) => (i - 1 + matches.length) % matches.length
-                );
-                return;
+            }}
+            disabled={!isConnected}
+            onKeyDown={(e) => {
+              if (mentionOpen) {
+                if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  setMentionIndex((i) => (i + 1) % matches.length);
+                  return;
+                }
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  setMentionIndex(
+                    (i) => (i - 1 + matches.length) % matches.length
+                  );
+                  return;
+                }
+                if (e.key === "Enter" || e.key === "Tab") {
+                  e.preventDefault();
+                  applyMention(matches[highlighted]);
+                  return;
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setMentionQuery(null);
+                  return;
+                }
               }
-              if (e.key === "Enter" || e.key === "Tab") {
+              if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                applyMention(matches[highlighted]);
-                return;
+                if (canSend) onSend();
               }
-              if (e.key === "Escape") {
-                e.preventDefault();
-                setMentionQuery(null);
-                return;
-              }
-            }
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              if (canSend) onSend();
-            }
-          }}
-        />
+            }}
+          />
+          {/* Icons on the right, grouped so the attach + emoji controls always
+              sit on the same horizontal line inside the box. */}
+          <div className="chat-input-actions">
+            {allowAttachments && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  hidden
+                  onChange={(e) => {
+                    handlePick(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  className="chat-attach-btn"
+                  data-tooltip="Attach files"
+                  data-tooltip-pos="top"
+                  data-tooltip-align="right"
+                  aria-label="Attach files"
+                  disabled={disabled}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <AttachmentIcon size={18} aria-hidden />
+                </button>
+              </>
+            )}
+            <div className="chat-emoji-anchor" ref={emojiAnchorRef}>
+              {emojiOpen && (
+                <EmojiPicker
+                  anchorRef={emojiAnchorRef}
+                  onSelect={insertEmoji}
+                  onClose={() => setEmojiOpen(false)}
+                />
+              )}
+              <button
+                type="button"
+                className="chat-emoji-btn-toggle"
+                data-tooltip="Emoji"
+                data-tooltip-pos="top"
+                data-tooltip-align="right"
+                aria-label="Emoji"
+                aria-expanded={emojiOpen}
+                disabled={disabled}
+                onClick={() => setEmojiOpen((open) => !open)}
+              >
+                <EmojiIcon size={18} aria-hidden />
+              </button>
+            </div>
+          </div>
+        </div>
         <button type="button" onClick={onSend} disabled={!canSend}>
           Send
         </button>

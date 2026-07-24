@@ -1059,7 +1059,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px;
+  padding: 8px 12px;
   border-top: 1px solid var(--color-border);
   background: var(--color-pane);
 }
@@ -1164,22 +1164,57 @@
   background: rgb(153, 27, 27, 0.12);
 }
 
-.chat-input textarea {
+/* The bordered box that visually IS the textbox. The attach/emoji icons and
+   the textarea are flex children inside it, so the icons read as sitting
+   inside the input. `align-items: flex-end` keeps the icons pinned to the
+   bottom-left as the textarea grows. */
+.chat-input-field {
   flex: 1;
-  min-height: 40px;
-  max-height: 120px;
-  height: 40px;
-  resize: vertical;
-  padding: 9px 12px;
-  line-height: 1.4;
+  display: flex;
+  align-items: stretch;
+  min-height: 30px;
+  padding: 0;
   border: 1px solid var(--color-input-border);
   border-radius: var(--radius-md);
-  font: inherit;
+  background: var(--color-surface);
 }
 
-.chat-input textarea:focus {
+.chat-input-field:focus-within {
   outline: 2px solid var(--color-primary-panel-border);
   border-color: var(--color-primary-action);
+}
+
+/* The attach + emoji controls as one horizontal group, kept on a single line
+   and pinned to the bottom of the field so they stay level with the first line
+   of text as the textarea grows. */
+.chat-input-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+}
+
+.chat-input textarea {
+  flex: 1;
+  box-sizing: border-box;
+  min-height: 30px;
+  max-height: 120px;
+  height: 30px;
+  resize: none;
+  overflow-y: auto;
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  /* `font: inherit` resets line-height, so these two MUST come after it or they
+     get clobbered. */
+  font-size: var(--text-lg);
+  line-height: 1.35;
+}
+
+/* The focus ring is on .chat-input-field (focus-within) now. */
+.chat-input textarea:focus {
+  outline: none;
 }
 
 .chat-input button {
@@ -1445,12 +1480,18 @@
 /* Composer: paperclip + pending file chips */
 .chat-attach-btn {
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   background: none;
-  font-size: 20px;
+  color: var(--color-text-muted);
   cursor: pointer;
-  padding: 0 8px;
+  padding: 0 1px;
   line-height: 1;
+}
+.chat-attach-btn:hover:not(:disabled) {
+  color: var(--color-text-primary);
 }
 .chat-attach-btn:disabled {
   opacity: 0.5;
@@ -1544,17 +1585,24 @@
   position: relative;
   flex: 0 0 auto;
   display: flex;
-  align-items: center;
+  align-items: stretch;
 }
 
-/* Matches .chat-attach-btn so the 🙂 and 📎 read as one pair of controls. */
+/* Matches .chat-attach-btn so the emoji + attachment icons read as one pair of
+   muted line-icon controls inside the textbox. */
 .chat-emoji-btn-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   background: none;
-  font-size: 20px;
+  color: var(--color-text-muted);
   cursor: pointer;
-  padding: 0 8px;
+  padding: 0 1px;
   line-height: 1;
+}
+.chat-emoji-btn-toggle:hover:not(:disabled) {
+  color: var(--color-text-primary);
 }
 .chat-emoji-btn-toggle:disabled {
   opacity: 0.5;
@@ -1563,10 +1611,14 @@
 
 .chat-emoji-picker {
   position: absolute;
-  left: 0;
+  /* Anchored to the RIGHT of its trigger: the emoji button sits on the right
+     side of the composer now, so a left-anchored 300px popover would overflow
+     off-screen. Expanding leftward keeps it in view. */
+  right: 0;
+  left: auto;
   bottom: calc(100% + 6px);
   z-index: 20;
-  width: 300px;
+  width: 340px;
   padding: 8px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -1604,8 +1656,8 @@
    only a couple of matches, so the grid doesn't stretch them across the row. */
 .chat-emoji-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(32px, 1fr));
-  gap: 2px;
+  grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
+  gap: 1px;
 }
 
 .chat-emoji-btn {
@@ -1613,6 +1665,8 @@
   align-items: center;
   justify-content: center;
   aspect-ratio: 1;
+  min-width: 0;
+  padding: 0;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
