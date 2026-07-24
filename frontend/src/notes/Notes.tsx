@@ -204,7 +204,7 @@ export default function Notes() {
                 className="notes-new-btn notes-new-btn--inline"
                 onClick={openNew}
               >
-                + New note
+                Add new notes
               </button>
             )}
           </div>
@@ -275,7 +275,7 @@ export default function Notes() {
                 </strong>
                 <span>
                   {notes.length === 0
-                    ? "Use + New note to add your first note."
+                    ? "Use Add new notes to add your first note."
                     : "Try a different search term."}
                 </span>
               </div>
