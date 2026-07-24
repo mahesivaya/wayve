@@ -99,8 +99,11 @@ jobs:
           # Layer cache in the GitHub Actions cache (npm deps, apt layers,
           # unchanged stages). The cargo/target cache mounts are handled by
           # the cache-dance step above.
-          cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          # scope bumped to -v2 to flush the pre-fix layer cache once: the old
+          # scope may hold a backend layer baked with the removed target-cache
+          # (potentially stale). Starting a fresh scope forces one clean rebuild.
+          cache-from: type=gha,scope=${{ matrix.name }}-v2
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}-v2
 
 # -----------------------------------------------------------------------------
 # ONE-TIME AWS SETUP (run once, then this workflow just works)
