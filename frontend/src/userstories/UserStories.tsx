@@ -19,6 +19,9 @@ const USER_STORIES_CONFIG: TasksConfig = {
   },
   features: { attachments: false, statusSummary: true },
   storageKey: "userstories",
+  // Name click opens the story in a right-side drawer; Edit opens the full page.
+  detailDrawer: true,
+  detailPath: (id) => `/user-stories/${id}`,
   labels: {
     title: "User Stories",
     subtitle: "A shared backlog of user stories for your workspace.",

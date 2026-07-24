@@ -354,6 +354,82 @@ function TaskBadge({ kind }: { kind?: string | null }) {
   );
 }
 
+// Hosts the compose/edit form on one of two surfaces: the centered modal (used
+// for Create, and Edit on boards without a drawer) or a right-side drawer (used
+// when an item's name is clicked on a drawer-enabled board). The form is passed
+// as `children`, so it is written once regardless of surface. `onExpand`, when
+// given, renders a button that jumps to the full page.
+function EditSurface({
+  surface,
+  isOpen,
+  onClose,
+  title,
+  onExpand,
+  children,
+}: {
+  surface: "modal" | "drawer";
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  onExpand?: () => void;
+  children: React.ReactNode;
+}) {
+  // Modal has its own ESC handling; the drawer needs its own.
+  useEffect(() => {
+    if (surface !== "drawer" || !isOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [surface, isOpen, onClose]);
+
+  if (surface === "modal") {
+    return (
+      <Modal isOpen={isOpen} onClose={onClose} title={title}>
+        {children}
+      </Modal>
+    );
+  }
+  if (!isOpen) return null;
+  return (
+    <>
+      <div
+        className="task-drawer-overlay"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <aside className="task-drawer" role="dialog" aria-label={title}>
+        <div className="task-drawer-head">
+          <h2 className="task-drawer-title">{title}</h2>
+          <div className="task-drawer-head-actions">
+            {onExpand && (
+              <button
+                type="button"
+                className="task-drawer-expand"
+                onClick={onExpand}
+                data-tooltip="Open full page"
+                aria-label="Open full page"
+              >
+                ⤢
+              </button>
+            )}
+            <button
+              type="button"
+              className="task-drawer-close"
+              onClick={onClose}
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+        <div className="task-drawer-body">{children}</div>
+      </aside>
+    </>
+  );
+}
+
 // This component powers both the personal Tasks board (`/tasks`) and the
 // org-shared Workspace "User Stories" board (`/user-stories`). Everything that
 // differs between the two — the CRUD endpoints, the visible labels, the
@@ -399,9 +475,15 @@ export type TasksConfig = {
   };
   // localStorage prefix so the two boards keep independent view/mode state.
   storageKey: string;
-  // When set, clicking an item routes to this path (a full detail page) instead
-  // of opening the edit modal. Tickets only; Tasks/User Stories leave it unset.
+  // When set, the Edit button (and deep links) routes to this path — a full
+  // detail/edit page — instead of opening the edit modal. Tickets and User
+  // Stories set it; personal Tasks leave it unset.
   detailPath?: (id: number) => string;
+  // When true, clicking an item's *name* opens its editable form in a
+  // right-side drawer (in-page) instead of navigating/opening the modal. The
+  // Edit button still goes to `detailPath` (the full page). On for the shared
+  // workspace boards (User Stories, Tickets).
+  detailDrawer?: boolean;
   labels: {
     title: string;
     subtitle: string;
@@ -475,6 +557,10 @@ export default function Tasks({
   // team, so the fetch is skipped for them.
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
   const [creating, setCreating] = useState(false);
+  // Whether the compose/edit form is shown in the centered modal (create, and
+  // edit on boards without a drawer) or in the right-side drawer (name click on
+  // drawer-enabled boards).
+  const [editSurface, setEditSurface] = useState<"modal" | "drawer">("modal");
   const [view, setView] = useState<"list" | "grid">(() => {
     const saved = window.localStorage.getItem(
       `wayve.${config.storageKey}.view`
@@ -882,19 +968,16 @@ export default function Tasks({
   const openCreate = () => {
     openedFromDeepLink.current = false;
     resetForm();
+    setEditSurface("modal");
     setCreating(true);
   };
 
-  const openEdit = (task: Task) => {
-    // Boards configured with a detail page (Tickets) open the item full-page
-    // instead of the modal — every card/edit click routes through here, so this
-    // one branch covers them all. Tasks/User Stories have no detailPath.
-    if (config.detailPath) {
-      navigate(config.detailPath(task.id));
-      return;
-    }
+  // Populate the edit form for `task` and show it on the given surface (the
+  // centered modal, or the right-side drawer). Shared by name-click and the
+  // Edit button.
+  const beginEdit = (task: Task, surface: "modal" | "drawer") => {
     // A normal open is not a deep-link open. The deep-link effect re-sets this
-    // flag after it calls openEdit.
+    // flag after it calls the editor.
     openedFromDeepLink.current = false;
     setEditingId(task.id);
     setTaskName(task.name);
@@ -909,6 +992,7 @@ export default function Tasks({
     setCreateAnother(false);
     setPendingAttachments([]);
     setExistingAttachments([]);
+    setEditSurface(surface);
     setCreating(true);
     if (config.features.attachments && config.api.listAttachments) {
       setAttachmentsLoading(true);
@@ -920,6 +1004,30 @@ export default function Tasks({
         })
         .finally(() => setAttachmentsLoading(false));
     }
+  };
+
+  // Clicking an item's *name*: a quick edit in the right-side drawer when the
+  // board opts in, else the full page (detailPath), else the modal.
+  const openDetail = (task: Task) => {
+    if (config.detailDrawer) {
+      beginEdit(task, "drawer");
+      return;
+    }
+    if (config.detailPath) {
+      navigate(config.detailPath(task.id));
+      return;
+    }
+    beginEdit(task, "modal");
+  };
+
+  // Clicking the Edit button: the full page when the board has one, else the
+  // modal. Never the drawer — Edit is the "open the full editor" affordance.
+  const openEditor = (task: Task) => {
+    if (config.detailPath) {
+      navigate(config.detailPath(task.id));
+      return;
+    }
+    beginEdit(task, "modal");
   };
 
   const copyTaskLink = (task: Task) => {
@@ -954,7 +1062,7 @@ export default function Tasks({
     deepLinkApplied.current = rawKey;
     // Deferred for the same React 19 cascading-render reason as loadTasks above.
     const timer = window.setTimeout(() => {
-      openEdit(target);
+      openEditor(target);
       openedFromDeepLink.current = true;
     }, 0);
     return () => window.clearTimeout(timer);
@@ -1370,7 +1478,7 @@ export default function Tasks({
           <button
             type="button"
             className="task-card-title-link task-trow-title"
-            onClick={() => openEdit(task)}
+            onClick={() => openDetail(task)}
             data-tooltip={`Open ${config.labels.lowerSingular} details`}
           >
             {task.name}
@@ -1442,7 +1550,7 @@ export default function Tasks({
           <button
             type="button"
             className="task-edit-btn"
-            onClick={() => openEdit(task)}
+            onClick={() => openEditor(task)}
             aria-label={`Edit ${task.name}`}
           >
             Edit
@@ -1815,11 +1923,21 @@ export default function Tasks({
           </>
         )}
 
-        <Modal
+        <EditSurface
+          surface={editSurface}
           isOpen={creating}
           onClose={closeForm}
           title={
             isEditing ? config.labels.editTitle : config.labels.createTitle
+          }
+          onExpand={
+            isEditing && editingId !== null && config.detailPath
+              ? () => {
+                  const id = editingId;
+                  closeForm();
+                  if (config.detailPath) navigate(config.detailPath(id));
+                }
+              : undefined
           }
         >
           <form className="task-compose" onSubmit={saveTask}>
@@ -2176,7 +2294,7 @@ export default function Tasks({
               )}
             </div>
           </form>
-        </Modal>
+        </EditSurface>
 
         {mode === "jira" ? (
           loading ? (
@@ -2293,7 +2411,7 @@ export default function Tasks({
                             <button
                               type="button"
                               className="task-card-title-link task-board-card-title"
-                              onClick={() => openEdit(task)}
+                              onClick={() => openDetail(task)}
                               data-tooltip={`Open ${config.labels.lowerSingular} details`}
                             >
                               {task.name}
@@ -2309,7 +2427,7 @@ export default function Tasks({
                               <button
                                 type="button"
                                 className="task-edit-btn"
-                                onClick={() => openEdit(task)}
+                                onClick={() => openEditor(task)}
                                 aria-label={`Edit ${task.name}`}
                               >
                                 Edit
@@ -2373,7 +2491,7 @@ export default function Tasks({
                             <button
                               type="button"
                               className="task-card-title-link"
-                              onClick={() => openEdit(task)}
+                              onClick={() => openDetail(task)}
                               data-tooltip={`Open ${config.labels.lowerSingular} details`}
                             >
                               {task.name}
@@ -2408,7 +2526,7 @@ export default function Tasks({
                           <button
                             type="button"
                             className="task-edit-btn"
-                            onClick={() => openEdit(task)}
+                            onClick={() => openEditor(task)}
                             aria-label={`Edit ${task.name}`}
                           >
                             Edit
@@ -2502,7 +2620,7 @@ export default function Tasks({
                             <button
                               type="button"
                               className="task-card-title-link"
-                              onClick={() => openEdit(task)}
+                              onClick={() => openDetail(task)}
                               data-tooltip={`Open ${config.labels.lowerSingular} details`}
                             >
                               {task.name}
@@ -2527,7 +2645,7 @@ export default function Tasks({
                         <button
                           type="button"
                           className="task-edit-btn"
-                          onClick={() => openEdit(task)}
+                          onClick={() => openEditor(task)}
                           aria-label={`Edit ${task.name}`}
                         >
                           Edit
