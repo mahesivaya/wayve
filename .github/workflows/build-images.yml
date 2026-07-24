@@ -1,0 +1,126 @@
+# Build the backend + frontend prod images and push them to ECR (private).
+#
+# Auth uses GitHub OIDC -> a short-lived AWS role (no long-lived keys stored).
+# See the one-time AWS setup notes at the bottom of this file.
+#
+# Images are tagged with the short git SHA (immutable, reproducible) and a
+# moving `latest`. Prod pulls the SHA tag; `latest` is a convenience pointer.
+name: build-images
+
+on:
+  push:
+    branches: [main]
+    # Only rebuild when something that affects an image changes.
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - ".github/workflows/build-images.yml"
+  workflow_dispatch: {} # allow manual runs
+
+# One build per ref at a time; a newer push cancels an in-flight build.
+concurrency:
+  group: build-images-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write # required for OIDC federation to AWS
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            repo: rwayve-backend
+            context: backend
+            dockerfile: backend/Dockerfile
+          - name: frontend
+            repo: rwayve-frontend
+            context: frontend
+            dockerfile: frontend/Dockerfile.prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute tags
+        id: meta
+        run: |
+          SHA=$(git rev-parse --short HEAD)
+          REG="${{ steps.ecr.outputs.registry }}/${{ matrix.repo }}"
+          # SHA-only: immutable, reproducible, and the deploy pins this exact
+          # tag. No moving `latest` (the ECR repos are IMMUTABLE).
+          echo "tags=$REG:$SHA" >> "$GITHUB_OUTPUT"
+
+      # Persist the backend's BuildKit cache mounts (cargo registry/git +
+      # the workspace target dir) across runs. type=gha caches image LAYERS
+      # but NOT `RUN --mount=type=cache` dirs, so without this a backend code
+      # change = full recompile (~15 min). The dance extracts these dirs from
+      # the gha cache before the build and injects them back after, keeping
+      # incremental Rust builds ~3-5 min. No-op for the frontend (npm deps are
+      # already covered by layer cache).
+      - name: Restore/save Rust build caches
+        uses: reproducible-containers/buildkit-cache-dance@v3
+        with:
+          cache-map: |
+            {
+              "cargo-registry": "/usr/local/cargo/registry",
+              "cargo-git": "/usr/local/cargo/git",
+              "cargo-target": {
+                "target": "/app/target",
+                "id": "rwayve-workspace-target-v1"
+              }
+            }
+          skip-extraction: ${{ matrix.name != 'backend' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          # Layer cache in the GitHub Actions cache (npm deps, apt layers,
+          # unchanged stages). The cargo/target cache mounts are handled by
+          # the cache-dance step above.
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+# -----------------------------------------------------------------------------
+# ONE-TIME AWS SETUP (run once, then this workflow just works)
+#
+# 1. Create the GitHub OIDC identity provider in your AWS account:
+#      aws iam create-open-id-connect-provider \
+#        --url https://token.actions.githubusercontent.com \
+#        --client-id-list sts.amazonaws.com \
+#        --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
+#
+# 2. Create an IAM role "gha-ecr-push" with a trust policy limiting it to THIS
+#    repo (replace <ACCOUNT_ID> and <OWNER>/<REPO>):
+#      Trust:  Principal Federated arn:aws:iam::<ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com
+#              Condition StringLike token.actions.githubusercontent.com:sub = "repo:<OWNER>/<REPO>:ref:refs/heads/main"
+#      Perms:  AmazonEC2ContainerRegistryPowerUser  (push/pull to ECR)
+#
+# 3. In GitHub repo settings:
+#      - Secret  AWS_ROLE_ARN = arn:aws:iam::<ACCOUNT_ID>:role/gha-ecr-push
+#      - Variable AWS_REGION  = <your region, e.g. us-east-1>
+#
+# The ECR repos (rwayve-backend, rwayve-frontend) must already exist — you
+# created them with `aws ecr create-repository ... --image-tag-mutability
+# IMMUTABLE`. Images are tagged SHA-only to match that immutability; deploy
+# by pinning the SHA tag.
+# -----------------------------------------------------------------------------
