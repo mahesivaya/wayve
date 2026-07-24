@@ -106,7 +106,7 @@ fn ticket_from_row(row: sqlx::postgres::PgRow) -> Task {
         jira_base: None,
         gitlab_issue_iid: None,
         gitlab_web_url: None,
-        // Present only in the list query (bug-derived tickets); absent elsewhere.
+        // Present in the list/create/update queries; absent elsewhere.
         badge_kind: row.try_get("badge_kind").ok().flatten(),
         related_to: row.try_get("related_to").ok().flatten(),
         relation_kind: row.try_get("relation_kind").ok().flatten(),
@@ -115,6 +115,18 @@ fn ticket_from_row(row: sqlx::postgres::PgRow) -> Task {
 
 fn normalize_priority(value: Option<i16>) -> i16 {
     value.unwrap_or(3).clamp(1, 5)
+}
+
+/// The stored value for a user-picked ticket type. Trims + lowercases, accepts
+/// only the known set (mirrors the DB CHECK + support categories), and maps
+/// anything empty/unknown to None so a bad value can never persist or 500.
+fn normalize_badge_kind(value: Option<&str>) -> Option<String> {
+    let v = value?.trim().to_ascii_lowercase();
+    matches!(
+        v.as_str(),
+        "bug" | "feature" | "billing" | "account" | "other"
+    )
+    .then_some(v)
 }
 
 /// The status slug a write should store, validated against the owner's shared
@@ -157,10 +169,14 @@ pub async fn list_tickets(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
 
     // The owner's own board is the non-bug tickets; bug-derived tickets (mirrored
     // reports) are hidden there and instead shown to every tickets:manage caller.
-    // badge_kind carries the reported bug's support category for a card badge.
+    // badge_kind is the Type-column value: the reported bug's support category
+    // when this is a mirrored report, else the type a user picked on the ticket.
     let rows = sqlx::query(&format!(
         "SELECT {SELECT_COLS},
-                (SELECT category FROM support_tickets st WHERE st.id = support_ticket_id) AS badge_kind
+                COALESCE(
+                    (SELECT category FROM support_tickets st WHERE st.id = support_ticket_id),
+                    badge_kind
+                ) AS badge_kind
          FROM workspace_tickets
          WHERE (support_ticket_id IS NULL
                 AND (($1::INTEGER IS NOT NULL AND organization_id = $1)
@@ -1138,18 +1154,19 @@ pub async fn create_ticket(
     let status = resolve_status(pool.get_ref(), owner, data.status.as_deref()).await?;
     let assigned_by = data.assigned_by.as_deref().unwrap_or("").trim();
     let assignee = data.assignee.as_deref().unwrap_or("").trim();
+    let badge_kind = normalize_badge_kind(data.badge_kind.as_deref());
 
     // ticket_number is the next per-owner sequence value, computed inline off the
     // same owner binds so one statement assigns it.
     let row = sqlx::query(&format!(
         "INSERT INTO workspace_tickets
              (organization_id, user_id, name, description, priority, status,
-              assigned_by, assignee, assignee_id, project_id, ticket_number)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+              assigned_by, assignee, assignee_id, project_id, badge_kind, ticket_number)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
                  COALESCE((SELECT MAX(ticket_number) FROM workspace_tickets
                             WHERE ($1::INTEGER IS NOT NULL AND organization_id = $1)
                                OR ($2::INTEGER IS NOT NULL AND user_id = $2)), 0) + 1)
-         RETURNING {SELECT_COLS}"
+         RETURNING {SELECT_COLS}, badge_kind"
     ))
     .bind(org_id)
     .bind(uid)
@@ -1161,6 +1178,7 @@ pub async fn create_ticket(
     .bind(assignee)
     .bind(data.assignee_id)
     .bind(data.project_id)
+    .bind(badge_kind.as_deref())
     .fetch_one(pool.get_ref())
     .await?;
 
@@ -1217,21 +1235,27 @@ pub async fn update_ticket(
     let status = resolve_status(pool.get_ref(), owner, data.status.as_deref()).await?;
     let assigned_by = data.assigned_by.as_deref().unwrap_or("").trim();
     let assignee = data.assignee.as_deref().unwrap_or("").trim();
+    let badge_kind = normalize_badge_kind(data.badge_kind.as_deref());
     let manage_bugs = can_manage_bug_tickets(&req, pool.get_ref(), user_id).await;
 
     // The owner-scoped UPDATE 404s on a row outside this owner's scope, so an id
     // belonging to another org/user never leaks. Bug-derived tickets are owned by
     // the reporter, so tickets:manage callers reach them via the extra clause.
+    // The returned badge_kind still lets the support category win, matching list.
     let row = sqlx::query(&format!(
         "UPDATE workspace_tickets
             SET name = $1, description = $2, priority = $3, status = $4,
                 assigned_by = $5, assignee = $6, assignee_id = $7, project_id = $8,
-                updated_at = NOW()
+                badge_kind = $13, updated_at = NOW()
           WHERE id = $9
             AND ((($10::INTEGER IS NOT NULL AND organization_id = $10)
                OR ($11::INTEGER IS NOT NULL AND user_id = $11))
               OR ($12::BOOLEAN AND support_ticket_id IS NOT NULL))
-         RETURNING {SELECT_COLS}"
+         RETURNING {SELECT_COLS},
+                   COALESCE(
+                       (SELECT category FROM support_tickets st WHERE st.id = support_ticket_id),
+                       badge_kind
+                   ) AS badge_kind"
     ))
     .bind(name)
     .bind(description)
@@ -1245,6 +1269,7 @@ pub async fn update_ticket(
     .bind(org_id)
     .bind(uid)
     .bind(manage_bugs)
+    .bind(badge_kind.as_deref())
     .fetch_optional(pool.get_ref())
     .await?
     .ok_or(AppError::NotFound("workspace ticket"))?;

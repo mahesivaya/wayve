@@ -35,9 +35,9 @@ export type Task = {
   jira_base?: string | null;
   gitlab_issue_iid?: number | null;
   gitlab_web_url?: string | null;
-  // A card badge kind, or absent for a plain ticket. Currently the support-ticket
-  // category (bug/feature/billing/account/other) for tickets materialised from a
-  // reported bug; the board renders it as a coloured pill.
+  // The ticket's type (bug/feature/billing/account/other), or absent when it has
+  // none: the linked support-ticket category for tickets materialised from a
+  // reported bug, else the type a user picked. Rendered as a coloured pill.
   badge_kind?: string | null;
   // AI relationship labels (tickets only): related_to points at the group's
   // canonical ticket id; relation_kind is how this ticket relates to it. The
@@ -57,6 +57,9 @@ export type SaveTaskPayload = {
   assignee?: string;
   assignee_id?: number | null;
   project_id?: number | null;
+  // The ticket "Type" (bug/feature/other, …). Only the Tickets board sends it;
+  // Tasks and User Stories leave it undefined and the backend ignores it.
+  badge_kind?: string | null;
 };
 
 export const getTasks = async () => apiFetchJson<Task[]>("/api/tasks");

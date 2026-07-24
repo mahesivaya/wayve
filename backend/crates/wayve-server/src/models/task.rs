@@ -27,9 +27,10 @@ pub struct Task {
     /// Set only by the GitLab importer.
     pub gitlab_issue_iid: Option<i32>,
     pub gitlab_web_url: Option<String>,
-    /// A UI badge kind for the card, or None for a plain ticket. Currently the
-    /// support-ticket category (`bug`/`feature`/`billing`/`account`/`other`) for
-    /// tickets materialised from a reported bug; None on tasks and user stories.
+    /// The ticket's type, shown in the board's "Type" column, or None when it has
+    /// no type. One of `bug`/`feature`/`billing`/`account`/`other`: the category
+    /// of the linked report for tickets materialised from a reported bug, else
+    /// the type a user picked. Always None on tasks and user stories.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub badge_kind: Option<String>,
     /// AI relationship labels for tickets (see `tickets/relate.rs`): `related_to`
@@ -51,4 +52,8 @@ pub struct TaskInput {
     pub assignee: Option<String>,
     pub assignee_id: Option<i32>,
     pub project_id: Option<i32>,
+    /// User-set ticket type for the workspace-tickets board's "Type" column
+    /// (`bug`/`feature`/`other`, …). Ignored by the tasks and user-stories
+    /// handlers, which never store it.
+    pub badge_kind: Option<String>,
 }

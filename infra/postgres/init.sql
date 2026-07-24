@@ -1514,6 +1514,11 @@ CREATE TABLE IF NOT EXISTS workspace_tickets (
     -- it. Labels only — nothing is merged or closed.
     related_to INTEGER,
     relation_kind TEXT CHECK (relation_kind IN ('duplicate', 'similar')),
+    -- User-set ticket type, shown in the board's "Type" column (Bug/Feature/…).
+    -- For bug-derived tickets the linked support_tickets.category takes
+    -- precedence at read time (see list_tickets' COALESCE); this column is the
+    -- type a user picks on a normal ticket. Same value set as support categories.
+    badge_kind TEXT CHECK (badge_kind IN ('bug', 'feature', 'billing', 'account', 'other')),
     -- Resolution memory (Phase 2): when a ticket is fixed by the AI-fix pipeline,
     -- the pointer to the fix is recorded here (the code itself stays in Git). A
     -- new ticket that is similar to a resolved one reuses resolution_summary +
@@ -1551,6 +1556,18 @@ CREATE INDEX IF NOT EXISTS idx_workspace_tickets_user ON workspace_tickets(user_
 -- ON CONFLICT (support_ticket_id). NULLs (normal tickets) don't collide.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_workspace_tickets_support_ticket
     ON workspace_tickets(support_ticket_id);
+-- Backfill the user-set type column onto pre-existing boards. The CREATE above
+-- names its inline CHECK `workspace_tickets_badge_kind_check`, so adding it under
+-- the same name here leaves a migrated board identical to a fresh one.
+ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS badge_kind TEXT;
+DO $$
+BEGIN
+    ALTER TABLE workspace_tickets
+        ADD CONSTRAINT workspace_tickets_badge_kind_check
+        CHECK (badge_kind IN ('bug', 'feature', 'billing', 'account', 'other'));
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ============================================================
 -- 🎫 SUPPORT TICKETS

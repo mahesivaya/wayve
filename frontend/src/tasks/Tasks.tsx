@@ -330,16 +330,28 @@ function TaskKeyBadge({
   );
 }
 
-// Emoji + label per support-ticket category, driving the coloured card pill for
-// tickets materialised from a reported bug (Task.badge_kind). Unknown/absent
-// kinds render nothing, so tasks and user stories are unaffected.
+// Emoji + label per ticket type, driving the "Type" column badge. The value is
+// either a user-picked type or, for tickets materialised from a reported bug,
+// the support category. Unknown/absent kinds render nothing, so tasks and user
+// stories (which never carry a badge_kind) are unaffected.
 const BADGE_KINDS: Record<string, { icon: string; label: string }> = {
   bug: { icon: "", label: "Bug" },
   feature: { icon: "✨", label: "Feature" },
   billing: { icon: "💳", label: "Billing" },
   account: { icon: "👤", label: "Account" },
-  other: { icon: "📌", label: "Report" },
+  other: { icon: "📌", label: "Other" },
 };
+
+// The types a user can pick, in the ticket form and in the board's Type column.
+// Same set as the support-ticket categories, so a manually typed ticket and a
+// mirrored bug report render the identical badge.
+const TYPE_OPTIONS = [
+  "bug",
+  "feature",
+  "billing",
+  "account",
+  "other",
+] as const;
 
 function TaskBadge({ kind }: { kind?: string | null }) {
   if (!kind) return null;
@@ -347,7 +359,7 @@ function TaskBadge({ kind }: { kind?: string | null }) {
   return (
     <span
       className={`ticket-kind-badge ticket-kind-${kind}`}
-      data-tooltip="Reported by a user"
+      data-tooltip="Ticket type"
     >
       {meta.icon ? `${meta.icon} ${meta.label}` : meta.label}
     </span>
@@ -472,6 +484,9 @@ export type TasksConfig = {
     findRelated?: boolean;
     // Shows the "Fix with AI" button in the edit modal. Tickets only.
     aiFix?: boolean;
+    // Shows a dedicated "Type" column (Bug/Feature/… badge) in the list-view
+    // table instead of rendering the badge inline after the name. Tickets only.
+    typeColumn?: boolean;
   };
   // localStorage prefix so the two boards keep independent view/mode state.
   storageKey: string;
@@ -537,6 +552,10 @@ export default function Tasks({
   const { normalizedSearchQuery } = useGlobalSearch();
   const { user } = useAuth();
   const isPersonal = user?.scope === "personal";
+  // Tickets show the badge (Bug/Feature/…) in its own "Type" column and expose
+  // the field for editing; other boards keep the badge inline after the name and
+  // never send a type.
+  const showType = !!config.features.typeColumn;
   // In a split pane the page collapses to one column and clicking a task
   // expands it inline instead of opening the edit modal.
   const inSplitPane = useInSplitPane();
@@ -674,6 +693,10 @@ export default function Tasks({
   // email.
   const [assigneeId, setAssigneeId] = useState<number | null>(null);
   const [projectId, setProjectId] = useState<number | null>(null);
+  // The edit modal's Type field, only used on the Tickets board (one of
+  // TYPE_OPTIONS; "" = no type). Bug-derived tickets keep their support category
+  // server-side regardless of what is picked here.
+  const [badgeKind, setBadgeKind] = useState<string>("");
   const [projects, setProjects] = useState<Project[]>([]);
   const [suggestions, setSuggestions] = useState<AssigneeSuggestion[] | null>(
     null
@@ -946,6 +969,7 @@ export default function Tasks({
     setAssignee("");
     setAssigneeId(null);
     setProjectId(null);
+    setBadgeKind("");
     clearSuggestions();
     setEditingId(null);
     setError("");
@@ -988,6 +1012,7 @@ export default function Tasks({
     setAssignee(task.assignee ?? "");
     setAssigneeId(task.assignee_id ?? null);
     setProjectId(task.project_id ?? null);
+    setBadgeKind(task.badge_kind ?? "");
     setError("");
     setCreateAnother(false);
     setPendingAttachments([]);
@@ -1114,27 +1139,43 @@ export default function Tasks({
     return `${(size / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const changeStatus = async (task: Task, nextStatus: TaskStatus) => {
-    if (task.status === nextStatus) return;
-    // Flip optimistically and roll back on failure: request-then-update lag is
-    // jarring when the user toggles status repeatedly.
+  // An inline edit (status or type dropdown on a row) still goes through the
+  // full-replace update endpoint, so every other field has to be echoed back or
+  // the server would null it out — that is how a status flip used to silently
+  // drop the assignee, project and type.
+  const savePayloadFrom = (
+    task: Task,
+    overrides: Partial<SaveTaskPayload>
+  ): SaveTaskPayload => ({
+    name: task.name,
+    description: task.description,
+    priority: task.priority,
+    status: task.status,
+    assigned_by: task.assigned_by ?? "",
+    assignee: task.assignee ?? "",
+    assignee_id: task.assignee_id ?? null,
+    project_id: task.project_id ?? null,
+    ...(showType ? { badge_kind: task.badge_kind ?? null } : {}),
+    ...overrides,
+  });
+
+  // Writes one inline field change, flipping optimistically and rolling back on
+  // failure: request-then-update lag is jarring when the user toggles a row's
+  // dropdown repeatedly.
+  const patchTask = async (
+    task: Task,
+    patch: Partial<Task> & Partial<SaveTaskPayload>,
+    failure: string
+  ) => {
     const prev = tasks;
     setTasks((current) =>
-      sortTasks(
-        current.map((t) =>
-          t.id === task.id ? { ...t, status: nextStatus } : t
-        )
-      )
+      sortTasks(current.map((t) => (t.id === task.id ? { ...t, ...patch } : t)))
     );
     try {
-      const updated = await config.api.update(task.id, {
-        name: task.name,
-        description: task.description,
-        priority: task.priority,
-        status: nextStatus,
-        assigned_by: task.assigned_by ?? "",
-        assignee: task.assignee ?? "",
-      });
+      const updated = await config.api.update(
+        task.id,
+        savePayloadFrom(task, patch)
+      );
       setTasks((current) =>
         sortTasks(
           current.map((t) =>
@@ -1150,10 +1191,25 @@ export default function Tasks({
       );
     } catch (err) {
       setTasks(prev);
-      window.alert(
-        err instanceof Error ? err.message : "Failed to update status"
-      );
+      window.alert(err instanceof Error ? err.message : failure);
     }
+  };
+
+  const changeStatus = async (task: Task, nextStatus: TaskStatus) => {
+    if (task.status === nextStatus) return;
+    await patchTask(task, { status: nextStatus }, "Failed to update status");
+  };
+
+  // Type is a Tickets-only field. For a ticket mirrored from a reported bug the
+  // server keeps the support category authoritative, so the row snaps back to it
+  // when the response lands.
+  const changeType = async (task: Task, nextKind: string) => {
+    if ((task.badge_kind ?? "") === nextKind) return;
+    await patchTask(
+      task,
+      { badge_kind: nextKind || null },
+      "Failed to update type"
+    );
   };
 
   // The card badge key is the project name's first three letters plus the
@@ -1273,6 +1329,7 @@ export default function Tasks({
           assignee: assignee.trim(),
           assignee_id: assigneeId,
           project_id: projectId,
+          badge_kind: showType ? badgeKind || null : undefined,
         });
         targetTaskId = updated.id;
         setTasks((prev) =>
@@ -1298,6 +1355,7 @@ export default function Tasks({
           assignee: assignee.trim(),
           assignee_id: assigneeId,
           project_id: projectId,
+          badge_kind: showType ? badgeKind || null : undefined,
         });
         targetTaskId = created.id;
         setTasks((prev) =>
@@ -1362,9 +1420,17 @@ export default function Tasks({
   // The Assignee column is a team feature; personal boards drop it (and its
   // grid column) entirely.
   const showAssignee = !isPersonal;
-  const tableCols = showAssignee
-    ? "124px minmax(0, 1fr) 176px 64px 168px 128px"
-    : "124px minmax(0, 1fr) 64px 168px 128px";
+  const tableCols = [
+    "124px", // created
+    "minmax(0, 1fr)", // title
+    showType ? "112px" : null, // type
+    showAssignee ? "176px" : null, // assignee
+    "64px", // priority
+    "168px", // status
+    "128px", // actions
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   // The team member behind a task's assignee email, for the Assignee column.
   // Falls back to the raw stored value (silhouette avatar) when it isn't a
@@ -1445,9 +1511,13 @@ export default function Tasks({
 
   // The table's column headers, reused above the active and completed rows.
   const tableHead = (
-    <div className="task-thead" role="row">
+    <div
+      className={`task-thead${showType ? " task-thead--type" : ""}`}
+      role="row"
+    >
       {sortHeader("created", "Created", "task-th--created")}
       <div className="task-th task-th--title">{config.labels.singular}</div>
+      {showType && <div className="task-th task-th--type">Type</div>}
       {showAssignee && sortHeader("assignee", "Assignee", "task-th--assignee")}
       {sortHeader("priority", "Priority", "task-th--center")}
       {sortHeader("status", "Status")}
@@ -1463,7 +1533,9 @@ export default function Tasks({
     return (
       <div
         key={task.id}
-        className={`task-trow${completed ? " task-trow--completed" : ""}`}
+        className={`task-trow${completed ? " task-trow--completed" : ""}${
+          showType ? " task-trow--type" : ""
+        }`}
         role="row"
       >
         <div className="task-tcell task-tcell--created">
@@ -1483,7 +1555,7 @@ export default function Tasks({
           >
             {task.name}
           </button>
-          <TaskBadge kind={task.badge_kind} />
+          {!showType && <TaskBadge kind={task.badge_kind} />}
           <JiraBadge task={task} />
           <GitlabBadge task={task} />
           <CopyLinkButton
@@ -1492,6 +1564,27 @@ export default function Tasks({
             label={task.name}
           />
         </div>
+
+        {showType && (
+          <div className="task-tcell task-tcell--type">
+            <select
+              className={`ticket-kind-select ticket-kind-${
+                task.badge_kind ?? "unset"
+              }`}
+              value={task.badge_kind ?? ""}
+              onChange={(event) => void changeType(task, event.target.value)}
+              aria-label={`Type of ${task.name}`}
+              data-tooltip="Ticket type"
+            >
+              <option value="">— Type</option>
+              {TYPE_OPTIONS.map((value) => (
+                <option key={value} value={value}>
+                  {BADGE_KINDS[value]?.label ?? value}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {showAssignee && (
           <div className="task-tcell task-tcell--assignee">
@@ -2014,6 +2107,34 @@ export default function Tasks({
                   ))}
                 </select>
               </label>
+
+              {/* Type is a Tickets-only field — the value shown in the board's
+                  "Type" column (Bug/Feature/…). */}
+              {showType && (
+                <label className="task-pill" data-tooltip="Type">
+                  <svg
+                    className="task-pill-icon task-pill-icon--stroke"
+                    viewBox="0 0 16 16"
+                    aria-hidden="true"
+                  >
+                    <path d="M2 3.5h7l4.5 4.5-6 6L2 9.5v-6z" />
+                    <circle cx="5" cy="6" r="1" />
+                  </svg>
+                  <select
+                    className="task-pill-select"
+                    value={badgeKind}
+                    aria-label="Type"
+                    onChange={(event) => setBadgeKind(event.target.value)}
+                  >
+                    <option value="">No type</option>
+                    {TYPE_OPTIONS.map((value) => (
+                      <option key={value} value={value}>
+                        {BADGE_KINDS[value]?.label ?? value}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
 
               <label
                 className="task-pill"
