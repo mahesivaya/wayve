@@ -45,7 +45,7 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
-    image: rwayve-backend:prod
+    image: ${BACKEND_IMAGE:-rwayve-backend:prod}
     container_name: rwayve_backend_prod
     restart: always
     depends_on:
@@ -84,7 +84,7 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
-    image: rwayve-backend:prod
+    image: ${BACKEND_IMAGE:-rwayve-backend:prod}
     container_name: rwayve_email_sync_worker_prod
     hostname: rwayve_email_sync_worker_prod
     restart: always
@@ -108,7 +108,7 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
-    image: rwayve-backend:prod
+    image: ${BACKEND_IMAGE:-rwayve-backend:prod}
     container_name: rwayve_email_body_worker_prod
     hostname: rwayve_email_body_worker_prod
     restart: always
@@ -133,7 +133,7 @@ services:
     build:
       context: ../frontend
       dockerfile: Dockerfile.prod
-    image: rwayve-frontend:prod
+    image: ${FRONTEND_IMAGE:-rwayve-frontend:prod}
     container_name: rwayve_frontend_prod
     restart: always
 
