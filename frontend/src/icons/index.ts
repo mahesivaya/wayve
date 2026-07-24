@@ -51,6 +51,7 @@ export {
   MailOpen as MailOpenIcon,
   GitPullRequest as PullRequestIcon,
   Paperclip as AttachmentIcon,
+  Smile as EmojiIcon,
   Trash2 as TrashIcon,
   List as ListViewIcon,
   LayoutGrid as GridViewIcon,
