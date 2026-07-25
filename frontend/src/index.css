@@ -694,6 +694,20 @@
   height: 100%;
   min-height: 0;
   overflow-y: auto;
+  /* Declaring only overflow-y is a trap: per spec a `visible` axis paired with
+     an `auto` one computes to `auto`, so the shell was silently a scroll
+     container on BOTH axes and any 1px overrun became a real horizontal bar.
+     Clip it instead — content that legitimately needs to scroll sideways (wide
+     tables, the tasks board) owns its own `overflow-x: auto` container. */
+  overflow-x: hidden;
+  /* Reserve the scrollbar's 10px (see ::-webkit-scrollbar below — it's a
+     classic, space-taking bar, not an overlay one) up front. Without this the
+     10px is taken out of the content box only once the page grows past one
+     viewport, i.e. AFTER children have sized themselves against the full
+     width — recharts' ResponsiveContainer writes that stale measurement to an
+     inline pixel width, and the sliver it leaves is what showed as sideways
+     scroll on the admin home. Matches the other page shells below. */
+  scrollbar-gutter: stable;
   /* No outer padding band — pages own panels/headers carry their own inner
      padding, so content stays readable while using the full pane width. */
   padding: 0;
