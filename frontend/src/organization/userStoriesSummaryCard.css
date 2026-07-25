@@ -98,8 +98,19 @@
   outline-offset: 1px;
 }
 
+/* The plot is draggable: pull it sideways to slide the date window. touch-action
+   keeps the horizontal gesture for the chart while leaving vertical scrolling to
+   the page, so a drag on a phone doesn't fight the scroll. */
 .us-summary-chart {
   width: 100%;
+  cursor: grab;
+  touch-action: pan-y;
+}
+
+.us-summary-chart--dragging {
+  cursor: grabbing;
+  /* Without this a horizontal drag selects the axis labels it passes over. */
+  user-select: none;
 }
 
 /* The "Today" reference-line label sits above the plot area; the chart's small

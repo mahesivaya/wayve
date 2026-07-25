@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   Bar,
   BarChart,
@@ -57,6 +58,9 @@ const ROW_HEIGHT = 26;
 // names itself in — both outside the plotted rows.
 const CHART_CHROME = 62;
 const LABEL_WIDTH = 176; // axis gutter the story titles are drawn into
+// The chart's own left+right margins, excluded (with the gutter) when turning a
+// drag in pixels into a shift in days.
+const SIDE_MARGINS = 18;
 const MAX_ROWS = 12; // keep the summary card a summary; the board has them all
 // A story that starts and ends the same day would otherwise have zero width.
 const MIN_SPAN_MS = DAY_MS / 3;
@@ -189,23 +193,67 @@ export default function UserStoriesSummaryCard() {
   const { user } = useAuth();
   const cycleDays = user?.organization_sprint_total_days ?? DEFAULT_CYCLE_DAYS;
 
-  // Which sprint is on screen, counted from the one running now: 0 is current,
-  // -1 the one before it, +1 the one after. It steps both ways — a future
-  // window is the sprint's plan, which is worth looking at before it starts.
-  const [cycleOffset, setCycleOffset] = useState(0);
+  const cycleMs = cycleDays * DAY_MS;
+
+  // How far the window on screen sits from the sprint running now, in ms. The
+  // arrows move it a whole sprint at a time; dragging moves it a day at a time,
+  // so the window is not tied to sprint boundaries — any date range is reachable.
+  const [offsetMs, setOffsetMs] = useState(0);
 
   const cycle = useMemo(() => {
     const current = currentCycleStart(new Date(), cycleDays);
-    const start = current + cycleOffset * cycleDays * DAY_MS;
-    const end = start + cycleDays * DAY_MS;
+    const start = current + offsetMs;
+    const end = start + cycleMs;
     const today = startOfDay(new Date());
     return {
       start,
       end,
-      // Only mark today when the window on screen is the one actually running.
+      // Only mark today when the window on screen actually contains it.
       todayMs: today >= start && today <= end ? today : null,
     };
-  }, [cycleDays, cycleOffset]);
+  }, [cycleDays, cycleMs, offsetMs]);
+
+  // Drag-to-pan. The origin is a ref, not state: it is read by the move handler
+  // and must not itself trigger a render on every pointer sample.
+  const chartRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ x: number; offset: number; msPerPx: number } | null>(
+    null
+  );
+  const [dragging, setDragging] = useState(false);
+
+  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const el = chartRef.current;
+    if (!el || event.button !== 0) return;
+    // The bars occupy the container minus the label gutter and the chart's own
+    // side margins; that width is what a pixel of drag is measured against.
+    const plotWidth = el.clientWidth - LABEL_WIDTH - SIDE_MARGINS;
+    if (plotWidth <= 0) return;
+    dragRef.current = {
+      x: event.clientX,
+      offset: offsetMs,
+      msPerPx: cycleMs / plotWidth,
+    };
+    // Optional: pointer capture keeps a drag alive when the cursor leaves the
+    // plot, but jsdom (tests) doesn't implement it and it isn't essential.
+    el.setPointerCapture?.(event.pointerId);
+    setDragging(true);
+  };
+
+  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    // Dragging right pulls earlier dates into view, like moving a sheet of
+    // paper. Snapped to whole days so the axis keeps landing on date ticks.
+    const shifted = drag.offset - (event.clientX - drag.x) * drag.msPerPx;
+    setOffsetMs(Math.round(shifted / DAY_MS) * DAY_MS);
+  };
+
+  const endDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return;
+    dragRef.current = null;
+    chartRef.current?.releasePointerCapture?.(event.pointerId);
+    setDragging(false);
+  };
 
   const [stories, setStories] = useState<Task[] | null>(null);
   const [statuses, setStatuses] = useState<TaskStatusRow[] | null>(null);
@@ -315,16 +363,20 @@ export default function UserStoriesSummaryCard() {
   const loading = !failed && stories === null;
   const empty = !failed && !loading && rows.length === 0;
   const hidden = windowRows.length - rows.length;
-  const sprintLabel =
-    cycleOffset === 0
+  // Dragging can leave the window between sprint boundaries, where no sprint
+  // name is true; then the dates alone describe it.
+  const sprints = offsetMs / cycleMs;
+  const windowLabel = !Number.isInteger(sprints)
+    ? "Custom range"
+    : sprints === 0
       ? "Current sprint"
-      : cycleOffset === -1
+      : sprints === -1
         ? "Previous sprint"
-        : cycleOffset === 1
+        : sprints === 1
           ? "Next sprint"
-          : cycleOffset < 0
-            ? `${-cycleOffset} sprints ago`
-            : `In ${cycleOffset} sprints`;
+          : sprints < 0
+            ? `${-sprints} sprints ago`
+            : `In ${sprints} sprints`;
 
   return (
     <article className="us-summary-card" aria-label="User stories timeline">
@@ -332,7 +384,7 @@ export default function UserStoriesSummaryCard() {
         <div>
           <h3 className="us-summary-title">User Stories</h3>
           <p className="us-summary-sub">
-            {sprintLabel} · {fmtRange(cycle.start)}–{fmtRange(cycle.end)}
+            {windowLabel} · {fmtRange(cycle.start)}–{fmtRange(cycle.end)}
           </p>
         </div>
         <div className="us-summary-total" aria-hidden={failed}>
@@ -351,7 +403,7 @@ export default function UserStoriesSummaryCard() {
         <button
           type="button"
           className="us-summary-nav-btn"
-          onClick={() => setCycleOffset((n) => n - 1)}
+          onClick={() => setOffsetMs((ms) => ms - cycleMs)}
           aria-label="Previous sprint"
           title="Previous sprint"
         >
@@ -366,7 +418,18 @@ export default function UserStoriesSummaryCard() {
           ) : empty ? (
             <p className="us-summary-empty">No user stories in this sprint.</p>
           ) : (
-            <div className="us-summary-chart">
+            // Drag the plot to slide the window to any date range; the arrows
+            // remain the keyboard-reachable path for the same move.
+            <div
+              ref={chartRef}
+              className={`us-summary-chart${
+                dragging ? " us-summary-chart--dragging" : ""
+              }`}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={endDrag}
+              onPointerCancel={endDrag}
+            >
           <ResponsiveContainer
             width="100%"
             height={rows.length * ROW_HEIGHT + CHART_CHROME}
@@ -493,7 +556,7 @@ export default function UserStoriesSummaryCard() {
         <button
           type="button"
           className="us-summary-nav-btn"
-          onClick={() => setCycleOffset((n) => n + 1)}
+          onClick={() => setOffsetMs((ms) => ms + cycleMs)}
           aria-label="Next sprint"
           title="Next sprint"
         >
