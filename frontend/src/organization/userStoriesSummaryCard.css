@@ -120,30 +120,23 @@
   overflow: visible;
 }
 
-/* Status key for the timeline bars. Kept in the DOM rather than inside the SVG
-   so it can never overlap the plot as the chart grows with the story count. */
-.us-summary-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-  margin: 6px 0 0;
-  padding: 0 0 0 4px;
-  list-style: none;
-  font-size: 11px;
-  color: var(--color-text-muted);
+/* Hover label: the story's title, on the card's own surface. */
+.us-summary-tip {
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgb(13, 27, 42, 0.18);
+  white-space: nowrap;
 }
 
-.us-summary-legend li {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.us-summary-legend-swatch {
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
-  flex: none;
+/* Every story's bar wears the same fill — the timeline says when work ran, and
+   status belongs to the board. Set here rather than as an SVG `fill` attribute,
+   which cannot resolve a theme token. */
+.us-summary-bar {
+  fill: var(--color-primary-action);
 }
 
 /* The timeline shows the first N stories of the cycle; this says so rather than

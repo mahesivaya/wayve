@@ -4,7 +4,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -57,16 +56,16 @@ const ROW_HEIGHT = 26;
 // The date axis above the rows, plus the strip below them the "Today" marker
 // names itself in — both outside the plotted rows.
 const CHART_CHROME = 62;
-const LABEL_WIDTH = 176; // axis gutter the story titles are drawn into
+// Axis gutter. It holds a story number ("#41"), not a title — the titles were
+// truncated to fit and still ate a fifth of the card, which is width the spans
+// themselves can use. The full title is on hover.
+const LABEL_WIDTH = 52;
 // The chart's own left+right margins, excluded (with the gutter) when turning a
 // drag in pixels into a shift in days.
 const SIDE_MARGINS = 18;
 const MAX_ROWS = 12; // keep the summary card a summary; the board has them all
 // A story that starts and ends the same day would otherwise have zero width.
 const MIN_SPAN_MS = DAY_MS / 3;
-// Long titles are truncated in the data rather than left to overflow the axis
-// gutter, where they would be clipped mid-word by the SVG edge.
-const MAX_LABEL_CHARS = 24;
 // Row fields. `offset` is an invisible spacer bar that pushes the visible
 // `span` bar to its start date — the standard way to place a range in a
 // cartesian bar chart. Both are durations measured from the cycle's start, so
@@ -75,14 +74,16 @@ const OFFSET_KEY = "offset";
 const SPAN_KEY = "span";
 
 type TimelineRow = {
-  label: string;
+  /** Unique per row; the category axis plots against this, never shows it. */
+  key: string;
+  /** What the axis shows: "#41", or "—" for a story with no number. */
+  number: string;
+  /** The full, untruncated story name — the axis has no room for it, so it is
+   *  carried here for the hover tooltip. */
+  title: string;
   [OFFSET_KEY]: number;
   [SPAN_KEY]: number;
-  color: string;
-  statusName: string;
   startMs: number;
-  endMs: number;
-  running: boolean;
   points: number;
 };
 
@@ -91,12 +92,16 @@ type SegmentProps = {
   y?: number;
   width?: number;
   height?: number;
-  fill?: string;
 };
 
 // A story's span. Both ends are rounded because both are data — there is no
 // baseline here for a square end to sit on.
-function SpanBar({ x = 0, y = 0, width = 0, height = 0, fill }: SegmentProps) {
+//
+// Every bar looks the same. The chart's subject is when a story ran, and a
+// colour per status made that a second thing to decode for no gain — the board
+// is where status lives. The fill comes from CSS, since a theme token cannot
+// resolve inside an SVG `fill` attribute.
+function SpanBar({ x = 0, y = 0, width = 0, height = 0 }: SegmentProps) {
   if (height <= 0 || width <= 0) return null;
   const r = Math.min(BAR_RADIUS, height / 2, width / 2);
   const right = x + width;
@@ -106,7 +111,7 @@ function SpanBar({ x = 0, y = 0, width = 0, height = 0, fill }: SegmentProps) {
     `L${right},${bottom - r} Q${right},${bottom} ${right - r},${bottom} ` +
     `L${x + r},${bottom} Q${x},${bottom} ${x},${bottom - r} ` +
     `L${x},${y + r} Q${x},${y} ${x + r},${y} Z`;
-  return <path d={d} fill={fill} />;
+  return <path className="us-summary-bar" d={d} />;
 }
 
 function startOfDay(d: Date): number {
@@ -165,27 +170,23 @@ function buildRows(
     const endMs = Math.min(Math.max(ended, created + MIN_SPAN_MS), windowEnd);
     if (endMs <= windowStart || startMs >= windowEnd) return [];
 
-    const key = story.task_number != null ? `#${story.task_number} ` : "";
-    const title =
-      story.name.length > MAX_LABEL_CHARS
-        ? `${story.name.slice(0, MAX_LABEL_CHARS - 1).trimEnd()}…`
-        : story.name;
     return [
       {
-        label: `${key}${title}`,
+        // The row's identity on the category axis. It is the story's id, not
+        // anything on show: two stories can share a number (or have none), and
+        // recharts would silently merge rows that share a category value.
+        key: String(story.id),
+        number: story.task_number != null ? `#${story.task_number}` : "—",
+        title: story.name,
         [OFFSET_KEY]: startMs - windowStart,
         [SPAN_KEY]: Math.max(endMs - startMs, MIN_SPAN_MS),
-        color: status?.color ?? AXIS_INK,
-        statusName: status?.name ?? story.status,
         startMs,
-        endMs,
-        running: !finished,
         points: story.priority ?? 0,
       },
     ];
   });
 
-  built.sort((a, b) => a.startMs - b.startMs || a.label.localeCompare(b.label));
+  built.sort((a, b) => a.startMs - b.startMs || a.title.localeCompare(b.title));
   return built;
 }
 
@@ -343,12 +344,11 @@ export default function UserStoriesSummaryCard() {
     [stories, shownRows]
   );
 
-  // Legend entries: only the statuses actually on the timeline, in board order.
-  const legendStatuses = useMemo(() => {
-    if (!statuses) return [];
-    const present = new Set(rows.map((r) => r.statusName));
-    return statuses.filter((s) => present.has(s.name));
-  }, [statuses, rows]);
+  // Row key → the number the axis prints for it.
+  const numberByKey = useMemo(
+    () => new Map(rows.map((row) => [row.key, row.number])),
+    [rows]
+  );
 
   // A tick every other day keeps the labels from colliding on a narrow card
   // while still marking the cycle's rhythm. Ticks are relative to the cycle's
@@ -460,7 +460,11 @@ export default function UserStoriesSummaryCard() {
               />
               <YAxis
                 type="category"
-                dataKey="label"
+                // Plotted against the row's unique key, but labelled with the
+                // story number — so two stories that share a number (or have
+                // none) still get a row each.
+                dataKey="key"
+                tickFormatter={(key: string) => numberByKey.get(key) ?? ""}
                 tick={{ fill: AXIS_INK, fontSize: 11 }}
                 tickLine={false}
                 axisLine={false}
@@ -470,22 +474,15 @@ export default function UserStoriesSummaryCard() {
               />
               <Tooltip
                 cursor={{ fill: "rgba(148,163,184,0.10)" }}
-                contentStyle={{
-                  background: "var(--color-surface, #fff)",
-                  border: "1px solid var(--color-border, #e5e7eb)",
-                  borderRadius: 8,
-                  fontSize: 12,
-                }}
-                // The offset spacer is scaffolding, not data: report the span as
-                // its dates and status instead of two raw millisecond numbers.
-                formatter={(_value, _name, item) => {
-                  const row = item?.payload as TimelineRow | undefined;
-                  if (!row) return null;
-                  const to = row.running ? "now" : fmtRange(row.endMs);
-                  return [
-                    `${fmtRange(row.startMs)} → ${to}`,
-                    row.statusName,
-                  ] as [string, string];
+                // The axis has room for the number only, so the hover carries
+                // the title — and nothing else. The default tooltip would list
+                // the series values, which here are the spacer's and the span's
+                // raw millisecond durations; the dates are already the axis the
+                // bar is drawn against, so restating them earns nothing.
+                content={({ active, payload }) => {
+                  const row = payload?.[0]?.payload as TimelineRow | undefined;
+                  if (!active || !row) return null;
+                  return <div className="us-summary-tip">{row.title}</div>;
                 }}
               />
               {cycle.todayMs !== null && (
@@ -524,29 +521,11 @@ export default function UserStoriesSummaryCard() {
                 shape={(props: unknown) => (
                   <SpanBar {...(props as SegmentProps)} />
                 )}
-              >
-                {rows.map((row) => (
-                  <Cell key={row.label} fill={row.color} />
-                ))}
-              </Bar>
+              />
             </BarChart>
           </ResponsiveContainer>
-          {/* The legend lives in the DOM rather than inside the SVG: recharts
-              draws its own over the plot area, which would sit on top of the
-              last story's bar once the chart height tracks the row count. */}
-          <ul className="us-summary-legend">
-            {legendStatuses.map((s) => (
-              <li key={s.slug}>
-                <span
-                  className="us-summary-legend-swatch"
-                  style={{ background: s.color }}
-                  aria-hidden="true"
-                />
-                {s.name}
-              </li>
-            ))}
-          </ul>
-          {hidden > 0 && (
+          {/* No legend: every bar is the same, so there is nothing to key. */}
+              {hidden > 0 && (
                 <p className="us-summary-more">+{hidden} more on the board</p>
               )}
             </div>

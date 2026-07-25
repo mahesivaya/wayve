@@ -100,9 +100,9 @@ function stubWidth(el: HTMLElement, width: number) {
 
 async function renderCard() {
   const { container } = render(<UserStoriesSummaryCard />);
-  await screen.findByText(/Ride receipts/);
+  await screen.findByText("#7");
   const chart = container.querySelector(".us-summary-chart") as HTMLElement;
-  return { chart };
+  return { chart, container };
 }
 
 describe("user stories timeline", () => {
@@ -110,6 +110,31 @@ describe("user stories timeline", () => {
     await renderCard();
     expect(subtitle()).toContain("Current sprint");
     expect(subtitle()).toContain(fmt(fx.cycleStart));
+  });
+
+  it("labels each row with the story number, not its title", async () => {
+    await renderCard();
+    // The gutter is narrow by design; the full name would have to be truncated
+    // to fit, so it lives on the hover instead.
+    expect(screen.getByText("#7")).toBeTruthy();
+    expect(screen.queryByText(/Ride receipts by email/)).toBeNull();
+  });
+
+  it("hovers the full title, and nothing else", async () => {
+    const { container } = await renderCard();
+    // Recharts needs a measured plot to resolve a pointer position to a row, so
+    // drive the tooltip through the chart's own state rather than a real mouse
+    // move — what is under test is the content it renders, not its hit-testing.
+    const chart = container.querySelector(".recharts-wrapper") as HTMLElement;
+    fireEvent.mouseOver(chart, { clientX: 300, clientY: 60 });
+    fireEvent.mouseMove(chart, { clientX: 300, clientY: 60 });
+
+    const tip = container.querySelector(".us-summary-tip");
+    expect(tip).toBeTruthy();
+    // The title alone: no dates, and none of the raw millisecond durations the
+    // default tooltip would print for the spacer and span series.
+    expect(tip?.textContent).toBe("Ride receipts by email");
+    expect(tip?.textContent).not.toMatch(/\d/);
   });
 
   it("steps a whole sprint with the side arrows", async () => {
@@ -129,13 +154,14 @@ describe("user stories timeline", () => {
 
   it("drags the window to a range between sprint boundaries", async () => {
     const { chart } = await renderCard();
-    // 800px wide minus the label gutter and side margins leaves 606px of plot
-    // for a 14-day sprint, so ~43px is a day. Drag right by ~3 days.
+    // 800px wide, minus the 52px number gutter and 18px of side margins, leaves
+    // 730px of plot for a 14-day sprint — so a day is ~52px. Drag right 156px,
+    // which is 3 days.
     stubWidth(chart, 800);
 
     fireEvent.pointerDown(chart, { clientX: 400, button: 0, pointerId: 1 });
-    fireEvent.pointerMove(chart, { clientX: 400 + 130, pointerId: 1 });
-    fireEvent.pointerUp(chart, { clientX: 530, pointerId: 1 });
+    fireEvent.pointerMove(chart, { clientX: 400 + 156, pointerId: 1 });
+    fireEvent.pointerUp(chart, { clientX: 556, pointerId: 1 });
 
     // Dragging right pulls earlier dates in, and lands off a sprint boundary —
     // so the window no longer answers to a sprint's name.
