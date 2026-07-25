@@ -1,27 +1,17 @@
-/* Compact user-story burnup card, dropped into the admin dashboards. Mirrors
-   the .org-home-tile surface/hover so it reads as one of the console cards. */
+/* User-story timeline card, dropped into the admin dashboards. It borrows the
+   .org-home-tile surface but is a read-only panel — it isn't a link to the
+   board, so it carries none of the tile's hover/press affordances. */
 .us-summary-card {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-width: 820px;
+  /* Full width of whatever column it is dropped into — the timeline's value is
+     horizontal room, so the card takes all of it rather than capping short. */
+  width: 100%;
   padding: 16px 18px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 12px;
-  cursor: pointer;
-  outline: none;
-  transition:
-    transform 0.15s ease,
-    box-shadow 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.us-summary-card:hover,
-.us-summary-card:focus-visible {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgb(13, 27, 42, 0.08);
-  border-color: var(--color-primary-action);
 }
 
 .us-summary-head {
@@ -62,6 +52,52 @@
   color: var(--color-text-muted);
 }
 
+/* Timeline row: a sprint stepper pinned to each side, the chart taking the rest.
+   The chart column is min-width:0 so it shrinks with the card instead of
+   pushing the right-hand arrow off the edge. */
+.us-summary-body {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.us-summary-body-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.us-summary-nav-btn {
+  flex: none;
+  width: 26px;
+  height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.us-summary-nav-btn:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-primary-action);
+  background: var(--color-surface-muted, transparent);
+}
+
+.us-summary-nav-btn:focus-visible {
+  outline: 2px solid var(--color-primary-panel-border);
+  outline-offset: 1px;
+}
+
 .us-summary-chart {
   width: 100%;
 }
@@ -71,6 +107,41 @@
    surface paint into the gap above instead so the label stays visible. */
 .us-summary-chart .recharts-surface {
   overflow: visible;
+}
+
+/* Status key for the timeline bars. Kept in the DOM rather than inside the SVG
+   so it can never overlap the plot as the chart grows with the story count. */
+.us-summary-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 6px 0 0;
+  padding: 0 0 0 4px;
+  list-style: none;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.us-summary-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.us-summary-legend-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+
+/* The timeline shows the first N stories of the cycle; this says so rather than
+   letting the card look like the whole board. */
+.us-summary-more {
+  margin: 2px 0 0;
+  padding-left: 4px;
+  font-size: 11px;
+  color: var(--color-text-muted);
 }
 
 .us-summary-empty {

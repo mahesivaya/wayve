@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
-import { useNavigate } from "react-router-dom";
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
+  Cell,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -14,30 +12,98 @@ import {
 } from "recharts";
 import {
   getUserStories,
-  getUserStoryStatusHistory,
   USER_STORIES_CHANGED_EVENT,
-  type StatusHistoryDay,
 } from "../api/userStories";
 import { getTaskStatuses, type TaskStatusRow } from "../api/taskStatuses";
+import type { Task } from "../api/tasks";
 import { useAuth } from "../auth/useAuth";
+import {
+  DEMO_DATA_ENABLED,
+  demoStoriesForCycle,
+} from "./userStoriesDemoData";
 import "./userStoriesSummaryCard.css";
 
-// A small graphical summary of the team's user stories over a fixed sprint
-// (cycle) window. The chart draws one line per status (Todo / In Progress /
-// In Review / Completed…), each in its own status colour, showing how many
-// stories sit in that status on each day — the real burnup trend.
+// A timeline of the team's user stories across the current sprint (cycle): one
+// horizontal bar per story, running from when it was created to when it was
+// completed — or to the right edge while it is still open — over a date axis of
+// the cycle's days. Each bar takes its status's colour, so where a story sits on
+// the board and how long it has been running read together.
 //
-// The counts come from replayed status-change history, so the lines only carry
-// true day-by-day movement from when recording started; earlier days rest on the
-// backfilled day-0 baseline (each story's created_at → its current status).
-// "Total points" (sum of priorities) stays as a headline scalar — a different
-// measure from story counts, so it never shares the chart's axis.
+// A span chart rather than trend lines because the thing being tracked is a set
+// of overlapping date ranges: a line has to collapse them to a daily count
+// first, which is exactly the information ("which story, running how long")
+// that makes the sprint legible.
+//
+// Bars are clipped to the cycle window, so a story that started before it opens
+// flush against the left edge. "Total points" (sum of priorities) stays as a
+// headline scalar — a different measure from durations, so it never shares an
+// axis with them.
 
 const DEFAULT_CYCLE_DAYS = 14;
 // Cycles are fixed blocks measured from this Monday, so boundaries are stable.
 const CYCLE_ANCHOR = new Date("2026-01-05T00:00:00");
 const DAY_MS = 86_400_000;
 const AXIS_INK = "#94a3b8"; // muted gray, legible on both admin surfaces
+const GRID_INK = "rgba(148,163,184,0.18)";
+// Bar geometry: a capped thickness (the rest of the row's band stays air) and a
+// 4px radius on both ends — unlike a column off a baseline, a span has two data
+// ends and neither is anchored.
+const MAX_BAR_WIDTH = 14;
+const BAR_RADIUS = 4;
+// Row height the chart is sized from, so the card grows with the story count
+// instead of squeezing every story into a fixed box.
+const ROW_HEIGHT = 26;
+// The date axis above the rows, plus the strip below them the "Today" marker
+// names itself in — both outside the plotted rows.
+const CHART_CHROME = 62;
+const LABEL_WIDTH = 176; // axis gutter the story titles are drawn into
+const MAX_ROWS = 12; // keep the summary card a summary; the board has them all
+// A story that starts and ends the same day would otherwise have zero width.
+const MIN_SPAN_MS = DAY_MS / 3;
+// Long titles are truncated in the data rather than left to overflow the axis
+// gutter, where they would be clipped mid-word by the SVG edge.
+const MAX_LABEL_CHARS = 24;
+// Row fields. `offset` is an invisible spacer bar that pushes the visible
+// `span` bar to its start date — the standard way to place a range in a
+// cartesian bar chart. Both are durations measured from the cycle's start, so
+// the value axis is relative and its ticks are formatted back into dates.
+const OFFSET_KEY = "offset";
+const SPAN_KEY = "span";
+
+type TimelineRow = {
+  label: string;
+  [OFFSET_KEY]: number;
+  [SPAN_KEY]: number;
+  color: string;
+  statusName: string;
+  startMs: number;
+  endMs: number;
+  running: boolean;
+  points: number;
+};
+
+type SegmentProps = {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  fill?: string;
+};
+
+// A story's span. Both ends are rounded because both are data — there is no
+// baseline here for a square end to sit on.
+function SpanBar({ x = 0, y = 0, width = 0, height = 0, fill }: SegmentProps) {
+  if (height <= 0 || width <= 0) return null;
+  const r = Math.min(BAR_RADIUS, height / 2, width / 2);
+  const right = x + width;
+  const bottom = y + height;
+  const d =
+    `M${x + r},${y} L${right - r},${y} Q${right},${y} ${right},${y + r} ` +
+    `L${right},${bottom - r} Q${right},${bottom} ${right - r},${bottom} ` +
+    `L${x + r},${bottom} Q${x},${bottom} ${x},${bottom - r} ` +
+    `L${x},${y + r} Q${x},${y} ${x + r},${y} Z`;
+  return <path d={d} fill={fill} />;
+}
 
 function startOfDay(d: Date): number {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -50,71 +116,122 @@ function currentCycleStart(today: Date, cycleDays: number): number {
   return anchor + cycleIndex * cycleDays * DAY_MS;
 }
 
-// Local YYYY-MM-DD (not toISOString, which would shift the date in some zones).
-function isoDate(ms: number): string {
-  const d = new Date(ms);
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${m}-${day}`;
-}
-
 const fmtRange = (ms: number) =>
   new Date(ms).toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
   });
-// The API date is a bare YYYY-MM-DD; parse it as local midnight so the label
-// doesn't slip a day.
-const fmtDayLabel = (iso: string) =>
-  new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
+
+// The backend serialises timestamps without a zone offset; parsed as-is they are
+// read as local time, which is what the cycle window is measured in too.
+function parseTs(value?: string | null): number | null {
+  if (!value) return null;
+  const ms = new Date(value).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/**
+ * Turns stories into timeline rows against the window `[windowStart, windowEnd]`,
+ * dropping the ones that don't overlap it and clipping the rest to its edges.
+ * `now` is where an unfinished story's bar ends.
+ *
+ * A plain function rather than inline in the memo because both the real stories
+ * and the dev stand-ins go through it — one definition of what a bar means.
+ */
+function buildRows(
+  stories: Task[],
+  statuses: TaskStatusRow[],
+  windowStart: number,
+  windowEnd: number,
+  now: number
+): TimelineRow[] {
+  const byStatus = new Map(statuses.map((s) => [s.slug, s]));
+
+  const built = stories.flatMap((story) => {
+    const created = parseTs(story.created_at);
+    if (created === null) return [];
+    const status = byStatus.get(story.status);
+    // A finished story's span ends when it was last touched; an open one is
+    // still running, so it reaches `now` (clipped to the window below).
+    const finished =
+      status?.category === "completed" || status?.category === "canceled";
+    const ended = finished ? (parseTs(story.updated_at) ?? now) : now;
+
+    const startMs = Math.max(created, windowStart);
+    const endMs = Math.min(Math.max(ended, created + MIN_SPAN_MS), windowEnd);
+    if (endMs <= windowStart || startMs >= windowEnd) return [];
+
+    const key = story.task_number != null ? `#${story.task_number} ` : "";
+    const title =
+      story.name.length > MAX_LABEL_CHARS
+        ? `${story.name.slice(0, MAX_LABEL_CHARS - 1).trimEnd()}…`
+        : story.name;
+    return [
+      {
+        label: `${key}${title}`,
+        [OFFSET_KEY]: startMs - windowStart,
+        [SPAN_KEY]: Math.max(endMs - startMs, MIN_SPAN_MS),
+        color: status?.color ?? AXIS_INK,
+        statusName: status?.name ?? story.status,
+        startMs,
+        endMs,
+        running: !finished,
+        points: story.priority ?? 0,
+      },
+    ];
   });
 
+  built.sort((a, b) => a.startMs - b.startMs || a.label.localeCompare(b.label));
+  return built;
+}
+
 export default function UserStoriesSummaryCard() {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const cycleDays = user?.organization_sprint_total_days ?? DEFAULT_CYCLE_DAYS;
 
+  // Which sprint is on screen, counted from the one running now: 0 is current,
+  // -1 the one before it, +1 the one after. It steps both ways — a future
+  // window is the sprint's plan, which is worth looking at before it starts.
+  const [cycleOffset, setCycleOffset] = useState(0);
+
   const cycle = useMemo(() => {
-    const start = currentCycleStart(new Date(), cycleDays);
+    const current = currentCycleStart(new Date(), cycleDays);
+    const start = current + cycleOffset * cycleDays * DAY_MS;
     const end = start + cycleDays * DAY_MS;
-    const elapsed = Math.floor((startOfDay(new Date()) - start) / DAY_MS);
+    const today = startOfDay(new Date());
     return {
       start,
       end,
-      todayDay: elapsed >= 0 && elapsed <= cycleDays ? elapsed : null,
+      // Only mark today when the window on screen is the one actually running.
+      todayMs: today >= start && today <= end ? today : null,
     };
-  }, [cycleDays]);
+  }, [cycleDays, cycleOffset]);
 
-  const [totalPoints, setTotalPoints] = useState<number | null>(null);
+  const [stories, setStories] = useState<Task[] | null>(null);
   const [statuses, setStatuses] = useState<TaskStatusRow[] | null>(null);
-  const [history, setHistory] = useState<StatusHistoryDay[] | null>(null);
   const [failed, setFailed] = useState(false);
+  // The instant the current data was read, which is where an unfinished story's
+  // bar ends. Stamped on load rather than read while deriving the rows, so the
+  // row build stays a pure function of state; it refreshes with the data.
+  const [loadedAt, setLoadedAt] = useState(0);
 
   // A monotonically-increasing id so a slower earlier fetch can't clobber the
   // result of a newer one (e.g. a refetch triggered mid-flight by a story edit).
   const reqIdRef = useRef(0);
   const load = useCallback(() => {
     const myId = ++reqIdRef.current;
-    const from = isoDate(cycle.start);
-    const to = isoDate(cycle.end);
-    Promise.all([
-      getUserStories(),
-      getTaskStatuses(),
-      getUserStoryStatusHistory(from, to),
-    ])
-      .then(([stories, sts, hist]) => {
+    Promise.all([getUserStories(), getTaskStatuses()])
+      .then(([sts, statusRows]) => {
         if (reqIdRef.current !== myId) return;
-        setTotalPoints(stories.reduce((sum, s) => sum + (s.priority ?? 0), 0));
-        setStatuses(sts);
-        setHistory(hist);
+        setStories(sts);
+        setStatuses(statusRows);
+        setLoadedAt(Date.now());
         setFailed(false);
       })
       .catch(() => {
         if (reqIdRef.current === myId) setFailed(true);
       });
-  }, [cycle.start, cycle.end]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -135,59 +252,87 @@ export default function UserStoriesSummaryCard() {
     };
   }, [load]);
 
-  // Only draw a line for a status that actually appears in the window, so the
-  // legend doesn't list empty statuses. Keep the owner's board order.
-  const seriesStatuses = useMemo(() => {
-    if (!statuses || !history) return [];
-    const present = new Set<string>();
-    for (const day of history) {
-      for (const [slug, n] of Object.entries(day.counts)) {
-        if (n > 0) present.add(slug);
-      }
-    }
-    return statuses.filter((s) => present.has(s.slug));
-  }, [statuses, history]);
+  // One row per story whose span overlaps the sprint on screen, oldest start
+  // first so the bars cascade down the window the way a sprint actually unfolds.
+  const windowRows = useMemo<TimelineRow[]>(
+    () =>
+      stories && statuses
+        ? buildRows(stories, statuses, cycle.start, cycle.end, loadedAt)
+        : [],
+    [stories, statuses, loadedAt, cycle.start, cycle.end]
+  );
 
-  // One row per day, with a numeric field per drawn status (0-filled so each
-  // line is continuous rather than gapped).
-  const rows = useMemo(() => {
-    if (!history) return [];
-    return history.map((day) => {
-      const row: Record<string, number | string> = {
-        dateLabel: fmtDayLabel(day.date),
-      };
-      for (const s of seriesStatuses) row[s.slug] = day.counts[s.slug] ?? 0;
-      return row;
-    });
-  }, [history, seriesStatuses]);
+  // Dev only, and only for a window that is genuinely empty: a local database
+  // rarely has anything in an earlier sprint, which would leave the navigation
+  // with nothing to show. Real stories always win.
+  const demoRows = useMemo<TimelineRow[]>(() => {
+    if (!DEMO_DATA_ENABLED || !statuses || windowRows.length > 0) return [];
+    return buildRows(
+      demoStoriesForCycle(
+        cycle.start,
+        cycleDays,
+        statuses.map((s) => s.slug)
+      ),
+      statuses,
+      cycle.start,
+      cycle.end,
+      cycle.end // a demo sprint is history: nothing is still "running now"
+    );
+  }, [statuses, windowRows, cycle.start, cycle.end, cycleDays]);
 
-  const open = () => void navigate("/user-stories");
-  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      open();
-    }
-  };
+  const showingDemo = demoRows.length > 0;
+  const shownRows = showingDemo ? demoRows : windowRows;
+  const rows = useMemo(
+    () => shownRows.slice(0, MAX_ROWS),
+    [shownRows]
+  );
 
-  const loading = !failed && history === null;
-  const empty = !failed && !loading && seriesStatuses.length === 0;
-  const todayLabel =
-    cycle.todayDay !== null ? rows[cycle.todayDay]?.dateLabel : undefined;
+  // Points for the sprint on screen, not the whole backlog — so stepping back a
+  // sprint re-reads the headline against the same window as the bars.
+  const totalPoints = useMemo(
+    () =>
+      stories ? shownRows.reduce((sum, row) => sum + row.points, 0) : null,
+    [stories, shownRows]
+  );
+
+  // Legend entries: only the statuses actually on the timeline, in board order.
+  const legendStatuses = useMemo(() => {
+    if (!statuses) return [];
+    const present = new Set(rows.map((r) => r.statusName));
+    return statuses.filter((s) => present.has(s.name));
+  }, [statuses, rows]);
+
+  // A tick every other day keeps the labels from colliding on a narrow card
+  // while still marking the cycle's rhythm. Ticks are relative to the cycle's
+  // start, like the bar values, and formatted back into dates on the axis.
+  const span = cycle.end - cycle.start;
+  const dayTicks = useMemo(() => {
+    const ticks: number[] = [];
+    for (let ms = 0; ms <= span; ms += 2 * DAY_MS) ticks.push(ms);
+    return ticks;
+  }, [span]);
+
+  const loading = !failed && stories === null;
+  const empty = !failed && !loading && rows.length === 0;
+  const hidden = windowRows.length - rows.length;
+  const sprintLabel =
+    cycleOffset === 0
+      ? "Current sprint"
+      : cycleOffset === -1
+        ? "Previous sprint"
+        : cycleOffset === 1
+          ? "Next sprint"
+          : cycleOffset < 0
+            ? `${-cycleOffset} sprints ago`
+            : `In ${cycleOffset} sprints`;
 
   return (
-    <article
-      className="us-summary-card"
-      role="button"
-      tabIndex={0}
-      aria-label="Open user stories"
-      onClick={open}
-      onKeyDown={onKeyDown}
-    >
+    <article className="us-summary-card" aria-label="User stories timeline">
       <div className="us-summary-head">
         <div>
           <h3 className="us-summary-title">User Stories</h3>
           <p className="us-summary-sub">
-            By status · {fmtRange(cycle.start)}–{fmtRange(cycle.end)}
+            {sprintLabel} · {fmtRange(cycle.start)}–{fmtRange(cycle.end)}
           </p>
         </div>
         <div className="us-summary-total" aria-hidden={failed}>
@@ -198,78 +343,163 @@ export default function UserStoriesSummaryCard() {
         </div>
       </div>
 
-      {failed ? (
-        <p className="us-summary-empty">Couldn’t load user stories.</p>
-      ) : loading ? (
-        <p className="us-summary-empty">Loading…</p>
-      ) : empty ? (
-        <p className="us-summary-empty">No user stories yet.</p>
-      ) : (
-        <div className="us-summary-chart">
-          <ResponsiveContainer width="100%" height={172}>
-            <LineChart
+      {/* The sprint steppers flank the timeline rather than sitting in the
+          header, so they read as "move the window under them". They wrap the
+          empty and error states too — an empty sprint is exactly the one you
+          need to step away from. */}
+      <div className="us-summary-body">
+        <button
+          type="button"
+          className="us-summary-nav-btn"
+          onClick={() => setCycleOffset((n) => n - 1)}
+          aria-label="Previous sprint"
+          title="Previous sprint"
+        >
+          ‹
+        </button>
+
+        <div className="us-summary-body-main">
+          {failed ? (
+            <p className="us-summary-empty">Couldn’t load user stories.</p>
+          ) : loading ? (
+            <p className="us-summary-empty">Loading…</p>
+          ) : empty ? (
+            <p className="us-summary-empty">No user stories in this sprint.</p>
+          ) : (
+            <div className="us-summary-chart">
+          <ResponsiveContainer
+            width="100%"
+            height={rows.length * ROW_HEIGHT + CHART_CHROME}
+          >
+            <BarChart
               data={rows}
-              margin={{ top: 6, right: 8, bottom: 0, left: -20 }}
+              // Horizontal spans: stories run down the category axis, dates run
+              // along the value axis.
+              layout="vertical"
+              margin={{ top: 4, right: 14, bottom: 16, left: 4 }}
+              barCategoryGap="22%"
             >
-              <CartesianGrid stroke="rgba(148,163,184,0.18)" vertical={false} />
+              {/* Only the date gridlines earn their ink — the story rows are
+                  already separated by the gaps between bars. */}
+              <CartesianGrid stroke={GRID_INK} horizontal={false} />
               <XAxis
-                dataKey="dateLabel"
-                tick={{ fill: AXIS_INK, fontSize: 11 }}
-                tickLine={false}
-                axisLine={{ stroke: "rgba(148,163,184,0.3)" }}
-                // Fit as many date labels as the (now wider) card allows,
-                // always keeping the first + last and thinning the middle only
-                // enough to avoid overlap — so the wider block shows more dates.
-                interval="preserveStartEnd"
-                minTickGap={24}
-              />
-              <YAxis
+                type="number"
+                // Fixed to the cycle so every bar is placed against the same
+                // window, whatever range the stories themselves happen to span.
+                domain={[0, span]}
+                ticks={dayTicks}
+                // The dates read as a header above the work, as on a Gantt.
+                orientation="top"
                 tick={{ fill: AXIS_INK, fontSize: 11 }}
                 tickLine={false}
                 axisLine={false}
-                width={30}
-                allowDecimals={false}
+                tickFormatter={(rel: number) => fmtRange(cycle.start + rel)}
+              />
+              <YAxis
+                type="category"
+                dataKey="label"
+                tick={{ fill: AXIS_INK, fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+                width={LABEL_WIDTH}
+                // Every story is its own row, so every row keeps its label.
+                interval={0}
               />
               <Tooltip
-                cursor={{ stroke: "rgba(148,163,184,0.4)" }}
+                cursor={{ fill: "rgba(148,163,184,0.10)" }}
                 contentStyle={{
                   background: "var(--color-surface, #fff)",
                   border: "1px solid var(--color-border, #e5e7eb)",
                   borderRadius: 8,
                   fontSize: 12,
                 }}
+                // The offset spacer is scaffolding, not data: report the span as
+                // its dates and status instead of two raw millisecond numbers.
+                formatter={(_value, _name, item) => {
+                  const row = item?.payload as TimelineRow | undefined;
+                  if (!row) return null;
+                  const to = row.running ? "now" : fmtRange(row.endMs);
+                  return [
+                    `${fmtRange(row.startMs)} → ${to}`,
+                    row.statusName,
+                  ] as [string, string];
+                }}
               />
-              <Legend wrapperStyle={{ fontSize: 11 }} iconType="plainline" />
-              {todayLabel && (
+              {cycle.todayMs !== null && (
                 <ReferenceLine
-                  x={todayLabel}
+                  x={cycle.todayMs - cycle.start}
                   stroke={AXIS_INK}
                   strokeDasharray="3 3"
                   label={{
                     value: "Today",
-                    position: "top",
+                    // The date axis owns the top of the plot and the story bars
+                    // own its interior, so the marker names itself in the strip
+                    // below — the one band nothing else can occupy.
+                    position: "bottom",
                     fill: AXIS_INK,
                     fontSize: 10,
                   }}
                 />
               )}
-              {seriesStatuses.map((s) => (
-                <Line
-                  key={s.slug}
-                  type="monotone"
-                  dataKey={s.slug}
-                  name={s.name}
-                  stroke={s.color}
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4 }}
-                  isAnimationActive={false}
-                />
-              ))}
-            </LineChart>
+              {/* Invisible: it only pushes the span bar to its start date. */}
+              <Bar
+                dataKey={OFFSET_KEY}
+                stackId="span"
+                fill="transparent"
+                isAnimationActive={false}
+                legendType="none"
+              />
+              <Bar
+                dataKey={SPAN_KEY}
+                name="Story"
+                stackId="span"
+                maxBarSize={MAX_BAR_WIDTH}
+                isAnimationActive={false}
+                legendType="none"
+                // recharts types a custom shape's props as `unknown`; what it
+                // passes is the resolved bar geometry.
+                shape={(props: unknown) => (
+                  <SpanBar {...(props as SegmentProps)} />
+                )}
+              >
+                {rows.map((row) => (
+                  <Cell key={row.label} fill={row.color} />
+                ))}
+              </Bar>
+            </BarChart>
           </ResponsiveContainer>
+          {/* The legend lives in the DOM rather than inside the SVG: recharts
+              draws its own over the plot area, which would sit on top of the
+              last story's bar once the chart height tracks the row count. */}
+          <ul className="us-summary-legend">
+            {legendStatuses.map((s) => (
+              <li key={s.slug}>
+                <span
+                  className="us-summary-legend-swatch"
+                  style={{ background: s.color }}
+                  aria-hidden="true"
+                />
+                {s.name}
+              </li>
+            ))}
+          </ul>
+          {hidden > 0 && (
+                <p className="us-summary-more">+{hidden} more on the board</p>
+              )}
+            </div>
+          )}
         </div>
-      )}
+
+        <button
+          type="button"
+          className="us-summary-nav-btn"
+          onClick={() => setCycleOffset((n) => n + 1)}
+          aria-label="Next sprint"
+          title="Next sprint"
+        >
+          ›
+        </button>
+      </div>
     </article>
   );
 }
