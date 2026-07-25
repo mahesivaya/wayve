@@ -59,6 +59,23 @@ export type StatusHistoryDay = {
   counts: Record<string, number>;
 };
 
+// One story's own status timeline: the status it moved to, and when. Ordered
+// oldest first, and deliberately including events from before the requested
+// window — the latest one before it is the status the story was already in when
+// the window opened. See the backend `user_story_status_timeline` handler.
+export type StoryStatusEvent = { at: string; status: string };
+export type StoryStatusTimeline = { id: number; events: StoryStatusEvent[] };
+
+export const getUserStoryStatusTimeline = async (
+  from: string,
+  to: string
+): Promise<StoryStatusTimeline[]> => {
+  const data = await apiFetchJson<{ stories: StoryStatusTimeline[] }>(
+    `/api/user-stories/status-timeline?from=${from}&to=${to}`
+  );
+  return data.stories;
+};
+
 export const getUserStoryStatusHistory = async (
   from: string,
   to: string

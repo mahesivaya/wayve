@@ -132,11 +132,30 @@
   white-space: nowrap;
 }
 
-/* Every story's bar wears the same fill — the timeline says when work ran, and
-   status belongs to the board. Set here rather than as an SVG `fill` attribute,
-   which cannot resolve a theme token. */
-.us-summary-bar {
-  fill: var(--color-primary-action);
+/* Key for the block colours. Kept in the DOM rather than inside the SVG so it
+   can never overlap the plot as the chart grows with the story count. */
+.us-summary-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 6px 0 0;
+  padding: 0 0 0 4px;
+  list-style: none;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.us-summary-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.us-summary-legend-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
 }
 
 /* The timeline shows the first N stories of the cycle; this says so rather than

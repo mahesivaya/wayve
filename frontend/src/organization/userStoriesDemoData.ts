@@ -1,4 +1,5 @@
 import type { Task } from "../api/tasks";
+import type { StoryStatusEvent } from "../api/userStories";
 
 // Dev-only stand-in stories for the timeline card.
 //
@@ -53,42 +54,60 @@ function isoLocal(ms: number): string {
 }
 
 /**
- * Demo stories spanning `[cycleStart, cycleStart + cycleDays)`, in the order the
- * card would have received them from the API. `statusSlugs` is the owner's real
- * status list (board order, completed last) so the bars carry real colours.
+ * A demo sprint spanning `[cycleStart, cycleStart + cycleDays)`: the stories as
+ * the card would have received them from the API, plus the status history that
+ * cuts each bar into its blocks. `statusSlugs` is the owner's real status list
+ * (board order, completed last) so the blocks carry real colours.
  */
-export function demoStoriesForCycle(
+export function demoSprint(
   cycleStart: number,
   cycleDays: number,
   statusSlugs: string[]
-): Task[] {
-  if (statusSlugs.length === 0) return [];
+): { stories: Task[]; timeline: Map<number, StoryStatusEvent[]> } {
+  if (statusSlugs.length === 0) return { stories: [], timeline: new Map() };
   const dayMs = 86_400_000;
   const windowMs = cycleDays * dayMs;
   // A stable per-window seed: the sprint's day number. Rotating the title list
   // by it keeps each sprint distinguishable without any randomness.
   const seed = Math.floor(cycleStart / dayMs);
+  // Clamp into the real status list so a board with fewer columns still maps.
+  const slug = (i: number) => statusSlugs[Math.min(i, statusSlugs.length - 1)];
 
-  return PATTERN.map((slot, i) => {
-    const title = TITLES[(seed + i) % TITLES.length];
+  const stories: Task[] = [];
+  const timeline = new Map<number, StoryStatusEvent[]>();
+
+  PATTERN.forEach((slot, i) => {
+    const id = -(seed * 100 + i + 1); // negative: never collides with a real row
     const start = cycleStart + Math.round(slot.at * windowMs) + 9 * 3_600_000;
     const end = Math.min(
       cycleStart + Math.round((slot.at + slot.len) * windowMs),
       cycleStart + windowMs - 1
     );
-    // Clamp into the real status list so a board with fewer columns still maps.
-    const status = statusSlugs[Math.min(slot.status, statusSlugs.length - 1)];
-    return {
-      id: -(seed * 100 + i + 1), // negative: never collides with a real row
+
+    stories.push({
+      id,
       task_number: i + 1,
-      name: title,
+      name: TITLES[(seed + i) % TITLES.length],
       description: "",
       priority: ((seed + i) % 4) + 1,
-      status,
+      status: slug(slot.status),
       assigned_by: "",
       assignee: "",
       created_at: isoLocal(start),
       updated_at: isoLocal(end),
-    } as Task;
+    } as Task);
+
+    // The story walks the board from the first column to the one it ended in,
+    // spending an equal share of its span in each — enough to show the blocks.
+    const steps = slot.status + 1;
+    timeline.set(
+      id,
+      Array.from({ length: steps }, (_, step) => ({
+        at: isoLocal(start + Math.round(((end - start) * step) / steps)),
+        status: slug(step),
+      }))
+    );
   });
+
+  return { stories, timeline };
 }

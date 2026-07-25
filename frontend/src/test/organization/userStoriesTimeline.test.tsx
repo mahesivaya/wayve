@@ -1,7 +1,7 @@
 // The user-stories timeline card. Its window is a sprint by default but is not
 // bound to sprint boundaries: the side arrows step a whole sprint, and dragging
 // the plot slides it a day at a time, so any date range is reachable.
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
@@ -68,12 +68,24 @@ const fx = vi.hoisted(() => {
       updated_at: iso(cycleStart + 3 * 86_400_000),
     },
   ];
-  return { STATUSES, STORIES, cycleStart };
+  // The story sat in To Do for a day, then moved to Done — so its bar is cut
+  // into two blocks, one per status, in that order.
+  const TIMELINE = [
+    {
+      id: 1,
+      events: [
+        { at: iso(cycleStart + 86_400_000), status: "todo" },
+        { at: iso(cycleStart + 2 * 86_400_000), status: "done" },
+      ],
+    },
+  ];
+  return { STATUSES, STORIES, TIMELINE, cycleStart };
 });
 
 vi.mock("../../api/userStories", () => ({
   USER_STORIES_CHANGED_EVENT: "rwayve:userstories-changed",
   getUserStories: vi.fn().mockResolvedValue(fx.STORIES),
+  getUserStoryStatusTimeline: vi.fn().mockResolvedValue(fx.TIMELINE),
 }));
 
 vi.mock("../../api/taskStatuses", () => ({
@@ -98,6 +110,14 @@ function stubWidth(el: HTMLElement, width: number) {
   Object.defineProperty(el, "clientWidth", { value: width, configurable: true });
 }
 
+// The status blocks are the only filled paths in the chart; the spacer that
+// positions each bar is transparent.
+function blockFills(container: HTMLElement): string[] {
+  return Array.from(container.querySelectorAll("path[fill]"))
+    .map((p) => p.getAttribute("fill") ?? "")
+    .filter((f) => f && f !== "transparent" && f !== "none");
+}
+
 async function renderCard() {
   const { container } = render(<UserStoriesSummaryCard />);
   await screen.findByText("#7");
@@ -106,6 +126,10 @@ async function renderCard() {
 }
 
 describe("user stories timeline", () => {
+  // The theme lives on <html>, which outlives an individual render — put it
+  // back so a test that flips it can't colour the ones after it.
+  afterEach(() => document.documentElement.removeAttribute("data-theme"));
+
   it("opens on the sprint running now", async () => {
     await renderCard();
     expect(subtitle()).toContain("Current sprint");
@@ -118,6 +142,44 @@ describe("user stories timeline", () => {
     // to fit, so it lives on the hover instead.
     expect(screen.getByText("#7")).toBeTruthy();
     expect(screen.queryByText(/Ride receipts by email/)).toBeNull();
+  });
+
+  it("cuts a bar into one coloured block per status it passed through", async () => {
+    const { container } = await renderCard();
+    // Two events → two blocks, drawn in the order the story moved through them
+    // and in two distinguishable colours.
+    const fills = blockFills(container);
+
+    expect(fills).toHaveLength(2);
+    expect(fills[0]).not.toBe(fills[1]);
+  });
+
+  it("draws one block when the story has no recorded history", async () => {
+    const { getUserStoryStatusTimeline } = await import("../../api/userStories");
+    vi.mocked(getUserStoryStatusTimeline).mockResolvedValueOnce([]);
+
+    const { container } = await renderCard();
+    // Falls back to the story's current status rather than losing the bar.
+    expect(blockFills(container)).toHaveLength(1);
+  });
+
+  it("re-tunes the block colours when the surface flips light", async () => {
+    const { container: dark } = await renderCard();
+    const onDark = blockFills(dark);
+
+    document.documentElement.setAttribute("data-theme", "light");
+    const { container: light } = await renderCard();
+    const onLight = blockFills(light);
+
+    // Same statuses, different surface: a colour picked to read on the dark
+    // background is not the one that reads on the light one.
+    expect(onLight).toHaveLength(onDark.length);
+    expect(onLight).not.toEqual(onDark);
+    // Hue is the status's identity and survives; only lightness moves. Green
+    // stays greener than it is red, whichever way the surface goes.
+    for (const fill of [...onDark, ...onLight]) {
+      expect(fill).toMatch(/^#[0-9a-f]{6}$/);
+    }
   });
 
   it("hovers the full title, and nothing else", async () => {

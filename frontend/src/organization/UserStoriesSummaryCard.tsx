@@ -4,6 +4,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -12,15 +13,15 @@ import {
 } from "recharts";
 import {
   getUserStories,
+  getUserStoryStatusTimeline,
   USER_STORIES_CHANGED_EVENT,
+  type StoryStatusEvent,
 } from "../api/userStories";
 import { getTaskStatuses, type TaskStatusRow } from "../api/taskStatuses";
 import type { Task } from "../api/tasks";
 import { useAuth } from "../auth/useAuth";
-import {
-  DEMO_DATA_ENABLED,
-  demoStoriesForCycle,
-} from "./userStoriesDemoData";
+import { useIsDarkTheme } from "../theme/useIsDarkTheme";
+import { DEMO_DATA_ENABLED, demoSprint } from "./userStoriesDemoData";
 import "./userStoriesSummaryCard.css";
 
 // A timeline of the team's user stories across the current sprint (cycle): one
@@ -66,12 +67,20 @@ const SIDE_MARGINS = 18;
 const MAX_ROWS = 12; // keep the summary card a summary; the board has them all
 // A story that starts and ends the same day would otherwise have zero width.
 const MIN_SPAN_MS = DAY_MS / 3;
-// Row fields. `offset` is an invisible spacer bar that pushes the visible
-// `span` bar to its start date — the standard way to place a range in a
-// cartesian bar chart. Both are durations measured from the cycle's start, so
-// the value axis is relative and its ticks are formatted back into dates.
+// Row fields. `offset` is an invisible spacer bar that pushes the story's first
+// block to its start date — the standard way to place a range in a cartesian
+// bar chart. Everything is a duration measured from the window's start, so the
+// value axis is relative and its ticks are formatted back into dates.
 const OFFSET_KEY = "offset";
-const SPAN_KEY = "span";
+// One field per status block: seg0, seg1, … stacked left to right in the order
+// the story passed through them. A row uses as many as it has and leaves the
+// rest at zero, so every row can be plotted by the same set of series.
+const segKey = (i: number) => `seg${i}`;
+// A block thinner than this can't show its colour, so it is folded into the one
+// before it rather than drawn as a sliver.
+const MIN_BLOCK_MS = 30 * 60_000;
+
+type StatusBlock = { status: string; color: string; ms: number };
 
 type TimelineRow = {
   /** Unique per row; the category axis plots against this, never shows it. */
@@ -82,9 +91,15 @@ type TimelineRow = {
    *  carried here for the hover tooltip. */
   title: string;
   [OFFSET_KEY]: number;
-  [SPAN_KEY]: number;
+  /** The blocks in order, for colour lookup and the hover breakdown. */
+  blocks: StatusBlock[];
+  /** Index of the row's last block, so a block can tell whether it owns the
+   *  bar's right cap. The first is always 0. */
+  lastBlock: number;
   startMs: number;
   points: number;
+  /** seg0, seg1, … — see `segKey`. */
+  [seg: string]: unknown;
 };
 
 type SegmentProps = {
@@ -92,26 +107,48 @@ type SegmentProps = {
   y?: number;
   width?: number;
   height?: number;
+  fill?: string;
+  index: number;
+  payload?: TimelineRow;
 };
 
-// A story's span. Both ends are rounded because both are data — there is no
-// baseline here for a square end to sit on.
+// One status block within a story's bar.
 //
-// Every bar looks the same. The chart's subject is when a story ran, and a
-// colour per status made that a second thing to decode for no gain — the board
-// is where status lives. The fill comes from CSS, since a theme token cannot
-// resolve inside an SVG `fill` attribute.
-function SpanBar({ x = 0, y = 0, width = 0, height = 0 }: SegmentProps) {
+// The bar is a single span cut into blocks by the status changes inside it, so
+// its length says how long the story ran and its colours say where that time
+// went. Only the outer ends are rounded: an interior edge is shared with the
+// next block, and rounding it would read as two separate bars.
+function SpanBlock({
+  x = 0,
+  y = 0,
+  width = 0,
+  height = 0,
+  fill,
+  index,
+  payload,
+}: SegmentProps) {
   if (height <= 0 || width <= 0) return null;
-  const r = Math.min(BAR_RADIUS, height / 2, width / 2);
-  const right = x + width;
+  const last = payload?.lastBlock ?? 0;
+  const isFirst = index === 0;
+  const isLast = index === last;
+  // A 2px gap in the surface separates touching blocks, but only where the
+  // block is wide enough to survive losing it — a narrow one would disappear.
+  const drawn = isLast || width < 8 ? width : width - 2;
+  const rl = isFirst ? Math.min(BAR_RADIUS, height / 2, drawn / 2) : 0;
+  const rr = isLast ? Math.min(BAR_RADIUS, height / 2, drawn / 2) : 0;
+  const right = x + drawn;
   const bottom = y + height;
   const d =
-    `M${x + r},${y} L${right - r},${y} Q${right},${y} ${right},${y + r} ` +
-    `L${right},${bottom - r} Q${right},${bottom} ${right - r},${bottom} ` +
-    `L${x + r},${bottom} Q${x},${bottom} ${x},${bottom - r} ` +
-    `L${x},${y + r} Q${x},${y} ${x + r},${y} Z`;
-  return <path className="us-summary-bar" d={d} />;
+    `M${x + rl},${y} L${right - rr},${y} ` +
+    (rr ? `Q${right},${y} ${right},${y + rr} ` : "") +
+    `L${right},${bottom - rr} ` +
+    (rr ? `Q${right},${bottom} ${right - rr},${bottom} ` : "") +
+    `L${x + rl},${bottom} ` +
+    (rl ? `Q${x},${bottom} ${x},${bottom - rl} ` : "") +
+    `L${x},${y + rl} ` +
+    (rl ? `Q${x},${y} ${x + rl},${y} ` : "") +
+    `Z`;
+  return <path d={d} fill={fill} />;
 }
 
 function startOfDay(d: Date): number {
@@ -124,6 +161,94 @@ function currentCycleStart(today: Date, cycleDays: number): number {
   const cycleIndex = Math.floor(elapsedDays / cycleDays);
   return anchor + cycleIndex * cycleDays * DAY_MS;
 }
+
+// A status colour is one value in the database, but it has to sit on two very
+// different surfaces. The hue is the status's identity and is kept exactly;
+// only lightness is moved, into the band that reads against the current
+// background — bright on the dark surface, deep on the light one — with a
+// saturation floor so a washed-out setting still arrives as a colour rather
+// than a grey. Outside these bands a mid-tone chosen for one theme goes muddy
+// on the other, which is what "adapt to the background" has to prevent.
+const DARK_BAND = { min: 0.54, max: 0.74 };
+const LIGHT_BAND = { min: 0.34, max: 0.52 };
+const SATURATION_FLOOR = 0.35;
+
+const clamp = (n: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, n));
+
+function hexToHsl(hex: string): { h: number; s: number; l: number } | null {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const full =
+    m[1].length === 3
+      ? m[1]
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : m[1];
+  const r = parseInt(full.slice(0, 2), 16) / 255;
+  const g = parseInt(full.slice(2, 4), 16) / 255;
+  const b = parseInt(full.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  if (d === 0) return { h: 0, s: 0, l };
+  const s = d / (1 - Math.abs(2 * l - 1));
+  const h =
+    max === r
+      ? ((g - b) / d + (g < b ? 6 : 0)) * 60
+      : max === g
+        ? ((b - r) / d + 2) * 60
+        : ((r - g) / d + 4) * 60;
+  return { h, s, l };
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  const [r, g, b] =
+    h < 60
+      ? [c, x, 0]
+      : h < 120
+        ? [x, c, 0]
+        : h < 180
+          ? [0, c, x]
+          : h < 240
+            ? [0, x, c]
+            : h < 300
+              ? [x, 0, c]
+              : [c, 0, x];
+  const to255 = (v: number) =>
+    Math.round((v + m) * 255)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${to255(r)}${to255(g)}${to255(b)}`;
+}
+
+/** The status's colour, re-tuned to read on the surface it is drawn against. */
+function adaptToSurface(hex: string | undefined, isDark: boolean): string {
+  const hsl = hex ? hexToHsl(hex) : null;
+  if (!hsl) return AXIS_INK;
+  const band = isDark ? DARK_BAND : LIGHT_BAND;
+  return hslToHex(
+    hsl.h,
+    Math.max(hsl.s, SATURATION_FLOOR),
+    clamp(hsl.l, band.min, band.max)
+  );
+}
+
+// Local YYYY-MM-DD (not toISOString, which would shift the date in some zones).
+function isoDate(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+// The `from` the history request sends. It only has to predate any story, since
+// the endpoint bounds its results by `to` alone.
+const HISTORY_FLOOR = "2000-01-01";
 
 const fmtRange = (ms: number) =>
   new Date(ms).toLocaleDateString(undefined, {
@@ -140,9 +265,73 @@ function parseTs(value?: string | null): number | null {
 }
 
 /**
+ * Cuts a story's span into one block per status it was in, using its own status
+ * history. The event *before* the span opens is what it was already in, so the
+ * first block is never colourless; events inside the span end one block and
+ * start the next. With no history at all (a story older than the recording, or
+ * one that never moved) the span is a single block of its current status.
+ *
+ * Blocks too thin to show their colour are folded into the block before them —
+ * a status held for minutes is a sliver, not information.
+ */
+function statusBlocks(
+  story: Task,
+  events: StoryStatusEvent[],
+  spanStart: number,
+  spanEnd: number,
+  byStatus: Map<string, TaskStatusRow>,
+  isDark: boolean
+): StatusBlock[] {
+  const colorOf = (slug: string) =>
+    adaptToSurface(byStatus.get(slug)?.color, isDark);
+
+  const stamped = events
+    .map((e) => ({ at: parseTs(e.at), status: e.status }))
+    .filter((e): e is { at: number; status: string } => e.at !== null)
+    .sort((a, b) => a.at - b.at);
+
+  // What it was in when the span opened: the last change at or before the
+  // start, falling back to the first recorded status, then to its status now.
+  const opening =
+    stamped.filter((e) => e.at <= spanStart).at(-1)?.status ??
+    stamped[0]?.status ??
+    story.status;
+
+  const cuts = stamped.filter((e) => e.at > spanStart && e.at < spanEnd);
+
+  const blocks: StatusBlock[] = [];
+  let at = spanStart;
+  let status = opening;
+  for (const cut of [...cuts, { at: spanEnd, status: "" }]) {
+    const ms = cut.at - at;
+    const previous = blocks.at(-1);
+    if (ms < MIN_BLOCK_MS && previous) {
+      previous.ms += ms;
+    } else if (ms > 0) {
+      // A repeat of the status already running is the same block continuing.
+      if (previous && previous.status === status) previous.ms += ms;
+      else blocks.push({ status, color: colorOf(status), ms });
+    }
+    at = cut.at;
+    status = cut.status;
+  }
+
+  return blocks.length > 0
+    ? blocks
+    : [
+        {
+          status: opening,
+          color: colorOf(opening),
+          ms: Math.max(spanEnd - spanStart, MIN_SPAN_MS),
+        },
+      ];
+}
+
+/**
  * Turns stories into timeline rows against the window `[windowStart, windowEnd]`,
  * dropping the ones that don't overlap it and clipping the rest to its edges.
- * `now` is where an unfinished story's bar ends.
+ * `now` is where an unfinished story's bar ends. `timeline` maps a story id to
+ * its status history; a story missing from it just gets one block.
  *
  * A plain function rather than inline in the memo because both the real stories
  * and the dev stand-ins go through it — one definition of what a bar means.
@@ -150,9 +339,11 @@ function parseTs(value?: string | null): number | null {
 function buildRows(
   stories: Task[],
   statuses: TaskStatusRow[],
+  timeline: Map<number, StoryStatusEvent[]>,
   windowStart: number,
   windowEnd: number,
-  now: number
+  now: number,
+  isDark: boolean
 ): TimelineRow[] {
   const byStatus = new Map(statuses.map((s) => [s.slug, s]));
 
@@ -170,20 +361,32 @@ function buildRows(
     const endMs = Math.min(Math.max(ended, created + MIN_SPAN_MS), windowEnd);
     if (endMs <= windowStart || startMs >= windowEnd) return [];
 
-    return [
-      {
-        // The row's identity on the category axis. It is the story's id, not
-        // anything on show: two stories can share a number (or have none), and
-        // recharts would silently merge rows that share a category value.
-        key: String(story.id),
-        number: story.task_number != null ? `#${story.task_number}` : "—",
-        title: story.name,
-        [OFFSET_KEY]: startMs - windowStart,
-        [SPAN_KEY]: Math.max(endMs - startMs, MIN_SPAN_MS),
-        startMs,
-        points: story.priority ?? 0,
-      },
-    ];
+    const blocks = statusBlocks(
+      story,
+      timeline.get(story.id) ?? [],
+      startMs,
+      endMs,
+      byStatus,
+      isDark
+    );
+
+    const row: TimelineRow = {
+      // The row's identity on the category axis. It is the story's id, not
+      // anything on show: two stories can share a number (or have none), and
+      // recharts would silently merge rows that share a category value.
+      key: String(story.id),
+      number: story.task_number != null ? `#${story.task_number}` : "—",
+      title: story.name,
+      [OFFSET_KEY]: startMs - windowStart,
+      blocks,
+      lastBlock: blocks.length - 1,
+      startMs,
+      points: story.priority ?? 0,
+    };
+    blocks.forEach((block, i) => {
+      row[segKey(i)] = block.ms;
+    });
+    return [row];
   });
 
   built.sort((a, b) => a.startMs - b.startMs || a.title.localeCompare(b.title));
@@ -192,6 +395,8 @@ function buildRows(
 
 export default function UserStoriesSummaryCard() {
   const { user } = useAuth();
+  // Re-tunes every block and swatch when the surface flips light or dark.
+  const isDark = useIsDarkTheme();
   const cycleDays = user?.organization_sprint_total_days ?? DEFAULT_CYCLE_DAYS;
 
   const cycleMs = cycleDays * DAY_MS;
@@ -258,6 +463,10 @@ export default function UserStoriesSummaryCard() {
 
   const [stories, setStories] = useState<Task[] | null>(null);
   const [statuses, setStatuses] = useState<TaskStatusRow[] | null>(null);
+  // Story id → its status history, for cutting each bar into blocks.
+  const [timeline, setTimeline] = useState<Map<number, StoryStatusEvent[]>>(
+    new Map()
+  );
   const [failed, setFailed] = useState(false);
   // The instant the current data was read, which is where an unfinished story's
   // bar ends. Stamped on load rather than read while deriving the rows, so the
@@ -269,11 +478,27 @@ export default function UserStoriesSummaryCard() {
   const reqIdRef = useRef(0);
   const load = useCallback(() => {
     const myId = ++reqIdRef.current;
-    Promise.all([getUserStories(), getTaskStatuses()])
-      .then(([sts, statusRows]) => {
+    // The history is fetched once for everything up to a horizon, not per
+    // window: the endpoint bounds only by `to`, so a wider request is a superset
+    // of a narrower one, and the window can then be dragged anywhere without a
+    // refetch per day. A story has a handful of status changes, so this stays
+    // small even over a long history.
+    // `from` is required by the endpoint but does not bound what it returns, so
+    // it is a floor rather than the window's own start.
+    const from = HISTORY_FLOOR;
+    const to = isoDate(Date.now() + 365 * DAY_MS);
+    Promise.all([
+      getUserStories(),
+      getTaskStatuses(),
+      // The blocks are an enrichment: if only the history fails, the card still
+      // draws every bar as one block of its current status.
+      getUserStoryStatusTimeline(from, to).catch(() => []),
+    ])
+      .then(([sts, statusRows, spans]) => {
         if (reqIdRef.current !== myId) return;
         setStories(sts);
         setStatuses(statusRows);
+        setTimeline(new Map(spans.map((s) => [s.id, s.events])));
         setLoadedAt(Date.now());
         setFailed(false);
       })
@@ -306,9 +531,17 @@ export default function UserStoriesSummaryCard() {
   const windowRows = useMemo<TimelineRow[]>(
     () =>
       stories && statuses
-        ? buildRows(stories, statuses, cycle.start, cycle.end, loadedAt)
+        ? buildRows(
+            stories,
+            statuses,
+            timeline,
+            cycle.start,
+            cycle.end,
+            loadedAt,
+            isDark
+          )
         : [],
-    [stories, statuses, loadedAt, cycle.start, cycle.end]
+    [stories, statuses, timeline, loadedAt, cycle.start, cycle.end, isDark]
   );
 
   // Dev only, and only for a window that is genuinely empty: a local database
@@ -316,25 +549,25 @@ export default function UserStoriesSummaryCard() {
   // with nothing to show. Real stories always win.
   const demoRows = useMemo<TimelineRow[]>(() => {
     if (!DEMO_DATA_ENABLED || !statuses || windowRows.length > 0) return [];
+    const demo = demoSprint(
+      cycle.start,
+      cycleDays,
+      statuses.map((s) => s.slug)
+    );
     return buildRows(
-      demoStoriesForCycle(
-        cycle.start,
-        cycleDays,
-        statuses.map((s) => s.slug)
-      ),
+      demo.stories,
       statuses,
+      demo.timeline,
       cycle.start,
       cycle.end,
-      cycle.end // a demo sprint is history: nothing is still "running now"
+      cycle.end, // a demo sprint is history: nothing is still "running now"
+      isDark
     );
-  }, [statuses, windowRows, cycle.start, cycle.end, cycleDays]);
+  }, [statuses, windowRows, cycle.start, cycle.end, cycleDays, isDark]);
 
   const showingDemo = demoRows.length > 0;
   const shownRows = showingDemo ? demoRows : windowRows;
-  const rows = useMemo(
-    () => shownRows.slice(0, MAX_ROWS),
-    [shownRows]
-  );
+  const rows = useMemo(() => shownRows.slice(0, MAX_ROWS), [shownRows]);
 
   // Points for the sprint on screen, not the whole backlog — so stepping back a
   // sprint re-reads the headline against the same window as the bars.
@@ -350,15 +583,37 @@ export default function UserStoriesSummaryCard() {
     [rows]
   );
 
-  // A tick every other day keeps the labels from colliding on a narrow card
-  // while still marking the cycle's rhythm. Ticks are relative to the cycle's
-  // start, like the bar values, and formatted back into dates on the axis.
+  // A tick for every day in the window. Ticks are relative to the cycle's start,
+  // like the bar values, and formatted back into dates on the axis.
   const span = cycle.end - cycle.start;
   const dayTicks = useMemo(() => {
     const ticks: number[] = [];
-    for (let ms = 0; ms <= span; ms += 2 * DAY_MS) ticks.push(ms);
+    for (let ms = 0; ms <= span; ms += DAY_MS) ticks.push(ms);
     return ticks;
   }, [span]);
+
+  // One series per block position, sized to the busiest row. A row with fewer
+  // blocks leaves the rest at zero, which recharts skips.
+  const blockSeries = useMemo(
+    () =>
+      Array.from(
+        { length: Math.max(0, ...rows.map((r) => r.blocks.length)) },
+        (_, i) => i
+      ),
+    [rows]
+  );
+
+  // Key for the block colours, in board order and only for the statuses on
+  // screen. It earns its space now that the colours carry meaning.
+  const legendStatuses = useMemo(() => {
+    if (!statuses) return [];
+    const present = new Set(rows.flatMap((r) => r.blocks.map((b) => b.status)));
+    return statuses
+      .filter((s) => present.has(s.slug))
+      // The same adaptation the blocks get, or the key would name a colour that
+      // is not on the chart.
+      .map((s) => ({ ...s, color: adaptToSurface(s.color, isDark) }));
+  }, [statuses, rows, isDark]);
 
   const loading = !failed && stories === null;
   const empty = !failed && !loading && rows.length === 0;
@@ -456,7 +711,17 @@ export default function UserStoriesSummaryCard() {
                 tick={{ fill: AXIS_INK, fontSize: 11 }}
                 tickLine={false}
                 axisLine={false}
-                tickFormatter={(rel: number) => fmtRange(cycle.start + rel)}
+                // Every day is labelled, so only the day number is spelled out;
+                // repeating the month fifteen times is noise, and at that
+                // density the labels would start colliding. The month is named
+                // where it is actually needed — the first tick, and wherever a
+                // new month begins.
+                tickFormatter={(rel: number) => {
+                  const ms = cycle.start + rel;
+                  return rel === 0 || new Date(ms).getDate() === 1
+                    ? fmtRange(ms)
+                    : String(new Date(ms).getDate());
+                }}
               />
               <YAxis
                 type="category"
@@ -509,22 +774,46 @@ export default function UserStoriesSummaryCard() {
                 isAnimationActive={false}
                 legendType="none"
               />
-              <Bar
-                dataKey={SPAN_KEY}
-                name="Story"
-                stackId="span"
-                maxBarSize={MAX_BAR_WIDTH}
-                isAnimationActive={false}
-                legendType="none"
-                // recharts types a custom shape's props as `unknown`; what it
-                // passes is the resolved bar geometry.
-                shape={(props: unknown) => (
-                  <SpanBar {...(props as SegmentProps)} />
-                )}
-              />
+              {/* One series per block position. They stack in order, so a row's
+                  blocks lay out left to right in the sequence the story moved
+                  through them; each row colours its own via a Cell. */}
+              {blockSeries.map((i) => (
+                <Bar
+                  key={segKey(i)}
+                  dataKey={segKey(i)}
+                  stackId="span"
+                  maxBarSize={MAX_BAR_WIDTH}
+                  isAnimationActive={false}
+                  legendType="none"
+                  // recharts types a custom shape's props as `unknown`; what it
+                  // passes is the resolved bar geometry.
+                  shape={(props: unknown) => (
+                    <SpanBlock {...(props as SegmentProps)} index={i} />
+                  )}
+                >
+                  {rows.map((row) => (
+                    <Cell
+                      key={row.key}
+                      fill={row.blocks[i]?.color ?? "transparent"}
+                    />
+                  ))}
+                </Bar>
+              ))}
             </BarChart>
           </ResponsiveContainer>
-          {/* No legend: every bar is the same, so there is nothing to key. */}
+              {/* The colours mean something again, so they need a key. */}
+              <ul className="us-summary-legend">
+                {legendStatuses.map((s) => (
+                  <li key={s.slug}>
+                    <span
+                      className="us-summary-legend-swatch"
+                      style={{ background: s.color }}
+                      aria-hidden="true"
+                    />
+                    {s.name}
+                  </li>
+                ))}
+              </ul>
               {hidden > 0 && (
                 <p className="us-summary-more">+{hidden} more on the board</p>
               )}

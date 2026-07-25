@@ -397,6 +397,79 @@ pub async fn user_story_status_history(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "days": days_json })))
 }
 
+/// Each story's own status timeline up to end-of-`to`, for the timeline card's
+/// per-story bars: a bar is drawn in blocks, one per status the story passed
+/// through, so its length says how long the story ran and its colours say where
+/// that time went.
+///
+/// Events before `from` are included on purpose — the latest one before the
+/// window is what the story's status *was* when the window opened, and without
+/// it the first block would have no colour. The caller clips to its own window.
+/// Response: `{ "stories": [{ "id": 12, "events": [{ "at": "...", "status": "todo" }] }] }`.
+#[get("/user-stories/status-timeline")]
+#[instrument(target = "http", skip(req, pool, query))]
+pub async fn user_story_status_timeline(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<HistoryQuery>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let owner = statuses::owner_for_user(pool.get_ref(), user_id).await?;
+    let (org_id, uid) = owner_ids(owner);
+
+    // `from` is accepted and validated for symmetry with the history endpoint,
+    // but does not bound the query: see the note above about the opening status.
+    let _from = NaiveDate::parse_from_str(&query.from, "%Y-%m-%d")
+        .map_err(|_| AppError::bad_request("Invalid `from` date (expected YYYY-MM-DD)"))?;
+    let to = NaiveDate::parse_from_str(&query.to, "%Y-%m-%d")
+        .map_err(|_| AppError::bad_request("Invalid `to` date (expected YYYY-MM-DD)"))?;
+    if to < _from {
+        return Err(AppError::bad_request("`to` must not be before `from`"));
+    }
+
+    let end_exclusive = to.succ_opt().unwrap_or(to);
+    let rows = sqlx::query(
+        "SELECT user_story_id, to_status, changed_at
+           FROM user_story_status_events
+          WHERE (($1::INTEGER IS NOT NULL AND organization_id = $1)
+             OR ($2::INTEGER IS NOT NULL AND user_id = $2))
+            AND changed_at < $3
+          ORDER BY user_story_id ASC, changed_at ASC, id ASC",
+    )
+    .bind(org_id)
+    .bind(uid)
+    .bind(NaiveDateTime::new(end_exclusive, NaiveTime::MIN))
+    .fetch_all(pool.get_ref())
+    .await?;
+
+    // Rows arrive grouped and ordered by the query, so one pass builds the
+    // per-story lists without sorting again.
+    let mut stories: Vec<Value> = Vec::new();
+    let mut current_id: Option<i32> = None;
+    let mut events: Vec<Value> = Vec::new();
+    for row in rows {
+        let sid: i32 = row.get("user_story_id");
+        if current_id != Some(sid) {
+            if let Some(id) = current_id {
+                stories.push(serde_json::json!({ "id": id, "events": events }));
+                events = Vec::new();
+            }
+            current_id = Some(sid);
+        }
+        let at: NaiveDateTime = row.get("changed_at");
+        let status: String = row.get("to_status");
+        events.push(serde_json::json!({
+            "at": at.format("%Y-%m-%dT%H:%M:%S").to_string(),
+            "status": status,
+        }));
+    }
+    if let Some(id) = current_id {
+        stories.push(serde_json::json!({ "id": id, "events": events }));
+    }
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "stories": stories })))
+}
+
 #[delete("/user-stories/{id}")]
 #[instrument(target = "http", skip(req, pool, path))]
 pub async fn delete_user_story(
