@@ -1,0 +1,131 @@
+/* Figma connect panel and the design cards it explains. Follows slackPanel.css
+   so the two read as the same family of integration panels. */
+.figma-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.figma-muted {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.figma-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-danger, #b42318);
+}
+
+.figma-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.figma-row--between {
+  justify-content: space-between;
+}
+
+.figma-btn {
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+}
+
+.figma-btn:hover:not(:disabled) {
+  border-color: var(--color-primary-action);
+}
+
+.figma-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.figma-btn--primary {
+  color: var(--color-on-primary, #fff);
+  background: var(--color-primary-action);
+  border-color: var(--color-primary-action);
+}
+
+/* ---------------------------------------------------------------------------
+   Design cards on a ticket / user story
+   --------------------------------------------------------------------------- */
+
+.figma-links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.figma-link-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface);
+  text-decoration: none;
+  color: inherit;
+}
+
+.figma-link-card:hover {
+  border-color: var(--color-primary-action);
+}
+
+/* Fixed box so a missing or slow thumbnail doesn't reflow the row. */
+.figma-link-thumb {
+  flex: none;
+  width: 56px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: var(--color-surface-soft, rgb(148 163 184 / 0.15));
+}
+
+.figma-link-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.figma-link-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.figma-link-meta {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.figma-link-remove {
+  margin-left: auto;
+  flex: none;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.figma-link-remove:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-border);
+}

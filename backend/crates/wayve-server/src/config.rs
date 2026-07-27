@@ -352,6 +352,38 @@ pub fn github_oauth() -> GithubOAuthConfig {
     }
 }
 
+/// Slack OAuth app credentials. Replaces asking an admin to create a Slack app
+/// and paste an `xoxb-` bot token: the connect button walks the same authorize →
+/// callback → encrypted-token path every other provider here uses.
+pub struct SlackOAuthConfig {
+    pub client_id: Option<String>,
+    pub client_secret: Option<String>,
+    pub redirect_uri: Option<String>,
+}
+
+pub fn slack_oauth() -> SlackOAuthConfig {
+    SlackOAuthConfig {
+        client_id: var_opt("SLACK_CLIENT_ID"),
+        client_secret: var_opt("SLACK_CLIENT_SECRET"),
+        redirect_uri: var_opt("SLACK_OAUTH_REDIRECT_URI"),
+    }
+}
+
+/// Figma OAuth app credentials, for attaching design files to board items.
+pub struct FigmaOAuthConfig {
+    pub client_id: Option<String>,
+    pub client_secret: Option<String>,
+    pub redirect_uri: Option<String>,
+}
+
+pub fn figma_oauth() -> FigmaOAuthConfig {
+    FigmaOAuthConfig {
+        client_id: var_opt("FIGMA_CLIENT_ID"),
+        client_secret: var_opt("FIGMA_CLIENT_SECRET"),
+        redirect_uri: var_opt("FIGMA_OAUTH_REDIRECT_URI"),
+    }
+}
+
 pub struct OutlookOAuthConfig {
     pub client_id: Option<String>,
     pub client_secret: Option<String>,
@@ -394,6 +426,8 @@ pub fn validate() {
     feature("zoom (scheduler)", zoom().is_ok());
     feature("google oauth", google_oauth().client_id.is_some());
     feature("github oauth", github_oauth().client_id.is_some());
+    feature("slack oauth", slack_oauth().client_id.is_some());
+    feature("figma oauth", figma_oauth().client_id.is_some());
     feature("outlook oauth", outlook_oauth().client_id.is_some());
     feature("smtp (email send)", smtp().is_ok());
 }

@@ -11,6 +11,20 @@ export type SlackConnectionStatus = {
 export const getSlackConnection = async () =>
   apiFetchJson<SlackConnectionStatus>("/api/integrations/slack/connection");
 
+// The OAuth path: ask for the authorize URL and send the browser there. Slack
+// redirects back to /slack/oauth/callback, which stores the granted bot token.
+// Preferred over connectSlack below — nobody should have to make a Slack app by
+// hand to use this.
+export const getSlackConnectUrl = async () => {
+  const data = await apiFetchJson<{ url: string }>("/api/slack-oauth/connect", {
+    method: "POST",
+  });
+  return data.url;
+};
+
+// The manual path, kept for a workspace whose admin would rather paste a bot
+// token than install the OAuth app (self-hosted Slack apps, restricted
+// installs). The OAuth callback writes the same row.
 export const connectSlack = async (botToken: string) =>
   apiFetchJson<SlackConnectionStatus>("/api/integrations/slack/connection", {
     method: "PUT",
