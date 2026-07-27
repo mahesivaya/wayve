@@ -142,6 +142,9 @@ export default function PlanAdmin() {
   const [showForm, setShowForm] = useState(false);
   const [editingCode, setEditingCode] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftForm>(EMPTY_DRAFT);
+  // The draft as `openEdit` seeded it, so Save can tell an untouched form from
+  // an edited one. Null while creating — Create is never gated on this.
+  const [pristineDraft, setPristineDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const reload = useCallback(async () => {
@@ -183,12 +186,15 @@ export default function PlanAdmin() {
   const openCreate = () => {
     setEditingCode(null);
     setDraft(EMPTY_DRAFT);
+    setPristineDraft(null);
     setShowForm(true);
   };
 
   const openEdit = (plan: Plan) => {
+    const seeded = planToDraft(plan);
     setEditingCode(plan.code);
-    setDraft(planToDraft(plan));
+    setDraft(seeded);
+    setPristineDraft(JSON.stringify(seeded));
     setShowForm(true);
   };
 
@@ -196,7 +202,14 @@ export default function PlanAdmin() {
     setShowForm(false);
     setEditingCode(null);
     setDraft(EMPTY_DRAFT);
+    setPristineDraft(null);
   };
+
+  // Every field update rebuilds `draft` from a spread, so key order is stable
+  // and the seeded snapshot compares straight across. Save stays dead while the
+  // two match — editing a plan and changing nothing is a write the API doesn't
+  // need to serve.
+  const dirty = pristineDraft === null || JSON.stringify(draft) !== pristineDraft;
 
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -532,7 +545,8 @@ export default function PlanAdmin() {
               <button
                 type="submit"
                 className="plan-admin-primary"
-                disabled={busy}
+                disabled={busy || !dirty}
+                title={dirty ? undefined : "No changes to save"}
               >
                 {busy
                   ? "Saving…"

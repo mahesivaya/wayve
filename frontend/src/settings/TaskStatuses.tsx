@@ -189,6 +189,14 @@ export default function TaskStatuses() {
     });
   };
 
+  // Save is gated on the row's draft differing from the status it opened, so an
+  // inline edit that changes nothing can't post a no-op update. Name and
+  // description compare trimmed, matching what `submitEdit` sends.
+  const editDirty = (status: TaskStatusRow) =>
+    editDraft.name.trim() !== status.name ||
+    editDraft.description.trim() !== status.description ||
+    editDraft.color !== status.color;
+
   const submitEdit = async (status: TaskStatusRow) => {
     if (!editDraft.name.trim() || busy) return;
     setBusy(true);
@@ -398,7 +406,12 @@ export default function TaskStatuses() {
                         <button
                           type="submit"
                           className="ts-btn ts-btn--primary"
-                          disabled={busy || !editDraft.name.trim()}
+                          disabled={
+                            busy || !editDraft.name.trim() || !editDirty(status)
+                          }
+                          title={
+                            editDirty(status) ? undefined : "No changes to save"
+                          }
                         >
                           Save
                         </button>

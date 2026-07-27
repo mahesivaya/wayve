@@ -294,6 +294,16 @@ export default function McpPanel() {
     setEditToken("");
   };
 
+  // Save is gated on the panel differing from the connection it opened for, so
+  // expanding a server's settings and touching nothing can't post a no-op
+  // update. Label and URL compare trimmed, matching what `saveSettings` sends;
+  // the token field is write-only ("leave blank to keep the current token"), so
+  // anything typed into it is a change by definition.
+  const settingsDirty = (c: McpConnection) =>
+    editToken.trim().length > 0 ||
+    editLabel.trim() !== c.label ||
+    editUrl.trim() !== c.server_url;
+
   const saveSettings = async (c: McpConnection) => {
     if (!editLabel.trim() || !editUrl.trim()) return;
     setBusy(`save:${c.id}`);
@@ -552,7 +562,11 @@ export default function McpPanel() {
                         disabled={
                           busy === `save:${c.id}` ||
                           !editLabel.trim() ||
-                          !editUrl.trim()
+                          !editUrl.trim() ||
+                          !settingsDirty(c)
+                        }
+                        title={
+                          settingsDirty(c) ? undefined : "No changes to save"
                         }
                       >
                         {busy === `save:${c.id}` ? "Saving…" : "Save changes"}

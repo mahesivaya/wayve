@@ -112,6 +112,9 @@ export default function SkillsBox() {
 
   const [editorFile, setEditorFile] = useState<DocumentFile | null>(null);
   const [editorContent, setEditorContent] = useState("");
+  // The content as it was fetched, so Save can tell an untouched editor from an
+  // edited one — opening a skill to read it shouldn't be savable.
+  const [loadedContent, setLoadedContent] = useState("");
   const [editorLoading, setEditorLoading] = useState(false);
   const [editorSaving, setEditorSaving] = useState(false);
   const editorTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -203,6 +206,7 @@ export default function SkillsBox() {
   const openEditor = async (file: DocumentFile) => {
     setEditorFile(file);
     setEditorContent("");
+    setLoadedContent("");
     setEditorLoading(true);
     setError(null);
     setAiBusy(null);
@@ -213,6 +217,7 @@ export default function SkillsBox() {
     try {
       const data = await getSkillContent(file.id);
       setEditorContent(data.content);
+      setLoadedContent(data.content);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to open document");
       setEditorFile(null);
@@ -235,6 +240,10 @@ export default function SkillsBox() {
       setEditorSaving(false);
     }
   };
+
+  // Save stays dead until the buffer differs from what was fetched. An AI assist
+  // that rewrites the content counts, same as typing.
+  const editorDirty = editorContent !== loadedContent;
 
   const aiDisabled =
     aiBusy !== null ||
@@ -862,7 +871,8 @@ export default function SkillsBox() {
               <button
                 type="button"
                 className="drive-folder-create-btn"
-                disabled={editorSaving}
+                disabled={editorSaving || !editorDirty}
+                title={editorDirty ? undefined : "No changes to save"}
                 onClick={() => void saveEditor()}
               >
                 {editorSaving ? "Saving…" : "Save"}

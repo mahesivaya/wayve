@@ -131,6 +131,14 @@ function ProjectsAccessCard({
       return next;
     });
 
+  // Save is gated on the draft differing from what's already granted, so
+  // opening the editor and ticking nothing can't post a no-op write. Compared
+  // as sets: this list has no order to change, only membership.
+  const grantedSet = new Set(granted ?? []);
+  const dirty =
+    draft.size !== grantedSet.size ||
+    [...grantedSet].some((repo) => !draft.has(repo));
+
   const save = async () => {
     setSaving(true);
     setErr("");
@@ -207,7 +215,8 @@ function ProjectsAccessCard({
             <button
               type="button"
               className="md-save-btn"
-              disabled={saving}
+              disabled={saving || !dirty}
+              title={dirty ? undefined : "No changes to save"}
               onClick={() => void save()}
             >
               {saving ? "Saving…" : "Save"}

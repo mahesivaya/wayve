@@ -185,6 +185,10 @@ export default function Scheduler() {
 
   const [showModal, setShowModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<SchedulerEvent | null>(null);
+  // The modal's fields as `openEdit` seeded them, so Update can tell an
+  // untouched meeting from an edited one. Null while scheduling a new meeting —
+  // Save is never gated on this.
+  const [pristineEvent, setPristineEvent] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
   const [start, setStart] = useState("09:00");
@@ -517,6 +521,7 @@ export default function Scheduler() {
   const resetModal = () => {
     setShowModal(false);
     setEditingEvent(null);
+    setPristineEvent(null);
     setTitle("");
     setParticipants([]);
     setSelectedCalendarId("office");
@@ -533,19 +538,46 @@ export default function Scheduler() {
   const openEdit = (event: SchedulerEvent) => {
     setEditingEvent(event);
 
-    setTitle(event.title);
-    setSelectedDate(event.date);
-    setStart(snap15(toTime(event.start)));
-    setEnd(snap15(toTime(event.end)));
-    setSelectedCalendarId(getCalendarIdForEvent(event));
-    setParticipants(event.participants ?? []);
+    const seeded = {
+      title: event.title,
+      date: event.date,
+      start: snap15(toTime(event.start)),
+      end: snap15(toTime(event.end)),
+      calendarId: getCalendarIdForEvent(event),
+      participants: event.participants ?? [],
+    };
+    setPristineEvent(JSON.stringify(seeded));
+
+    setTitle(seeded.title);
+    setSelectedDate(seeded.date);
+    setStart(seeded.start);
+    setEnd(seeded.end);
+    setSelectedCalendarId(seeded.calendarId);
+    setParticipants(seeded.participants);
     setEmailInput("");
 
     setShowModal(true);
   };
 
+  // Update stays dead until a field differs from the meeting the modal opened,
+  // so re-opening one to check the time can't post a no-op update (which would
+  // re-send the invite emails). Built from the same values `openEdit` seeded, so
+  // the two compare straight across. Scheduling a new meeting isn't gated —
+  // there is no baseline to differ from.
+  const eventDirty =
+    pristineEvent === null ||
+    JSON.stringify({
+      title,
+      date: selectedDate,
+      start,
+      end,
+      calendarId: selectedCalendarId,
+      participants,
+    }) !== pristineEvent;
+
   const openCreate = (date?: string, startTime?: string) => {
     setEditingEvent(null);
+    setPristineEvent(null);
     setTitle("");
     setParticipants([]);
     setSelectedCalendarId(
@@ -1231,7 +1263,11 @@ export default function Scheduler() {
               Delete
             </button>
           )}
-          <button onClick={saveMeeting}>
+          <button
+            onClick={saveMeeting}
+            disabled={!eventDirty}
+            title={eventDirty ? undefined : "No changes to save"}
+          >
             {editingEvent ? "Update" : "Save"}
           </button>
           <button onClick={resetModal}>Cancel</button>

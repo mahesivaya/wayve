@@ -154,6 +154,19 @@ export default function Notes() {
   const editorOpen = selectedId !== null;
   const isEditing = typeof selectedId === "number";
 
+  // Save is gated on the editor differing from the note it opened (the decrypted
+  // copy in `notes`, which `fetchNotes` refreshes after every save), so opening a
+  // note and closing it can't post a no-op update. Compared raw: `save` encrypts
+  // exactly what's in the fields, without trimming. Creating is never gated —
+  // there is no stored note to differ from.
+  const editingNote = isEditing
+    ? notes.find((note) => note.id === selectedId)
+    : undefined;
+  const dirty =
+    editingNote === undefined ||
+    title !== (editingNote.title ?? "") ||
+    content !== (editingNote.content ?? "");
+
   const visibleNotes = useMemo(() => {
     if (!normalizedSearchQuery) return notes;
     return notes.filter((note) =>
@@ -253,7 +266,12 @@ export default function Notes() {
                   Delete
                 </button>
               )}
-              <button type="submit" className="primary" disabled={saving}>
+              <button
+                type="submit"
+                className="primary"
+                disabled={saving || !dirty}
+                title={dirty ? undefined : "No changes to save"}
+              >
                 {saving
                   ? isEditing
                     ? "Saving…"

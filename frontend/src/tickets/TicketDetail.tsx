@@ -137,6 +137,19 @@ export default function TicketDetail() {
     }
   };
 
+  // Save is gated on the form actually differing from the ticket it loaded, so
+  // an untouched page can't post a no-op update. `setTicket(updated)` on a
+  // successful save re-baselines this, which disables the button again. Name is
+  // compared trimmed because `save` trims it — trailing whitespace is not an
+  // edit.
+  const dirty =
+    ticket !== null &&
+    (name.trim() !== ticket.name ||
+      description !== ticket.description ||
+      priority !== ((ticket.priority as TaskPriority) ?? 3) ||
+      status !== ticket.status ||
+      assignee !== (ticket.assignee ?? ""));
+
   const remove = async () => {
     if (!ticket) return;
     if (
@@ -315,7 +328,12 @@ export default function TicketDetail() {
             </div>
 
             <div className="ticket-detail-actions">
-              <button type="submit" className="primary" disabled={saving}>
+              <button
+                type="submit"
+                className="primary"
+                disabled={saving || !dirty}
+                title={dirty ? undefined : "No changes to save"}
+              >
                 {saving ? "Saving…" : "Save changes"}
               </button>
               {/* AI fix is limited to P5 tickets; shown only when there's no fix
