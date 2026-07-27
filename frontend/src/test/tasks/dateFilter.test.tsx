@@ -44,6 +44,19 @@ vi.mock("../../api/tasks", () => ({
   downloadTaskAttachment: vi.fn(),
 }));
 
+// The status filter renders one checkbox per configured status, so the board
+// needs at least one to filter by. Unmocked this resolves to nothing and the
+// status menu is empty. Only the fetch is stubbed — Tasks also pulls the
+// category helpers from this module and needs the real ones.
+vi.mock("../../api/taskStatuses", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../api/taskStatuses")>()),
+  getTaskStatuses: vi
+    .fn()
+    .mockResolvedValue([
+      { id: 1, slug: "todo", name: "To Do", color: "#888", category: "open" },
+    ]),
+}));
+
 vi.mock("../../auth/useAuth", () => ({
   useAuth: () => ({
     user: { id: 1, email: "me@test.local", scope: "personal" },
@@ -72,6 +85,14 @@ const setMode = (v: string) =>
   fireEvent.change(screen.getByLabelText("Filter by date created"), {
     target: { value: v },
   });
+
+// Status is a multi-select: a dropdown button inside the popover that reveals a
+// checkbox per status. Its trigger is labelled by the current selection, which
+// reads "All statuses" while nothing is picked.
+const pickStatus = async (name: string) => {
+  fireEvent.click(screen.getByRole("button", { name: /All statuses/ }));
+  fireEvent.click(await screen.findByLabelText(name));
+};
 
 describe("Tasks date-created filter", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -130,9 +151,7 @@ describe("Tasks date-created filter", () => {
     await screen.findByText("June task");
     openFilters();
     // Apply status + date → two active filters.
-    fireEvent.change(screen.getByLabelText("Filter by status"), {
-      target: { value: "todo" },
-    });
+    await pickStatus("To Do");
     setMode("after");
     fireEvent.change(screen.getByLabelText("Created on or after"), {
       target: { value: "2026-07-01" },
