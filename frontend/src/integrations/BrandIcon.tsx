@@ -106,6 +106,27 @@ export function BrandIcon({ name }: { name: string }) {
           />
         </svg>
       );
+    // Figma's mark: five shapes in its five brand colours, the bottom-right one
+    // a circle and the rest rounded rectangles.
+    case "figma":
+      return (
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+          <path
+            d="M8.5 2h3.5v6H8.5a3 3 0 0 1 0-6z"
+            fill="#F24E1E"
+          />
+          <path d="M12 2h3.5a3 3 0 0 1 0 6H12V2z" fill="#FF7262" />
+          <path d="M12 8h3.5a3 3 0 0 1 0 6H12V8z" fill="#1ABCFE" />
+          <path
+            d="M8.5 8H12v6H8.5a3 3 0 0 1 0-6z"
+            fill="#A259FF"
+          />
+          <path
+            d="M8.5 14H12v3a3 3 0 1 1-3.5-3z"
+            fill="#0ACF83"
+          />
+        </svg>
+      );
     case "gitlab":
       return (
         <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">

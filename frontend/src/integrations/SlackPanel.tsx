@@ -3,6 +3,7 @@ import {
   connectSlack,
   disconnectSlack,
   getSlackConnection,
+  getSlackConnectUrl,
   importSlack,
   linkSlackChannel,
   listSlackChannels,
@@ -44,6 +45,20 @@ export default function SlackPanel() {
 
   const fail = (e: unknown, fallback: string) =>
     setError(e instanceof Error ? e.message : fallback);
+
+  // Leaves the app for Slack's consent screen; the backend callback stores the
+  // granted token and redirects back to Integrations.
+  const connectWithOAuth = async () => {
+    setBusy("oauth");
+    setError(null);
+    setMessage(null);
+    try {
+      window.location.href = await getSlackConnectUrl();
+    } catch (e) {
+      fail(e, "Could not start the Slack connect flow.");
+      setBusy(null);
+    }
+  };
 
   const connect = async () => {
     if (!token.trim()) return;
@@ -191,30 +206,52 @@ export default function SlackPanel() {
         <p className="slack-muted">Loading…</p>
       ) : !connected ? (
         <div className="slack-connect">
+          {/* One click, approve in Slack, done — the app asks for the scopes it
+              needs, so nobody has to build a Slack app to use this. */}
           <p className="slack-muted">
-            Paste a Slack <strong>bot token</strong> (<code>xoxb-…</code>) with
-            the <code>channels:history</code>, <code>channels:read</code>,{" "}
-            <code>chat:write</code>, <code>chat:write.customize</code>, and{" "}
-            <code>users:read</code> scopes.
+            Connect your Slack workspace to bridge channels into Wayve Chat.
+            You'll be sent to Slack to approve the permissions.
           </p>
           <div className="slack-row">
-            <input
-              type="password"
-              className="slack-input"
-              placeholder="xoxb-…"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              autoComplete="off"
-            />
             <button
               type="button"
               className="slack-btn slack-btn--primary"
-              onClick={() => void connect()}
-              disabled={busy === "connect" || !token.trim()}
+              onClick={() => void connectWithOAuth()}
+              disabled={busy === "oauth"}
             >
-              {busy === "connect" ? "Connecting…" : "Connect"}
+              {busy === "oauth" ? "Redirecting…" : "Connect Slack"}
             </button>
           </div>
+
+          {/* The manual path stays for a workspace that can't install the app —
+              restricted installs, or a self-hosted Slack-compatible server. */}
+          <details className="slack-manual">
+            <summary>Use a bot token instead</summary>
+            <p className="slack-muted">
+              Paste a Slack <strong>bot token</strong> (<code>xoxb-…</code>) with
+              the <code>channels:history</code>, <code>channels:read</code>,{" "}
+              <code>chat:write</code>, <code>chat:write.customize</code>, and{" "}
+              <code>users:read</code> scopes.
+            </p>
+            <div className="slack-row">
+              <input
+                type="password"
+                className="slack-input"
+                placeholder="xoxb-…"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                autoComplete="off"
+              />
+              <button
+                type="button"
+                className="slack-btn slack-btn--primary"
+                onClick={() => void connect()}
+                disabled={busy === "connect" || !token.trim()}
+              >
+                {busy === "connect" ? "Connecting…" : "Connect"}
+              </button>
+            </div>
+          </details>
         </div>
       ) : (
         <div className="slack-connected">

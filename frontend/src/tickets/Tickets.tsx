@@ -32,6 +32,7 @@ const TICKETS_CONFIG: TasksConfig = {
     attachments: true,
     statusSummary: true,
     aiFix: true,
+    figmaLinks: true,
     typeColumn: true,
   },
   storageKey: "tickets",

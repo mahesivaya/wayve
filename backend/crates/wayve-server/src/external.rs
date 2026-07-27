@@ -51,6 +51,35 @@ pub fn github_oauth_token_url() -> String {
         .unwrap_or_else(|_| "https://github.com/login/oauth/access_token".to_string())
 }
 
+/// The browser redirect target for the Slack OAuth consent screen.
+pub fn slack_oauth_authorize_url() -> String {
+    std::env::var("SLACK_OAUTH_AUTHORIZE_URL")
+        .unwrap_or_else(|_| "https://slack.com/oauth/v2/authorize".to_string())
+}
+
+/// Server-to-server token exchange; never called from the browser.
+pub fn slack_oauth_token_url() -> String {
+    std::env::var("SLACK_OAUTH_TOKEN_URL")
+        .unwrap_or_else(|_| "https://slack.com/api/oauth.v2.access".to_string())
+}
+
+/// The browser redirect target for the Figma OAuth consent screen.
+pub fn figma_oauth_authorize_url() -> String {
+    std::env::var("FIGMA_OAUTH_AUTHORIZE_URL")
+        .unwrap_or_else(|_| "https://www.figma.com/oauth".to_string())
+}
+
+/// Server-to-server token exchange; never called from the browser.
+pub fn figma_oauth_token_url() -> String {
+    std::env::var("FIGMA_OAUTH_TOKEN_URL")
+        .unwrap_or_else(|_| "https://api.figma.com/v1/oauth/token".to_string())
+}
+
+/// Root for Figma REST calls (file metadata, current user).
+pub fn figma_api_base() -> String {
+    std::env::var("FIGMA_API_BASE").unwrap_or_else(|_| "https://api.figma.com".to_string())
+}
+
 /// Root for Jira Cloud REST calls. Each connection carries its own site base, so
 /// `JIRA_API_BASE` overrides it wholesale rather than per connection.
 pub fn jira_api_base(connection_base: &str) -> String {

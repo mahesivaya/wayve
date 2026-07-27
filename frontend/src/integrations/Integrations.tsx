@@ -3,12 +3,14 @@ import { getJiraConnection } from "../api/jira";
 import { getGithubConnection } from "../api/github";
 import { getGitlabConnection } from "../api/gitlab";
 import { getSlackConnection } from "../api/slack";
+import { getFigmaConnection } from "../api/figma";
 import { getMcpConnections } from "../api/mcp";
 import { getAccounts } from "../api/email";
 import { type EmailAccount } from "../emails/types";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import SlackPanel from "./SlackPanel";
+import FigmaPanel from "./FigmaPanel";
 import McpPanel from "./McpPanel";
 import GitLabPanel from "./GitLabPanel";
 import JiraPanel from "../tasks/JiraPanel";
@@ -102,6 +104,21 @@ export default function Integrations() {
     };
   }, [canManageMcp]);
 
+  // Per-user, so every account probes it — no tier or scope gate.
+  const [figmaConnected, setFigmaConnected] = useState(false);
+  const [showFigma, setShowFigma] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void getFigmaConnection()
+      .then((s) => {
+        if (!cancelled) setFigmaConnected(s.connected);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const [gitlabConnected, setGitlabConnected] = useState(false);
   const [showGitlab, setShowGitlab] = useState(false);
   useEffect(() => {
@@ -193,6 +210,15 @@ export default function Integrations() {
       onClick: () => setShowGitlab((v) => !v),
     },
     {
+      key: "figma",
+      name: "Figma",
+      description:
+        "Attach designs to tickets and user stories \u2014 paste a Figma link and it shows as a titled, thumbnailed reference.",
+      icon: <BrandIcon name="figma" />,
+      status: figmaConnected ? "enabled" : "available",
+      onClick: () => setShowFigma((v) => !v),
+    },
+    {
       key: "mcp",
       name: "Connect MCP",
       description:
@@ -203,10 +229,15 @@ export default function Integrations() {
     },
   ];
 
-  // Tiles an account can't use are hidden entirely rather than shown disabled.
+  // Tiles an account can't use at all are hidden rather than shown disabled.
+  //
+  // Slack is the exception: it stays on the list for every plan, carrying its
+  // "Enterprise" badge, because hiding it answered the question "can I connect
+  // Slack?" with silence. The card is inert below that tier and the backend
+  // gates the endpoints regardless, so showing it advertises the feature
+  // without granting it.
   const visibleServices = services.filter(
     (s) =>
-      (s.key !== "slack" || isEnterprise) &&
       (s.key !== "mcp" || canManageMcp) &&
       (s.key !== "gmail" || canConnectMailbox)
   );
@@ -308,6 +339,13 @@ export default function Integrations() {
         <section className="settings-card">
           <h2 className="settings-card-title">Slack</h2>
           <SlackPanel />
+        </section>
+      )}
+
+      {showFigma && (
+        <section className="settings-card">
+          <h2 className="settings-card-title">Figma</h2>
+          <FigmaPanel />
         </section>
       )}
 

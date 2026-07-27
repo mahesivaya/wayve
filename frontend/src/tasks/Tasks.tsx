@@ -43,6 +43,7 @@ import { getApiBase } from "../config/env";
 import { JiraBadge } from "./JiraPanel";
 import { GitlabBadge } from "./GitlabBadge";
 import TaskStatusIcon from "./TaskStatusIcon";
+import FigmaLinks from "../integrations/FigmaLinks";
 import "./tasks.css";
 
 const PRIORITY_OPTIONS: TaskPriority[] = [5, 4, 3, 2, 1];
@@ -487,6 +488,9 @@ export type TasksConfig = {
     // Shows a dedicated "Type" column (Bug/Feature/… badge) in the list-view
     // table instead of rendering the badge inline after the name. Tickets only.
     typeColumn?: boolean;
+    // Shows the "Design" section in the editor, for attaching Figma files.
+    // On for the workspace boards; personal Tasks leave it off.
+    figmaLinks?: boolean;
   };
   // localStorage prefix so the two boards keep independent view/mode state.
   storageKey: string;
@@ -2332,6 +2336,22 @@ export default function Tasks({
                   ))}
                 </ul>
               )}
+
+            {/* Designs attach to a saved item, so this appears once the
+                ticket or story exists — there is no id to hang them on
+                before the first save. */}
+            {config.features.figmaLinks && isEditing && editingId != null && (
+              <div className="task-compose-designs">
+                <span className="task-compose-designs-label">Design</span>
+                <FigmaLinks
+                  owner={
+                    config.storageKey === "tickets"
+                      ? { ticketId: editingId }
+                      : { userStoryId: editingId }
+                  }
+                />
+              </div>
+            )}
 
             {error && <div className="task-error">{error}</div>}
 

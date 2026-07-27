@@ -379,6 +379,27 @@ CREATE TABLE IF NOT EXISTS github_accounts (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Per-user Figma OAuth connection, same shape and the same at-rest encryption as
+-- github_accounts. Figma access is per person rather than per org: the token is
+-- only ever used to read metadata for files that user can already see, so one
+-- member connecting never widens what another can attach.
+CREATE TABLE IF NOT EXISTS figma_accounts (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    figma_handle TEXT NOT NULL,
+    figma_user_id TEXT,
+    figma_email TEXT,
+    access_token_iv TEXT NOT NULL,
+    access_token_encrypted TEXT NOT NULL,
+    -- Figma access tokens expire (unlike GitHub's), so the refresh token is kept
+    -- to renew them; without it a connection dies silently in a few weeks.
+    refresh_token_iv TEXT,
+    refresh_token_encrypted TEXT,
+    expires_at TIMESTAMPTZ,
+    scope TEXT,
+    connected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- =========================================================================
 -- OIDC SSO (multi-tenant: each organization brings its own IdP)
 -- =========================================================================
@@ -1608,6 +1629,48 @@ DO $$ BEGIN
         ADD CONSTRAINT workspace_tickets_support_ticket_fk
         FOREIGN KEY (support_ticket_id) REFERENCES support_tickets(id) ON DELETE CASCADE;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- ============================================================
+-- 🎨 FIGMA LINKS
+-- ------------------------------------------------------------
+-- A design file attached to a board item. Only the reference is stored — the
+-- file key, the node the link pointed at, and the metadata needed to render a
+-- card (name, thumbnail) without a Figma round trip on every board load. The
+-- design itself never leaves Figma.
+--
+-- Ownership is one nullable FK per board, with a CHECK that exactly one is set:
+-- a real foreign key each way means deleting a ticket or story takes its links
+-- with it, which a polymorphic (type, id) pair could not do.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS figma_links (
+    id SERIAL PRIMARY KEY,
+    ticket_id INTEGER REFERENCES workspace_tickets(id) ON DELETE CASCADE,
+    user_story_id INTEGER REFERENCES user_stories(id) ON DELETE CASCADE,
+    file_key TEXT NOT NULL,
+    -- The specific frame the link pointed at, when it had one.
+    node_id TEXT,
+    url TEXT NOT NULL,
+    name TEXT NOT NULL,
+    thumbnail_url TEXT,
+    -- Figma's own last-edit time, for showing staleness on the card.
+    file_modified_at TIMESTAMPTZ,
+    added_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT figma_links_owner_chk CHECK (
+        (ticket_id IS NOT NULL AND user_story_id IS NULL)
+        OR (ticket_id IS NULL AND user_story_id IS NOT NULL)
+    )
+);
+CREATE INDEX IF NOT EXISTS idx_figma_links_ticket ON figma_links(ticket_id);
+CREATE INDEX IF NOT EXISTS idx_figma_links_story ON figma_links(user_story_id);
+-- The same frame attached twice to one item is a duplicate, not a second link.
+-- NULLS NOT DISTINCT so a whole-file link (node_id IS NULL) also collides.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_figma_links_ticket
+    ON figma_links(ticket_id, file_key, node_id) NULLS NOT DISTINCT
+    WHERE ticket_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_figma_links_story
+    ON figma_links(user_story_id, file_key, node_id) NULLS NOT DISTINCT
+    WHERE user_story_id IS NOT NULL;
 
 -- Screenshots / files uploaded with the ticket. Mirrors task_attachments:
 -- per-row AES-GCM ciphertext blob on disk under ./uploads, base64 IV in DB.

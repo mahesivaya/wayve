@@ -2187,3 +2187,19 @@
   overflow-y: auto;
   padding: 18px;
 }
+
+/* "Design" block in the editor — the Figma files attached to this item. Sits
+   with the other compose sections rather than in the footer's icon row, since
+   each attached design is a card rather than a chip. */
+.task-compose-designs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.task-compose-designs-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
