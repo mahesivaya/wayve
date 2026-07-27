@@ -202,6 +202,14 @@ export default function Profile() {
     profile.role_label ?? user?.role_label ?? "Personal workspace owner";
   const roleKey = profile.effective_role ?? user?.effective_role ?? "owner";
 
+  // Save stays dead until a name field differs from the loaded profile — an
+  // untouched page has nothing to send. `setProfile(data)` after a successful
+  // save re-baselines this, disabling the button again. Compared untrimmed
+  // because `save` sends the raw values.
+  const dirty =
+    firstName !== (profile.first_name ?? "") ||
+    lastName !== (profile.last_name ?? "");
+
   return (
     <SettingsShell title="My Profile">
       <section className="settings-card">
@@ -395,7 +403,8 @@ export default function Profile() {
             type="button"
             className="profile-save"
             onClick={() => void save()}
-            disabled={saving}
+            disabled={saving || !dirty}
+            title={dirty ? undefined : "No changes to save"}
           >
             {saving ? "Saving…" : "Save"}
           </button>

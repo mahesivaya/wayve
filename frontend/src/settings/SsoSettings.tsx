@@ -119,6 +119,22 @@ export default function SsoSettings() {
     );
   }
 
+  // Save is gated on the form differing from the stored config, so re-opening a
+  // configured org's SSO page and touching nothing can't post a no-op PUT.
+  // `setExisting(saved)` after a save re-baselines it, disabling the button
+  // again. The URL/id/domain fields are compared trimmed, matching what onSave
+  // sends. The secret is never returned by the API, so any value typed into it
+  // is by definition a change. Enabling SSO for the first time isn't gated —
+  // there is no stored config to differ from.
+  const dirty =
+    existing === null ||
+    form.client_secret.length > 0 ||
+    form.issuer_url.trim() !== existing.issuer_url ||
+    form.client_id.trim() !== existing.client_id ||
+    form.allowed_domain.trim() !== existing.allowed_domain ||
+    form.enforce_sso !== existing.enforce_sso ||
+    form.enabled !== existing.enabled;
+
   async function onSave(event: React.FormEvent) {
     event.preventDefault();
     if (!orgId) return;
@@ -370,7 +386,11 @@ export default function SsoSettings() {
           </fieldset>
 
           <div className="sso-form-actions">
-            <button type="submit" disabled={saving}>
+            <button
+              type="submit"
+              disabled={saving || !dirty}
+              title={dirty ? undefined : "No changes to save"}
+            >
               {saving ? "Saving…" : existing ? "Save changes" : "Enable SSO"}
             </button>
             {existing && (

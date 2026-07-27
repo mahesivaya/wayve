@@ -97,6 +97,19 @@ export default function StoryDetail() {
     }
   };
 
+  // Save is gated on the form actually differing from the story it loaded, so
+  // an untouched page can't post a no-op update. `setStory(updated)` on a
+  // successful save re-baselines this, which disables the button again. Name is
+  // compared trimmed because `save` trims it — trailing whitespace is not an
+  // edit.
+  const dirty =
+    story !== null &&
+    (name.trim() !== story.name ||
+      description !== story.description ||
+      priority !== ((story.priority as TaskPriority) ?? 3) ||
+      status !== story.status ||
+      assignee !== (story.assignee ?? ""));
+
   const remove = async () => {
     if (!story) return;
     if (!window.confirm(`Delete story "${story.name}"? This can't be undone.`))
@@ -200,7 +213,12 @@ export default function StoryDetail() {
             </div>
 
             <div className="ticket-detail-actions">
-              <button type="submit" className="primary" disabled={saving}>
+              <button
+                type="submit"
+                className="primary"
+                disabled={saving || !dirty}
+                title={dirty ? undefined : "No changes to save"}
+              >
                 {saving ? "Saving…" : "Save changes"}
               </button>
               <button

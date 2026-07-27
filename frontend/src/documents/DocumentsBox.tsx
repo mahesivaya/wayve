@@ -113,6 +113,9 @@ export default function DocumentsBox() {
   // Content editor modal.
   const [editorFile, setEditorFile] = useState<DocumentFile | null>(null);
   const [editorContent, setEditorContent] = useState("");
+  // The content as it was fetched, so Save can tell an untouched editor from an
+  // edited one — opening a document to read it shouldn't be savable.
+  const [loadedContent, setLoadedContent] = useState("");
   const [editorLoading, setEditorLoading] = useState(false);
   const [editorSaving, setEditorSaving] = useState(false);
   // Ref to the editor textarea so file references insert at the caret.
@@ -200,6 +203,7 @@ export default function DocumentsBox() {
   const openEditor = async (file: DocumentFile) => {
     setEditorFile(file);
     setEditorContent("");
+    setLoadedContent("");
     setEditorLoading(true);
     setError(null);
     // Clear any assist state left over from a previously edited file.
@@ -211,6 +215,7 @@ export default function DocumentsBox() {
     try {
       const data = await getDocumentContent(file.id);
       setEditorContent(data.content);
+      setLoadedContent(data.content);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to open document");
       setEditorFile(null);
@@ -233,6 +238,10 @@ export default function DocumentsBox() {
       setEditorSaving(false);
     }
   };
+
+  // Save stays dead until the buffer differs from what was fetched. An AI assist
+  // that rewrites the content counts, same as typing.
+  const editorDirty = editorContent !== loadedContent;
 
   // Whether the AI assist buttons are usable: nothing else in flight, not saving,
   // there's trimmed content, and the document isn't too large to send.
@@ -800,7 +809,8 @@ export default function DocumentsBox() {
               <button
                 type="button"
                 className="drive-folder-create-btn"
-                disabled={editorSaving}
+                disabled={editorSaving || !editorDirty}
+                title={editorDirty ? undefined : "No changes to save"}
                 onClick={() => void saveEditor()}
               >
                 {editorSaving ? "Saving…" : "Save"}

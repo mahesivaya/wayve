@@ -186,6 +186,11 @@ export default function ProjectDetail() {
     setEditingSummary(true);
   };
 
+  // Save is gated on the draft differing from the blurb the editor seeded from,
+  // so opening it and closing it can't post a no-op write. Trimmed on both
+  // sides because `saveSummary` trims what it sends.
+  const summaryDirty = summaryDraft.trim() !== displaySummary.trim();
+
   const saveSummary = async () => {
     setSavingSummary(true);
     setSummaryError("");
@@ -278,7 +283,8 @@ export default function ProjectDetail() {
                   type="button"
                   className="project-detail-summary-save"
                   onClick={() => void saveSummary()}
-                  disabled={savingSummary}
+                  disabled={savingSummary || !summaryDirty}
+                  title={summaryDirty ? undefined : "No changes to save"}
                 >
                   {savingSummary ? "Saving…" : "Save"}
                 </button>

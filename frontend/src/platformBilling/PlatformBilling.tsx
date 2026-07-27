@@ -150,6 +150,9 @@ export default function PlatformBilling() {
   const [showEmployeeForm, setShowEmployeeForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [empDraft, setEmpDraft] = useState<EmployeeInput>(EMPTY_EMPLOYEE);
+  // The draft as `openEmployeeEdit` seeded it, so Save can tell an untouched
+  // form from an edited one. Null while adding — Add employee is never gated.
+  const [pristineEmp, setPristineEmp] = useState<string | null>(null);
 
   // Payroll form
   const [showPayrollForm, setShowPayrollForm] = useState(false);
@@ -221,13 +224,13 @@ export default function PlatformBilling() {
     dismissBanners();
     setEditingId(null);
     setEmpDraft(EMPTY_EMPLOYEE);
+    setPristineEmp(null);
     setShowEmployeeForm(true);
   };
 
   const openEmployeeEdit = (emp: Employee) => {
     dismissBanners();
-    setEditingId(emp.id);
-    setEmpDraft({
+    const seeded: EmployeeInput = {
       full_name: emp.full_name,
       email: emp.email,
       job_title: emp.job_title ?? "",
@@ -238,7 +241,10 @@ export default function PlatformBilling() {
       currency: emp.currency,
       pay_frequency: emp.pay_frequency,
       hire_date: emp.hire_date,
-    });
+    };
+    setEditingId(emp.id);
+    setEmpDraft(seeded);
+    setPristineEmp(JSON.stringify(seeded));
     setShowEmployeeForm(true);
   };
 
@@ -246,7 +252,15 @@ export default function PlatformBilling() {
     setShowEmployeeForm(false);
     setEditingId(null);
     setEmpDraft(EMPTY_EMPLOYEE);
+    setPristineEmp(null);
   };
+
+  // Every field update rebuilds `empDraft` from a spread, so key order is stable
+  // and the seeded snapshot compares straight across. Save stays dead while the
+  // two match — editing an employee and changing nothing is a write the API
+  // doesn't need to serve.
+  const empDirty =
+    pristineEmp === null || JSON.stringify(empDraft) !== pristineEmp;
 
   const saveEmployee = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1086,7 +1100,8 @@ export default function PlatformBilling() {
                 <button
                   type="submit"
                   className="pb-btn"
-                  disabled={busy === "save-employee"}
+                  disabled={busy === "save-employee" || !empDirty}
+                  title={empDirty ? undefined : "No changes to save"}
                 >
                   {busy === "save-employee"
                     ? "Saving…"
