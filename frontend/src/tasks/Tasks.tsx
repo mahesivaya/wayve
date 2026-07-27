@@ -107,6 +107,37 @@ const normalizeStatus = (
   return known[0].slug;
 };
 
+/**
+ * Every field the compose form can write, flattened into one comparable string.
+ * `beginEdit` records this for the item as it loaded; the live values are
+ * re-derived each render, and Save stays disabled while the two match — an edit
+ * that changes nothing is a write the API doesn't need to serve.
+ *
+ * Name and description are trimmed on both sides because `saveTask` trims them
+ * too: trailing whitespace is not an edit. Queued attachments count as a change
+ * even when no field moved; already-uploaded ones don't, since removing one
+ * hits the API immediately rather than waiting for Save.
+ */
+type ComposeFields = {
+  name: string;
+  description: string;
+  priority: TaskPriority;
+  status: TaskStatus;
+  assignedBy: string;
+  assignee: string;
+  assigneeId: number | null;
+  projectId: number | null;
+  badgeKind: string;
+  pendingAttachments: number;
+};
+
+const composeFingerprint = (fields: ComposeFields) =>
+  JSON.stringify({
+    ...fields,
+    name: fields.name.trim(),
+    description: fields.description.trim(),
+  });
+
 const sortTasks = (list: Task[]) =>
   [...list].sort(
     (a, b) =>
@@ -715,6 +746,11 @@ export default function Tasks({
   >([]);
   const [attachmentsLoading, setAttachmentsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // The form as `beginEdit` loaded it, so Save can tell an untouched editor from
+  // an edited one. State rather than a ref because the comparison happens during
+  // render, and refs must not be read there. Null while creating — Create is
+  // never gated on this.
+  const [pristineForm, setPristineForm] = useState<string | null>(null);
   // The compact form folds assignee picking (autocomplete + code-history
   // suggestions) into a popover behind an "Assignee" pill.
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
@@ -735,6 +771,26 @@ export default function Tasks({
   }, [assigneePickerOpen]);
 
   const isEditing = editingId !== null;
+
+  // Has anything actually moved since the editor opened? Compared against the
+  // baseline `beginEdit` recorded, so Save is dead until there is something to
+  // save. Raw `status` (not `composeStatus`) on purpose: the fallback resolves
+  // once the status list lands, and reading it here would mark an untouched
+  // form dirty on its own. Creating never gates — there is no baseline.
+  const formDirty =
+    pristineForm === null ||
+    composeFingerprint({
+      name: taskName,
+      description,
+      priority,
+      status,
+      assignedBy,
+      assignee,
+      assigneeId,
+      projectId,
+      badgeKind,
+      pendingAttachments: pendingAttachments.length,
+    }) !== pristineForm;
 
   // The assignee pill shows the picked teammate's name + avatar when the
   // stored email matches an assignable user, else the raw stored value.
@@ -976,6 +1032,7 @@ export default function Tasks({
     setPendingAttachments([]);
     setExistingAttachments([]);
     setAssigneePickerOpen(false);
+    setPristineForm(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -1003,16 +1060,31 @@ export default function Tasks({
     // A normal open is not a deep-link open. The deep-link effect re-sets this
     // flag after it calls the editor.
     openedFromDeepLink.current = false;
+    // The same values the setters below apply — recorded as the baseline Save
+    // compares against, so an editor the user only looked at can't be saved.
+    const loaded: ComposeFields = {
+      name: task.name,
+      description: task.description,
+      priority: normalizePriority(task.priority),
+      status: normalizeStatus(task.status, statusRows),
+      assignedBy: task.assigned_by ?? "",
+      assignee: task.assignee ?? "",
+      assigneeId: task.assignee_id ?? null,
+      projectId: task.project_id ?? null,
+      badgeKind: task.badge_kind ?? "",
+      pendingAttachments: 0,
+    };
+    setPristineForm(composeFingerprint(loaded));
     setEditingId(task.id);
-    setTaskName(task.name);
-    setDescription(task.description);
-    setPriority(normalizePriority(task.priority));
-    setStatus(normalizeStatus(task.status, statusRows));
-    setAssignedBy(task.assigned_by ?? "");
-    setAssignee(task.assignee ?? "");
-    setAssigneeId(task.assignee_id ?? null);
-    setProjectId(task.project_id ?? null);
-    setBadgeKind(task.badge_kind ?? "");
+    setTaskName(loaded.name);
+    setDescription(loaded.description);
+    setPriority(loaded.priority);
+    setStatus(loaded.status);
+    setAssignedBy(loaded.assignedBy);
+    setAssignee(loaded.assignee);
+    setAssigneeId(loaded.assigneeId);
+    setProjectId(loaded.projectId);
+    setBadgeKind(loaded.badgeKind);
     setError("");
     setCreateAnother(false);
     setPendingAttachments([]);
@@ -2398,7 +2470,12 @@ export default function Tasks({
                       {aiFixBusy ? "Starting…" : "Fix with AI"}
                     </button>
                   )}
-                <button type="submit" className="primary" disabled={submitting}>
+                <button
+                  type="submit"
+                  className="primary"
+                  disabled={submitting || !formDirty}
+                  title={formDirty ? undefined : "No changes to save"}
+                >
                   {submitting
                     ? isEditing
                       ? "Saving…"

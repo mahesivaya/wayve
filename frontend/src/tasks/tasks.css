@@ -910,6 +910,14 @@
   margin-left: auto;
 }
 
+/* Submit stays UA-styled, but its disabled state (an editor nothing has been
+   changed in) needs saying explicitly — the browser's own gray-out barely
+   registers against the themed surfaces this modal sits on. */
+.task-compose-footer-right button[type="submit"]:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* "Create more" — hidden checkbox rendered as a small switch. */
 .task-compose-more {
   position: relative;
