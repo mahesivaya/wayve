@@ -1431,22 +1431,6 @@ CREATE TABLE IF NOT EXISTS task_attachments (
 
 CREATE INDEX IF NOT EXISTS idx_task_attachments_task ON task_attachments(task_id);
 
--- Attachments for Workspace tickets. Unlike task_attachments (per-user tasks),
--- a ticket is org-shared, so access is by ticket visibility, not uploader — the
--- `user_id` here only records who uploaded. Blobs are encrypted at rest on disk.
-CREATE TABLE IF NOT EXISTS ticket_attachments (
-    id BIGSERIAL PRIMARY KEY,
-    ticket_id INTEGER NOT NULL REFERENCES workspace_tickets(id) ON DELETE CASCADE,
-    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    name TEXT NOT NULL,
-    file_type TEXT,
-    file_path TEXT NOT NULL,
-    file_iv TEXT,
-    size BIGINT NOT NULL DEFAULT 0,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket ON ticket_attachments(ticket_id);
-
 -- ============================================================
 -- 📖 WORKSPACE USER STORIES
 -- ------------------------------------------------------------
@@ -1577,6 +1561,22 @@ CREATE INDEX IF NOT EXISTS idx_workspace_tickets_user ON workspace_tickets(user_
 -- ON CONFLICT (support_ticket_id). NULLs (normal tickets) don't collide.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_workspace_tickets_support_ticket
     ON workspace_tickets(support_ticket_id);
+
+-- Attachments for Workspace tickets. Unlike task_attachments (per-user tasks),
+-- a ticket is org-shared, so access is by ticket visibility, not uploader — the
+-- `user_id` here only records who uploaded. Blobs are encrypted at rest on disk.
+CREATE TABLE IF NOT EXISTS ticket_attachments (
+    id BIGSERIAL PRIMARY KEY,
+    ticket_id INTEGER NOT NULL REFERENCES workspace_tickets(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    name TEXT NOT NULL,
+    file_type TEXT,
+    file_path TEXT NOT NULL,
+    file_iv TEXT,
+    size BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket ON ticket_attachments(ticket_id);
 -- Backfill the user-set type column onto pre-existing boards. The CREATE above
 -- names its inline CHECK `workspace_tickets_badge_kind_check`, so adding it under
 -- the same name here leaves a migrated board identical to a fresh one.
