@@ -367,3 +367,129 @@
   background: var(--color-canvas);
   border-color: var(--color-text-slate-soft);
 }
+
+/* ---------------------------------------------------------------------------
+   Read-only ticket view
+   --------------------------------------------------------------------------- */
+
+.support-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.support-view-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 0;
+}
+
+.support-view-meta div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.support-view-meta dt {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.support-view-meta dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-primary);
+}
+
+.support-view-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.support-view-label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+/* The description was typed into a textarea, so its own newlines are the only
+   formatting it has; keep them rather than collapsing to one paragraph. */
+.support-view-description {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.support-view-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.support-view-attachment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+}
+
+.support-view-attachment:hover {
+  border-color: var(--color-primary-action);
+}
+
+.support-view-attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.support-view-attachment-size {
+  flex: none;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.support-view-muted {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.support-view-error {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--color-danger, #b42318);
+}
+
+/* The subject sits in the body rather than the modal title: the title is set
+   before the fetch resolves, and a heading that changes under the reader is
+   worse than one that arrives with its content. */
+.support-view-subject {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
