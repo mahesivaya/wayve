@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   downloadEmailAttachment,
   sendEmail,
@@ -9,8 +9,7 @@ import {
 import { formatFileSize } from "./renderUtils";
 import { isGmailReconnectError } from "./bodyUtils";
 import EmailBody from "./EmailBody";
-import { EmailItem, EmailAttachment, EmailFolder } from "./types";
-import { FolderChips } from "./FolderChips";
+import { EmailItem } from "./types";
 import { updateEmailState, type InboxState } from "../api/sharedInboxes";
 import { APP_TIME_ZONE } from "../utils/datetime";
 import { useAuth } from "../auth/useAuth";
@@ -22,20 +21,6 @@ interface EmailDetailProps {
   onDeleteEmail: (emailId: number) => Promise<void>;
   // Marks the email's sender as noise (routes their mail to the Noise folder).
   onMarkNoise?: (emailId: number) => Promise<void>;
-  files: EmailAttachment[];
-  filesLoading: boolean;
-  filesError: string | null;
-  // When set, the Files view leads with the same folder-chips toolbar the list
-  // shows, so switching back to Inbox/Sent doesn't require leaving the view
-  // first. Clicking a chip is expected to flip back to the email view.
-  onSelectFolder?: (folder: EmailFolder) => void;
-  normalizedSearchQuery: string;
-  // Sync context for the Files view. A freshly connected account has 0 synced
-  // emails, so without these counts the panel can't tell "no attachments exist"
-  // apart from "sync hasn't finished", and can't decide whether to keep polling.
-  inboxAccountCount: number;
-  inboxEmailCount: number;
-  inboxUncheckedCount: number;
 }
 
 export const EmailDetail: React.FC<EmailDetailProps> = ({
@@ -44,14 +29,6 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   onBack,
   onDeleteEmail,
   onMarkNoise,
-  files,
-  filesLoading,
-  filesError,
-  onSelectFolder,
-  normalizedSearchQuery,
-  inboxAccountCount,
-  inboxEmailCount,
-  inboxUncheckedCount,
 }) => {
   const { user } = useAuth();
   const [deleting, setDeleting] = useState(false);
@@ -189,126 +166,9 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     }
   }
 
-  const visibleFiles = useMemo(() => {
-    if (!normalizedSearchQuery) return files;
-    return files.filter((file) =>
-      [
-        file.filename,
-        file.mime_type ?? "",
-        file.subject ?? "",
-        file.sender ?? "",
-        file.receiver ?? "",
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalizedSearchQuery)
-    );
-  }, [files, normalizedSearchQuery]);
-
-  if (viewMode === "files") {
-    // `inboxUncheckedCount` counts emails whose bodies, and therefore
-    // attachments, the body worker has not processed yet. It separates "still
-    // importing" from "genuinely no attachments".
-    const hasNoAccounts = inboxAccountCount === 0;
-    const inboxStillImporting =
-      !hasNoAccounts && (inboxEmailCount === 0 || inboxUncheckedCount > 0);
-    const scannedSoFar = Math.max(inboxEmailCount - inboxUncheckedCount, 0);
-
-    let emptyMessage: React.ReactNode = "No attached files found";
-    if (normalizedSearchQuery) {
-      emptyMessage = "No files match your search";
-    } else if (hasNoAccounts) {
-      emptyMessage = "Connect an email account to see attachments here.";
-    } else if (inboxEmailCount === 0) {
-      emptyMessage = (
-        <>
-          We're still importing your inbox. Attachments will appear here as we
-          find them.
-        </>
-      );
-    } else if (inboxUncheckedCount > 0) {
-      emptyMessage = (
-        <>
-          Scanned {scannedSoFar} of {inboxEmailCount} email
-          {inboxEmailCount === 1 ? "" : "s"} so far. More attachments may show
-          up shortly.
-        </>
-      );
-    }
-
-    return (
-      <div className="email-detail email-detail--files">
-        {/* Same folder-chips toolbar as the list header, so the menu doesn't
-          vanish while browsing attachments — a chip click hops straight back
-          to that folder in the email view. */}
-        {onSelectFolder && (
-          <div
-            className="email-bulk-bar"
-            role="toolbar"
-            aria-label="Mail folders"
-          >
-            <FolderChips activeFolder={null} onSelectFolder={onSelectFolder} />
-            <button
-              type="button"
-              className="email-bulk-action is-active"
-              aria-pressed="true"
-              data-tooltip="Showing all attachments"
-            >
-              Attachments
-            </button>
-          </div>
-        )}
-        {/* No close/"back to inbox" affordances here: the folder chips above
-          (or the sidebar for personal accounts) already navigate away. */}
-        <div className="email-files-inline">
-          <div className="email-files-header">
-            <h2>Files</h2>
-          </div>
-          {filesLoading ? (
-            <div className="email-files-empty">Loading files…</div>
-          ) : filesError ? (
-            <div className="email-files-error">{filesError}</div>
-          ) : visibleFiles.length === 0 ? (
-            <div className="email-files-empty">{emptyMessage}</div>
-          ) : (
-            <>
-              {inboxStillImporting && !normalizedSearchQuery && (
-                <div className="email-files-progress" role="status">
-                  Still scanning{" "}
-                  {inboxUncheckedCount > 0 ? inboxUncheckedCount : ""} email
-                  {inboxUncheckedCount === 1 ? "" : "s"} for attachments — this
-                  list will update automatically.
-                </div>
-              )}
-              <div className="email-files-list">
-                {visibleFiles.map((file) => (
-                  <button
-                    key={file.id}
-                    className="email-files-row"
-                    onClick={() =>
-                      downloadEmailAttachment(file, user?.id ?? null)
-                    }
-                  >
-                    <span className="email-files-icon">📎</span>
-                    <span className="email-files-main">
-                      <span className="email-files-name">{file.filename}</span>
-                      <span className="email-files-meta">
-                        {file.subject || "No subject"} ·{" "}
-                        {file.sender || "Unknown sender"}
-                      </span>
-                    </span>
-                    <span className="email-files-size">
-                      {formatFileSize(file.size)}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    );
-  }
+  // The attachments view is no longer rendered here: it is a list pane plus a
+  // detail pane of its own (EmailFilesPane), mounted by Emails.tsx alongside
+  // the email list rather than inside the message pane.
 
   if (!selectedEmail) {
     return (

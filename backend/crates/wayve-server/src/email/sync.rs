@@ -62,8 +62,14 @@ pub async fn refresh_provider_unread_count(
 }
 
 pub async fn fetch_headers_only(token: &str, msg_id: &str) -> Result<EmailHeader> {
+    // Message-Id / References / In-Reply-To come along for GitHub routing: they
+    // are the only headers that say whether a notification is about a pull
+    // request or an issue (see `github_pr_label`). Metadata headers are free —
+    // same request, no extra round trip.
     let url = format!(
-        "{}/gmail/v1/users/me/messages/{}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject",
+        "{}/gmail/v1/users/me/messages/{}?format=metadata\
+         &metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject\
+         &metadataHeaders=Message-Id&metadataHeaders=References&metadataHeaders=In-Reply-To",
         crate::external::gmail_api_base(),
         msg_id
     );
@@ -88,7 +94,7 @@ pub async fn fetch_headers_only(token: &str, msg_id: &str) -> Result<EmailHeader
 
     let (sender, receiver, subject) = extract_headers(&res);
     let gmail_timestamp = extract_gmail_timestamp(&res);
-    let label_ids: Vec<String> = res["labelIds"]
+    let mut label_ids: Vec<String> = res["labelIds"]
         .as_array()
         .map(|labels| {
             labels
@@ -98,6 +104,13 @@ pub async fn fetch_headers_only(token: &str, msg_id: &str) -> Result<EmailHeader
         })
         .unwrap_or_default();
     let is_read = !label_ids.iter().any(|label| label == "UNREAD");
+    // Tagged here rather than stored in a column of its own: `label_ids` already
+    // rides this tuple into `emails.labels`, which is indexed and queried with
+    // `= ANY(...)`, so routing on it needs no schema change and no new plumbing.
+    // `send_internal` sets synthetic INBOX/SENT labels the same way.
+    if let Some(label) = github_pr_label(&res) {
+        label_ids.push(label.to_string());
+    }
     Ok((
         msg_id.to_string(),
         sender,
@@ -174,9 +187,12 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
         }
     }
 
-    // GitHub review/PR mail feeds the Reviews folder, which filters on the
-    // sender. The label walk above can't reach it (no local rows to seed from),
-    // so pull it by search instead — one window per tick until exhausted.
+    // GitHub mail is pulled by search because the label walk above can't reach
+    // it (no local rows to seed from) — one window per tick until exhausted.
+    // The query stays broad (`from:github.com`): every GitHub notification is
+    // ingested, and `fetch_headers_only` tags only the pull-request ones, which
+    // is what the Reviews folder selects on. Narrowing the search here would
+    // drop issues and security alerts from the inbox entirely.
     if let Err(err) = backfill_query_older(
         pool,
         account.id,
@@ -719,6 +735,59 @@ async fn backfill_query_older(
     Ok(())
 }
 
+/// The synthetic label marking a GitHub *pull request* notification.
+///
+/// Namespaced `WAYVE_` so it can never collide with a real Gmail label, and so
+/// a reader of `emails.labels` can tell at a glance which entries the provider
+/// sent and which this app added.
+pub const GITHUB_PR_LABEL: &str = "WAYVE_GITHUB_PR";
+
+/// `Some(GITHUB_PR_LABEL)` when this message is a GitHub pull-request
+/// notification.
+///
+/// GitHub threads its notification mail by putting the subject of the thread in
+/// the Message-Id — `owner/repo/pull/123/...@github.com` for a pull request and
+/// `owner/repo/issues/123/...` for an issue. That is the only reliable
+/// discriminator: the *subject* uses `(#123)` for both, and the From address is
+/// `notifications@github.com` either way, so neither can tell them apart.
+///
+/// References / In-Reply-To are checked as well, because a reply in the thread
+/// carries the thread's id there while its own Message-Id is per-comment.
+fn github_pr_label(res: &Value) -> Option<&'static str> {
+    fn scan(node: &Value, found: &mut Option<&'static str>) {
+        if found.is_some() {
+            return;
+        }
+        if let Some(headers) = node["headers"].as_array() {
+            for h in headers {
+                let name = h["name"].as_str().unwrap_or("");
+                if !name.eq_ignore_ascii_case("Message-Id")
+                    && !name.eq_ignore_ascii_case("References")
+                    && !name.eq_ignore_ascii_case("In-Reply-To")
+                {
+                    continue;
+                }
+                let value = h["value"].as_str().unwrap_or("").to_ascii_lowercase();
+                // Anchored on "/pull/" so a repo or branch merely *named* "pull"
+                // does not match; GitHub always emits the path form.
+                if value.contains("@github.com") && value.contains("/pull/") {
+                    *found = Some(GITHUB_PR_LABEL);
+                    return;
+                }
+            }
+        }
+        if let Some(parts) = node["parts"].as_array() {
+            for part in parts {
+                scan(part, found);
+            }
+        }
+    }
+
+    let mut found = None;
+    scan(&res["payload"], &mut found);
+    found
+}
+
 pub fn extract_headers(res: &Value) -> (String, String, String) {
     let mut sender: Option<String> = None;
     let mut receiver: Option<String> = None;
@@ -1080,4 +1149,59 @@ where
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod github_pr_label_tests {
+    use super::{GITHUB_PR_LABEL, github_pr_label};
+    use serde_json::json;
+
+    fn msg(header: &str, value: &str) -> serde_json::Value {
+        json!({ "payload": { "headers": [ { "name": header, "value": value } ] } })
+    }
+
+    #[test]
+    fn tags_pull_request_threads() {
+        let m = msg("Message-Id", "<mahesivaya/wayve/pull/106/c2984@github.com>");
+        assert_eq!(github_pr_label(&m), Some(GITHUB_PR_LABEL));
+    }
+
+    #[test]
+    fn leaves_issue_threads_alone() {
+        // The discriminator: issues and pull requests are identical everywhere
+        // else — same From, and both say "(#106)" in the subject.
+        let m = msg("Message-Id", "<mahesivaya/wayve/issues/106@github.com>");
+        assert_eq!(github_pr_label(&m), None);
+    }
+
+    #[test]
+    fn reads_the_thread_id_from_a_reply() {
+        // A reply's own Message-Id is per-comment; the thread it belongs to is
+        // only named in References / In-Reply-To.
+        for header in ["References", "In-Reply-To"] {
+            let m = msg(header, "<owner/repo/pull/9@github.com>");
+            assert_eq!(
+                github_pr_label(&m),
+                Some(GITHUB_PR_LABEL),
+                "{header} should identify the thread"
+            );
+        }
+    }
+
+    #[test]
+    fn ignores_pull_outside_a_github_message_id() {
+        // Mail from elsewhere that merely contains the word must not be routed
+        // into Reviews.
+        let m = msg("Message-Id", "<newsletter/pull/quotes@example.com>");
+        assert_eq!(github_pr_label(&m), None);
+
+        let none = msg("Subject", "[owner/repo] Fix the pull handler (#12)");
+        assert_eq!(github_pr_label(&none), None);
+    }
+
+    #[test]
+    fn survives_a_message_with_no_headers() {
+        assert_eq!(github_pr_label(&json!({})), None);
+        assert_eq!(github_pr_label(&json!({ "payload": {} })), None);
+    }
 }

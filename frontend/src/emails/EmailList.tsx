@@ -15,6 +15,9 @@ interface EmailListProps {
   onCompose?: () => void;
   width?: number;
   isListView?: boolean;
+  // Accepted but no longer read: the toolbar button that called it is gone and
+  // marking read is a per-row action now. Kept so Emails.tsx keeps compiling —
+  // drop both sides together.
   onBulkMarkRead?: (ids: number[]) => Promise<void> | void;
   onBulkDelete?: (ids: number[]) => Promise<void> | void;
   // Per-row hover actions: toggle a single email's read state.
@@ -77,7 +80,6 @@ export const EmailList: React.FC<EmailListProps> = ({
   onCompose,
   width,
   isListView = false,
-  onBulkMarkRead,
   onBulkDelete,
   onMarkRead,
   onMarkUnread,
@@ -100,15 +102,10 @@ export const EmailList: React.FC<EmailListProps> = ({
   const [checkedIds, setCheckedIds] = useState<Set<number>>(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkHint, setBulkHint] = useState<string | null>(null);
-  // Client-side filter over the already-loaded `emails`, so it triggers no re-fetch
-  // and Show more still pages older mail in chronological order.
-  const [showUnreadOnly, setShowUnreadOnly] = useState(false);
-
-
-  const visibleEmails = useMemo(
-    () => (showUnreadOnly ? emails.filter((e) => e.is_read === false) : emails),
-    [emails, showUnreadOnly]
-  );
+  // Everything loaded, in load order. This used to be filtered by an unread-only
+  // toggle in the toolbar; with that icon gone there is nothing to narrow by, so
+  // the list shows what it was given.
+  const visibleEmails = emails;
 
   useEffect(() => {
     if (!bulkHint) return;
@@ -173,21 +170,6 @@ export const EmailList: React.FC<EmailListProps> = ({
       document.removeEventListener("keydown", onKey);
     };
   }, [selectMenuOpen]);
-
-  const runBulkMarkRead = async () => {
-    if (!onBulkMarkRead) return;
-    if (checkedIds.size === 0) {
-      setBulkHint("Select at least one email to mark as read.");
-      return;
-    }
-    setBulkBusy(true);
-    try {
-      await onBulkMarkRead(Array.from(checkedIds));
-      setCheckedIds(new Set());
-    } finally {
-      setBulkBusy(false);
-    }
-  };
 
   const runBulkDelete = async () => {
     if (!onBulkDelete) return;
@@ -358,51 +340,13 @@ export const EmailList: React.FC<EmailListProps> = ({
             <FolderChips
               activeFolder={activeFolder}
               onSelectFolder={onSelectFolder}
+              onShowAttachments={onShowAttachments}
             />
           )}
-          <button
-            type="button"
-            className={`email-bulk-action email-bulk-action--icon${showUnreadOnly ? " is-active" : ""}`}
-            onClick={() => {
-              setShowUnreadOnly((prev) => !prev);
-              // Drop selections the new filter would hide, so the count in the bar
-              // always matches what the user can see.
-              setCheckedIds(new Set());
-            }}
-            aria-pressed={showUnreadOnly}
-            data-tooltip={
-              showUnreadOnly ? "Show all emails" : "Show only unread emails"
-            }
-            aria-label={
-              showUnreadOnly ? "Show all emails" : "Show only unread emails"
-            }
-            disabled={bulkBusy}
-          >
-            <EmailsIcon size={18} />
-          </button>
-          {onBulkMarkRead && (
-            <button
-              type="button"
-              className="email-bulk-action email-bulk-action--icon"
-              onClick={runBulkMarkRead}
-              disabled={bulkBusy}
-              data-tooltip="Mark selected as read"
-              aria-label="Mark selected as read"
-            >
-              <MailOpenIcon size={18} />
-            </button>
-          )}
-          {onShowAttachments && (
-            <button
-              type="button"
-              className="email-bulk-action email-bulk-action--icon"
-              onClick={onShowAttachments}
-              data-tooltip="All attachments"
-              aria-label="Show all attachments across your emails"
-            >
-              <AttachmentIcon size={18} />
-            </button>
-          )}
+          {/* The unread-filter and mark-as-read icons that used to sit here are
+            gone; both actions stay on the row itself, where they act on the
+            email under the pointer rather than on a selection. The attachments
+            paperclip is now the "Docs" chip beside Sent, in FolderChips. */}
           {onBulkDelete && checkedIds.size > 0 && (
             <button
               type="button"
@@ -471,11 +415,6 @@ export const EmailList: React.FC<EmailListProps> = ({
         </div>
       ) : (
         <>
-          {visibleEmails.length === 0 && isListView && showUnreadOnly && (
-            <div className="email-bulk-empty">
-              No unread emails in this list.
-            </div>
-          )}
 
           {visibleEmails.map((email) => (
             <div

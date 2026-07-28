@@ -177,13 +177,20 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
         }
     }
 
-    // GitHub notification mail (PR/review requests) lives exclusively under the
-    // "Reviews" folder: the `github` arm selects on this predicate and the inbox
-    // tabs (All / Signal / Noise) subtract it, so the two sides stay disjoint and
-    // a PR email never shows up in two places. `sender` is the only plaintext,
-    // indexable field — `subject` is encrypted at rest — so it's the sole basis
-    // available for this routing.
-    const GITHUB_SENDER_MATCH: &str = "lower(coalesce(e.sender, '')) LIKE '%github.com%'";
+    // Pull-request mail lives exclusively under the "Reviews" folder: the
+    // `github` arm selects on this predicate and the inbox tabs (All / Signal /
+    // Noise) subtract it, so the two sides stay disjoint and a PR email never
+    // shows up in two places.
+    //
+    // The test is the synthetic label sync stamps on (see
+    // `sync::github_pr_label`), not the sender. Sender only says the mail came
+    // from GitHub — issues, releases, security alerts and sign-in notices all
+    // arrive from the same `notifications@`/`no-reply@` addresses — and the
+    // subject can't help because it is encrypted at rest and says `(#123)` for
+    // issues and pull requests alike. Narrowing this to PRs means everything
+    // else from GitHub now stays in the inbox, which is where it belongs;
+    // previously the sender match swallowed all of it into Reviews.
+    const GITHUB_PR_MATCH: &str = "'WAYVE_GITHUB_PR' = ANY(e.labels)";
 
     if let Some(folder) = filters.folder.as_deref() {
         match folder {
@@ -212,7 +219,7 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
                     " AND lower(coalesce(e.sender, '')) LIKE '%' || lower(ns.sender_email) || '%') ",
                 );
                 // PR/review mail belongs to Reviews, not the inbox.
-                qb.push(format!(" AND NOT {GITHUB_SENDER_MATCH} "));
+                qb.push(format!(" AND NOT {GITHUB_PR_MATCH} "));
             }
             "sent" => {
                 qb.push(
@@ -242,12 +249,11 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
             "trash" => {
                 qb.push(" AND 'TRASH' = ANY(e.labels) ");
             }
-            // "GitHub" is a virtual, sender-based folder rather than a Gmail
-            // label, so it cross-cuts accounts like a saved `from:github.com`
-            // search. It relies on the plaintext `sender` column, which sync
-            // still populates; only `subject` is nulled.
+            // "Reviews" is a virtual folder rather than a Gmail label, so it
+            // cross-cuts accounts like a saved search. It matches only
+            // pull-request notifications — see GITHUB_PR_MATCH above.
             "github" => {
-                qb.push(format!(" AND {GITHUB_SENDER_MATCH} "));
+                qb.push(format!(" AND {GITHUB_PR_MATCH} "));
             }
             // Inbox sub-views (the "All / Signal / Noise" chips): "signal" is the
             // high-priority mail — anything Gmail tags Important OR Updates —
@@ -265,7 +271,7 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
                     " AND lower(coalesce(e.sender, '')) LIKE '%' || lower(ns.sender_email) || '%') ",
                 );
                 // PR/review mail belongs to Reviews, not Signal.
-                qb.push(format!(" AND NOT {GITHUB_SENDER_MATCH} "));
+                qb.push(format!(" AND NOT {GITHUB_PR_MATCH} "));
             }
             "noise" => {
                 // A sender the user marked as Noise ALWAYS lands here — even if
@@ -287,7 +293,7 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
                                 OR 'CATEGORY_PROMOTIONS' = ANY(e.labels)))) ",
                 );
                 // PR/review mail belongs to Reviews, not Noise.
-                qb.push(format!(" AND NOT {GITHUB_SENDER_MATCH} "));
+                qb.push(format!(" AND NOT {GITHUB_PR_MATCH} "));
             }
             _ => {}
         }

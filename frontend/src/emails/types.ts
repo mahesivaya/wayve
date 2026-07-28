@@ -66,6 +66,16 @@ export type EmailFolder =
   // Client-only inbox sub-views shown as chips beside "All" (= inbox). No
   // backend query yet: `useEmailInbox` short-circuits them to an empty list and
   // EmailList renders a "coming soon" placeholder.
+  //
+  // The intended rule, when these are built: Signal is mail a real person sent
+  // you — a human sender with you on To/Cc, and replies in threads you are part
+  // of. Noise is bulk and automated: anything carrying a List-Unsubscribe
+  // header, no-reply/noreply senders, Gmail's PROMOTIONS/SOCIAL/UPDATES
+  // categories, and senders already marked via `markSenderNoise` (which works
+  // today and routes to the Noise folder). Deterministic on purpose — no
+  // training and no engagement history, so a brand-new important sender lands
+  // in Signal on their first message rather than after you have opened enough
+  // of their mail.
   | "signal"
   | "noise";
 

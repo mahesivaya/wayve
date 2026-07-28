@@ -8,8 +8,11 @@ import Modal from "../components/Modal";
 import { EmailSidebar } from "./EmailSidebar";
 import { EmailList } from "./EmailList";
 import { EmailDetail } from "./EmailDetail";
+import { EmailFilesList, EmailFileDetail } from "./EmailFilesPane";
+import { useVisibleFiles } from "./useVisibleFiles";
 import ProviderPicker from "./ProviderPicker";
 import { useEmailInbox } from "./useEmailInbox";
+import type { EmailAttachment } from "../api/email";
 import {
   getEmail,
   getGmailConnectUrl,
@@ -234,10 +237,10 @@ export default function Emails() {
   // for its header chips, so the folder menu relocates to the page toolbar
   // next to Compose.
   const inSplitPane = useInSplitPane();
-  // The attachments view also docks the chips beside Compose — its own pane
-  // header sat noticeably lower, leaving a dead gap under the toolbar.
-  const chipsInToolbar =
-    inSplitPane || emailViewLayout === "split" || viewMode === "files";
+  // Layout only — opening the attachments view must NOT move the chips, or the
+  // whole menu jumps up next to Compose mid-click. The files pane renders the
+  // same bar flush at the top of its pane instead (see EmailDetail).
+  const chipsInToolbar = inSplitPane || emailViewLayout === "split";
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const stored = localStorage.getItem("rwayve.emailSidebar.width");
     const parsed = stored ? Number(stored) : NaN;
@@ -320,13 +323,42 @@ export default function Emails() {
   }
 
   const useSingleColumn = isNarrow;
+
+  const [selectedFile, setSelectedFile] = useState<EmailAttachment | null>(
+    null
+  );
+
+  // Entering the files view always lands on the list. Without this the previous
+  // selection survives, and on a narrow screen — where list and detail take
+  // turns — reopening Files would jump straight back into a stale file.
+  const showFiles = () => {
+    setSelectedFile(null);
+    void openFiles();
+  };
+
+  // The attachment the files view is showing. Cleared whenever the view is left
+  // so returning to it opens on the list rather than a stale file.
+  const { visibleFiles, emptyMessage: filesEmptyMessage, progressNote: filesProgressNote } =
+    useVisibleFiles({
+      files,
+      normalizedSearchQuery,
+      accountCount: accounts.length,
+      emailCount: emails.length,
+      uncheckedCount: emails.filter(
+        (email) => email.attachments_checked === false
+      ).length,
+    });
+  // In files mode the list pane holds the file list, so it shows on the same
+  // terms the email list would: always on a wide screen, and on a narrow one
+  // only until something is selected.
   const showList =
-    viewMode === "email" &&
-    ((emailViewLayout === "list" && selectedEmail === null) ||
-      (emailViewLayout === "split" &&
-        (!useSingleColumn || selectedEmail === null)));
+    viewMode === "files"
+      ? !useSingleColumn || selectedFile === null
+      : (emailViewLayout === "list" && selectedEmail === null) ||
+        (emailViewLayout === "split" &&
+          (!useSingleColumn || selectedEmail === null));
   const showDetail =
-    viewMode === "files" ||
+    (viewMode === "files" && (!useSingleColumn || selectedFile !== null)) ||
     (emailViewLayout === "list" && selectedEmail !== null) ||
     (emailViewLayout === "split" &&
       (!useSingleColumn || selectedEmail !== null));
@@ -543,7 +575,7 @@ export default function Emails() {
               <button
                 type="button"
                 className={`email-bulk-action${viewMode === "files" ? " is-active" : ""}`}
-                onClick={openFiles}
+                onClick={showFiles}
                 aria-pressed={viewMode === "files"}
                 data-tooltip="Show all attachments across your emails"
               >
@@ -603,7 +635,7 @@ export default function Emails() {
                 setActiveFolder(f);
               }}
               viewMode={viewMode}
-              onOpenFiles={openFiles}
+              onOpenFiles={showFiles}
               onRequestAddAccount={() => setAddAccountOpen(true)}
               onCompose={() => setComposeOpen(true)}
               composeDisabled={accounts.length === 0}
@@ -626,7 +658,30 @@ export default function Emails() {
           </>
         )}
 
-        {showList && (
+        {showList && viewMode === "files" && (
+          <EmailFilesList
+            files={visibleFiles}
+            filesLoading={filesLoading}
+            filesError={filesError}
+            emptyMessage={filesEmptyMessage}
+            progressNote={filesProgressNote}
+            selectedFileId={selectedFile?.id ?? null}
+            onSelectFile={setSelectedFile}
+            width={useSingleColumn ? undefined : emailListWidth}
+            onSelectFolder={
+              !isPersonalScope && !chipsInToolbar
+                ? (f) => {
+                    setViewMode("email");
+                    setSelectedFile(null);
+                    setActiveFolder(f);
+                  }
+                : undefined
+            }
+            onShowAttachments={showFiles}
+          />
+        )}
+
+        {showList && viewMode === "email" && (
           <EmailList
             emails={emails}
             selectedEmailId={selectedEmail?.id ?? null}
@@ -652,7 +707,7 @@ export default function Emails() {
               setViewMode("email");
               setActiveFolder(f);
             }}
-            onShowAttachments={openFiles}
+            onShowAttachments={showFiles}
           />
         )}
 
@@ -698,7 +753,11 @@ export default function Emails() {
           )}
         </Modal>
 
-        {showDetail && (
+        {showDetail && viewMode === "files" && (
+          <EmailFileDetail file={selectedFile} />
+        )}
+
+        {showDetail && viewMode === "email" && (
           <EmailDetail
             selectedEmail={selectedEmail}
             viewMode={viewMode}
@@ -708,28 +767,6 @@ export default function Emails() {
             }}
             onDeleteEmail={deleteEmail}
             onMarkNoise={markSenderNoise}
-            files={files}
-            filesLoading={filesLoading}
-            filesError={filesError}
-            onSelectFolder={
-              // Same scope gate as the list's folder chips: personal accounts
-              // navigate folders via the sidebar instead. When the chips sit
-              // in the page toolbar (split), skip the duplicate here.
-              !isPersonalScope && !chipsInToolbar
-                ? (f) => {
-                    setViewMode("email");
-                    setSelectedEmail(null);
-                    setActiveFolder(f);
-                  }
-                : undefined
-            }
-            normalizedSearchQuery={normalizedSearchQuery}
-            inboxAccountCount={accounts.length}
-            inboxEmailCount={emails.length}
-            inboxUncheckedCount={
-              emails.filter((email) => email.attachments_checked === false)
-                .length
-            }
           />
         )}
       </div>

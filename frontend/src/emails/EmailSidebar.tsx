@@ -331,9 +331,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
             className={`filter-btn ${viewMode === "files" ? "active" : ""}`}
             onClick={onOpenFiles}
           >
-            <span className="email-chip-label">
-              <DocsIcon size={14} /> Attachments
-            </span>
+            📎 Attachments
           </button>
         </nav>
       )}

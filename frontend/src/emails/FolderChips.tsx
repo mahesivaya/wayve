@@ -8,10 +8,17 @@ import { PullRequestIcon } from "../icons";
 export function FolderChips({
   activeFolder,
   onSelectFolder,
+  onShowAttachments,
+  filesActive,
 }: {
   // null/undefined = no folder highlighted (e.g. while the files view is open).
   activeFolder?: EmailFolder | null;
   onSelectFolder: (folder: EmailFolder) => void;
+  // The attachments view. Not a folder — it swaps the whole pane — so it rides
+  // beside the folder chips rather than going through `onSelectFolder`. Omit to
+  // leave the chip out.
+  onShowAttachments?: () => void;
+  filesActive?: boolean;
 }) {
   const chip = (folder: EmailFolder, label: ReactNode, title: string) => (
     <button
@@ -32,6 +39,19 @@ export function FolderChips({
       {chip("signal", "Signal", "Signal")}
       {chip("noise", "Noise", "Noise")}
       {chip("sent", "Sent", "Sent")}
+      {/* Sits next to Sent, where it's read as another place mail lives, rather
+        than as a paperclip lost among the bulk-action icons at the far end. */}
+      {onShowAttachments && (
+        <button
+          type="button"
+          className={`email-bulk-action${filesActive ? " is-active" : ""}`}
+          onClick={onShowAttachments}
+          aria-pressed={filesActive ?? false}
+          data-tooltip="All attachments across your emails"
+        >
+          Docs
+        </button>
+      )}
       {chip(
         "github",
         <span className="email-chip-label">

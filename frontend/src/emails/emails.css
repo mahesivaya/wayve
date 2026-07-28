@@ -1132,13 +1132,61 @@
 
 /* Inbox/Sent tabs at the start of the bulk bar (org/platform inbox). A right
    divider separates them from the bulk-select controls. */
+/* Folder tabs: one segmented control rather than a row of loose chips.
+   The group is the raised surface and the selected tab is the only filled
+   thing in it, so the current folder reads at a glance instead of competing
+   with four outlined neighbours.
+
+   Scoped to `.email-folder-tabs` on purpose: these buttons share
+   `.email-bulk-action` with the bulk-action toolbar (archive, delete, the
+   icon-only variants), and restyling that class outright would drag those
+   along with it. */
 .email-folder-tabs {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-right: 4px;
-  padding-right: 10px;
-  border-right: 1px solid var(--color-overlay-border);
+  gap: 2px;
+  margin-right: 10px;
+  padding: 3px;
+  border-radius: calc(var(--radius-md, 8px) + 2px);
+  background: var(--color-surface-soft, rgb(148 163 184 / 0.1));
+  border: 1px solid var(--color-overlay-border);
+}
+
+/* Strip the chip chrome: inside the group, separation comes from the selected
+   tab's fill, not from a border on every button. */
+.email-folder-tabs .email-bulk-action {
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: var(--radius-md, 8px);
+  white-space: nowrap;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.email-folder-tabs .email-bulk-action:hover:not(:disabled):not(.is-active) {
+  color: var(--color-text-primary);
+  background: var(--color-surface-hover, rgb(148 163 184 / 0.12));
+  border-color: transparent;
+}
+
+/* The selected tab: a raised pill on the group's surface. Deliberately not the
+   primary accent fill the loose chips used — at tab size that read as a call to
+   action rather than "you are here". */
+.email-folder-tabs .email-bulk-action.is-active,
+.email-folder-tabs .email-bulk-action.is-active:hover:not(:disabled) {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border-color: var(--color-overlay-border);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.12);
+}
+
+.email-folder-tabs .email-bulk-action:focus-visible {
+  outline: 2px solid var(--color-primary-panel-border);
+  outline-offset: -1px;
 }
 
 .email-bulk-master {
@@ -1533,10 +1581,17 @@
   outline: none;
 }
 
-/* Files (attachments) view: there's no email header above, so the generous
-   reading top-padding just reads as dead space under the toolbar — tighten. */
+/* Files (attachments) view: its folder/attachment bar replaces the list header
+   bar, so it must sit flush at the top of the pane — the reading padding would
+   otherwise drop it a row lower and read as a jump when the view opens. */
 .email-detail.email-detail--files {
-  padding-top: var(--space-4);
+  padding-top: 0;
+}
+
+.email-detail--files .email-bulk-bar {
+  /* Cancel the pane's side padding so the bar spans edge to edge like the
+     list header it stands in for; the reading margin resumes below it. */
+  margin: 0 calc(-1 * var(--space-9)) var(--space-4);
 }
 
 /* ================= NARROW (split-pane / small viewport) =================

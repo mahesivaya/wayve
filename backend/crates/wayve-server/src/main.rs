@@ -21,6 +21,7 @@ mod feature_access;
 mod figma;
 mod geoip;
 mod github_oauth;
+mod github_pr_notify;
 mod github_proxy;
 mod home;
 mod integrations;
