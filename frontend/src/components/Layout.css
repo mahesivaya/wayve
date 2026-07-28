@@ -567,6 +567,23 @@
   gap: 2px;
 }
 
+/* Hairline between two runs of nav items (Calendar / Drive). Inset to the same
+   8px the links pad to, so it starts and ends under their labels rather than
+   spanning the full sidebar. */
+.sidebar-divider {
+  height: 0;
+  margin: 6px 8px;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  opacity: 0.7;
+}
+
+/* In the icon-only rail the links lose their side padding, so the line runs
+   the width of the rail minus a small inset. */
+.sidebar.collapsed .sidebar-divider {
+  margin: 6px 12px;
+}
+
 .sidebar-section-label {
   display: flex;
   align-items: center;
