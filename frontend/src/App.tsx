@@ -48,6 +48,7 @@ const Profile = lazy(() => import("./profile/Profile"));
 const Settings = lazy(() => import("./profile/Settings"));
 const Integrations = lazy(() => import("./integrations/Integrations"));
 const Appearance = lazy(() => import("./profile/Appearance"));
+const DeveloperSettings = lazy(() => import("./profile/DeveloperSettings"));
 const FeatureAccessPage = lazy(
   () => import("./featureAccess/FeatureAccessPage")
 );
@@ -405,6 +406,20 @@ export default function App() {
               {/* Theme customizer as a page, so the settings sidebar's
                 Appearance entry navigates like My Profile / Integrations. */}
               <Route path="/appearance" element={<Appearance />} />
+              {/* Docs / API / SDK / keys, moved off the main sidebar into the
+                settings family. Personal accounts never had the sidebar group,
+                so they are bounced home rather than shown an empty page; the
+                SettingsShell rail entry gates on the same predicate. */}
+              <Route
+                path="/settings/developers"
+                element={
+                  user?.account_type !== "personal" ? (
+                    <DeveloperSettings />
+                  ) : (
+                    <Navigate to={accountHome} replace />
+                  )
+                }
+              />
               {/* The owner-only feature access matrix self-guards. One component
                 serves both scopes; the backend resolves the matrix from the
                 caller's scope. */}
