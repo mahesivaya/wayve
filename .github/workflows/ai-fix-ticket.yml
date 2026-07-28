@@ -35,6 +35,10 @@ on:
         description: "Commit SHA of that past fix (optional)"
         required: false
         default: ""
+      target_kind:
+        description: "Which board the item lives on: ticket or story"
+        required: false
+        default: "ticket"
 
 permissions:
   contents: write
@@ -61,7 +65,7 @@ jobs:
         run: npm ci
 
       - name: Create fix branch
-        run: git checkout -b "ai-fix/ticket-${{ github.event.inputs.ticket_number }}-${{ github.run_id }}"
+        run: git checkout -b "ai-fix/${{ github.event.inputs.target_kind || 'ticket' }}-${{ github.event.inputs.ticket_number }}-${{ github.run_id }}"
 
       - name: Set commit identity
         run: |
@@ -76,7 +80,7 @@ jobs:
           prompt: |
             Use the /fix-ticket skill to implement and verify a fix for this ticket.
 
-            Ticket #${{ github.event.inputs.ticket_number }}: ${{ github.event.inputs.ticket_title }}
+            ${{ github.event.inputs.target_kind == 'story' && 'User story' || 'Ticket' }} #${{ github.event.inputs.ticket_number }}: ${{ github.event.inputs.ticket_title }}
 
             Description:
             ${{ github.event.inputs.ticket_description }}
@@ -106,6 +110,7 @@ jobs:
           BASE_URL: ${{ secrets.WAYVE_BASE_URL }}
           API_KEY: ${{ secrets.WAYVE_API_KEY }}
           TICKET: ${{ github.event.inputs.ticket_number }}
+          TARGET_KIND: ${{ github.event.inputs.target_kind || 'ticket' }}
           AGENT_OUTCOME: ${{ steps.claude.outcome }}
         run: |
           if [ -z "${BASE_URL:-}" ] || [ -z "${API_KEY:-}" ]; then
@@ -118,6 +123,9 @@ jobs:
           base_url = os.environ["BASE_URL"].rstrip("/")
           api_key = os.environ["API_KEY"]
           ticket = os.environ["TICKET"]
+          # Stories and tickets expose the identical ai-fix endpoints under
+          # their own prefix, so only the collection segment changes.
+          collection = "user-stories" if os.environ.get("TARGET_KIND") == "story" else "workspace-tickets"
           outcome = os.environ.get("AGENT_OUTCOME", "")
 
           def git(*a):
@@ -125,7 +133,7 @@ jobs:
 
           def post(body):
               req = urllib.request.Request(
-                  f"{base_url}/api/workspace-tickets/{ticket}/ai-fix-diff",
+                  f"{base_url}/api/{collection}/{ticket}/ai-fix-diff",
                   data=json.dumps(body).encode(),
                   method="POST",
                   headers={"X-API-KEY": api_key, "Content-Type": "application/json"},

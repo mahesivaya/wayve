@@ -4,12 +4,12 @@ import {
   createTicketApi,
   updateTicketApi,
   deleteTicketApi,
-  aiFixTicket,
   listTicketAttachments,
   uploadTicketAttachments,
   deleteTicketAttachment,
   downloadTicketAttachment,
 } from "../api/tickets";
+import { ticketAiFix } from "../api/aiFix";
 
 // The Workspace "Tickets" board is the Tasks board with its own org-shared data
 // source (separate from User Stories) and ticket-flavoured labels. Statuses,
@@ -22,7 +22,7 @@ const TICKETS_CONFIG: TasksConfig = {
     create: createTicketApi,
     update: updateTicketApi,
     remove: deleteTicketApi,
-    aiFix: aiFixTicket,
+    aiFixPanel: ticketAiFix,
     listAttachments: listTicketAttachments,
     uploadAttachments: uploadTicketAttachments,
     deleteAttachment: deleteTicketAttachment,
@@ -31,7 +31,8 @@ const TICKETS_CONFIG: TasksConfig = {
   features: {
     attachments: true,
     statusSummary: true,
-    aiFix: true,
+    // P4 (Low) and P5 (Lowest) tickets may be auto-fixed.
+    aiFixMinPriority: 4,
     // Design (Figma) section is off on both boards now — file attachments cover
     // the same need without leaving the app. The ticket_figma_links table and
     // its endpoints stay, so flipping this back on restores existing links.

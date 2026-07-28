@@ -1458,6 +1458,16 @@ CREATE TABLE IF NOT EXISTS user_stories (
     assignee TEXT NOT NULL DEFAULT '',
     assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+    -- AI-fix review state, mirroring workspace_tickets above. Stories run the
+    -- same pipeline but are gated to P5 (Lowest) only — the least risky end of
+    -- the backlog. See tickets/ai_fix.rs, which drives both tables.
+    ai_fix_status TEXT,
+    ai_fix_diff TEXT,
+    ai_fix_files JSONB,
+    ai_fix_base_sha TEXT,
+    ai_fix_commit_sha TEXT,
+    ai_fix_branch TEXT,
+    ai_fix_pr_url TEXT,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     CONSTRAINT user_stories_owner_chk CHECK (
@@ -1533,7 +1543,7 @@ CREATE TABLE IF NOT EXISTS workspace_tickets (
     resolution_commit TEXT,
     resolution_summary TEXT,
     resolved_at TIMESTAMP,
-    -- AI-fix review state: the "Fix with AI" pipeline (P1 tickets) dispatches CI,
+    -- AI-fix review state: the "Fix with AI" pipeline (P4/P5 tickets) dispatches CI,
     -- which makes + verifies a fix and posts the changed files + diff back here
     -- WITHOUT touching Git. The ticket page shows the diff, then three buttons
     -- drive GitHub's Git Data API: Commit (ai_fix_files @ ai_fix_base_sha → a

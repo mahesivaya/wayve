@@ -12,11 +12,26 @@ vi.mock("../../api/tickets", () => ({
   getTickets,
   updateTicketApi: vi.fn(),
   deleteTicketApi: vi.fn(),
-  aiFixTicket: vi.fn(),
-  getAiFixState: vi.fn().mockResolvedValue(null),
-  commitAiFix: vi.fn(),
-  pushAiFix: vi.fn(),
-  openAiFixPr: vi.fn(),
+}));
+
+// The panel asks for AI-fix state on mount; "no run yet" is the state in which
+// the gate alone decides whether "Fix with AI" is offered.
+vi.mock("../../api/aiFix", () => ({
+  ticketAiFix: {
+    getState: vi.fn().mockResolvedValue({
+      status: null,
+      diff: null,
+      files: [],
+      commit_sha: null,
+      branch: null,
+      pr_url: null,
+    }),
+    start: vi.fn(),
+    saveEdits: vi.fn(),
+    commit: vi.fn(),
+    push: vi.fn(),
+    openPr: vi.fn(),
+  },
 }));
 
 vi.mock("../../api/taskStatuses", () => ({

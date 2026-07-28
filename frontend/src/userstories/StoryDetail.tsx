@@ -6,6 +6,8 @@ import {
   updateUserStoryApi,
   deleteUserStoryApi,
 } from "../api/userStories";
+import { storyAiFix } from "../api/aiFix";
+import AiFixPanel from "../aifix/AiFixPanel";
 import { getTaskStatuses, type TaskStatusRow } from "../api/taskStatuses";
 // Reuses the ticket detail-page styling so the full-page story editor matches
 // the ticket one (same `.ticket-detail-*` classes). The board's drawer shows
@@ -13,6 +15,10 @@ import { getTaskStatuses, type TaskStatusRow } from "../api/taskStatuses";
 import "../tickets/ticketDetail.css";
 
 const PRIORITIES: TaskPriority[] = [1, 2, 3, 4, 5];
+
+// Stories open up to the AI fixer only at P5 (Lowest) — the least risky end
+// of the backlog. The backend enforces the same floor.
+const AI_FIX_MIN_PRIORITY = 5;
 
 // Full-page editable view of a single user story — the User Stories board's
 // Edit button routes here (config.detailPath) while a name click opens the
@@ -237,6 +243,15 @@ export default function StoryDetail() {
               )}
             </div>
           </form>
+
+          {/* Same AI-fix surface the tickets get: the diff, an editor for the
+              proposed files, then Commit → Push → Create PR. */}
+          <AiFixPanel
+            itemId={story.id}
+            api={storyAiFix}
+            canFix={priority >= AI_FIX_MIN_PRIORITY}
+            kind="story"
+          />
         </>
       ) : null}
     </div>
