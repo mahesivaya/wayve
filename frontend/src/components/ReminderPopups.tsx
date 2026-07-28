@@ -111,7 +111,8 @@ function meetingSubtitle(m: ApiMeeting, startMs: number) {
 export default function ReminderPopups() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
-  const meetingLeadMin = user?.meeting_alert_minutes ?? DEFAULT_MEETING_LEAD_MIN;
+  const meetingLeadMin =
+    user?.meeting_alert_minutes ?? DEFAULT_MEETING_LEAD_MIN;
 
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [meetings, setMeetings] = useState<ApiMeeting[]>([]);
@@ -138,7 +139,8 @@ export default function ReminderPopups() {
     // Each list keeps its previous value on failure, so one endpoint being down
     // doesn't blank the other's popups.
     if (r.status === "fulfilled") setReminders(r.value);
-    if (m.status === "fulfilled") setMeetings(Array.isArray(m.value) ? m.value : []);
+    if (m.status === "fulfilled")
+      setMeetings(Array.isArray(m.value) ? m.value : []);
   }, [wantMeetings]);
 
   useEffect(() => {
@@ -263,7 +265,8 @@ export default function ReminderPopups() {
     >
       {due.map((item) => {
         const mins = Math.round((item.ts - now) / 60_000);
-        const label = mins <= 0 ? "Now" : `In ${mins} min${mins === 1 ? "" : "s"}`;
+        const label =
+          mins <= 0 ? "Now" : `In ${mins} min${mins === 1 ? "" : "s"}`;
         return (
           <div key={item.key} className="meeting-reminder-card" role="alert">
             <div className="meeting-reminder-head">

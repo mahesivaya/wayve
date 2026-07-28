@@ -76,7 +76,9 @@ export default function FigmaPanel() {
       window.location.href = await getFigmaConnectUrl();
     } catch (e) {
       setError(
-        e instanceof Error ? e.message : "Could not start the Figma connect flow."
+        e instanceof Error
+          ? e.message
+          : "Could not start the Figma connect flow."
       );
       setBusy(null);
     }

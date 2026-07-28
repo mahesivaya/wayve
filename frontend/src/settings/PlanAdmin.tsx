@@ -209,7 +209,8 @@ export default function PlanAdmin() {
   // and the seeded snapshot compares straight across. Save stays dead while the
   // two match — editing a plan and changing nothing is a write the API doesn't
   // need to serve.
-  const dirty = pristineDraft === null || JSON.stringify(draft) !== pristineDraft;
+  const dirty =
+    pristineDraft === null || JSON.stringify(draft) !== pristineDraft;
 
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();

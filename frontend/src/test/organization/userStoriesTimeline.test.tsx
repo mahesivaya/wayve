@@ -107,7 +107,10 @@ const subtitle = () => screen.getByText(/·/).textContent ?? "";
 // The drag maths divides the sprint by the plot's pixel width; jsdom reports 0
 // for every layout box, so the wrapper needs a width to divide by.
 function stubWidth(el: HTMLElement, width: number) {
-  Object.defineProperty(el, "clientWidth", { value: width, configurable: true });
+  Object.defineProperty(el, "clientWidth", {
+    value: width,
+    configurable: true,
+  });
 }
 
 // The status blocks are the only filled paths in the chart; the spacer that
@@ -155,7 +158,8 @@ describe("user stories timeline", () => {
   });
 
   it("draws one block when the story has no recorded history", async () => {
-    const { getUserStoryStatusTimeline } = await import("../../api/userStories");
+    const { getUserStoryStatusTimeline } =
+      await import("../../api/userStories");
     vi.mocked(getUserStoryStatusTimeline).mockResolvedValueOnce([]);
 
     const { container } = await renderCard();

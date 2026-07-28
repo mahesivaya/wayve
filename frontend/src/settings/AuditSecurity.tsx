@@ -1121,10 +1121,16 @@ export default function AuditSecurity({
                         </span>
                       </td>
                       <td>{formatProvider(row)}</td>
-                      <td className="audit-path" data-tooltip={metaStr(row, "from")}>
+                      <td
+                        className="audit-path"
+                        data-tooltip={metaStr(row, "from")}
+                      >
                         {metaStr(row, "from")}
                       </td>
-                      <td className="audit-path" data-tooltip={metaStr(row, "to")}>
+                      <td
+                        className="audit-path"
+                        data-tooltip={metaStr(row, "to")}
+                      >
                         {metaStr(row, "to")}
                       </td>
                       <td
@@ -1133,7 +1139,10 @@ export default function AuditSecurity({
                       >
                         {metaStr(row, "subject")}
                       </td>
-                      <td className="audit-path" data-tooltip={formatAttachments(row)}>
+                      <td
+                        className="audit-path"
+                        data-tooltip={formatAttachments(row)}
+                      >
                         {formatAttachments(row)}
                       </td>
                     </tr>
@@ -1358,13 +1367,19 @@ export default function AuditSecurity({
                           {CALENDAR_ACTION_LABEL[row.action] ?? row.action}
                         </span>
                       </td>
-                      <td className="audit-path" data-tooltip={metaStr(row, "title")}>
+                      <td
+                        className="audit-path"
+                        data-tooltip={metaStr(row, "title")}
+                      >
                         {metaStr(row, "title")}
                       </td>
                       <td>{metaStr(row, "date")}</td>
                       <td>{formatMeetingTime(row)}</td>
                       <td>{formatMeetingDuration(row)}</td>
-                      <td className="audit-path" data-tooltip={formatInvitees(row)}>
+                      <td
+                        className="audit-path"
+                        data-tooltip={formatInvitees(row)}
+                      >
                         {formatInvitees(row)}
                       </td>
                       <td>{metaStr(row, "status")}</td>
@@ -1480,10 +1495,16 @@ export default function AuditSecurity({
                           {DRIVE_ACTION_LABEL[row.action] ?? row.action}
                         </span>
                       </td>
-                      <td className="audit-path" data-tooltip={driveNameTitle(row)}>
+                      <td
+                        className="audit-path"
+                        data-tooltip={driveNameTitle(row)}
+                      >
                         {metaStr(row, "name")}
                       </td>
-                      <td className="audit-path" data-tooltip={metaStr(row, "folder")}>
+                      <td
+                        className="audit-path"
+                        data-tooltip={metaStr(row, "folder")}
+                      >
                         {metaStr(row, "folder")}
                       </td>
                       <td>{formatSize(row)}</td>
@@ -1580,7 +1601,10 @@ export default function AuditSecurity({
                           {NOTE_ACTION_LABEL[row.action] ?? row.action}
                         </span>
                       </td>
-                      <td className="audit-path" data-tooltip={metaStr(row, "name")}>
+                      <td
+                        className="audit-path"
+                        data-tooltip={metaStr(row, "name")}
+                      >
                         {metaStr(row, "name")}
                       </td>
                       <td>{formatSize(row)}</td>

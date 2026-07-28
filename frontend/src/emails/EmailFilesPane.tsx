@@ -47,7 +47,11 @@ export function EmailFilesList({
       style={width ? { width, flex: "0 0 auto" } : undefined}
     >
       {onSelectFolder && (
-        <div className="email-bulk-bar" role="toolbar" aria-label="Mail folders">
+        <div
+          className="email-bulk-bar"
+          role="toolbar"
+          aria-label="Mail folders"
+        >
           <FolderChips
             activeFolder={null}
             onSelectFolder={onSelectFolder}

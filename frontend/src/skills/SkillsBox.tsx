@@ -279,7 +279,8 @@ export default function SkillsBox() {
 
   const runGrammarFix = () =>
     void runAssist("fix", GRAMMAR_PROMPT, setGrammarSuggestion);
-  const runSummary = () => void runAssist("summary", SUMMARY_PROMPT, setSummary);
+  const runSummary = () =>
+    void runAssist("summary", SUMMARY_PROMPT, setSummary);
 
   const applyGrammar = () => {
     if (grammarSuggestion === null) return;

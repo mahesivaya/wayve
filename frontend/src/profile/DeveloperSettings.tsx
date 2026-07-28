@@ -3,12 +3,7 @@ import { useNavigate } from "react-router-dom";
 import SettingsShell from "./SettingsShell";
 import { useAuth } from "../auth/useAuth";
 import { canAccessApiKeyAdmin } from "../auth/permissions";
-import {
-  DocsIcon,
-  ApiRefIcon,
-  LibrariesIcon,
-  ApiKeysIcon,
-} from "../icons";
+import { DocsIcon, ApiRefIcon, LibrariesIcon, ApiKeysIcon } from "../icons";
 
 // The developer references — docs, API, SDK, keys — as one settings page.
 // They used to be a collapsible group in the main sidebar, which put five rows

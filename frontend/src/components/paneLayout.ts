@@ -1,10 +1,5 @@
 import type { AppKey } from "./LayoutConfig";
-import type {
-  DropZone,
-  PaneDragPayload,
-  PaneHalf,
-  PaneKey,
-} from "./paneDnd";
+import type { DropZone, PaneDragPayload, PaneHalf, PaneKey } from "./paneDnd";
 
 // The pane arrangement, extracted from Layout's state so the drop rules are a
 // pure function. Layout owns the setters; this owns the decisions.

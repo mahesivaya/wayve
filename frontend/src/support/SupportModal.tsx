@@ -226,7 +226,10 @@ export default function SupportModal({ onClose, onSubmitted }: Props) {
               <ul className="support-file-list">
                 {files.map((file, idx) => (
                   <li key={`${file.name}-${idx}`}>
-                    <span className="support-file-name" data-tooltip={file.name}>
+                    <span
+                      className="support-file-name"
+                      data-tooltip={file.name}
+                    >
                       {file.name}
                     </span>
                     <span className="support-file-size">

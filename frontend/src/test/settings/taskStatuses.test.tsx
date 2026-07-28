@@ -41,9 +41,9 @@ const statusRows: TaskStatusRow[] = [
 ];
 
 vi.mock("../../api/taskStatuses", async () => {
-  const actual = await vi.importActual<
-    typeof import("../../api/taskStatuses")
-  >("../../api/taskStatuses");
+  const actual = await vi.importActual<typeof import("../../api/taskStatuses")>(
+    "../../api/taskStatuses"
+  );
   return {
     ...actual,
     getTaskStatuses: vi.fn(),
@@ -122,9 +122,7 @@ describe("Task statuses settings", () => {
     renderPage();
     await screen.findByText("To Do");
 
-    fireEvent.click(
-      screen.getByLabelText("Add a status to Planned")
-    );
+    fireEvent.click(screen.getByLabelText("Add a status to Planned"));
     fireEvent.change(screen.getByLabelText("New status name"), {
       target: { value: "Scheduled" },
     });
@@ -145,9 +143,7 @@ describe("Task statuses settings", () => {
     await screen.findByText("To Do");
     expect(screen.queryByText("Delete")).toBeNull();
     expect(screen.queryByLabelText("Add a status to Planned")).toBeNull();
-    expect(
-      screen.getByText(/organization's shared statuses/i)
-    ).toBeTruthy();
+    expect(screen.getByText(/organization's shared statuses/i)).toBeTruthy();
   });
 
   /**
@@ -178,9 +174,7 @@ describe("Task statuses settings", () => {
    */
   it("prompts for a destination before deleting an in-use status", async () => {
     vi.mocked(deleteTaskStatus).mockResolvedValue(undefined);
-    const prompt = vi
-      .spyOn(window, "prompt")
-      .mockReturnValue("Done");
+    const prompt = vi.spyOn(window, "prompt").mockReturnValue("Done");
     renderPage();
     // "In Progress" is both a category heading and a status name here, so this
     // deliberately matches all of them rather than asserting a single node.

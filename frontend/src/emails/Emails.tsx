@@ -338,16 +338,19 @@ export default function Emails() {
 
   // The attachment the files view is showing. Cleared whenever the view is left
   // so returning to it opens on the list rather than a stale file.
-  const { visibleFiles, emptyMessage: filesEmptyMessage, progressNote: filesProgressNote } =
-    useVisibleFiles({
-      files,
-      normalizedSearchQuery,
-      accountCount: accounts.length,
-      emailCount: emails.length,
-      uncheckedCount: emails.filter(
-        (email) => email.attachments_checked === false
-      ).length,
-    });
+  const {
+    visibleFiles,
+    emptyMessage: filesEmptyMessage,
+    progressNote: filesProgressNote,
+  } = useVisibleFiles({
+    files,
+    normalizedSearchQuery,
+    accountCount: accounts.length,
+    emailCount: emails.length,
+    uncheckedCount: emails.filter(
+      (email) => email.attachments_checked === false
+    ).length,
+  });
   // In files mode the list pane holds the file list, so it shows on the same
   // terms the email list would: always on a wide screen, and on a narrow one
   // only until something is selected.

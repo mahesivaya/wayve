@@ -60,8 +60,7 @@ export function readPaneDragData(
       return { kind: "app", app: o.app };
     }
     if (o.kind === "pane" && isPaneKey(o.from)) {
-      const half =
-        o.half === "top" || o.half === "bottom" ? o.half : undefined;
+      const half = o.half === "top" || o.half === "bottom" ? o.half : undefined;
       return { kind: "pane", from: o.from, half };
     }
     return null;

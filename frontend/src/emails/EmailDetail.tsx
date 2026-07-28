@@ -414,113 +414,113 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
           <span>Back</span>
         </button>
         <div className="email-detail-actions">
-        <button
-          className="email-detail-reply"
-          onClick={() => {
-            setReplyOpen((open) => !open);
-            setReplyError(null);
-            setForwardOpen(false);
-            setForwardError(null);
-          }}
-          data-tooltip="Reply"
-          aria-label="Reply"
-        >
-          <svg
-            className="email-detail-reply-icon"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
+          <button
+            className="email-detail-reply"
+            onClick={() => {
+              setReplyOpen((open) => !open);
+              setReplyError(null);
+              setForwardOpen(false);
+              setForwardError(null);
+            }}
+            data-tooltip="Reply"
+            aria-label="Reply"
           >
-            <path d="M10 8 5 13l5 5" />
-            <path d="M5 13h9a5 5 0 0 1 5 5v1" />
-          </svg>
-          <span>Reply</span>
-        </button>
-        <button
-          className="email-detail-forward"
-          onClick={openForward}
-          data-tooltip="Forward"
-          aria-label="Forward"
-        >
-          <svg
-            className="email-detail-forward-icon"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path d="M14 8l5 5-5 5" />
-            <path d="M5 19v-1a5 5 0 0 1 5-5h9" />
-          </svg>
-          <span>Forward</span>
-        </button>
-        <button
-          className="email-detail-delete"
-          onClick={() => void handleDelete()}
-          disabled={deleting}
-          data-tooltip="Delete email"
-          aria-label="Delete email"
-        >
-          {deleting ? (
-            "…"
-          ) : (
             <svg
-              className="email-detail-delete-icon"
+              className="email-detail-reply-icon"
               viewBox="0 0 24 24"
               aria-hidden="true"
             >
-              <path d="M4 7h16" />
-              <path d="M10 11v6" />
-              <path d="M14 11v6" />
-              <path d="M6 7l1 14h10l1-14" />
-              <path d="M9 7V4h6v3" />
+              <path d="M10 8 5 13l5 5" />
+              <path d="M5 13h9a5 5 0 0 1 5 5v1" />
             </svg>
-          )}
-        </button>
-        <button
-          className="email-detail-back"
-          onClick={onBack}
-          data-tooltip="Close"
-          aria-label="Close"
-        >
-          ✕
-        </button>
-        <div className="email-detail-more" ref={moreRef}>
-          <button
-            type="button"
-            className="email-detail-more-btn"
-            onClick={() => setMoreOpen((open) => !open)}
-            aria-haspopup="menu"
-            aria-expanded={moreOpen}
-            data-tooltip="More"
-            aria-label="More actions"
-          >
-            ⋮
+            <span>Reply</span>
           </button>
-          {moreOpen && (
-            <div className="email-detail-more-menu" role="menu">
-              <button
-                type="button"
-                role="menuitem"
-                className="email-detail-more-item"
-                onClick={() => {
-                  setMoreOpen(false);
-                  void handleMarkNoise();
-                }}
+          <button
+            className="email-detail-forward"
+            onClick={openForward}
+            data-tooltip="Forward"
+            aria-label="Forward"
+          >
+            <svg
+              className="email-detail-forward-icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path d="M14 8l5 5-5 5" />
+              <path d="M5 19v-1a5 5 0 0 1 5-5h9" />
+            </svg>
+            <span>Forward</span>
+          </button>
+          <button
+            className="email-detail-delete"
+            onClick={() => void handleDelete()}
+            disabled={deleting}
+            data-tooltip="Delete email"
+            aria-label="Delete email"
+          >
+            {deleting ? (
+              "…"
+            ) : (
+              <svg
+                className="email-detail-delete-icon"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
               >
-                Mark as Noise
-              </button>
-              {["test2", "test3"].map((item) => (
+                <path d="M4 7h16" />
+                <path d="M10 11v6" />
+                <path d="M14 11v6" />
+                <path d="M6 7l1 14h10l1-14" />
+                <path d="M9 7V4h6v3" />
+              </svg>
+            )}
+          </button>
+          <button
+            className="email-detail-back"
+            onClick={onBack}
+            data-tooltip="Close"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+          <div className="email-detail-more" ref={moreRef}>
+            <button
+              type="button"
+              className="email-detail-more-btn"
+              onClick={() => setMoreOpen((open) => !open)}
+              aria-haspopup="menu"
+              aria-expanded={moreOpen}
+              data-tooltip="More"
+              aria-label="More actions"
+            >
+              ⋮
+            </button>
+            {moreOpen && (
+              <div className="email-detail-more-menu" role="menu">
                 <button
-                  key={item}
                   type="button"
                   role="menuitem"
                   className="email-detail-more-item"
-                  onClick={() => setMoreOpen(false)}
+                  onClick={() => {
+                    setMoreOpen(false);
+                    void handleMarkNoise();
+                  }}
                 >
-                  {item}
+                  Mark as Noise
                 </button>
-              ))}
-            </div>
-          )}
-        </div>
+                {["test2", "test3"].map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    role="menuitem"
+                    className="email-detail-more-item"
+                    onClick={() => setMoreOpen(false)}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
       <h2 className="email-detail-subject">

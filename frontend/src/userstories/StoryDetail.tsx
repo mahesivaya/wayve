@@ -59,7 +59,9 @@ export default function StoryDetail() {
       setStatus(found.status);
       setAssignee(found.assignee ?? "");
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Failed to load story.");
+      setLoadError(
+        err instanceof Error ? err.message : "Failed to load story."
+      );
     } finally {
       setLoading(false);
     }

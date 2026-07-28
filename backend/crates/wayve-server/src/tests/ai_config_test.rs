@@ -420,7 +420,13 @@ mod tests {
             .set_json(serde_json::json!({ "messages": [{ "role": "user", "content": "hi" }] }))
             .to_request();
         let resp = actix_test::call_service(&app, req).await;
-        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        // 502, not 500: the handler answers an upstream failure with BadGateway
+        // so the provider's own reason reaches the caller (bad key, retired
+        // model, quota) instead of a generic "Internal server error". What this
+        // test is about is that fail-closed *errors* rather than silently
+        // falling back to the platform key — the status only has to be the
+        // failure the handler actually returns.
+        assert_eq!(resp.status(), StatusCode::BAD_GATEWAY);
 
         drop(app);
         unsafe {

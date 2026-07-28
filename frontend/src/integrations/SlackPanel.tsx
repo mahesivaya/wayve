@@ -228,9 +228,9 @@ export default function SlackPanel() {
           <details className="slack-manual">
             <summary>Use a bot token instead</summary>
             <p className="slack-muted">
-              Paste a Slack <strong>bot token</strong> (<code>xoxb-…</code>) with
-              the <code>channels:history</code>, <code>channels:read</code>,{" "}
-              <code>chat:write</code>, <code>chat:write.customize</code>, and{" "}
+              Paste a Slack <strong>bot token</strong> (<code>xoxb-…</code>)
+              with the <code>channels:history</code>, <code>channels:read</code>
+              , <code>chat:write</code>, <code>chat:write.customize</code>, and{" "}
               <code>users:read</code> scopes.
             </p>
             <div className="slack-row">

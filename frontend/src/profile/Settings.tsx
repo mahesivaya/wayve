@@ -247,7 +247,8 @@ export default function Settings() {
   // meeting-lead control; the value lives on the organization, not the user.
   const [pendingSprint, setPendingSprint] = useState<number | null>(null);
   const [sprintError, setSprintError] = useState("");
-  const sprintDays = pendingSprint ?? user?.organization_sprint_total_days ?? 14;
+  const sprintDays =
+    pendingSprint ?? user?.organization_sprint_total_days ?? 14;
   const changeSprintDays = async (next: number) => {
     const clamped = Math.min(90, Math.max(1, Math.round(next)));
     if (clamped === sprintDays) return;
@@ -494,8 +495,8 @@ export default function Settings() {
           </div>
           <p className="settings-support-empty" style={{ textAlign: "left" }}>
             Meeting alerts appear as a card in the corner of the app. Desktop
-            notifications additionally surface them outside the browser, but only
-            while Wayve is open in a tab.
+            notifications additionally surface them outside the browser, but
+            only while Wayve is open in a tab.
             {notifPermission === "denied" &&
               " Your browser is blocking notifications for this site — re-allow them in site settings to turn this on."}
           </p>
@@ -667,7 +668,10 @@ export default function Settings() {
                 {accounts.map((acc) => (
                   <div key={acc.id} className="settings-account">
                     <span className="settings-account-icon">📧</span>
-                    <span className="settings-account-email" data-tooltip={acc.email}>
+                    <span
+                      className="settings-account-email"
+                      data-tooltip={acc.email}
+                    >
                       {acc.email}
                     </span>
                     <button
@@ -823,7 +827,9 @@ export default function Settings() {
                           ` · ${t.attachment_count} attachment${t.attachment_count === 1 ? "" : "s"}`}
                       </span>
                     </span>
-                    <span className={`settings-ticket-status status-${t.status}`}>
+                    <span
+                      className={`settings-ticket-status status-${t.status}`}
+                    >
                       {t.status.replace("_", " ")}
                     </span>
                   </button>

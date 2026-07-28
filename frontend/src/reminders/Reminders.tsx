@@ -213,177 +213,190 @@ export default function Reminders() {
 
       <div className="reminders-layout">
         <div className="reminders-side-col">
-      <section className="reminders-section">
-        <div className="reminders-section-head">
-          <h2>New reminder</h2>
-        </div>
-        <form
-          className="reminder-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void addReminder();
-          }}
-        >
-          <div className="reminder-form-row">
-            <input
-              className="reminder-form-title"
-              type="text"
-              placeholder="Remind me to…"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              aria-label="Reminder title"
-            />
-            <input
-              className="reminder-form-time"
-              type="datetime-local"
-              value={remindAt}
-              onChange={(e) => setRemindAt(e.target.value)}
-              aria-label="Remind at"
-            />
-          </div>
-          <textarea
-            className="reminder-form-note"
-            placeholder="Notes (optional)"
-            rows={2}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            aria-label="Reminder notes"
-          />
-          {formError && <div className="reminder-form-error">{formError}</div>}
-          <div className="reminder-form-actions">
-            <button type="submit" className="reminder-form-submit" disabled={saving}>
-              {saving ? "Adding…" : "Add reminder"}
-            </button>
-          </div>
-        </form>
-      </section>
+          <section className="reminders-section">
+            <div className="reminders-section-head">
+              <h2>New reminder</h2>
+            </div>
+            <form
+              className="reminder-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void addReminder();
+              }}
+            >
+              <div className="reminder-form-row">
+                <input
+                  className="reminder-form-title"
+                  type="text"
+                  placeholder="Remind me to…"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  aria-label="Reminder title"
+                />
+                <input
+                  className="reminder-form-time"
+                  type="datetime-local"
+                  value={remindAt}
+                  onChange={(e) => setRemindAt(e.target.value)}
+                  aria-label="Remind at"
+                />
+              </div>
+              <textarea
+                className="reminder-form-note"
+                placeholder="Notes (optional)"
+                rows={2}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                aria-label="Reminder notes"
+              />
+              {formError && (
+                <div className="reminder-form-error">{formError}</div>
+              )}
+              <div className="reminder-form-actions">
+                <button
+                  type="submit"
+                  className="reminder-form-submit"
+                  disabled={saving}
+                >
+                  {saving ? "Adding…" : "Add reminder"}
+                </button>
+              </div>
+            </form>
+          </section>
         </div>
 
         <div className="reminders-main-col">
-      <section className="reminders-section">
-        <div className="reminders-section-head">
-          <h2>Your reminders</h2>
-          <span className="reminders-count">{sortedReminders.length}</span>
-        </div>
-        {loading ? (
-          <div className="reminders-empty">Loading…</div>
-        ) : sortedReminders.length === 0 ? (
-          <div className="reminders-empty">
-            No reminders yet — add one above.
-          </div>
-        ) : (
-          <ul className="reminders-list">
-            {sortedReminders.map((r) => {
-              const ts = new Date(r.remind_at).getTime();
-              return (
-                <li key={r.id} className="reminder-row reminder-row--static">
-                  <span className="reminder-when">
-                    {ts >= now ? relativeWhen(ts, now) : "past"}
-                  </span>
-                  <span className="reminder-main">
-                    <span className="reminder-title">{r.title}</span>
-                    <span className="reminder-meta">
-                      {new Date(r.remind_at).toLocaleString("en-US", {
-                        weekday: "short",
-                        month: "short",
-                        day: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
-                      {r.notes ? ` · ${r.notes}` : ""}
+          <section className="reminders-section">
+            <div className="reminders-section-head">
+              <h2>Your reminders</h2>
+              <span className="reminders-count">{sortedReminders.length}</span>
+            </div>
+            {loading ? (
+              <div className="reminders-empty">Loading…</div>
+            ) : sortedReminders.length === 0 ? (
+              <div className="reminders-empty">
+                No reminders yet — add one above.
+              </div>
+            ) : (
+              <ul className="reminders-list">
+                {sortedReminders.map((r) => {
+                  const ts = new Date(r.remind_at).getTime();
+                  return (
+                    <li
+                      key={r.id}
+                      className="reminder-row reminder-row--static"
+                    >
+                      <span className="reminder-when">
+                        {ts >= now ? relativeWhen(ts, now) : "past"}
+                      </span>
+                      <span className="reminder-main">
+                        <span className="reminder-title">{r.title}</span>
+                        <span className="reminder-meta">
+                          {new Date(r.remind_at).toLocaleString("en-US", {
+                            weekday: "short",
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                          {r.notes ? ` · ${r.notes}` : ""}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        className="reminder-delete"
+                        aria-label="Delete reminder"
+                        onClick={() => void removeReminder(r.id)}
+                      >
+                        ×
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          <section className="reminders-section">
+            <div className="reminders-section-head">
+              <h2>Upcoming meetings</h2>
+              <span className="reminders-count">{upcomingMeetings.length}</span>
+            </div>
+            {loading ? (
+              <div className="reminders-empty">Loading…</div>
+            ) : upcomingMeetings.length === 0 ? (
+              <div className="reminders-empty">No upcoming meetings.</div>
+            ) : (
+              <ul className="reminders-list">
+                {upcomingMeetings.map((m) => (
+                  <li
+                    key={`${m.id}:${m.date}`}
+                    className="reminder-row"
+                    onClick={() => navigate("/scheduler")}
+                  >
+                    <span className="reminder-when">
+                      {relativeWhen(m.startTs, now)}
                     </span>
-                  </span>
-                  <button
-                    type="button"
-                    className="reminder-delete"
-                    aria-label="Delete reminder"
-                    onClick={() => void removeReminder(r.id)}
-                  >
-                    ×
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+                    <span className="reminder-main">
+                      <span className="reminder-title">
+                        {m.title || "Meeting"}
+                      </span>
+                      <span className="reminder-meta">
+                        {dateLabel(m.date)} · {formatHour(m.startMin)} –{" "}
+                        {formatHour(m.endMin)}
+                      </span>
+                    </span>
+                    {m.zoomUrl && (
+                      <a
+                        className="reminder-join"
+                        href={m.zoomUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Join
+                      </a>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
 
-      <section className="reminders-section">
-        <div className="reminders-section-head">
-          <h2>Upcoming meetings</h2>
-          <span className="reminders-count">{upcomingMeetings.length}</span>
-        </div>
-        {loading ? (
-          <div className="reminders-empty">Loading…</div>
-        ) : upcomingMeetings.length === 0 ? (
-          <div className="reminders-empty">No upcoming meetings.</div>
-        ) : (
-          <ul className="reminders-list">
-            {upcomingMeetings.map((m) => (
-              <li
-                key={`${m.id}:${m.date}`}
-                className="reminder-row"
-                onClick={() => navigate("/scheduler")}
-              >
-                <span className="reminder-when">{relativeWhen(m.startTs, now)}</span>
-                <span className="reminder-main">
-                  <span className="reminder-title">{m.title || "Meeting"}</span>
-                  <span className="reminder-meta">
-                    {dateLabel(m.date)} · {formatHour(m.startMin)} –{" "}
-                    {formatHour(m.endMin)}
-                  </span>
-                </span>
-                {m.zoomUrl && (
-                  <a
-                    className="reminder-join"
-                    href={m.zoomUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
+          <section className="reminders-section">
+            <div className="reminders-section-head">
+              <h2>Open tasks</h2>
+              <span className="reminders-count">{openTasks.length}</span>
+            </div>
+            {loading ? (
+              <div className="reminders-empty">Loading…</div>
+            ) : openTasks.length === 0 ? (
+              <div className="reminders-empty">No open tasks.</div>
+            ) : (
+              <ul className="reminders-list">
+                {openTasks.map((t) => (
+                  <li
+                    key={t.id}
+                    className="reminder-row"
+                    onClick={() => navigate("/tasks")}
                   >
-                    Join
-                  </a>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="reminders-section">
-        <div className="reminders-section-head">
-          <h2>Open tasks</h2>
-          <span className="reminders-count">{openTasks.length}</span>
-        </div>
-        {loading ? (
-          <div className="reminders-empty">Loading…</div>
-        ) : openTasks.length === 0 ? (
-          <div className="reminders-empty">No open tasks.</div>
-        ) : (
-          <ul className="reminders-list">
-            {openTasks.map((t) => (
-              <li
-                key={t.id}
-                className="reminder-row"
-                onClick={() => navigate("/tasks")}
-              >
-                <span
-                  className={`reminder-priority p${t.priority}`}
-                  data-tooltip={`Priority ${t.priority} — ${priorityLabel(t.priority)}`}
-                >
-                  P{t.priority}
-                </span>
-                <span className="reminder-main">
-                  <span className="reminder-title">{t.name}</span>
-                  <span className="reminder-meta">
-                    {priorityLabel(t.priority)} · {statusLabel(t.status)}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                    <span
+                      className={`reminder-priority p${t.priority}`}
+                      data-tooltip={`Priority ${t.priority} — ${priorityLabel(t.priority)}`}
+                    >
+                      P{t.priority}
+                    </span>
+                    <span className="reminder-main">
+                      <span className="reminder-title">{t.name}</span>
+                      <span className="reminder-meta">
+                        {priorityLabel(t.priority)} · {statusLabel(t.status)}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </div>
       </div>
     </div>

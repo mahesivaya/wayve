@@ -415,7 +415,6 @@ export const EmailList: React.FC<EmailListProps> = ({
         </div>
       ) : (
         <>
-
           {visibleEmails.map((email) => (
             <div
               key={email.id}
