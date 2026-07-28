@@ -137,9 +137,7 @@ export default function ProfileMenu({
               <button
                 className="profile-dropdown-item"
                 disabled={switching}
-                title={
-                  inAdminMode ? "Exit admin mode" : "Switch to admin mode"
-                }
+                title={inAdminMode ? "Exit admin mode" : "Switch to admin mode"}
                 onClick={() =>
                   void handleSwitch(inAdminMode ? "normal" : "admin")
                 }

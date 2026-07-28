@@ -40,7 +40,11 @@ function scrollableAncestor(el: HTMLElement): HTMLElement | null {
   let node = el.parentElement;
   while (node) {
     const overflowY = getComputedStyle(node).overflowY;
-    if (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") {
+    if (
+      overflowY === "auto" ||
+      overflowY === "scroll" ||
+      overflowY === "overlay"
+    ) {
       return node;
     }
     node = node.parentElement;

@@ -2,6 +2,11 @@ name: smoke
 
 on:
   push:
+    # `main` as well as tags: without it nothing re-ran the tests once a PR was
+    # merged, so a branch that went red could land and main would sit untested
+    # until the next PR happened to notice. build-images is the only other
+    # workflow on push, and it does not run a single test.
+    branches: [main]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:

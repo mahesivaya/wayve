@@ -899,7 +899,10 @@ export default function Drive() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="drive-preview-header">
-              <span className="drive-preview-title" data-tooltip={previewFile.name}>
+              <span
+                className="drive-preview-title"
+                data-tooltip={previewFile.name}
+              >
                 {previewFile.name}
               </span>
               <div className="drive-preview-actions">

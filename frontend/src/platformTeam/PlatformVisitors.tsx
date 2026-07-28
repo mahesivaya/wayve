@@ -207,7 +207,10 @@ export default function PlatformVisitors({
                       </td>
                       <td>{parseDevice(r.user_agent)}</td>
                       <td>{parseBrowser(r.user_agent)}</td>
-                      <td className="pt-details" data-tooltip={r.referrer ?? ""}>
+                      <td
+                        className="pt-details"
+                        data-tooltip={r.referrer ?? ""}
+                      >
                         {r.referrer || <span className="pt-empty-cell">—</span>}
                       </td>
                     </tr>

@@ -465,7 +465,9 @@ export default function TicketDetail() {
                           type="button"
                           className="primary"
                           onClick={() => void doPush()}
-                          disabled={stepBusy !== null || order < 1 || order >= 2}
+                          disabled={
+                            stepBusy !== null || order < 1 || order >= 2
+                          }
                         >
                           {stepBusy === "push"
                             ? "Pushing…"
@@ -480,7 +482,9 @@ export default function TicketDetail() {
                           type="button"
                           className="primary"
                           onClick={() => void doCreatePr()}
-                          disabled={stepBusy !== null || order < 2 || order >= 3}
+                          disabled={
+                            stepBusy !== null || order < 2 || order >= 3
+                          }
                         >
                           {stepBusy === "pr"
                             ? "Opening PR…"

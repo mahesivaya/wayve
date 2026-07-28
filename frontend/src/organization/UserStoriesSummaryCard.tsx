@@ -608,11 +608,13 @@ export default function UserStoriesSummaryCard() {
   const legendStatuses = useMemo(() => {
     if (!statuses) return [];
     const present = new Set(rows.flatMap((r) => r.blocks.map((b) => b.status)));
-    return statuses
-      .filter((s) => present.has(s.slug))
-      // The same adaptation the blocks get, or the key would name a colour that
-      // is not on the chart.
-      .map((s) => ({ ...s, color: adaptToSurface(s.color, isDark) }));
+    return (
+      statuses
+        .filter((s) => present.has(s.slug))
+        // The same adaptation the blocks get, or the key would name a colour that
+        // is not on the chart.
+        .map((s) => ({ ...s, color: adaptToSurface(s.color, isDark) }))
+    );
   }, [statuses, rows, isDark]);
 
   const loading = !failed && stories === null;
@@ -685,122 +687,124 @@ export default function UserStoriesSummaryCard() {
               onPointerUp={endDrag}
               onPointerCancel={endDrag}
             >
-          <ResponsiveContainer
-            width="100%"
-            height={rows.length * ROW_HEIGHT + CHART_CHROME}
-          >
-            <BarChart
-              data={rows}
-              // Horizontal spans: stories run down the category axis, dates run
-              // along the value axis.
-              layout="vertical"
-              margin={{ top: 4, right: 14, bottom: 16, left: 4 }}
-              barCategoryGap="22%"
-            >
-              {/* Only the date gridlines earn their ink — the story rows are
+              <ResponsiveContainer
+                width="100%"
+                height={rows.length * ROW_HEIGHT + CHART_CHROME}
+              >
+                <BarChart
+                  data={rows}
+                  // Horizontal spans: stories run down the category axis, dates run
+                  // along the value axis.
+                  layout="vertical"
+                  margin={{ top: 4, right: 14, bottom: 16, left: 4 }}
+                  barCategoryGap="22%"
+                >
+                  {/* Only the date gridlines earn their ink — the story rows are
                   already separated by the gaps between bars. */}
-              <CartesianGrid stroke={GRID_INK} horizontal={false} />
-              <XAxis
-                type="number"
-                // Fixed to the cycle so every bar is placed against the same
-                // window, whatever range the stories themselves happen to span.
-                domain={[0, span]}
-                ticks={dayTicks}
-                // The dates read as a header above the work, as on a Gantt.
-                orientation="top"
-                tick={{ fill: AXIS_INK, fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-                // Every day is labelled, so only the day number is spelled out;
-                // repeating the month fifteen times is noise, and at that
-                // density the labels would start colliding. The month is named
-                // where it is actually needed — the first tick, and wherever a
-                // new month begins.
-                tickFormatter={(rel: number) => {
-                  const ms = cycle.start + rel;
-                  return rel === 0 || new Date(ms).getDate() === 1
-                    ? fmtRange(ms)
-                    : String(new Date(ms).getDate());
-                }}
-              />
-              <YAxis
-                type="category"
-                // Plotted against the row's unique key, but labelled with the
-                // story number — so two stories that share a number (or have
-                // none) still get a row each.
-                dataKey="key"
-                tickFormatter={(key: string) => numberByKey.get(key) ?? ""}
-                tick={{ fill: AXIS_INK, fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-                width={LABEL_WIDTH}
-                // Every story is its own row, so every row keeps its label.
-                interval={0}
-              />
-              <Tooltip
-                cursor={{ fill: "rgba(148,163,184,0.10)" }}
-                // The axis has room for the number only, so the hover carries
-                // the title — and nothing else. The default tooltip would list
-                // the series values, which here are the spacer's and the span's
-                // raw millisecond durations; the dates are already the axis the
-                // bar is drawn against, so restating them earns nothing.
-                content={({ active, payload }) => {
-                  const row = payload?.[0]?.payload as TimelineRow | undefined;
-                  if (!active || !row) return null;
-                  return <div className="us-summary-tip">{row.title}</div>;
-                }}
-              />
-              {cycle.todayMs !== null && (
-                <ReferenceLine
-                  x={cycle.todayMs - cycle.start}
-                  stroke={AXIS_INK}
-                  strokeDasharray="3 3"
-                  label={{
-                    value: "Today",
-                    // The date axis owns the top of the plot and the story bars
-                    // own its interior, so the marker names itself in the strip
-                    // below — the one band nothing else can occupy.
-                    position: "bottom",
-                    fill: AXIS_INK,
-                    fontSize: 10,
-                  }}
-                />
-              )}
-              {/* Invisible: it only pushes the span bar to its start date. */}
-              <Bar
-                dataKey={OFFSET_KEY}
-                stackId="span"
-                fill="transparent"
-                isAnimationActive={false}
-                legendType="none"
-              />
-              {/* One series per block position. They stack in order, so a row's
+                  <CartesianGrid stroke={GRID_INK} horizontal={false} />
+                  <XAxis
+                    type="number"
+                    // Fixed to the cycle so every bar is placed against the same
+                    // window, whatever range the stories themselves happen to span.
+                    domain={[0, span]}
+                    ticks={dayTicks}
+                    // The dates read as a header above the work, as on a Gantt.
+                    orientation="top"
+                    tick={{ fill: AXIS_INK, fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={false}
+                    // Every day is labelled, so only the day number is spelled out;
+                    // repeating the month fifteen times is noise, and at that
+                    // density the labels would start colliding. The month is named
+                    // where it is actually needed — the first tick, and wherever a
+                    // new month begins.
+                    tickFormatter={(rel: number) => {
+                      const ms = cycle.start + rel;
+                      return rel === 0 || new Date(ms).getDate() === 1
+                        ? fmtRange(ms)
+                        : String(new Date(ms).getDate());
+                    }}
+                  />
+                  <YAxis
+                    type="category"
+                    // Plotted against the row's unique key, but labelled with the
+                    // story number — so two stories that share a number (or have
+                    // none) still get a row each.
+                    dataKey="key"
+                    tickFormatter={(key: string) => numberByKey.get(key) ?? ""}
+                    tick={{ fill: AXIS_INK, fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={LABEL_WIDTH}
+                    // Every story is its own row, so every row keeps its label.
+                    interval={0}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "rgba(148,163,184,0.10)" }}
+                    // The axis has room for the number only, so the hover carries
+                    // the title — and nothing else. The default tooltip would list
+                    // the series values, which here are the spacer's and the span's
+                    // raw millisecond durations; the dates are already the axis the
+                    // bar is drawn against, so restating them earns nothing.
+                    content={({ active, payload }) => {
+                      const row = payload?.[0]?.payload as
+                        | TimelineRow
+                        | undefined;
+                      if (!active || !row) return null;
+                      return <div className="us-summary-tip">{row.title}</div>;
+                    }}
+                  />
+                  {cycle.todayMs !== null && (
+                    <ReferenceLine
+                      x={cycle.todayMs - cycle.start}
+                      stroke={AXIS_INK}
+                      strokeDasharray="3 3"
+                      label={{
+                        value: "Today",
+                        // The date axis owns the top of the plot and the story bars
+                        // own its interior, so the marker names itself in the strip
+                        // below — the one band nothing else can occupy.
+                        position: "bottom",
+                        fill: AXIS_INK,
+                        fontSize: 10,
+                      }}
+                    />
+                  )}
+                  {/* Invisible: it only pushes the span bar to its start date. */}
+                  <Bar
+                    dataKey={OFFSET_KEY}
+                    stackId="span"
+                    fill="transparent"
+                    isAnimationActive={false}
+                    legendType="none"
+                  />
+                  {/* One series per block position. They stack in order, so a row's
                   blocks lay out left to right in the sequence the story moved
                   through them; each row colours its own via a Cell. */}
-              {blockSeries.map((i) => (
-                <Bar
-                  key={segKey(i)}
-                  dataKey={segKey(i)}
-                  stackId="span"
-                  maxBarSize={MAX_BAR_WIDTH}
-                  isAnimationActive={false}
-                  legendType="none"
-                  // recharts types a custom shape's props as `unknown`; what it
-                  // passes is the resolved bar geometry.
-                  shape={(props: unknown) => (
-                    <SpanBlock {...(props as SegmentProps)} index={i} />
-                  )}
-                >
-                  {rows.map((row) => (
-                    <Cell
-                      key={row.key}
-                      fill={row.blocks[i]?.color ?? "transparent"}
-                    />
+                  {blockSeries.map((i) => (
+                    <Bar
+                      key={segKey(i)}
+                      dataKey={segKey(i)}
+                      stackId="span"
+                      maxBarSize={MAX_BAR_WIDTH}
+                      isAnimationActive={false}
+                      legendType="none"
+                      // recharts types a custom shape's props as `unknown`; what it
+                      // passes is the resolved bar geometry.
+                      shape={(props: unknown) => (
+                        <SpanBlock {...(props as SegmentProps)} index={i} />
+                      )}
+                    >
+                      {rows.map((row) => (
+                        <Cell
+                          key={row.key}
+                          fill={row.blocks[i]?.color ?? "transparent"}
+                        />
+                      ))}
+                    </Bar>
                   ))}
-                </Bar>
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
+                </BarChart>
+              </ResponsiveContainer>
               {/* The colours mean something again, so they need a key. */}
               <ul className="us-summary-legend">
                 {legendStatuses.map((s) => (

@@ -116,10 +116,9 @@ export const commitAiFix = async (id: number) =>
 
 // Step 2: create the branch ref pointing at the commit (the "push"). Idempotent.
 export const pushAiFix = async (id: number) =>
-  apiFetchJson<{ branch: string }>(
-    `/api/workspace-tickets/${id}/ai-fix-push`,
-    { method: "POST" }
-  );
+  apiFetchJson<{ branch: string }>(`/api/workspace-tickets/${id}/ai-fix-push`, {
+    method: "POST",
+  });
 
 // Step 3: open the PR from the pushed branch into main. Idempotent — returns the
 // existing PR url if one was already opened.
@@ -177,7 +176,9 @@ export const deleteTicketAttachment = async (id: number) => {
 export const downloadTicketAttachment = async (
   attachment: TaskAttachment
 ): Promise<void> => {
-  const res = await apiFetch(`/api/ticket-attachments/${attachment.id}/download`);
+  const res = await apiFetch(
+    `/api/ticket-attachments/${attachment.id}/download`
+  );
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

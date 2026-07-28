@@ -928,7 +928,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           onFocusCapture={() => focusPane(key, whichHalf)}
         >
           <div className="split-pane-toolbar">
-            <span className="split-pane-title" {...titleDragProps(key, whichHalf)}>
+            <span
+              className="split-pane-title"
+              {...titleDragProps(key, whichHalf)}
+            >
               {title}
             </span>
             <div className="split-pane-tools">

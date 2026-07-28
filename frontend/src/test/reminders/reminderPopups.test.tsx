@@ -75,9 +75,9 @@ describe("ReminderPopups", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "5 min" }));
 
     await waitFor(() => expect(screen.queryByText("Standup soon")).toBeNull());
-    expect(
-      sessionStorage.getItem("rwayve.reminderPopups.snoozed")
-    ).toContain("3");
+    expect(sessionStorage.getItem("rwayve.reminderPopups.snoozed")).toContain(
+      "3"
+    );
   });
 
   it("pops a meeting inside the user's lead time", async () => {
@@ -142,7 +142,9 @@ describe("ReminderPopups", () => {
     render(<ReminderPopups />);
     await screen.findByText("Roadmap sync");
 
-    await waitFor(() => expect(showDesktopNotification).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(showDesktopNotification).toHaveBeenCalledTimes(1)
+    );
     const [title, body, tag] = showDesktopNotification.mock.calls[0];
     expect(title).toMatch(/^Meeting in \d+ mins?$/);
     expect(body).toContain("Roadmap sync");
@@ -184,7 +186,9 @@ describe("ReminderPopups", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss reminder" }));
 
-    await waitFor(() => expect(screen.queryByText("Reminder seven")).toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByText("Reminder seven")).toBeNull()
+    );
     expect(screen.queryByText("Meeting seven")).toBeTruthy();
   });
 });

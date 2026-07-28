@@ -306,8 +306,11 @@ export default function TaskStatuses() {
 
     // Optimistic: reorder locally so the row lands where it was dropped, then
     // reconcile with whatever the server returns.
-    setStatuses((prev) =>
-      order.map((id) => prev.find((s) => s.id === id)).filter(Boolean) as TaskStatusRow[]
+    setStatuses(
+      (prev) =>
+        order
+          .map((id) => prev.find((s) => s.id === id))
+          .filter(Boolean) as TaskStatusRow[]
     );
     try {
       setStatuses(await reorderTaskStatuses(order));
@@ -381,7 +384,10 @@ export default function TaskStatuses() {
                           aria-label="Status name"
                           value={editDraft.name}
                           onChange={(e) =>
-                            setEditDraft((d) => ({ ...d, name: e.target.value }))
+                            setEditDraft((d) => ({
+                              ...d,
+                              name: e.target.value,
+                            }))
                           }
                         />
                         <input

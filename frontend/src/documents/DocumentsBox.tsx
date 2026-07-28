@@ -281,7 +281,8 @@ export default function DocumentsBox() {
 
   const runGrammarFix = () =>
     void runAssist("fix", GRAMMAR_PROMPT, setGrammarSuggestion);
-  const runSummary = () => void runAssist("summary", SUMMARY_PROMPT, setSummary);
+  const runSummary = () =>
+    void runAssist("summary", SUMMARY_PROMPT, setSummary);
 
   // Accept the grammar suggestion into the editor (still requires Save).
   const applyGrammar = () => {

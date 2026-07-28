@@ -74,7 +74,13 @@ describe("Reminders page", () => {
 
   it("orders open tasks by priority and hides done tasks", async () => {
     getTasks.mockResolvedValue([
-      { id: 1, name: "Low task", priority: 2, status: "to_do", created_at: null },
+      {
+        id: 1,
+        name: "Low task",
+        priority: 2,
+        status: "to_do",
+        created_at: null,
+      },
       {
         id: 2,
         name: "Urgent task",
@@ -133,8 +139,18 @@ describe("Reminders page", () => {
 
   it("lists created reminders soonest-first", async () => {
     getReminders.mockResolvedValue([
-      { id: 1, title: "Later reminder", notes: null, remind_at: "2026-07-20T09:00:00" },
-      { id: 2, title: "Sooner reminder", notes: null, remind_at: "2026-07-18T09:00:00" },
+      {
+        id: 1,
+        title: "Later reminder",
+        notes: null,
+        remind_at: "2026-07-20T09:00:00",
+      },
+      {
+        id: 2,
+        title: "Sooner reminder",
+        notes: null,
+        remind_at: "2026-07-18T09:00:00",
+      },
     ]);
     renderPage();
     await screen.findByText("Sooner reminder");

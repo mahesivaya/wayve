@@ -377,13 +377,7 @@ const BADGE_KINDS: Record<string, { icon: string; label: string }> = {
 // The types a user can pick, in the ticket form and in the board's Type column.
 // Same set as the support-ticket categories, so a manually typed ticket and a
 // mirrored bug report render the identical badge.
-const TYPE_OPTIONS = [
-  "bug",
-  "feature",
-  "billing",
-  "account",
-  "other",
-] as const;
+const TYPE_OPTIONS = ["bug", "feature", "billing", "account", "other"] as const;
 
 function TaskBadge({ kind }: { kind?: string | null }) {
   if (!kind) return null;
@@ -501,7 +495,10 @@ export type TasksConfig = {
     // /api/tasks/…, Tickets hit /api/workspace-tickets/… — the board just calls
     // these. Only wired when `features.attachments` is on.
     listAttachments?: (id: number) => Promise<TaskAttachment[]>;
-    uploadAttachments?: (id: number, files: File[]) => Promise<TaskAttachment[]>;
+    uploadAttachments?: (
+      id: number,
+      files: File[]
+    ) => Promise<TaskAttachment[]>;
     deleteAttachment?: (id: number) => Promise<void>;
     downloadAttachment?: (attachment: TaskAttachment) => Promise<void>;
   };
@@ -636,9 +633,7 @@ export default function Tasks({
   const [statusFilter, setStatusFilter] = useState<TaskStatus[]>([]);
   const toggleStatusFilter = (slug: TaskStatus) =>
     setStatusFilter((prev) =>
-      prev.includes(slug)
-        ? prev.filter((s) => s !== slug)
-        : [...prev, slug]
+      prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]
     );
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "all">(
     "all"
@@ -1850,9 +1845,7 @@ export default function Tasks({
                           <button
                             type="button"
                             className="tasks-filter-dropdown-btn"
-                            onClick={() =>
-                              setStatusMenuOpen((open) => !open)
-                            }
+                            onClick={() => setStatusMenuOpen((open) => !open)}
                             aria-haspopup="true"
                             aria-expanded={statusMenuOpen}
                           >
@@ -2671,7 +2664,7 @@ export default function Tasks({
         ) : (
           <>
             {useTable ? (
-              listPlaceholder ?? (
+              (listPlaceholder ?? (
                 <div
                   className="task-table"
                   style={{ "--task-cols": tableCols } as React.CSSProperties}
@@ -2682,117 +2675,117 @@ export default function Tasks({
                     renderRow(task, false)
                   )}
                 </div>
-              )
+              ))
             ) : (
               <div className={`task-list task-list--${view}`}>
                 {listPlaceholder ??
                   activeTasks.map((task) => {
-                  const expanded = inSplitPane && expandedId === task.id;
-                  return (
-                    <article
-                      key={task.id}
-                      className={`task-card${expanded ? " task-card--expanded" : ""}`}
-                    >
-                      <div className="task-card-body">
-                        <div className="task-card-title">
-                          <TaskKeyBadge
-                            value={taskKey(task)}
-                            tooltip={config.labels.numberBadgeTooltip}
-                          />
-                          <CopyLinkButton
-                            copied={copiedTaskId === task.id}
-                            onCopy={() => copyTaskLink(task)}
-                            label={task.name}
-                          />
-                          <TaskBadge kind={task.badge_kind} />
-                          <h3>
+                    const expanded = inSplitPane && expandedId === task.id;
+                    return (
+                      <article
+                        key={task.id}
+                        className={`task-card${expanded ? " task-card--expanded" : ""}`}
+                      >
+                        <div className="task-card-body">
+                          <div className="task-card-title">
+                            <TaskKeyBadge
+                              value={taskKey(task)}
+                              tooltip={config.labels.numberBadgeTooltip}
+                            />
+                            <CopyLinkButton
+                              copied={copiedTaskId === task.id}
+                              onCopy={() => copyTaskLink(task)}
+                              label={task.name}
+                            />
+                            <TaskBadge kind={task.badge_kind} />
+                            <h3>
+                              <button
+                                type="button"
+                                className="task-card-title-link"
+                                onClick={() => openDetail(task)}
+                                data-tooltip={`Open ${config.labels.lowerSingular} details`}
+                              >
+                                {task.name}
+                              </button>
+                              <JiraBadge task={task} />
+                              <GitlabBadge task={task} />
+                            </h3>
+                            <span
+                              className={`task-priority-badge priority-${task.priority}`}
+                              data-tooltip={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
+                            >
+                              P{task.priority}
+                            </span>
+                          </div>
+                          {formatCreatedAt(task.created_at) && (
+                            <span className="task-card-created">
+                              Created {formatCreatedAt(task.created_at)}
+                            </span>
+                          )}
+                        </div>
+                        {expanded && (
+                          <div className="task-card-detail">
+                            <p className="task-card-detail-desc">
+                              {task.description?.trim()
+                                ? task.description
+                                : "No description."}
+                            </p>
+                          </div>
+                        )}
+                        {(!inSplitPane || expanded) && (
+                          <div className="task-card-actions">
                             <button
                               type="button"
-                              className="task-card-title-link"
-                              onClick={() => openDetail(task)}
-                              data-tooltip={`Open ${config.labels.lowerSingular} details`}
+                              className="task-edit-btn"
+                              onClick={() => openEditor(task)}
+                              aria-label={`Edit ${task.name}`}
                             >
-                              {task.name}
+                              Edit
                             </button>
-                            <JiraBadge task={task} />
-                            <GitlabBadge task={task} />
-                          </h3>
-                          <span
-                            className={`task-priority-badge priority-${task.priority}`}
-                            data-tooltip={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
-                          >
-                            P{task.priority}
-                          </span>
-                        </div>
-                        {formatCreatedAt(task.created_at) && (
-                          <span className="task-card-created">
-                            Created {formatCreatedAt(task.created_at)}
-                          </span>
-                        )}
-                      </div>
-                      {expanded && (
-                        <div className="task-card-detail">
-                          <p className="task-card-detail-desc">
-                            {task.description?.trim()
-                              ? task.description
-                              : "No description."}
-                          </p>
-                        </div>
-                      )}
-                      {(!inSplitPane || expanded) && (
-                        <div className="task-card-actions">
-                          <button
-                            type="button"
-                            className="task-edit-btn"
-                            onClick={() => openEditor(task)}
-                            aria-label={`Edit ${task.name}`}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            className="task-delete-btn"
-                            onClick={() => deleteTask(task)}
-                            aria-label={`Delete ${task.name}`}
-                          >
-                            Delete
-                          </button>
-                          <span className="task-status-control">
-                            <TaskStatusIcon
-                              category={lookupStatus(task.status).category}
-                              color={lookupStatus(task.status).color}
-                            />
-                            {/* Tinted from the status's own colour rather than a
+                            <button
+                              type="button"
+                              className="task-delete-btn"
+                              onClick={() => deleteTask(task)}
+                              aria-label={`Delete ${task.name}`}
+                            >
+                              Delete
+                            </button>
+                            <span className="task-status-control">
+                              <TaskStatusIcon
+                                category={lookupStatus(task.status).category}
+                                color={lookupStatus(task.status).color}
+                              />
+                              {/* Tinted from the status's own colour rather than a
                                 per-status class, so custom statuses are styled
                                 the same way the built-in ones are. */}
-                            <select
-                              className="task-status-select"
-                              style={{
-                                borderColor: lookupStatus(task.status).color,
-                                color: lookupStatus(task.status).color,
-                                backgroundColor: `${lookupStatus(task.status).color}1a`,
-                              }}
-                              value={task.status}
-                              onChange={(event) =>
-                                void changeStatus(
-                                  task,
-                                  event.target.value as TaskStatus
-                                )
-                              }
-                              aria-label={`Status of ${task.name}`}
-                            >
-                              {statusRows.map((row) => (
-                                <option key={row.id} value={row.slug}>
-                                  {row.name}
-                                </option>
-                              ))}
-                            </select>
-                          </span>
-                        </div>
-                      )}
-                    </article>
-                  );
-                })}
+                              <select
+                                className="task-status-select"
+                                style={{
+                                  borderColor: lookupStatus(task.status).color,
+                                  color: lookupStatus(task.status).color,
+                                  backgroundColor: `${lookupStatus(task.status).color}1a`,
+                                }}
+                                value={task.status}
+                                onChange={(event) =>
+                                  void changeStatus(
+                                    task,
+                                    event.target.value as TaskStatus
+                                  )
+                                }
+                                aria-label={`Status of ${task.name}`}
+                              >
+                                {statusRows.map((row) => (
+                                  <option key={row.id} value={row.slug}>
+                                    {row.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </span>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
               </div>
             )}
 
@@ -2818,67 +2811,67 @@ export default function Tasks({
                 ) : (
                   <div className={`task-list task-list--${view}`}>
                     {completedTasks.map((task) => (
-                    <article
-                      key={task.id}
-                      className="task-card task-card--completed"
-                    >
-                      <div className="task-card-body">
-                        <div className="task-card-title">
-                          <TaskKeyBadge
-                            value={taskKey(task)}
-                            tooltip={config.labels.numberBadgeTooltip}
-                          />
-                          <CopyLinkButton
-                            copied={copiedTaskId === task.id}
-                            onCopy={() => copyTaskLink(task)}
-                            label={task.name}
-                          />
-                          <TaskBadge kind={task.badge_kind} />
-                          <h3>
-                            <button
-                              type="button"
-                              className="task-card-title-link"
-                              onClick={() => openDetail(task)}
-                              data-tooltip={`Open ${config.labels.lowerSingular} details`}
+                      <article
+                        key={task.id}
+                        className="task-card task-card--completed"
+                      >
+                        <div className="task-card-body">
+                          <div className="task-card-title">
+                            <TaskKeyBadge
+                              value={taskKey(task)}
+                              tooltip={config.labels.numberBadgeTooltip}
+                            />
+                            <CopyLinkButton
+                              copied={copiedTaskId === task.id}
+                              onCopy={() => copyTaskLink(task)}
+                              label={task.name}
+                            />
+                            <TaskBadge kind={task.badge_kind} />
+                            <h3>
+                              <button
+                                type="button"
+                                className="task-card-title-link"
+                                onClick={() => openDetail(task)}
+                                data-tooltip={`Open ${config.labels.lowerSingular} details`}
+                              >
+                                {task.name}
+                              </button>
+                              <JiraBadge task={task} />
+                              <GitlabBadge task={task} />
+                            </h3>
+                            <span
+                              className={`task-priority-badge priority-${task.priority}`}
+                              data-tooltip={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
                             >
-                              {task.name}
-                            </button>
-                            <JiraBadge task={task} />
-                            <GitlabBadge task={task} />
-                          </h3>
-                          <span
-                            className={`task-priority-badge priority-${task.priority}`}
-                            data-tooltip={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
-                          >
-                            P{task.priority}
-                          </span>
+                              P{task.priority}
+                            </span>
+                          </div>
+                          {formatCreatedAt(task.created_at) && (
+                            <span className="task-card-created">
+                              Created {formatCreatedAt(task.created_at)}
+                            </span>
+                          )}
                         </div>
-                        {formatCreatedAt(task.created_at) && (
-                          <span className="task-card-created">
-                            Created {formatCreatedAt(task.created_at)}
-                          </span>
-                        )}
-                      </div>
-                      <div className="task-card-actions">
-                        <button
-                          type="button"
-                          className="task-edit-btn"
-                          onClick={() => openEditor(task)}
-                          aria-label={`Edit ${task.name}`}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="task-delete-btn"
-                          onClick={() => deleteTask(task)}
-                          aria-label={`Delete ${task.name}`}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </article>
-                  ))}
+                        <div className="task-card-actions">
+                          <button
+                            type="button"
+                            className="task-edit-btn"
+                            onClick={() => openEditor(task)}
+                            aria-label={`Edit ${task.name}`}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="task-delete-btn"
+                            onClick={() => deleteTask(task)}
+                            aria-label={`Delete ${task.name}`}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </article>
+                    ))}
                   </div>
                 )}
               </section>

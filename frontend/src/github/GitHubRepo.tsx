@@ -1930,107 +1930,110 @@ function GitHubRepoViewer({
                         {!diffs.loadingShas.has(commit.sha) &&
                           !diffs.errorBySha[commit.sha] &&
                           detail && (
-                          <>
-                            {/* Conversation comments on this commit
+                            <>
+                              {/* Conversation comments on this commit
                                 (read-only, mirrors the PR comment thread). */}
-                            {(() => {
-                              const comments =
-                                commitCommentsBySha[commit.sha] ?? [];
-                              return (
-                                <div className="github-commit-comments">
-                                  <div className="github-commit-comments-head">
-                                    <h4>Comments</h4>
-                                    <span className="github-pr-block-count">
-                                      {comments.length}
-                                    </span>
-                                  </div>
-                                  {comments.length === 0 ? (
-                                    <div className="github-empty">
-                                      No comments on this commit yet.
+                              {(() => {
+                                const comments =
+                                  commitCommentsBySha[commit.sha] ?? [];
+                                return (
+                                  <div className="github-commit-comments">
+                                    <div className="github-commit-comments-head">
+                                      <h4>Comments</h4>
+                                      <span className="github-pr-block-count">
+                                        {comments.length}
+                                      </span>
                                     </div>
-                                  ) : (
-                                    <ul className="github-pr-thread">
-                                      {comments.map((c) => (
-                                        <li
-                                          key={c.id}
-                                          className="github-pr-comment"
-                                        >
-                                          <PrAvatar
-                                            name={c.user?.login ?? "ghost"}
-                                          />
-                                          <div className="github-pr-comment-main">
-                                            <div className="github-pr-comment-head">
-                                              <strong>
-                                                {c.user?.login ?? "unknown"}
-                                              </strong>
-                                              {c.created_at && (
-                                                <small className="github-pr-comment-time">
-                                                  {formatDate(c.created_at)}
-                                                </small>
+                                    {comments.length === 0 ? (
+                                      <div className="github-empty">
+                                        No comments on this commit yet.
+                                      </div>
+                                    ) : (
+                                      <ul className="github-pr-thread">
+                                        {comments.map((c) => (
+                                          <li
+                                            key={c.id}
+                                            className="github-pr-comment"
+                                          >
+                                            <PrAvatar
+                                              name={c.user?.login ?? "ghost"}
+                                            />
+                                            <div className="github-pr-comment-main">
+                                              <div className="github-pr-comment-head">
+                                                <strong>
+                                                  {c.user?.login ?? "unknown"}
+                                                </strong>
+                                                {c.created_at && (
+                                                  <small className="github-pr-comment-time">
+                                                    {formatDate(c.created_at)}
+                                                  </small>
+                                                )}
+                                              </div>
+                                              {c.body?.trim() && (
+                                                <div className="github-pr-comment-text">
+                                                  {renderRichText(c.body)}
+                                                </div>
                                               )}
                                             </div>
-                                            {c.body?.trim() && (
-                                              <div className="github-pr-comment-text">
-                                                {renderRichText(c.body)}
-                                              </div>
-                                            )}
-                                          </div>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  )}
-                                  <div className="github-commit-composer">
-                                    <textarea
-                                      className="github-commit-composer-input"
-                                      placeholder="Leave a comment on this commit…"
-                                      value={
-                                        commitCommentDraft[commit.sha] ?? ""
-                                      }
-                                      onChange={(e) =>
-                                        setCommitCommentDraft((cur) => ({
-                                          ...cur,
-                                          [commit.sha]: e.target.value,
-                                        }))
-                                      }
-                                      rows={3}
-                                      disabled={postingCommentShas.has(
-                                        commit.sha
-                                      )}
-                                    />
-                                    {commentErrorBySha[commit.sha] && (
-                                      <div className="github-banner">
-                                        {commentErrorBySha[commit.sha]}
-                                      </div>
+                                          </li>
+                                        ))}
+                                      </ul>
                                     )}
-                                    <div className="github-commit-composer-foot">
-                                      <span className="github-commit-composer-note">
-                                        Posts to GitHub as the connected
-                                        account.
-                                      </span>
-                                      <button
-                                        type="button"
-                                        className="github-commit-composer-send"
-                                        disabled={
-                                          postingCommentShas.has(commit.sha) ||
-                                          !(
-                                            commitCommentDraft[commit.sha] ?? ""
-                                          ).trim()
+                                    <div className="github-commit-composer">
+                                      <textarea
+                                        className="github-commit-composer-input"
+                                        placeholder="Leave a comment on this commit…"
+                                        value={
+                                          commitCommentDraft[commit.sha] ?? ""
                                         }
-                                        onClick={() =>
-                                          void submitCommitComment(commit.sha)
+                                        onChange={(e) =>
+                                          setCommitCommentDraft((cur) => ({
+                                            ...cur,
+                                            [commit.sha]: e.target.value,
+                                          }))
                                         }
-                                      >
-                                        {postingCommentShas.has(commit.sha)
-                                          ? "Posting…"
-                                          : "Comment"}
-                                      </button>
+                                        rows={3}
+                                        disabled={postingCommentShas.has(
+                                          commit.sha
+                                        )}
+                                      />
+                                      {commentErrorBySha[commit.sha] && (
+                                        <div className="github-banner">
+                                          {commentErrorBySha[commit.sha]}
+                                        </div>
+                                      )}
+                                      <div className="github-commit-composer-foot">
+                                        <span className="github-commit-composer-note">
+                                          Posts to GitHub as the connected
+                                          account.
+                                        </span>
+                                        <button
+                                          type="button"
+                                          className="github-commit-composer-send"
+                                          disabled={
+                                            postingCommentShas.has(
+                                              commit.sha
+                                            ) ||
+                                            !(
+                                              commitCommentDraft[commit.sha] ??
+                                              ""
+                                            ).trim()
+                                          }
+                                          onClick={() =>
+                                            void submitCommitComment(commit.sha)
+                                          }
+                                        >
+                                          {postingCommentShas.has(commit.sha)
+                                            ? "Posting…"
+                                            : "Comment"}
+                                        </button>
+                                      </div>
                                     </div>
                                   </div>
-                                </div>
-                              );
-                            })()}
-                          </>
-                        )}
+                                );
+                              })()}
+                            </>
+                          )}
                       </div>
                     )}
                   </div>
@@ -2392,7 +2395,9 @@ function GitHubRepoViewer({
                                         <button
                                           type="button"
                                           className="github-commit-file-head"
-                                          onClick={() => diffs.toggleFile(fileKey)}
+                                          onClick={() =>
+                                            diffs.toggleFile(fileKey)
+                                          }
                                           aria-expanded={fileOpen}
                                         >
                                           <span

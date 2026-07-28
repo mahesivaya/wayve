@@ -115,7 +115,9 @@ function TicketBody({ ticketId }: { ticketId: number }) {
             <div>
               <dt>Status</dt>
               <dd>
-                <span className={`settings-ticket-status status-${ticket.status}`}>
+                <span
+                  className={`settings-ticket-status status-${ticket.status}`}
+                >
                   {STATUS_LABEL[ticket.status] ?? ticket.status}
                 </span>
               </dd>

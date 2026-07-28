@@ -201,7 +201,9 @@ export function CommitDiffBody({
                       : file.filename}
                   </span>
                   <span className="github-commit-file-meta">
-                    <em className={`github-commit-status status-${file.status}`}>
+                    <em
+                      className={`github-commit-status status-${file.status}`}
+                    >
                       {file.status}
                     </em>
                     <span className="github-commit-stat is-add">
@@ -217,7 +219,8 @@ export function CommitDiffBody({
                     <CommitSplitPatch patch={file.patch} />
                   ) : (
                     <div className="github-commit-nopatch">
-                      Binary file or diff not available — open on GitHub to view.
+                      Binary file or diff not available — open on GitHub to
+                      view.
                     </div>
                   ))}
               </article>

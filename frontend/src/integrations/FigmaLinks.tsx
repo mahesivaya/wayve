@@ -49,7 +49,9 @@ export default function FigmaLinks({ owner }: { owner: FigmaLinkOwner }) {
     } catch (e) {
       // The backend distinguishes a bad link, an unreadable file, and a missing
       // connection; each message is already the useful one.
-      setError(e instanceof Error ? e.message : "Could not attach that design.");
+      setError(
+        e instanceof Error ? e.message : "Could not attach that design."
+      );
     } finally {
       setBusy(false);
     }
