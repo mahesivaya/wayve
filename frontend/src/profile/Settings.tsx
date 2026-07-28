@@ -27,6 +27,7 @@ import { hasPermission } from "../auth/permissions";
 import { cachedLoad } from "../api/cache";
 import { listMyTickets, type SupportTicket } from "../api/support";
 import SupportModal from "../support/SupportModal";
+import SupportTicketView from "../support/SupportTicketView";
 import { fmtDate, fmtShortDate } from "../utils/datetime";
 import { isDesktopApp } from "../utils/desktop";
 import SettingsShell from "./SettingsShell";
@@ -116,6 +117,8 @@ export default function Settings() {
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [ticketsLoaded, setTicketsLoaded] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
+  // The ticket being read, or null. Read-only — see SupportTicketView.
+  const [viewingTicketId, setViewingTicketId] = useState<number | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [invoicesLoaded, setInvoicesLoaded] = useState(false);
   const [invoicesError, setInvoicesError] = useState(false);
@@ -797,20 +800,33 @@ export default function Settings() {
           ) : (
             <ul className="settings-ticket-list">
               {tickets.map((t) => (
-                <li key={t.id} className="settings-ticket-row">
-                  <div className="settings-ticket-main">
-                    <span className="settings-ticket-subject" data-tooltip={t.subject}>
-                      #{t.id} · {t.subject}
+                <li key={t.id}>
+                  {/* The whole row opens the ticket read-only, so the status
+                      pill is clickable along with everything else — a filed
+                      report is a record, not a form to reopen. */}
+                  <button
+                    type="button"
+                    className="settings-ticket-row settings-ticket-row--open"
+                    onClick={() => setViewingTicketId(t.id)}
+                    aria-label={`Open ticket #${t.id}: ${t.subject}`}
+                  >
+                    <span className="settings-ticket-main">
+                      <span
+                        className="settings-ticket-subject"
+                        data-tooltip={t.subject}
+                      >
+                        #{t.id} · {t.subject}
+                      </span>
+                      <span className="settings-ticket-meta">
+                        {t.category} · {fmtDate(t.created_at)}
+                        {t.attachment_count > 0 &&
+                          ` · ${t.attachment_count} attachment${t.attachment_count === 1 ? "" : "s"}`}
+                      </span>
                     </span>
-                    <span className="settings-ticket-meta">
-                      {t.category} · {fmtDate(t.created_at)}
-                      {t.attachment_count > 0 &&
-                        ` · ${t.attachment_count} attachment${t.attachment_count === 1 ? "" : "s"}`}
+                    <span className={`settings-ticket-status status-${t.status}`}>
+                      {t.status.replace("_", " ")}
                     </span>
-                  </div>
-                  <span className={`settings-ticket-status status-${t.status}`}>
-                    {t.status.replace("_", " ")}
-                  </span>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -935,6 +951,11 @@ export default function Settings() {
             onSubmitted={() => void loadTickets()}
           />
         )}
+
+        <SupportTicketView
+          ticketId={viewingTicketId}
+          onClose={() => setViewingTicketId(null)}
+        />
       </>
     </SettingsShell>
   );

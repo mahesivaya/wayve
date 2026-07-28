@@ -795,3 +795,26 @@
 .toggle-switch.on .toggle-switch-slider::before {
   transform: translateX(20px);
 }
+
+/* The ticket row is a button now — it opens the report read-only. Reset the
+   button chrome so it still reads as the row it replaced, and keep the text
+   left-aligned (a button centres by default). */
+.settings-ticket-row--open {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.settings-ticket-row--open:hover {
+  border-color: var(--color-primary-action);
+  background: var(--color-surface-hover, var(--color-surface));
+}
+
+.settings-ticket-row--open:focus-visible {
+  outline: 2px solid var(--color-primary-panel-border);
+  outline-offset: 1px;
+}
