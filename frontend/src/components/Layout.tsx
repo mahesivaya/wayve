@@ -187,9 +187,13 @@ function loadPersistedSplit(): PersistedSplit {
 // Section expand state must live at module scope: `/docs*` pages mount their own
 // <Layout> instance (DocsShell), so per-instance state would snap every section
 // shut on navigation there. Not localStorage, so a full reload resets to these
-// defaults: Workspace starts expanded, every other section collapsed. Collapsing
-// a section still sticks for the rest of the session (until a full reload).
-const persistedSidebarSections: Record<string, boolean> = { workspace: true };
+// defaults: Workspace and Teams start expanded, every other section collapsed.
+// Collapsing a section still sticks for the rest of the session (until a full
+// reload) — these are starting positions, not locks.
+const persistedSidebarSections: Record<string, boolean> = {
+  workspace: true,
+  teams: true,
+};
 
 // Simple sections supply `links`; interactive ones (Workspace, Teams) supply a
 // custom `body`.
