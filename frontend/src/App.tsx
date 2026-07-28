@@ -118,10 +118,7 @@ const OrgKeyBootstrap = lazy(() => import("./orgKeys/BootstrapPage"));
 const OrgRecoveryKey = lazy(() => import("./orgKeys/RecoveryKeyPage"));
 const RecoverMemberData = lazy(() => import("./orgKeys/RecoverMemberDataPage"));
 const OrgAuditLog = lazy(() => import("./orgKeys/AuditLogPage"));
-const TestAccess = lazy(() => import("./test_access/TestAccess"));
-const AccessRequestsReview = lazy(
-  () => import("./accessRequests/AccessRequestsReview")
-);
+const RequestsPage = lazy(() => import("./requests/RequestsPage"));
 const TracingDashboard = lazy(() => import("./tracing/TracingDashboard"));
 
 export default function App() {
@@ -374,18 +371,17 @@ export default function App() {
                 path="/coming-soon"
                 element={<ComingSoon feature="Domains" />}
               />
-              <Route path="/test-access" element={<TestAccess />} />
+              {/* Asking for access and reviewing requests are two tabs of one
+                page now. The old paths still resolve — they were linked from
+                emails and bookmarks — and land on the matching tab. */}
+              <Route path="/requests" element={<RequestsPage />} />
+              <Route
+                path="/test-access"
+                element={<Navigate to="/requests?tab=mine" replace />}
+              />
               <Route
                 path="/access-requests"
-                element={
-                  (user?.scope === "organization" ||
-                    user?.scope === "platform") &&
-                  user?.effective_role === "owner" ? (
-                    <AccessRequestsReview />
-                  ) : (
-                    <Navigate to={accountHome} replace />
-                  )
-                }
+                element={<Navigate to="/requests?tab=review" replace />}
               />
               <Route path="/profile" element={<Profile />} />
               <Route path="/settings" element={<Settings />} />

@@ -26,7 +26,11 @@ const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
 // by the caller's role context server-side, so this one page serves both
 // platform support (personal users' requests) and organization support (their
 // own org's requests).
-export default function AccessRequestsReview() {
+// `embedded` = rendered as a tab of the Requests page, which supplies the page
+// title; the panel drops its own header so the two don't stack.
+export default function AccessRequestsReview({
+  embedded,
+}: { embedded?: boolean } = {}) {
   const { user } = useAuth();
   const canManage = hasPermission(user, "tickets:manage");
 
@@ -97,13 +101,15 @@ export default function AccessRequestsReview() {
 
   return (
     <div className="pt-page">
-      <header className="pt-header">
-        <h1>Access Requests</h1>
-        <p>
-          Requests to view locked data, routed to your support team ·{" "}
-          {user?.email}
-        </p>
-      </header>
+      {!embedded && (
+        <header className="pt-header">
+          <h1>Access Requests</h1>
+          <p>
+            Requests to view locked data, routed to your support team ·{" "}
+            {user?.email}
+          </p>
+        </header>
+      )}
 
       {error && <div className="pt-banner">{error}</div>}
 

@@ -17,9 +17,11 @@ const USER_STORIES_CONFIG: TasksConfig = {
     update: updateUserStoryApi,
     remove: deleteUserStoryApi,
   },
-  // Attachments are task-only server-side; Figma links are not — they attach to
-  // a story by its own foreign key.
-  features: { attachments: false, statusSummary: true, figmaLinks: true },
+  // Attachments are task-only server-side. The Design (Figma) section is off
+  // here by choice — stories carry the narrative, and the design lives on the
+  // ticket that implements it; the story_figma_links table and its endpoints
+  // stay, so turning this back on restores any links already attached.
+  features: { attachments: false, statusSummary: true, figmaLinks: false },
   storageKey: "userstories",
   // Name click opens the story in a right-side drawer; Edit opens the full page.
   detailDrawer: true,

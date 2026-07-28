@@ -12,7 +12,9 @@ const RESOURCE = "test_access";
 // routes the request to the right support team (platform for personal
 // users, the user's organization for org members); once approved the
 // unlocked data is returned by the server.
-export default function TestAccess() {
+// `embedded` = rendered as a tab of the Requests page, which supplies the
+// page title; the panel drops its own header so the two don't stack.
+export default function TestAccess({ embedded }: { embedded?: boolean } = {}) {
   const [state, setState] = useState<MyAccessStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState("");
@@ -68,10 +70,14 @@ export default function TestAccess() {
 
   return (
     <main className="test-access-page">
-      <header className="test-access-header">
-        <h1>Test Access</h1>
-        <p>This page contains protected sample data that requires approval.</p>
-      </header>
+      {!embedded && (
+        <header className="test-access-header">
+          <h1>Test Access</h1>
+          <p>
+            This page contains protected sample data that requires approval.
+          </p>
+        </header>
+      )}
 
       {loading ? (
         <div className="test-access-muted">Loading…</div>
