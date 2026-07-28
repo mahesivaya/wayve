@@ -1744,6 +1744,16 @@
   gap: 8px;
 }
 
+/* A squeezed title column must clip, not spill over the column beside it: the
+   key badge (and the header's label) have no room to shrink, so they printed on
+   top of Type. The title text itself already truncates (.task-trow-title).
+   Scoped to the title on purpose — a blanket rule on .task-th/.task-tcell would
+   clip the `data-tooltip` bubbles and the actions cell's controls. */
+.task-th--title,
+.task-tcell--title {
+  overflow: hidden;
+}
+
 /* The title truncates so long names never push the columns out of
    alignment; the badges after it keep their intrinsic width. */
 .task-trow-title {
@@ -1814,9 +1824,16 @@
   opacity: 1;
 }
 
-/* Narrow (non-split) screens: drop the lower-priority columns rather than
-   letting the fixed template overflow. Overrides the inline `--task-cols`. */
-@media (max-width: 860px) {
+/* Narrow BOARD PANE: drop the lower-priority columns rather than letting the
+   fixed template overflow. Overrides the inline `--task-cols`.
+
+   A container query, not a media query: the pane is narrow long before the
+   viewport is (sidebar open, split pane), and a viewport rule left the full
+   7-column template in place in a ~760px pane — the `minmax(0, 1fr)` title
+   collapsed to zero and its key badge printed on top of the Type column.
+   Threshold is 900px, above the ~868px the widest template needs (7 columns
+   + six 16px gaps), so the columns drop just BEFORE they stop fitting. */
+@container (max-width: 900px) {
   .task-thead,
   .task-trow {
     grid-template-columns: minmax(0, 1fr) 56px 150px auto;
