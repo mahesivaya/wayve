@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { EmailAccount, EmailFolder } from "./types";
-import { PullRequestIcon } from "../icons";
+import { DocsIcon, PullRequestIcon } from "../icons";
 
 interface EmailSidebarProps {
   accounts: EmailAccount[];
@@ -250,6 +250,18 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
             onClick={() => setActiveFolder("sent")}
           >
             📤 Sent
+          </button>
+          {/* Same files view the Attachments entry at the foot of this list
+            opens — deliberately duplicated up here, where it's in reach without
+            scrolling past every category folder. Both light up together, since
+            both describe the view that's showing. */}
+          <button
+            className={`filter-btn ${viewMode === "files" ? "active" : ""}`}
+            onClick={onOpenFiles}
+          >
+            <span className="email-chip-label">
+              <DocsIcon size={14} /> Docs
+            </span>
           </button>
           {/* Virtual folder cutting across every account, matched by sender on
             the backend rather than by label. */}

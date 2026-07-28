@@ -499,9 +499,58 @@ fn build_merge_body(payload: &[u8]) -> serde_json::Value {
     serde_json::json!({ "merge_method": method })
 }
 
+/// Fetches the pull request and notifies the requester and the actor.
+///
+/// The PR body is re-fetched rather than parsed from the action's response,
+/// because neither the review nor the merge response names the PR's author —
+/// and the author is the requester this is meant to reach.
+async fn notify_after_pr_action(
+    req: &HttpRequest,
+    pool: &PgPool,
+    pr_ref: crate::github_pr_notify::PrRef<'_>,
+    action: &str,
+    pat: &str,
+) {
+    let crate::github_pr_notify::PrRef {
+        owner,
+        repo,
+        number,
+    } = pr_ref;
+    let Some(actor_user_id) = get_user_id_from_request(req) else {
+        return;
+    };
+    let api_base = crate::external::github_api_base();
+    let url = format!("{api_base}/repos/{owner}/{repo}/pulls/{number}");
+    let pr = match HTTP_CLIENT
+        .get(&url)
+        .timeout(Duration::from_secs(20))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "rwayve-app")
+        .header("Authorization", format!("Bearer {pat}"))
+        .send()
+        .await
+    {
+        Ok(resp) => match resp.json::<serde_json::Value>().await {
+            Ok(pr) => pr,
+            Err(e) => {
+                warn!(target: "http", error = ?e, "pr lookup for notification returned no JSON");
+                return;
+            }
+        },
+        Err(e) => {
+            warn!(target: "http", error = ?e, "pr lookup for notification failed");
+            return;
+        }
+    };
+    crate::github_pr_notify::notify_pull_request_event(pool, pr_ref, action, actor_user_id, &pr)
+        .await;
+}
+
 /// Owner-only: submit an `APPROVE` review for a pull request. Requires a token
 /// with `Pull requests: write`, and GitHub rejects approving your own PR; those
 /// upstream 403/422 errors are mirrored back verbatim.
+
 #[post("/github/repos/{owner}/{repo}/pulls/{number}/approve")]
 #[instrument(target = "http", skip(req, pool, payload))]
 pub async fn approve_pull_request(
@@ -559,6 +608,21 @@ pub async fn approve_pull_request(
     };
     if (200..300).contains(&status) {
         info!(target: "http", owner = %owner, repo = %repo, number, "pull request approved");
+        // Notify the requester and the approver. After the fact and best effort:
+        // GitHub has already recorded the approval, so a notification problem
+        // must not turn a successful approve into an error response.
+        notify_after_pr_action(
+            &req,
+            pool.get_ref(),
+            crate::github_pr_notify::PrRef {
+                owner: &owner,
+                repo: &repo,
+                number,
+            },
+            "approved",
+            &pat,
+        )
+        .await;
     } else {
         warn!(target: "http", status, owner = %owner, repo = %repo, number, "pr approve rejected by GitHub");
     }
@@ -629,6 +693,18 @@ pub async fn merge_pull_request(
     };
     if (200..300).contains(&status) {
         info!(target: "http", owner = %owner, repo = %repo, number, "pull request merged");
+        notify_after_pr_action(
+            &req,
+            pool.get_ref(),
+            crate::github_pr_notify::PrRef {
+                owner: &owner,
+                repo: &repo,
+                number,
+            },
+            "merged",
+            &pat,
+        )
+        .await;
     } else {
         warn!(target: "http", status, owner = %owner, repo = %repo, number, "pr merge rejected by GitHub");
     }
