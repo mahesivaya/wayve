@@ -79,6 +79,12 @@
   align-content: start;
 }
 
+/* The Back button is a grid item like the rest of the pane, so it would stretch
+   the full width without this. */
+.email-file-detail .email-detail-back-top {
+  justify-self: start;
+}
+
 .email-file-detail-head {
   display: flex;
   align-items: center;

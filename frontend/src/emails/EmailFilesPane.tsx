@@ -103,7 +103,15 @@ export function EmailFilesList({
   );
 }
 
-export function EmailFileDetail({ file }: { file: EmailAttachment | null }) {
+export function EmailFileDetail({
+  file,
+  onBack,
+}: {
+  file: EmailAttachment | null;
+  // In list view the details replace the list rather than sitting beside it, so
+  // the pane carries the only way back — same Back button the email detail has.
+  onBack?: () => void;
+}) {
   const { user } = useAuth();
 
   if (!file) {
@@ -128,6 +136,24 @@ export function EmailFileDetail({ file }: { file: EmailAttachment | null }) {
   return (
     <div className="email-detail email-detail--files">
       <div className="email-file-detail">
+        {onBack && (
+          <button
+            type="button"
+            className="email-detail-back-top"
+            onClick={onBack}
+            data-tooltip="Back to files"
+            aria-label="Back to files"
+          >
+            <svg
+              className="email-detail-back-top-icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path d="M15 6l-6 6 6 6" />
+            </svg>
+            <span>Back</span>
+          </button>
+        )}
         <div className="email-file-detail-head">
           <span className="email-files-icon" aria-hidden="true">
             📎

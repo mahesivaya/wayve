@@ -351,17 +351,24 @@ export default function Emails() {
       (email) => email.attachments_checked === false
     ).length,
   });
-  // In files mode the list pane holds the file list, so it shows on the same
-  // terms the email list would: always on a wide screen, and on a narrow one
-  // only until something is selected.
+  // In files mode the list pane holds the file list, so it shows on exactly the
+  // terms the email list would: in list view the full-width list until a file is
+  // picked, in split view always on a wide screen and only until something is
+  // selected on a narrow one.
+  const filesInListView = viewMode === "files" && emailViewLayout === "list";
   const showList =
     viewMode === "files"
-      ? !useSingleColumn || selectedFile === null
+      ? filesInListView
+        ? selectedFile === null
+        : !useSingleColumn || selectedFile === null
       : (emailViewLayout === "list" && selectedEmail === null) ||
         (emailViewLayout === "split" &&
           (!useSingleColumn || selectedEmail === null));
   const showDetail =
-    (viewMode === "files" && (!useSingleColumn || selectedFile !== null)) ||
+    (viewMode === "files" &&
+      (filesInListView
+        ? selectedFile !== null
+        : !useSingleColumn || selectedFile !== null)) ||
     (emailViewLayout === "list" && selectedEmail !== null) ||
     (emailViewLayout === "split" &&
       (!useSingleColumn || selectedEmail !== null));
@@ -566,25 +573,19 @@ export default function Emails() {
           {/* Split (pane or list+detail layout): the folder menu sits next to
             Compose (the list header that normally hosts it is too cramped). */}
           {chipsInToolbar && !isPersonalScope && (
-            <>
-              <FolderChips
-                activeFolder={viewMode === "email" ? activeFolder : null}
-                onSelectFolder={(f) => {
-                  setViewMode("email");
-                  setSelectedEmail(null);
-                  setActiveFolder(f);
-                }}
-              />
-              <button
-                type="button"
-                className={`email-bulk-action${viewMode === "files" ? " is-active" : ""}`}
-                onClick={showFiles}
-                aria-pressed={viewMode === "files"}
-                data-tooltip="Show all attachments across your emails"
-              >
-                Attachments
-              </button>
-            </>
+            <FolderChips
+              activeFolder={viewMode === "email" ? activeFolder : null}
+              onSelectFolder={(f) => {
+                setViewMode("email");
+                setSelectedEmail(null);
+                setActiveFolder(f);
+              }}
+              // The attachments view rides inside the chip group as "Docs" next
+              // to Sent, the same as in the list header — it used to be a
+              // separate "Attachments" button tacked on after Reviews.
+              onShowAttachments={showFiles}
+              filesActive={viewMode === "files"}
+            />
           )}
           <SearchBar />
         </div>
@@ -670,7 +671,9 @@ export default function Emails() {
             progressNote={filesProgressNote}
             selectedFileId={selectedFile?.id ?? null}
             onSelectFile={setSelectedFile}
-            width={useSingleColumn ? undefined : emailListWidth}
+            width={
+              useSingleColumn || filesInListView ? undefined : emailListWidth
+            }
             onSelectFolder={
               !isPersonalScope && !chipsInToolbar
                 ? (f) => {
@@ -757,7 +760,10 @@ export default function Emails() {
         </Modal>
 
         {showDetail && viewMode === "files" && (
-          <EmailFileDetail file={selectedFile} />
+          <EmailFileDetail
+            file={selectedFile}
+            onBack={() => setSelectedFile(null)}
+          />
         )}
 
         {showDetail && viewMode === "email" && (
