@@ -2,7 +2,7 @@ import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { BRAND_NAME } from "../config/brand";
 import BrandLogo from "./BrandLogo";
 import { useAuth } from "../auth/useAuth";
-import { canAccessApiKeyAdmin, hasPermission } from "../auth/permissions";
+import { hasPermission } from "../auth/permissions";
 import { recordActivity } from "../api/activity";
 import {
   Suspense,
@@ -65,10 +65,6 @@ import {
   UserLogsIcon,
   AuditIcon,
   TeamsIcon,
-  DocsIcon,
-  ApiRefIcon,
-  LibrariesIcon,
-  SdkIcon,
   ApiKeysIcon,
   GitLogoIcon,
   BugReportIcon,
@@ -81,7 +77,6 @@ import {
   AssistantIcon,
   WorkspaceIcon,
   PlatformIcon,
-  DevelopersIcon,
   OrganizationIcon,
   MembersIcon,
 } from "../icons";
@@ -192,9 +187,13 @@ function loadPersistedSplit(): PersistedSplit {
 // Section expand state must live at module scope: `/docs*` pages mount their own
 // <Layout> instance (DocsShell), so per-instance state would snap every section
 // shut on navigation there. Not localStorage, so a full reload resets to these
-// defaults: Workspace starts expanded, every other section collapsed. Collapsing
-// a section still sticks for the rest of the session (until a full reload).
-const persistedSidebarSections: Record<string, boolean> = { workspace: true };
+// defaults: Workspace and Teams start expanded, every other section collapsed.
+// Collapsing a section still sticks for the rest of the session (until a full
+// reload) — these are starting positions, not locks.
+const persistedSidebarSections: Record<string, boolean> = {
+  workspace: true,
+  teams: true,
+};
 
 // Simple sections supply `links`; interactive ones (Workspace, Teams) supply a
 // custom `body`.
@@ -1455,39 +1454,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         },
       ],
     },
-    {
-      key: "developers",
-      label: "Developers",
-      visible: user.account_type !== "personal",
-      icon: <DevelopersIcon size={16} />,
-      links: [
-        {
-          path: "/docs",
-          label: "Docs",
-          icon: <DocsIcon size={16} />,
-          visible: user.scope === "platform",
-        },
-        {
-          path: "/docs/api",
-          label: "API reference",
-          icon: <ApiRefIcon size={16} />,
-        },
-        // Libraries and SDK share a route; only SDK is ever marked active.
-        {
-          path: "/docs/developers",
-          label: "Libraries",
-          icon: <LibrariesIcon size={16} />,
-          active: false,
-        },
-        { path: "/docs/developers", label: "SDK", icon: <SdkIcon size={16} /> },
-        {
-          path: "/api-keys",
-          label: "API Keys",
-          icon: <ApiKeysIcon size={16} />,
-          visible: canAccessApiKeyAdmin(user),
-        },
-      ],
-    },
+    // The Developers group (Docs / API reference / Libraries / SDK / API Keys)
+    // now lives at /settings/developers, reached from the settings rail under
+    // Appearance — reference material doesn't earn a permanent seat in the rail
+    // people work out of all day. See profile/DeveloperSettings.tsx.
     {
       key: "organization",
       label: "Organization",
