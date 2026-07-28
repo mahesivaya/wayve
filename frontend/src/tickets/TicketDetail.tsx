@@ -336,10 +336,11 @@ export default function TicketDetail() {
               >
                 {saving ? "Saving…" : "Save changes"}
               </button>
-              {/* AI fix is limited to P5 tickets; shown only when there's no fix
-                  in flight — i.e. nothing yet, or the last run gave nothing to
-                  review (backend enforces the P5 gate too). */}
-              {priority === 5 &&
+              {/* AI fix is limited to the low-stakes end of the scale — P4 (Low)
+                  and P5 (Lowest); shown only when there's no fix in flight —
+                  i.e. nothing yet, or the last run gave nothing to review
+                  (backend enforces the same gate). */}
+              {priority >= 4 &&
                 (!aiFix?.status ||
                   aiFix.status === "no_change" ||
                   aiFix.status === "error") && (

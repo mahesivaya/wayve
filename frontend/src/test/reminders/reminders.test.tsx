@@ -74,24 +74,26 @@ describe("Reminders page", () => {
 
   it("orders open tasks by priority and hides done tasks", async () => {
     getTasks.mockResolvedValue([
+      // P1 is the highest priority and P5 the lowest, so "Urgent task" must
+      // sort above "Low task" even though its number is smaller.
       {
         id: 1,
         name: "Low task",
-        priority: 2,
+        priority: 4,
         status: "to_do",
         created_at: null,
       },
       {
         id: 2,
         name: "Urgent task",
-        priority: 5,
+        priority: 1,
         status: "in_progress",
         created_at: null,
       },
       {
         id: 3,
         name: "Finished task",
-        priority: 4,
+        priority: 2,
         status: "done",
         created_at: null,
       },

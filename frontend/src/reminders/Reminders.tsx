@@ -31,14 +31,15 @@ type UpcomingMeeting = {
   startTs: number;
 };
 
+// P1 is the most important, P5 the least.
 const priorityLabel = (p: TaskPriority): string =>
-  p === 5
+  p === 1
     ? "Highest"
-    : p === 4
+    : p === 2
       ? "High"
       : p === 3
         ? "Medium"
-        : p === 2
+        : p === 4
           ? "Low"
           : "Lowest";
 
@@ -187,7 +188,7 @@ export default function Reminders() {
     return tasks
       .filter((t) => t.status !== "done")
       .sort((a, b) => {
-        if (b.priority !== a.priority) return b.priority - a.priority;
+        if (a.priority !== b.priority) return a.priority - b.priority;
         const at = new Date(a.created_at ?? 0).getTime();
         const bt = new Date(b.created_at ?? 0).getTime();
         return bt - at;

@@ -111,7 +111,8 @@ mod tests {
             .unwrap_or_else(|e| panic!("task row: {e}"));
         assert_eq!(row.get::<String, _>("name"), "Updated summary");
         assert_eq!(row.get::<String, _>("status"), "done");
-        assert_eq!(row.get::<i16, _>("priority"), 4);
+        // Jira "High" → P2 on the 1-highest scale.
+        assert_eq!(row.get::<i16, _>("priority"), 2);
 
         unsafe {
             std::env::remove_var("JIRA_WEBHOOK_SECRET");

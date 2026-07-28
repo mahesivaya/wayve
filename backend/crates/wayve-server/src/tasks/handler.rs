@@ -86,7 +86,7 @@ pub async fn list_tasks(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult 
                     created_at, updated_at, jira_issue_key, jira_base, gitlab_issue_iid, gitlab_web_url
              FROM tasks
              WHERE user_id = $1
-             ORDER BY priority DESC, created_at ASC, id ASC",
+             ORDER BY priority ASC, created_at ASC, id ASC",
         )
         .bind(user_id)
         .fetch_all(&mut *tx)

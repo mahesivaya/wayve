@@ -1083,13 +1083,15 @@
   background: var(--color-surface);
 }
 
-.task-priority-badge.priority-5,
-.task-priority-select.priority-5 {
+/* P1 is the most urgent, so it carries the hottest colour and the ramp cools
+   down to the muted P5. */
+.task-priority-badge.priority-1,
+.task-priority-select.priority-1 {
   background: var(--color-danger-hover);
 }
 
-.task-priority-badge.priority-4,
-.task-priority-select.priority-4 {
+.task-priority-badge.priority-2,
+.task-priority-select.priority-2 {
   background: var(--color-task-urgent);
 }
 
@@ -1098,13 +1100,13 @@
   background: var(--color-warning-deep);
 }
 
-.task-priority-badge.priority-2,
-.task-priority-select.priority-2 {
+.task-priority-badge.priority-4,
+.task-priority-select.priority-4 {
   background: var(--color-primary-action);
 }
 
-.task-priority-badge.priority-1,
-.task-priority-select.priority-1 {
+.task-priority-badge.priority-5,
+.task-priority-select.priority-5 {
   background: var(--color-text-slate-light);
 }
 

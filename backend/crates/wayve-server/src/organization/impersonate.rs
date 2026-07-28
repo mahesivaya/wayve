@@ -320,7 +320,7 @@ pub async fn list_member_tasks(
         "SELECT id, name, description, priority, status, created_at, updated_at
          FROM tasks
          WHERE user_id = $1
-         ORDER BY priority DESC, created_at DESC
+         ORDER BY priority ASC, created_at DESC
          LIMIT 200",
     )
     .bind(target_user_id)

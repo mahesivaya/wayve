@@ -126,7 +126,7 @@ pub async fn list_user_stories(req: HttpRequest, pool: web::Data<PgPool>) -> App
          FROM user_stories
          WHERE ($1::INTEGER IS NOT NULL AND organization_id = $1)
             OR ($2::INTEGER IS NOT NULL AND user_id = $2)
-         ORDER BY priority DESC, created_at ASC, id ASC"
+         ORDER BY priority ASC, created_at ASC, id ASC"
     ))
     .bind(org_id)
     .bind(uid)

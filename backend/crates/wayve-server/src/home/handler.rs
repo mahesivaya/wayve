@@ -216,7 +216,7 @@ async fn load_tasks(pool: &PgPool, user_id: i32) -> Result<TasksSummary, sqlx::E
                OR s.organization_id = (SELECT organization_id FROM users WHERE id = t.user_id))
          WHERE t.user_id = $1
            AND (s.category IS NULL OR s.category != ALL($2))
-         ORDER BY t.priority DESC, t.created_at DESC
+         ORDER BY t.priority ASC, t.created_at DESC
          LIMIT 5",
     )
     .bind(user_id)
