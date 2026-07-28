@@ -42,6 +42,28 @@ http {
             proxy_redirect off;
         }
 
+        # Root-mounted OAuth callbacks for the Slack and Figma connect flows.
+        # Scoped to `/<provider>/oauth/` so the SPA keeps its own pages under
+        # those prefixes. Without these the provider redirects to a URL that
+        # answers with the SPA shell, so the token exchange never runs.
+        location /slack/oauth/ {
+            proxy_pass http://backend:8080;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_redirect off;
+        }
+
+        location /figma/oauth/ {
+            proxy_pass http://backend:8080;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_redirect off;
+        }
+
         # ✅ Inbound integration webhooks (Jira: /webhooks/fluxze_webhook)
         location /webhooks/ {
             proxy_pass http://backend:8080;
