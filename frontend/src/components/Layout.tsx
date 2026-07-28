@@ -54,7 +54,6 @@ import {
   DriveIcon,
   NotesIcon,
   TasksIcon,
-  TestAccessIcon,
   AccessRequestsIcon,
   BillingIcon,
   DeveloperIcon,
@@ -1264,16 +1263,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           >
             📄 Library
           </Link>
-          <Link
-            to="/projects"
-            title="Projects"
-            className={`sidebar-project-label${
-              location.pathname === "/projects" ? " active" : ""
-            }`}
-            onClick={() => setNavOpen(false)}
-          >
-            🗂 Projects
-          </Link>
+          {/* Projects is off the menu; /projects still routes, so any existing
+              link or bookmark keeps working. */}
           <Link
             to="/user-stories"
             title="User Stories"
@@ -1346,6 +1337,16 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             >
               <GitLogoIcon size={14} /> Code Repo
             </Link>
+          )}
+          {/* Moved down here from the top-level app list — a workspace tool, not
+              a personal app. Test Access and Access Requests are one page now,
+              so one entry covers both; it needs no gate of its own, since the
+              section's `visible` is the same scope test Test Access carried. */}
+          {renderSidebarLink(
+            "/requests",
+            "Requests",
+            <AccessRequestsIcon size={16} />,
+            location.pathname === "/requests"
           )}
         </div>
       ),
@@ -1767,20 +1768,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                     )}
                   </>
                 )}
-                {(user.scope === "platform" || user.scope === "organization") &&
-                  renderSidebarItem(
-                    "/test-access",
-                    "test_access",
-                    "Test Access",
-                    <TestAccessIcon size={18} />
-                  )}
-                {(isOrgOwner || isPlatformOwner) &&
-                  renderSidebarLink(
-                    "/access-requests",
-                    "Access Requests",
-                    <AccessRequestsIcon size={16} />,
-                    location.pathname === "/access-requests"
-                  )}
+                {/* Test Access and Access Requests moved into the Workspace
+                    section below. */}
               </div>
 
               {sectionDefs.map(renderSection)}

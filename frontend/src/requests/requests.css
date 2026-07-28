@@ -1,0 +1,64 @@
+/* Shell for the combined Requests page. The two panels it hosts keep their own
+   stylesheets (test_access.css, platformTeam.css); this file only owns the
+   page header and the tab bar above them. */
+.requests-page {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 16px 20px;
+  /* Own vertical scroll — the page host (.split-pane-body) clips overflow. */
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* The in-app h1 would otherwise inherit the oversized marketing heading. */
+.requests-page h1 {
+  margin: 0 0 4px;
+  font-size: var(--text-2xl);
+  letter-spacing: normal;
+}
+
+.requests-header {
+  margin-bottom: 18px;
+}
+
+.requests-header p {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.requests-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.requests-tab {
+  appearance: none;
+  cursor: pointer;
+  padding: 10px 16px;
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.requests-tab:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-primary-action);
+}
+
+.requests-tab.active {
+  color: var(--color-on-primary);
+  background: var(--color-primary-action);
+  border-color: var(--color-primary-action);
+}
+
+/* Embedded panels sit directly under the tab bar, so they drop the standalone
+   page padding they carry when routed on their own. */
+.requests-page .test-access-page,
+.requests-page .pt-page {
+  padding: 0;
+}
