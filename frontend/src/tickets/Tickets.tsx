@@ -32,7 +32,10 @@ const TICKETS_CONFIG: TasksConfig = {
     attachments: true,
     statusSummary: true,
     aiFix: true,
-    figmaLinks: true,
+    // Design (Figma) section is off on both boards now — file attachments cover
+    // the same need without leaving the app. The ticket_figma_links table and
+    // its endpoints stay, so flipping this back on restores existing links.
+    figmaLinks: false,
     typeColumn: true,
   },
   storageKey: "tickets",
