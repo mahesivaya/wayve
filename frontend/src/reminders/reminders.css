@@ -163,19 +163,20 @@
 }
 
 /* Warmer as priority climbs; cool/neutral for the low end. */
-.reminder-priority.p5 {
+/* P1 is the most urgent, so the ramp runs hot → muted as the number climbs. */
+.reminder-priority.p1 {
   background: var(--color-danger, #dc2626);
 }
-.reminder-priority.p4 {
+.reminder-priority.p2 {
   background: #ea580c;
 }
 .reminder-priority.p3 {
   background: #d97706;
 }
-.reminder-priority.p2 {
+.reminder-priority.p4 {
   background: #0284c7;
 }
-.reminder-priority.p1 {
+.reminder-priority.p5 {
   background: #64748b;
 }
 

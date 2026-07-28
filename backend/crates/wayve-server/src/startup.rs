@@ -482,7 +482,7 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_by TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee TEXT NOT NULL DEFAULT ''",
         "CREATE INDEX IF NOT EXISTS idx_tasks_user_priority \
-         ON tasks(user_id, priority DESC, created_at DESC)",
+         ON tasks(user_id, priority ASC, created_at DESC)",
         // Backfill must run before the uniqueness guard installs. Mirrors init.sql.
         "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS task_number INTEGER",
         "WITH numbered AS ( \

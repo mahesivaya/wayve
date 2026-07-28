@@ -257,12 +257,13 @@ const TASK_ACTION_LABEL: Record<string, string> = {
   task_deleted: "Task deleted",
 };
 
+// P1 is the most important, P5 the least.
 const PRIORITY_LABEL: Record<number, string> = {
-  1: "Lowest",
-  2: "Low",
+  1: "Highest",
+  2: "High",
   3: "Medium",
-  4: "High",
-  5: "Highest",
+  4: "Low",
+  5: "Lowest",
 };
 
 // Audit rows record the status *slug* at the time of the action. Statuses are

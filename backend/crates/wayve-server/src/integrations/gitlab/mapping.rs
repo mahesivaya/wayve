@@ -47,15 +47,15 @@ pub fn gitlab_state_to_category(state: &str, labels: &[String]) -> &'static str 
 }
 
 /// GitLab has no native priority field, so this sniffs common label conventions
-/// onto Wayve's 1..=5 scale and defaults to 3, Medium.
+/// onto Wayve's 1..=5 scale (1 highest) and defaults to 3, Medium.
 pub fn gitlab_priority_from_labels(labels: &[String]) -> i16 {
     let has = |needle: &str| labels.iter().any(|l| l.to_lowercase().contains(needle));
     if has("critical") || has("highest") || has("urgent") {
-        5
+        1
     } else if has("high") {
-        4
-    } else if has("low") {
         2
+    } else if has("low") {
+        4
     } else {
         3
     }
@@ -95,9 +95,9 @@ mod tests {
 
     #[test]
     fn priority_mapping() {
-        assert_eq!(gitlab_priority_from_labels(&["critical".into()]), 5);
-        assert_eq!(gitlab_priority_from_labels(&["priority::high".into()]), 4);
-        assert_eq!(gitlab_priority_from_labels(&["low".into()]), 2);
+        assert_eq!(gitlab_priority_from_labels(&["critical".into()]), 1);
+        assert_eq!(gitlab_priority_from_labels(&["priority::high".into()]), 2);
+        assert_eq!(gitlab_priority_from_labels(&["low".into()]), 4);
         assert_eq!(gitlab_priority_from_labels(&["bug".into()]), 3);
         assert_eq!(gitlab_priority_from_labels(&[]), 3);
     }

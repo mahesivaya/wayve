@@ -46,13 +46,15 @@ import TaskStatusIcon from "./TaskStatusIcon";
 import FigmaLinks from "../integrations/FigmaLinks";
 import "./tasks.css";
 
-const PRIORITY_OPTIONS: TaskPriority[] = [5, 4, 3, 2, 1];
+// P1 is the most important, P5 the least — the number *is* the rank, so the
+// options read top-down in importance order.
+const PRIORITY_OPTIONS: TaskPriority[] = [1, 2, 3, 4, 5];
 
 const priorityLabel = (priority: TaskPriority) => {
-  if (priority === 5) return "Highest";
-  if (priority === 4) return "High";
+  if (priority === 1) return "Highest";
+  if (priority === 2) return "High";
   if (priority === 3) return "Medium";
-  if (priority === 2) return "Low";
+  if (priority === 4) return "Low";
   return "Lowest";
 };
 
@@ -142,7 +144,7 @@ const composeFingerprint = (fields: ComposeFields) =>
 const sortTasks = (list: Task[]) =>
   [...list].sort(
     (a, b) =>
-      b.priority - a.priority ||
+      a.priority - b.priority ||
       // Oldest first within a priority group, so a new task lands at the bottom.
       new Date(a.created_at ?? 0).getTime() -
         new Date(b.created_at ?? 0).getTime()
@@ -672,8 +674,9 @@ export default function Tasks({
   const toggleSort = (key: "created" | "assignee" | "priority" | "status") => {
     if (sortKey !== key) {
       setSortKey(key);
-      // Priority reads most-useful high→low first; the rest read A→Z / oldest.
-      setSortDir(key === "priority" ? "desc" : "asc");
+      // P1-first is the most useful priority order; ascending gets it, since a
+      // lower number now means a higher priority. The rest read A→Z / oldest.
+      setSortDir("asc");
       return;
     }
     setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -2470,9 +2473,9 @@ export default function Tasks({
                   editingId !== null &&
                   config.features.aiFix &&
                   config.api.aiFix &&
-                  // The AI fixer is limited to P5 tickets for now; the backend
-                  // enforces the same gate.
-                  priority === 5 && (
+                  // The AI fixer is limited to the low-stakes end of the scale —
+                  // P4 (Low) and P5 (Lowest). The backend enforces the same gate.
+                  priority >= 4 && (
                     <button
                       type="button"
                       className="task-ai-fix-btn"

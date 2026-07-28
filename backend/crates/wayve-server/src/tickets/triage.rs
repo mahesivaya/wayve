@@ -17,12 +17,13 @@ pub async fn suggest_priority(pool: &PgPool, name: &str, description: &str) -> O
 
     let prompt = format!(
         "You are triaging an engineering/support ticket. Read the title and \
-         description and reply with ONLY a single digit for its priority:\n\
-         5 = urgent/critical (outage, data loss, security, many users blocked)\n\
-         4 = high (broken feature, no workaround)\n\
+         description and reply with ONLY a single digit for its priority, where \
+         1 is the most important and 5 the least:\n\
+         1 = urgent/critical (outage, data loss, security, many users blocked)\n\
+         2 = high (broken feature, no workaround)\n\
          3 = normal (default)\n\
-         2 = low (minor/cosmetic, easy workaround)\n\
-         1 = trivial (nice-to-have)\n\
+         4 = low (minor/cosmetic, easy workaround)\n\
+         5 = trivial (nice-to-have)\n\
          Reply with just the digit 1-5, no other text.\n\n\
          Title: {name}\n\nDescription: {description}"
     );

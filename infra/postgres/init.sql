@@ -1172,7 +1172,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_tasks_user_gitlab_issue
     ON tasks(user_id, gitlab_project_id, gitlab_issue_iid)
     WHERE gitlab_issue_iid IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS idx_tasks_user_priority ON tasks(user_id, priority DESC, created_at DESC);
+-- P1 is the highest priority, so "most important first" is an ASC scan.
+CREATE INDEX IF NOT EXISTS idx_tasks_user_priority ON tasks(user_id, priority ASC, created_at DESC);
 
 -- First-class assignment + project linkage (see docs/architecture/ai-task-assignment.md).
 -- `assignee_id` is the real assigned user (FK users); the legacy free-text `assignee`
@@ -1767,7 +1768,7 @@ ON meetings (user_id, date, start_time);
 -- idx_tasks_user_priority above scans all tasks; this partial variant
 -- skips done rows entirely so the dashboard's top-5 lookup is tighter.
 CREATE INDEX IF NOT EXISTS idx_tasks_user_open_priority
-ON tasks (user_id, priority DESC, created_at DESC)
+ON tasks (user_id, priority ASC, created_at DESC)
 WHERE status != 'done';
 
 -- Most-recently-touched notes for a user.

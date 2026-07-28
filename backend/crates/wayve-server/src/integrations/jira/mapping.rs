@@ -64,13 +64,14 @@ pub fn jira_status_to_category(category_key: &str, _status_name: &str) -> &'stat
     }
 }
 
-/// Wayve's scale is 1..=5, 5 highest. Unknown or missing falls back to 3, Medium.
+/// Wayve's scale is 1..=5, 1 highest — the same direction Jira's own P1..P5
+/// naming reads. Unknown or missing falls back to 3, Medium.
 pub fn jira_priority_to_wayve(name: Option<&str>) -> i16 {
     match name.map(|n| n.trim().to_lowercase()).as_deref() {
-        Some("highest") => 5,
-        Some("high") => 4,
-        Some("low") => 2,
-        Some("lowest") => 1,
+        Some("highest") => 1,
+        Some("high") => 2,
+        Some("low") => 4,
+        Some("lowest") => 5,
         _ => 3,
     }
 }
@@ -153,11 +154,11 @@ mod tests {
 
     #[test]
     fn priority_mapping() {
-        assert_eq!(jira_priority_to_wayve(Some("Highest")), 5);
-        assert_eq!(jira_priority_to_wayve(Some("high")), 4);
+        assert_eq!(jira_priority_to_wayve(Some("Highest")), 1);
+        assert_eq!(jira_priority_to_wayve(Some("high")), 2);
         assert_eq!(jira_priority_to_wayve(Some("Medium")), 3);
-        assert_eq!(jira_priority_to_wayve(Some("Low")), 2);
-        assert_eq!(jira_priority_to_wayve(Some("LOWEST")), 1);
+        assert_eq!(jira_priority_to_wayve(Some("Low")), 4);
+        assert_eq!(jira_priority_to_wayve(Some("LOWEST")), 5);
         assert_eq!(jira_priority_to_wayve(None), 3);
         assert_eq!(jira_priority_to_wayve(Some("Critical")), 3);
     }

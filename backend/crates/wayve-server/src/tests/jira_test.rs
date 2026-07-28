@@ -167,7 +167,8 @@ mod tests {
             .find(|t| t["jira_issue_key"] == "WAY-1")
             .expect("WAY-1 task");
         assert_eq!(way1["status"], "to_do");
-        assert_eq!(way1["priority"], 4);
+        // Jira "High" → P2 on the 1-highest scale.
+        assert_eq!(way1["priority"], 2);
         assert_eq!(way1["jira_base"], "https://acme.atlassian.net");
         let task_id = way1["id"].as_i64().expect("task id") as i32;
 

@@ -146,7 +146,8 @@ mod tests {
             .find(|t| t["gitlab_issue_iid"] == 2)
             .expect("issue #2 task");
         assert_eq!(second["status"], "done");
-        assert_eq!(second["priority"], 4);
+        // "priority::high" → P2 on the 1-highest scale.
+        assert_eq!(second["priority"], 2);
 
         drop(app);
         unsafe {

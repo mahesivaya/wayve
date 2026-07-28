@@ -182,7 +182,7 @@ pub async fn list_tickets(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
                 AND (($1::INTEGER IS NOT NULL AND organization_id = $1)
                   OR ($2::INTEGER IS NOT NULL AND user_id = $2)))
             OR ($3::BOOLEAN AND support_ticket_id IS NOT NULL)
-         ORDER BY priority DESC, created_at ASC, id ASC"
+         ORDER BY priority ASC, created_at ASC, id ASC"
     ))
     .bind(org_id)
     .bind(uid)
@@ -395,11 +395,12 @@ pub async fn ai_fix_ticket(
     let description: String = row.get("description");
     let priority: i16 = row.get("priority");
 
-    // For now the AI fixer is limited to P5 (Highest-priority) tickets. The UI
-    // hides the button off P5; this is the authoritative gate.
-    if priority != 5 {
+    // The AI fixer is limited to the low-stakes end of the scale — P4 (Low) and
+    // P5 (Lowest). The UI hides the button above that; this is the
+    // authoritative gate.
+    if priority < 4 {
         return Err(AppError::bad_request(
-            "AI fix is available only for P5 tickets",
+            "AI fix is available only for P4 and P5 tickets",
         ));
     }
 
