@@ -63,8 +63,11 @@ export const SPLIT_APPS: SplitApp[] = [
   },
   { key: "chat", label: "Chat", path: "/chat", icon: "💬", Comp: ChatView },
   {
+    // `key` and `path` stay "scheduler": they are persisted in split-pane
+    // layout state and used in deep links, so renaming them would drop saved
+    // panes and break existing URLs. Only the visible label changes.
     key: "scheduler",
-    label: "Scheduler",
+    label: "Calendar",
     path: "/scheduler",
     icon: "📅",
     Comp: SchedulerView,

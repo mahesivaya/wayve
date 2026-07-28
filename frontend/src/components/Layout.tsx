@@ -1678,10 +1678,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   chatUnreadCount
                 )}
                 {/* /call is intentionally absent — audio/video lives inside Chat. */}
+                {/* Labelled "Calendar" — the route and component keep the
+                    `scheduler` name so no links or deep links break. */}
                 {renderSidebarItem(
                   "/scheduler",
                   "scheduler",
-                  "Scheduler",
+                  "Calendar",
                   <SchedulerIcon size={18} />
                 )}
                 {renderSidebarItem(
