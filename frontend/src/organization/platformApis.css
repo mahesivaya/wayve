@@ -1,0 +1,229 @@
+/* The platform API catalogue (/platform/api). Laid out like a Swagger page —
+   grouped by area, one row per operation, coloured verb badges — but read-only:
+   no request builder, no "Try it out". */
+.api-page {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 16px 20px;
+  /* Own vertical scroll — the page host clips overflow. */
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* These in-app titles otherwise inherit the oversized marketing h1. */
+.api-page h1 {
+  margin: 0 0 4px;
+  font-size: var(--text-2xl);
+  letter-spacing: normal;
+}
+
+.api-header {
+  margin-bottom: 16px;
+}
+
+.api-header p {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.api-banner {
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+}
+
+.api-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.api-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 460px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+}
+
+.api-search:focus-visible {
+  outline: 2px solid var(--color-primary-action);
+  outline-offset: 1px;
+}
+
+.api-count,
+.api-muted {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.api-empty {
+  padding: 16px;
+  color: var(--color-text-secondary);
+}
+
+.api-group {
+  margin-bottom: 22px;
+}
+
+.api-group-head {
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.api-group-head h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.api-group-desc {
+  margin: 2px 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.api-rows {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.api-row {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.api-row-head {
+  width: 100%;
+  display: grid;
+  /* verb · path · summary · caret. The summary takes the slack and truncates,
+     so long descriptions never push the caret off the row. */
+  grid-template-columns: 68px auto minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.api-row-head:hover {
+  background: var(--color-surface-hover);
+}
+
+.api-row-head:focus-visible {
+  outline: 2px solid var(--color-primary-action);
+  outline-offset: -2px;
+}
+
+.api-method {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 0;
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+/* Verb colours follow the convention every API reference uses, so the row is
+   readable at a glance without reading the word. */
+.api-method--get {
+  background: #2563eb;
+}
+.api-method--post {
+  background: #16794a;
+}
+.api-method--put,
+.api-method--patch {
+  background: #b45309;
+}
+.api-method--delete {
+  background: #b42318;
+}
+
+.api-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--text-sm);
+  font-weight: 650;
+  color: var(--color-text-primary);
+}
+
+.api-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.api-caret {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.api-row-detail {
+  margin: 0;
+  padding: 10px 12px 12px 92px;
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-alt, #0f172a08);
+}
+
+.api-row-detail > div {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+}
+
+.api-row-detail dt {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.api-row-detail dd {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.api-row-detail code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Narrow pane: the summary drops out rather than squeezing the path. */
+@media (max-width: 720px) {
+  .api-row-head {
+    grid-template-columns: 68px minmax(0, 1fr) 16px;
+  }
+  .api-summary {
+    display: none;
+  }
+  .api-row-detail {
+    padding-left: 12px;
+  }
+}

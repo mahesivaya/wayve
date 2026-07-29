@@ -24,6 +24,7 @@ import AIChat from "../aichat/AIChat";
 import UserStoriesSummaryCard from "./UserStoriesSummaryCard";
 import { listScimTokens } from "../api/scim";
 import { getAiUsage, type AiUsage } from "../api/aiProvider";
+import { getApiCatalogue } from "../api/openapi";
 import { formatBytes } from "../utils/bytes";
 import "./admin-ui.css";
 import "./platformAdmin.css";
@@ -67,6 +68,9 @@ export default function PlatformAdminHome() {
   const canSeeAiUsage =
     (user?.scope === "platform" || user?.account_type === "platform_admin") &&
     user?.effective_role === "owner";
+  // The endpoint catalogue is the platform's own surface area — visible to
+  // platform staff, and gated the same way by the page itself.
+  const canSeeApis = user?.scope === "platform";
 
   const [usersSummary, setUsersSummary] = useState<UsersSummary | null>(null);
   // The Business and Enterprise cards both aggregate this admin-org list.
@@ -80,6 +84,7 @@ export default function PlatformAdminHome() {
   const [auditCount, setAuditCount] = useState<number | null>(null);
   const [scimCount, setScimCount] = useState<number | null>(null);
   const [aiUsage, setAiUsage] = useState<AiUsage | null>(null);
+  const [endpointCount, setEndpointCount] = useState<number | null>(null);
 
   const canSeeOrgStats = canManageMembers || canManageApiKeys;
   const canSeeBilling =
@@ -184,6 +189,19 @@ export default function PlatformAdminHome() {
       cancelled = true;
     };
   }, [canManageApiKeys]);
+
+  // Counts the endpoints the API card advertises. The spec is served with an
+  // ETag and a 5-minute cache, so this is a cheap conditional request.
+  useEffect(() => {
+    if (!canSeeApis) return;
+    let cancelled = false;
+    getApiCatalogue()
+      .then((c) => !cancelled && setEndpointCount(c.endpoints.length))
+      .catch(() => !cancelled && setEndpointCount(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [canSeeApis]);
 
   useEffect(() => {
     if (!canReadAudit) return;
@@ -303,6 +321,19 @@ export default function PlatformAdminHome() {
     if (key === "developer" && apiKeysCount != null) {
       return [{ value: apiKeysCount.toLocaleString(), label: "API keys" }];
     }
+    if (key === "api") {
+      const stats: CardStat[] = [];
+      if (endpointCount != null) {
+        stats.push({
+          value: endpointCount.toLocaleString(),
+          label: "Endpoints",
+        });
+      }
+      if (apiKeysCount != null) {
+        stats.push({ value: apiKeysCount.toLocaleString(), label: "API keys" });
+      }
+      return stats.length > 0 ? stats : null;
+    }
     if (key === "analytics" && summary) {
       return [
         {
@@ -388,6 +419,14 @@ export default function PlatformAdminHome() {
       visible: canSeeAnalytics,
     },
     {
+      key: "api",
+      label: "API",
+      description:
+        "Every endpoint the platform publishes, grouped by area with its required scope.",
+      path: "/platform/api",
+      visible: canSeeApis,
+    },
+    {
       key: "scim",
       label: "SCIM provisioning",
       description: "Mint bearer tokens so Okta / Entra can provision users.",
@@ -415,7 +454,7 @@ export default function PlatformAdminHome() {
   const ROW_KEYS: string[][] = [
     ["users", "business", "enterprise"],
     ["billing", "plans"],
-    ["members", "support", "developer"],
+    ["api", "members", "support", "developer"],
   ];
   const namedKeys = new Set(ROW_KEYS.flat());
 

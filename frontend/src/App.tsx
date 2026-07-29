@@ -74,6 +74,7 @@ const PlatformEnterprises = lazy(
   () => import("./organization/PlatformEnterprises")
 );
 const PlatformMembers = lazy(() => import("./organization/PlatformMembers"));
+const PlatformApis = lazy(() => import("./organization/PlatformApis"));
 const OrganizationHome = lazy(() => import("./organization/OrganizationHome"));
 const EmailFiles = lazy(() => import("./files/EmailFiles"));
 const ServicePage = lazy(() => import("./services/ServicePage"));
@@ -439,6 +440,9 @@ export default function App() {
                 element={<PlatformEnterprises />}
               />
               <Route path="/platform/members" element={<PlatformMembers />} />
+              {/* The platform's own endpoint catalogue, read from
+                /api/openapi.json. The page gates on platform scope itself. */}
+              <Route path="/platform/api" element={<PlatformApis />} />
               <Route path="/platform/billing" element={<PlatformBilling />} />
               <Route
                 path="/platform/developer"
