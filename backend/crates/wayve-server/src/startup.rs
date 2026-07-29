@@ -333,6 +333,18 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         // board so platform staff see/action them there. The marker column, its
         // uniqueness (one board item per report), and the cascade FK must exist on
         // existing deployments too, then backfill one board ticket per report.
+        // The AI-fix review state for stories. `user_stories` predates the
+        // pipeline, so an existing deployment reaches the new story endpoints
+        // without these columns and every read 500s on "column does not exist".
+        // Mirrors workspace_tickets; init.sql carries the same set for fresh
+        // volumes. See infra/postgres/migrations/2026-07-user-stories-ai-fix.sql.
+        "ALTER TABLE user_stories ADD COLUMN IF NOT EXISTS ai_fix_status TEXT",
+        "ALTER TABLE user_stories ADD COLUMN IF NOT EXISTS ai_fix_diff TEXT",
+        "ALTER TABLE user_stories ADD COLUMN IF NOT EXISTS ai_fix_files JSONB",
+        "ALTER TABLE user_stories ADD COLUMN IF NOT EXISTS ai_fix_base_sha TEXT",
+        "ALTER TABLE user_stories ADD COLUMN IF NOT EXISTS ai_fix_commit_sha TEXT",
+        "ALTER TABLE user_stories ADD COLUMN IF NOT EXISTS ai_fix_branch TEXT",
+        "ALTER TABLE user_stories ADD COLUMN IF NOT EXISTS ai_fix_pr_url TEXT",
         "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS support_ticket_id INTEGER",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_workspace_tickets_support_ticket \
          ON workspace_tickets(support_ticket_id)",
