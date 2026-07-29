@@ -52,10 +52,16 @@
   background: var(--color-surface-hover);
 }
 
+/* Drag the grip in the bottom-right corner to give the diff more (or less)
+   room — a long change is unreadable through a fixed window, and a two-line
+   one shouldn't hold a tall box open. `max-height` is the drag ceiling as well
+   as the default cap, so it sits near the full pane rather than at 60vh. */
 .aifix-diff {
   margin: 0 0 12px;
   padding: 12px;
-  max-height: 60vh;
+  min-height: 120px;
+  max-height: 85vh;
+  resize: vertical;
   overflow: auto;
   border: 1px solid var(--color-border);
   border-radius: 8px;
@@ -174,7 +180,9 @@
   display: block;
   width: 100%;
   min-height: 260px;
-  max-height: 60vh;
+  /* Same ceiling as the diff above: this textarea already had a resize grip,
+     but 60vh capped how far it could actually be dragged. */
+  max-height: 85vh;
   padding: 12px;
   border: 0;
   border-top: 1px solid var(--color-border);
