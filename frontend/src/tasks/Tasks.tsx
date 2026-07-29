@@ -396,6 +396,19 @@ function TaskBadge({ kind }: { kind?: string | null }) {
   );
 }
 
+// The drawer's dragged width, shared by every board (one drawer is open at a
+// time, and a person who wants a wide editor wants it everywhere). The floor
+// keeps the head's title + buttons on one line; the ceiling leaves the board
+// visible behind it.
+const DRAWER_WIDTH_KEY = "rwayve.taskDrawer.width";
+const DRAWER_DEFAULT_WIDTH = 460;
+const DRAWER_MIN_WIDTH = 360;
+const clampDrawerWidth = (px: number) =>
+  Math.min(
+    Math.max(px, DRAWER_MIN_WIDTH),
+    Math.round(window.innerWidth * 0.95)
+  );
+
 // Hosts the compose/edit form on one of two surfaces: the centered modal (used
 // for Create, and Edit on boards without a drawer) or a right-side drawer (used
 // when an item's name is clicked on a drawer-enabled board). The form is passed
@@ -426,6 +439,45 @@ function EditSurface({
     return () => window.removeEventListener("keydown", onKey);
   }, [surface, isOpen, onClose]);
 
+  // Drag the drawer's left edge to widen it — a diff or a long description is
+  // unreadable in a 460px column. Same drag mechanics as the email sidebar
+  // (see Emails.tsx): a ref for the in-flight gesture so moving the mouse
+  // doesn't re-subscribe, and the result persisted so it survives a reload.
+  const [drawerWidth, setDrawerWidth] = useState<number>(() => {
+    const stored = Number(localStorage.getItem(DRAWER_WIDTH_KEY));
+    return Number.isFinite(stored) && stored > 0
+      ? stored
+      : DRAWER_DEFAULT_WIDTH;
+  });
+  const draggingRef = useRef(false);
+
+  useEffect(() => {
+    if (surface !== "drawer" || !isOpen) return;
+    function onMove(event: MouseEvent) {
+      if (!draggingRef.current) return;
+      // The drawer is pinned to the right, so its width is the gap between the
+      // pointer and the viewport's right edge.
+      setDrawerWidth(clampDrawerWidth(window.innerWidth - event.clientX));
+    }
+    function onUp() {
+      if (!draggingRef.current) return;
+      draggingRef.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      onUp();
+    };
+  }, [surface, isOpen]);
+
+  useEffect(() => {
+    localStorage.setItem(DRAWER_WIDTH_KEY, String(drawerWidth));
+  }, [drawerWidth]);
+
   if (surface === "modal") {
     return (
       <Modal isOpen={isOpen} onClose={onClose} title={title}>
@@ -441,7 +493,27 @@ function EditSurface({
         onClick={onClose}
         aria-hidden="true"
       />
-      <aside className="task-drawer" role="dialog" aria-label={title}>
+      <aside
+        className="task-drawer"
+        role="dialog"
+        aria-label={title}
+        style={{ width: clampDrawerWidth(drawerWidth) }}
+      >
+        <div
+          className="task-drawer-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize panel"
+          data-tooltip="Drag to resize"
+          onMouseDown={() => {
+            draggingRef.current = true;
+            document.body.style.cursor = "col-resize";
+            document.body.style.userSelect = "none";
+          }}
+          // Double-click restores the default, so a drag that went too far
+          // isn't a nuisance to undo by hand.
+          onDoubleClick={() => setDrawerWidth(DRAWER_DEFAULT_WIDTH)}
+        />
         <div className="task-drawer-head">
           <h2 className="task-drawer-title">{title}</h2>
           <div className="task-drawer-head-actions">
@@ -634,6 +706,29 @@ export default function Tasks({
     );
     return saved === "jira" ? "jira" : "tasks";
   });
+  // Per-column widths for the list-view table, in px, keyed by column. Only
+  // columns the user has actually dragged appear here — everything else falls
+  // back to its default track, so the title keeps flexing to fill the row until
+  // it is deliberately sized. Persisted per board.
+  const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
+    try {
+      const saved = window.localStorage.getItem(
+        `wayve.${config.storageKey}.colw`
+      );
+      const parsed = saved ? (JSON.parse(saved) as unknown) : null;
+      // Anything hand-edited or written by an older build could be any shape;
+      // keep only positive numbers so a bad entry can't collapse a column.
+      if (!parsed || typeof parsed !== "object") return {};
+      return Object.fromEntries(
+        Object.entries(parsed as Record<string, unknown>).filter(
+          ([, v]) => typeof v === "number" && Number.isFinite(v) && v > 0
+        )
+      ) as Record<string, number>;
+    } catch {
+      return {};
+    }
+  });
+
   // The status, priority and date filters combine, and apply to both the list
   // and the board.
   // Status filter is multi-select: an empty list means "all statuses", any
@@ -718,6 +813,13 @@ export default function Tasks({
   useEffect(() => {
     window.localStorage.setItem(`wayve.${config.storageKey}.mode`, mode);
   }, [mode, config.storageKey]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      `wayve.${config.storageKey}.colw`,
+      JSON.stringify(colWidths)
+    );
+  }, [colWidths, config.storageKey]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [taskName, setTaskName] = useState("");
   const [description, setDescription] = useState("");
@@ -1476,17 +1578,92 @@ export default function Tasks({
   // The Assignee column is a team feature; personal boards drop it (and its
   // grid column) entirely.
   const showAssignee = !isPersonal;
+  // A dragged column becomes a fixed px track; everything else keeps its
+  // default. The title's default is flexible so it soaks up spare width, which
+  // is why it is the one column that reads as truncated until you widen it.
+  const col = (key: string, fallback: string) =>
+    colWidths[key] ? `${colWidths[key]}px` : fallback;
   const tableCols = [
-    "124px", // created
-    "minmax(0, 1fr)", // title
-    showType ? "112px" : null, // type
-    showAssignee ? "176px" : null, // assignee
-    "64px", // priority
-    "168px", // status
-    "128px", // actions
+    col("created", "124px"),
+    col("title", "minmax(0, 1fr)"),
+    showType ? col("type", "112px") : null,
+    showAssignee ? col("assignee", "176px") : null,
+    col("priority", "64px"),
+    col("status", "168px"),
+    "128px", // actions — a fixed Edit/Delete pair, nothing to reveal
   ]
     .filter(Boolean)
     .join(" ");
+
+  // Below this a column is unreadable, and a mis-drag could otherwise shrink one
+  // to nothing with no obvious way back.
+  const MIN_COL_PX = 56;
+
+  // Drag a header's right-hand grip to resize that column. Width is measured
+  // from the header cell at drag start and offset by the pointer delta, so the
+  // column tracks the cursor exactly regardless of its starting track type
+  // (px or fr). Listeners go on the window so the drag survives the pointer
+  // leaving the 8px grip, and `setPointerCapture` keeps it alive over iframes.
+  const startColResize = (
+    event: React.PointerEvent<HTMLSpanElement>,
+    key: string
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const grip = event.currentTarget;
+    const cell = grip.parentElement;
+    if (!cell) return;
+    const startX = event.clientX;
+    const startWidth = cell.getBoundingClientRect().width;
+    grip.setPointerCapture?.(event.pointerId);
+    document.body.classList.add("is-col-resizing");
+
+    const onMove = (e: PointerEvent) => {
+      const next = Math.max(
+        MIN_COL_PX,
+        Math.round(startWidth + (e.clientX - startX))
+      );
+      setColWidths((prev) => ({ ...prev, [key]: next }));
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      document.body.classList.remove("is-col-resizing");
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  };
+
+  // Double-click a grip to hand the column back to its default width.
+  const resetColWidth = (key: string) =>
+    setColWidths((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+
+  // Wraps a header cell so it can carry a resize grip. The wrapper becomes the
+  // grid child; the original cell keeps its own classes and styling.
+  const headCell = (key: string, node: React.ReactNode, center = false) => (
+    <div
+      key={key}
+      className={`task-th-wrap${center ? " task-th-wrap--center" : ""}`}
+    >
+      {node}
+      <span
+        className="task-th-grip"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={`Resize ${key} column`}
+        title="Drag to resize · double-click to reset"
+        onPointerDown={(e) => startColResize(e, key)}
+        onDoubleClick={() => resetColWidth(key)}
+      />
+    </div>
+  );
 
   // The team member behind a task's assignee email, for the Assignee column.
   // Falls back to the raw stored value (silhouette avatar) when it isn't a
@@ -1571,12 +1748,27 @@ export default function Tasks({
       className={`task-thead${showType ? " task-thead--type" : ""}`}
       role="row"
     >
-      {sortHeader("created", "Created", "task-th--created")}
-      <div className="task-th task-th--title">{config.labels.singular}</div>
-      {showType && <div className="task-th task-th--type">Type</div>}
-      {showAssignee && sortHeader("assignee", "Assignee", "task-th--assignee")}
-      {sortHeader("priority", "Priority", "task-th--center")}
-      {sortHeader("status", "Status")}
+      {headCell(
+        "created",
+        sortHeader("created", "Created", "task-th--created")
+      )}
+      {headCell(
+        "title",
+        <div className="task-th task-th--title">{config.labels.singular}</div>
+      )}
+      {showType &&
+        headCell("type", <div className="task-th task-th--type">Type</div>)}
+      {showAssignee &&
+        headCell(
+          "assignee",
+          sortHeader("assignee", "Assignee", "task-th--assignee")
+        )}
+      {headCell(
+        "priority",
+        sortHeader("priority", "Priority", "task-th--center"),
+        true
+      )}
+      {headCell("status", sortHeader("status", "Status"))}
       <div className="task-th task-th--actions" />
     </div>
   );
