@@ -163,6 +163,72 @@ environment.
 | `AUTH_COOKIE_SECURE` | `false` | `Secure` attribute on the auth cookie (set `true` in prod) |
 | `AES_HKDF_SALT` | built-in | HKDF salt — keep stable forever once set |
 | `ENV_FILE` | _(unset)_ | Extra env file to load before the standard layering |
+| `S3_BUCKET` | _(unset ⇒ local disk)_ | Bucket for uploaded files — see File storage below |
+| `S3_REGION` | `AWS_REGION`, else SDK chain | Region of `S3_BUCKET` |
+| `S3_PREFIX` | `uploads` | Key prefix inside the bucket |
+| `S3_ENDPOINT` | _(unset)_ | Endpoint override for MinIO / LocalStack / tests |
+
+### File storage (uploads)
+
+Every uploaded file — drive files, task / ticket / support / chat attachments,
+org documents and avatars — is written through `storage.rs`. With `S3_BUCKET`
+unset it goes to the local disk under `./uploads` (`/app/uploads` in the
+container, backed by the `uploads_prod` volume). That is the default and what
+local dev uses; nothing about it changed.
+
+Setting `S3_BUCKET` switches **writes** to S3. Reads try S3 first and fall back
+to the local disk on a miss, which is what makes the cutover safe: files
+uploaded before the switch keep serving off the volume while new ones land in
+the bucket. A `served upload from disk fallback` log line means an object was
+not in S3 — expect those until the backlog is copied up, and treat them as a
+signal afterwards.
+
+The database is unchanged. `file_path` columns keep their historical
+`./uploads/<name>` values; that string *is* the storage key, with the
+`./uploads/` prefix swapped for `S3_PREFIX` on the S3 side. So no data migration
+is needed, and unsetting `S3_BUCKET` reverts to disk.
+
+Bytes reach S3 already encrypted with the server AES-GCM key (avatars excepted —
+they are served inline as images), so the bucket never holds plaintext.
+
+**Bucket setup** (once, in the same region as the app):
+
+- Block Public Access **on** — downloads are served by the authenticated
+  `/api/files/{id}/download` handler, never by a public URL or presigned link,
+  because the app must decrypt the bytes and re-check permissions per request.
+- Default encryption SSE-S3, versioning **on**.
+- Lifecycle rules: expire noncurrent versions after 30–90 days, and abort
+  incomplete multipart uploads after 7 days. Without these, both bill forever.
+- Create a **Gateway VPC Endpoint for S3** — it is free, and without it traffic
+  from a private subnet pays NAT data-processing charges that dwarf the storage
+  cost.
+
+**Credentials:** none in env. The EC2 instance profile carries the policy, and
+the SDK's default chain picks it up. Minimum grant, scoped to the one bucket:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+    "Resource": "arn:aws:s3:::YOUR_BUCKET/uploads/*"
+  }]
+}
+```
+
+`ListBucket` is deliberately absent — the app addresses objects by exact key.
+
+**Cutover:**
+
+1. Create the bucket and attach the policy to the instance profile.
+2. Copy the backlog up from the box:
+   `docker run --rm -v uploads_prod:/u -v ~/.aws:/root/.aws amazon/aws-cli s3 sync /u s3://YOUR_BUCKET/uploads/`
+3. Set `S3_BUCKET` (and `S3_REGION`) in the server-side env file, redeploy.
+4. Re-run the sync to catch anything uploaded during the deploy.
+5. Watch for `served upload from disk fallback` lines. Once they stop, the
+   volume can be retired — keep it for a while regardless; it costs pennies and
+   it is the rollback.
 
 ### SMTP (required for outbound email)
 

@@ -3,7 +3,6 @@ use actix_multipart::Multipart;
 use actix_web::{Error, delete, http::header};
 use futures_util::StreamExt;
 use sqlx::Row;
-use tokio::{fs, io::AsyncWriteExt};
 use tracing::{error, info, instrument};
 use uuid::Uuid;
 use wayve_security::encryption::{decrypt_binary, encrypt_binary};
@@ -64,12 +63,6 @@ pub async fn upload_attachments(
         return Ok(HttpResponse::NotFound().finish());
     }
 
-    let upload_dir = "./uploads";
-    fs::create_dir_all(upload_dir).await.map_err(|e| {
-        error!(target: "http", error = ?e, "upload dir create failed");
-        actix_web::error::ErrorInternalServerError("Dir error")
-    })?;
-
     let mut saved: Vec<TaskAttachment> = Vec::new();
 
     while let Some(item) = payload.next().await {
@@ -90,7 +83,7 @@ pub async fn upload_attachments(
         // reject characters ext4 allows, such as the dev virtiofs mount choking
         // on the colon in macOS screenshot names.
         let file_id = Uuid::new_v4().to_string();
-        let filepath = format!("{}/task_{}_{}", upload_dir, task_id, file_id);
+        let filepath = crate::storage::stored_path(&format!("task_{task_id}_{file_id}"));
 
         let mut size: i64 = 0;
         let mut plaintext: Vec<u8> = Vec::new();
@@ -105,14 +98,12 @@ pub async fn upload_attachments(
             actix_web::error::ErrorInternalServerError("File encrypt error")
         })?;
 
-        let mut f = fs::File::create(&filepath).await.map_err(|e| {
-            error!(target: "http", path = %filepath, error = ?e, "task attachment create failed");
-            actix_web::error::ErrorInternalServerError("File create error")
-        })?;
-        f.write_all(&encrypted_bytes).await.map_err(|e| {
-            error!(target: "http", path = %filepath, error = ?e, "task attachment write failed");
-            actix_web::error::ErrorInternalServerError("Write error")
-        })?;
+        crate::storage::put(&filepath, encrypted_bytes)
+            .await
+            .map_err(|e| {
+                error!(target: "http", path = %filepath, error = %e, "task attachment write failed");
+                actix_web::error::ErrorInternalServerError("Write error")
+            })?;
 
         let file_type = filename.rsplit('.').next().unwrap_or("").to_string();
 
@@ -208,7 +199,7 @@ pub async fn download_attachment(
     let file_path: String = row.get("file_path");
     let file_iv: Option<String> = row.try_get("file_iv").ok();
 
-    match fs::read(&file_path).await {
+    match crate::storage::get(&file_path).await {
         Ok(bytes) => {
             let body = match file_iv.as_deref().filter(|v| !v.is_empty()) {
                 Some(iv) => decrypt_binary(iv, &bytes).map_err(|e| {
@@ -257,8 +248,8 @@ pub async fn delete_attachment(
     let file_path: String = row.get("file_path");
     // Best-effort blob cleanup: the row is already gone, so a stale file cannot
     // be re-fetched.
-    if let Err(e) = fs::remove_file(&file_path).await {
-        error!(target: "http", user_id, attachment_id, error = ?e, "task attachment blob remove failed");
+    if let Err(e) = crate::storage::delete(&file_path).await {
+        error!(target: "http", user_id, attachment_id, error = %e, "task attachment blob remove failed");
     }
 
     Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))

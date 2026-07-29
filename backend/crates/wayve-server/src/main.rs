@@ -45,6 +45,7 @@ mod scheduler;
 mod scim;
 mod slack_oauth;
 mod startup;
+mod storage;
 mod tasks;
 mod tickets;
 mod user_stories;

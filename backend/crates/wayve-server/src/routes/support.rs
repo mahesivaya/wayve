@@ -8,7 +8,6 @@ use actix_multipart::Multipart;
 use actix_web::{Error, delete, http::header, patch};
 use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
-use tokio::{fs, io::AsyncWriteExt};
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 use wayve_security::encryption::{decrypt_binary, encrypt_binary};
@@ -404,12 +403,6 @@ pub async fn upload_ticket_attachments(
         return Ok(HttpResponse::NotFound().finish());
     }
 
-    let upload_dir = "./uploads";
-    fs::create_dir_all(upload_dir).await.map_err(|e| {
-        error!(target: "http", error = ?e, "upload dir create failed");
-        actix_web::error::ErrorInternalServerError("Dir error")
-    })?;
-
     let mut saved: Vec<SupportAttachmentView> = Vec::new();
 
     while let Some(item) = payload.next().await {
@@ -425,10 +418,8 @@ pub async fn upload_ticket_attachments(
         let filename = raw_filename.replace(['/', '\\'], "");
 
         let file_id = Uuid::new_v4().to_string();
-        let filepath = format!(
-            "{}/support_{}_{}_{}",
-            upload_dir, ticket_id, file_id, filename
-        );
+        let filepath =
+            crate::storage::stored_path(&format!("support_{ticket_id}_{file_id}_{filename}"));
 
         let mut size: i64 = 0;
         let mut plaintext: Vec<u8> = Vec::new();
@@ -443,14 +434,12 @@ pub async fn upload_ticket_attachments(
             actix_web::error::ErrorInternalServerError("File encrypt error")
         })?;
 
-        let mut f = fs::File::create(&filepath).await.map_err(|e| {
-            error!(target: "http", path = %filepath, error = ?e, "support attachment create failed");
-            actix_web::error::ErrorInternalServerError("File create error")
-        })?;
-        f.write_all(&encrypted_bytes).await.map_err(|e| {
-            error!(target: "http", path = %filepath, error = ?e, "support attachment write failed");
-            actix_web::error::ErrorInternalServerError("Write error")
-        })?;
+        crate::storage::put(&filepath, encrypted_bytes)
+            .await
+            .map_err(|e| {
+                error!(target: "http", path = %filepath, error = %e, "support attachment write failed");
+                actix_web::error::ErrorInternalServerError("Write error")
+            })?;
 
         let file_type = filename.rsplit('.').next().unwrap_or("").to_string();
 
@@ -539,7 +528,7 @@ pub async fn download_ticket_attachment(
     let file_path: String = row.get("file_path");
     let file_iv: Option<String> = row.try_get("file_iv").ok();
 
-    match fs::read(&file_path).await {
+    match crate::storage::get(&file_path).await {
         Ok(bytes) => {
             let body = match file_iv.as_deref().filter(|v| !v.is_empty()) {
                 Some(iv) => decrypt_binary(iv, &bytes).map_err(|e| {
@@ -587,8 +576,8 @@ pub async fn delete_ticket_attachment(
         return Err(AppError::NotFound("attachment"));
     };
     let file_path: String = row.get("file_path");
-    if let Err(e) = fs::remove_file(&file_path).await {
-        error!(target: "http", user_id, attachment_id, error = ?e, "support attachment blob remove failed");
+    if let Err(e) = crate::storage::delete(&file_path).await {
+        error!(target: "http", user_id, attachment_id, error = %e, "support attachment blob remove failed");
     }
 
     Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
