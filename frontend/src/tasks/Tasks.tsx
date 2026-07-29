@@ -44,6 +44,8 @@ import { JiraBadge } from "./JiraPanel";
 import { GitlabBadge } from "./GitlabBadge";
 import TaskStatusIcon from "./TaskStatusIcon";
 import FigmaLinks from "../integrations/FigmaLinks";
+import AiFixPanel from "../aifix/AiFixPanel";
+import type { AiFixApi } from "../api/aiFix";
 import "./tasks.css";
 
 // P1 is the most important, P5 the least — the number *is* the rank, so the
@@ -491,8 +493,10 @@ export type TasksConfig = {
     // Optional: on-demand AI pass that labels duplicate/similar tickets. Only
     // the Tickets board wires this (see api/tickets.ts).
     findRelated?: () => Promise<RelatedResult>;
-    // Optional: dispatch the Claude Code CI fixer for one ticket. Tickets only.
-    aiFix?: (id: number) => Promise<{ reused_fix_from: number | null }>;
+    // Optional: the full AI-fix client (dispatch, diff, edit, commit/push/PR)
+    // for this board's collection. Set it and the edit surface renders the
+    // review panel inline. Tickets and User Stories wire it; Tasks don't.
+    aiFixPanel?: AiFixApi;
     // Optional: attachment endpoints for this board's item type. Tasks hit
     // /api/tasks/…, Tickets hit /api/workspace-tickets/… — the board just calls
     // these. Only wired when `features.attachments` is on.
@@ -513,8 +517,10 @@ export type TasksConfig = {
     statusSummary?: boolean;
     // Shows the "Find related" (AI duplicate/similar) toolbar button. Tickets only.
     findRelated?: boolean;
-    // Shows the "Fix with AI" button in the edit modal. Tickets only.
-    aiFix?: boolean;
+    // Lowest priority *number* eligible for an AI fix. P1 is Highest, so this
+    // is a floor: 4 lets P4 (Low) and P5 (Lowest) through, 5 only P5. Defaults
+    // to 4. The backend enforces the real gate.
+    aiFixMinPriority?: number;
     // Shows a dedicated "Type" column (Bug/Feature/… badge) in the list-view
     // table instead of rendering the badge inline after the name. Tickets only.
     typeColumn?: boolean;
@@ -904,32 +910,8 @@ export default function Tasks({
     }
   }, [config, loadTasks]);
 
-  // "Fix with AI": dispatch the Claude Code CI fixer for the ticket being edited.
-  // The fix runs in GitHub Actions and opens a PR — this just kicks it off.
-  const [aiFixBusy, setAiFixBusy] = useState(false);
-  const [aiFixMsg, setAiFixMsg] = useState("");
-  const runAiFix = useCallback(
-    async (id: number) => {
-      if (!config.api.aiFix) return;
-      setAiFixBusy(true);
-      setAiFixMsg("");
-      try {
-        const r = await config.api.aiFix(id);
-        setAiFixMsg(
-          r.reused_fix_from
-            ? `Fix started in CI (reusing the fix from #${r.reused_fix_from}). Open the ticket to review the diff.`
-            : "Fix started in CI. Open the ticket to review the diff."
-        );
-      } catch (err) {
-        setAiFixMsg(
-          err instanceof Error ? err.message : "Couldn't start the AI fix."
-        );
-      } finally {
-        setAiFixBusy(false);
-      }
-    },
-    [config]
-  );
+  // Dispatching a fix, showing its diff and driving Commit → Push → Create PR
+  // all live in <AiFixPanel>, rendered inside the edit surface below.
 
   // The load is deferred to a timeout so the effect body doesn't synchronously
   // call setState, which React 19 flags as a cascading-render risk.
@@ -2469,23 +2451,6 @@ export default function Tasks({
                     <span>Create more</span>
                   </label>
                 )}
-                {isEditing &&
-                  editingId !== null &&
-                  config.features.aiFix &&
-                  config.api.aiFix &&
-                  // The AI fixer is limited to the low-stakes end of the scale —
-                  // P4 (Low) and P5 (Lowest). The backend enforces the same gate.
-                  priority >= 4 && (
-                    <button
-                      type="button"
-                      className="task-ai-fix-btn"
-                      onClick={() => void runAiFix(editingId)}
-                      disabled={aiFixBusy}
-                      data-tooltip="Have Claude propose a fix in CI, then review the diff on the ticket"
-                    >
-                      {aiFixBusy ? "Starting…" : "Fix with AI"}
-                    </button>
-                  )}
                 <button
                   type="submit"
                   className="primary"
@@ -2501,10 +2466,17 @@ export default function Tasks({
                       : `Create ${config.labels.lowerSingular}`}
                 </button>
               </div>
-              {aiFixMsg && (
-                <p className="task-ai-fix-msg" role="status">
-                  {aiFixMsg}
-                </p>
+              {/* AI fix, inline: opening an item shows Claude's diff, the
+                  editable file contents and Commit → Push → Create PR right
+                  here, so a developer never has to navigate away to act on it. */}
+              {isEditing && editingId !== null && config.api.aiFixPanel && (
+                <AiFixPanel
+                  itemId={editingId}
+                  api={config.api.aiFixPanel}
+                  canFix={priority >= (config.features.aiFixMinPriority ?? 4)}
+                  kind={config.labels.lowerSingular}
+                  onChanged={() => void loadTasks()}
+                />
               )}
             </div>
           </form>

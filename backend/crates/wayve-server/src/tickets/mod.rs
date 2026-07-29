@@ -16,6 +16,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(handler::ai_fix_ticket)
         .service(handler::get_ai_fix_state)
         .service(handler::record_ai_fix_diff)
+        .service(handler::edit_ai_fix)
         .service(handler::commit_ai_fix)
         .service(handler::push_ai_fix)
         .service(handler::open_ai_fix_pr)

@@ -239,6 +239,67 @@ const VISIBLE_SCOPE: &str = "((support_ticket_id IS NULL
           OR ($2::INTEGER IS NOT NULL AND user_id = $2)))
      OR ($3::BOOLEAN AND support_ticket_id IS NOT NULL))";
 
+/// The stories equivalent of `VISIBLE_SCOPE`: a story belongs to exactly one
+/// owner and there is no bug-derived variant, so ownership is the whole rule.
+/// `$3` (manage-bugs) is bound but deliberately inert — `AND FALSE` keeps the
+/// placeholder typed so both targets share one four-bind query shape.
+const STORY_VISIBLE_SCOPE: &str = "((($1::INTEGER IS NOT NULL AND organization_id = $1)
+      OR ($2::INTEGER IS NOT NULL AND user_id = $2))
+     OR ($3::BOOLEAN AND FALSE))";
+
+/// The two boards that run the AI-fix pipeline. Both carry an identical set of
+/// `ai_fix_*` columns, so every step below (dispatch → CI callback → commit →
+/// push → PR) is written against this rather than against one table.
+#[derive(Clone, Copy)]
+pub struct AiFixTarget {
+    /// Table holding the `ai_fix_*` columns.
+    pub table: &'static str,
+    /// WHERE fragment binding `$1` org_id, `$2` uid, `$3` manage_bugs, `$4` id.
+    pub scope: &'static str,
+    /// `ticket` | `story`. Selects the CI workflow input, the commit subject and
+    /// the `ai-fix/<kind>-<id>` branch name.
+    pub kind: &'static str,
+    /// Label for `AppError::NotFound`.
+    pub not_found: &'static str,
+    /// Lowest priority *number* eligible for an automated fix. P1 is Highest, so
+    /// a larger number is a lower priority: tickets open up at P4 (Low), stories
+    /// only at P5 (Lowest).
+    pub min_priority: i16,
+    /// Whether this table records resolutions that `recall` can mine for a
+    /// worked example. Only tickets carry `resolution_summary`.
+    pub has_recall: bool,
+    /// `audit_log.resource_type` for rows of this table.
+    pub resource_type: &'static str,
+    /// `audit_log.action` when a fix is dispatched.
+    pub audit_requested: &'static str,
+    /// `audit_log.action` when the reviewed fix reaches an open PR.
+    pub audit_pr_opened: &'static str,
+}
+
+pub const TICKET_TARGET: AiFixTarget = AiFixTarget {
+    table: "workspace_tickets",
+    scope: VISIBLE_SCOPE,
+    kind: "ticket",
+    not_found: "workspace ticket",
+    min_priority: 4,
+    has_recall: true,
+    resource_type: "workspace_ticket",
+    audit_requested: "workspace_ticket_ai_fix_requested",
+    audit_pr_opened: "workspace_ticket_ai_fix_pr_opened",
+};
+
+pub const STORY_TARGET: AiFixTarget = AiFixTarget {
+    table: "user_stories",
+    scope: STORY_VISIBLE_SCOPE,
+    kind: "story",
+    not_found: "user story",
+    min_priority: 5,
+    has_recall: false,
+    resource_type: "user_story",
+    audit_requested: "user_story_ai_fix_requested",
+    audit_pr_opened: "user_story_ai_fix_pr_opened",
+};
+
 /// On-demand AI pass: ask Claude to group the caller's visible tickets into
 /// `duplicate` / `similar` clusters and label them (`related_to` = the group's
 /// canonical = min id; `relation_kind` = how it relates). Re-runnable: it first
@@ -359,11 +420,7 @@ pub async fn find_related_tickets(req: HttpRequest, pool: web::Data<PgPool>) -> 
     })))
 }
 
-/// Dispatch the Claude Code CI fixer for a ticket: recall a similar past fix (if
-/// any) to pass as a worked example, then trigger the GitHub Actions workflow
-/// which checks out the repo, has Claude implement + verify the fix, and opens a
-/// PR. Requires `tickets:manage` (it opens PRs on the repo) plus `GITHUB_TOKEN` +
-/// `GITHUB_REPO` configured. The fix runs entirely in CI — this only kicks it off.
+/// `POST /workspace-tickets/{id}/ai-fix` — dispatch the fixer for a ticket.
 #[post("/workspace-tickets/{id}/ai-fix")]
 #[instrument(target = "http", skip(req, pool, path))]
 pub async fn ai_fix_ticket(
@@ -371,18 +428,44 @@ pub async fn ai_fix_ticket(
     pool: web::Data<PgPool>,
     path: web::Path<i32>,
 ) -> AppResult {
+    dispatch_ai_fix(req, pool, path.into_inner(), TICKET_TARGET).await
+}
+
+/// `POST /user-stories/{id}/ai-fix` — the same pipeline for a P5 story.
+#[post("/user-stories/{id}/ai-fix")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn ai_fix_story(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> AppResult {
+    dispatch_ai_fix(req, pool, path.into_inner(), STORY_TARGET).await
+}
+
+/// Dispatch the Claude Code CI fixer for one item: recall a similar past fix (if
+/// the target keeps resolutions) to pass as a worked example, then trigger the
+/// GitHub Actions workflow which checks out the repo, has Claude implement +
+/// verify the fix, and posts the diff back. Requires `tickets:manage` (it
+/// eventually opens PRs on the repo) plus `GITHUB_TOKEN` + `GITHUB_REPO`. The fix
+/// runs entirely in CI — this only kicks it off.
+async fn dispatch_ai_fix(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    id: i32,
+    target: AiFixTarget,
+) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let id = path.into_inner();
     let owner = statuses::owner_for_user(pool.get_ref(), user_id).await?;
     let (org_id, uid) = owner_ids(owner);
     let manage_bugs = can_manage_bug_tickets(&req, pool.get_ref(), user_id).await;
     if !manage_bugs {
         return Err(AppError::Forbidden);
     }
+    let (table, scope) = (target.table, target.scope);
 
-    // The target ticket, scoped to the caller's view.
+    // The target row, scoped to the caller's view.
     let row = sqlx::query(&format!(
-        "SELECT name, description, priority FROM workspace_tickets WHERE id = $4 AND {VISIBLE_SCOPE}"
+        "SELECT name, description, priority FROM {table} WHERE id = $4 AND {scope}"
     ))
     .bind(org_id)
     .bind(uid)
@@ -390,72 +473,77 @@ pub async fn ai_fix_ticket(
     .bind(id)
     .fetch_optional(pool.get_ref())
     .await?
-    .ok_or(AppError::NotFound("workspace ticket"))?;
+    .ok_or(AppError::NotFound(target.not_found))?;
     let name: String = row.get("name");
     let description: String = row.get("description");
     let priority: i16 = row.get("priority");
 
-    // The AI fixer is limited to the low-stakes end of the scale — P4 (Low) and
-    // P5 (Lowest). The UI hides the button above that; this is the
-    // authoritative gate.
-    if priority < 4 {
-        return Err(AppError::bad_request(
-            "AI fix is available only for P4 and P5 tickets",
-        ));
+    // The AI fixer is limited to the low-stakes end of the scale. P1 is Highest,
+    // so eligibility is a *floor* on the number: tickets from P4 (Low) down,
+    // stories only at P5 (Lowest). The UI hides the button above that; this is
+    // the authoritative gate.
+    if priority < target.min_priority {
+        return Err(AppError::bad_request(format!(
+            "AI fix is available only for P{}+ {}s",
+            target.min_priority, target.kind
+        )));
     }
 
     // Recall a resolved ticket with a stored fix that is the same kind of issue,
     // to hand the fixer as a worked example (cold-start: none until fixes accrue).
-    let resolved = sqlx::query(&format!(
-        "SELECT id, name, description, resolution_summary FROM workspace_tickets
-         WHERE resolution_summary IS NOT NULL AND id <> $4 AND {VISIBLE_SCOPE}"
-    ))
-    .bind(org_id)
-    .bind(uid)
-    .bind(manage_bugs)
-    .bind(id)
-    .fetch_all(pool.get_ref())
-    .await?;
-    let candidates: Vec<crate::tickets::recall::ResolvedTicket> = resolved
-        .iter()
-        .map(|r| crate::tickets::recall::ResolvedTicket {
-            id: r.get("id"),
-            name: r.get("name"),
-            description: r.get("description"),
-            summary: r
-                .try_get("resolution_summary")
-                .ok()
-                .flatten()
-                .unwrap_or_default(),
-        })
-        .collect();
-    let matched = crate::tickets::recall::find_similar_fix(
-        pool.get_ref(),
-        (id, &name, &description),
-        &candidates,
-    )
-    .await;
-    let (past_summary, past_commit) = match matched {
-        Some(mid) => {
-            let m = sqlx::query(
-                "SELECT resolution_summary, resolution_commit FROM workspace_tickets WHERE id = $1",
-            )
+    // Only tickets record resolutions, so a story dispatches without an example.
+    let mut matched: Option<i32> = None;
+    let mut past_summary = String::new();
+    let mut past_commit = String::new();
+    if target.has_recall {
+        let resolved = sqlx::query(&format!(
+            "SELECT id, name, description, resolution_summary FROM {table}
+             WHERE resolution_summary IS NOT NULL AND id <> $4 AND {scope}"
+        ))
+        .bind(org_id)
+        .bind(uid)
+        .bind(manage_bugs)
+        .bind(id)
+        .fetch_all(pool.get_ref())
+        .await?;
+        let candidates: Vec<crate::tickets::recall::ResolvedTicket> = resolved
+            .iter()
+            .map(|r| crate::tickets::recall::ResolvedTicket {
+                id: r.get("id"),
+                name: r.get("name"),
+                description: r.get("description"),
+                summary: r
+                    .try_get("resolution_summary")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default(),
+            })
+            .collect();
+        matched = crate::tickets::recall::find_similar_fix(
+            pool.get_ref(),
+            (id, &name, &description),
+            &candidates,
+        )
+        .await;
+        if let Some(mid) = matched {
+            let m = sqlx::query(&format!(
+                "SELECT resolution_summary, resolution_commit FROM {table} WHERE id = $1"
+            ))
             .bind(mid)
             .fetch_one(pool.get_ref())
             .await?;
-            (
-                m.try_get::<Option<String>, _>("resolution_summary")
-                    .ok()
-                    .flatten()
-                    .unwrap_or_default(),
-                m.try_get::<Option<String>, _>("resolution_commit")
-                    .ok()
-                    .flatten()
-                    .unwrap_or_default(),
-            )
+            past_summary = m
+                .try_get::<Option<String>, _>("resolution_summary")
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+            past_commit = m
+                .try_get::<Option<String>, _>("resolution_commit")
+                .ok()
+                .flatten()
+                .unwrap_or_default();
         }
-        None => (String::new(), String::new()),
-    };
+    }
 
     // Kick off the CI fixer workflow via the GitHub API.
     let Some(gh_token) = crate::github_proxy::effective_github_token(&req, pool.get_ref()).await
@@ -473,6 +561,8 @@ pub async fn ai_fix_ticket(
     let url = format!(
         "{api_base}/repos/{gh_owner}/{gh_repo}/actions/workflows/ai-fix-ticket.yml/dispatches"
     );
+    // `target_kind` tells the workflow which board to post the diff back to; it
+    // defaults to "ticket" there so an older workflow file still works.
     let body = serde_json::json!({
         "ref": "main",
         "inputs": {
@@ -481,6 +571,7 @@ pub async fn ai_fix_ticket(
             "ticket_description": description,
             "past_fix_summary": past_summary,
             "past_fix_commit": past_commit,
+            "target_kind": target.kind,
         }
     });
     let resp = reqwest::Client::new()
@@ -502,15 +593,15 @@ pub async fn ai_fix_ticket(
         )));
     }
 
-    // Mark the ticket "running" and clear any prior review state, so the ticket
-    // page shows a pending state until CI posts the diff back (POST .../ai-fix-diff).
-    sqlx::query(
-        "UPDATE workspace_tickets
+    // Mark the row "running" and clear any prior review state, so the editor
+    // shows a pending state until CI posts the diff back (POST .../ai-fix-diff).
+    sqlx::query(&format!(
+        "UPDATE {table}
             SET ai_fix_status = 'running', ai_fix_diff = NULL, ai_fix_files = NULL,
                 ai_fix_base_sha = NULL, ai_fix_commit_sha = NULL, ai_fix_branch = NULL,
                 ai_fix_pr_url = NULL, updated_at = NOW()
-          WHERE id = $1",
-    )
+          WHERE id = $1"
+    ))
     .bind(id)
     .execute(pool.get_ref())
     .await?;
@@ -520,8 +611,8 @@ pub async fn ai_fix_ticket(
         &req,
         crate::audit::AuditEvent {
             actor_user_id: user_id,
-            action: "workspace_ticket_ai_fix_requested",
-            resource_type: "workspace_ticket",
+            action: target.audit_requested,
+            resource_type: target.resource_type,
             resource_id: Some(id.to_string()),
             metadata: Some(serde_json::json!({ "reused_fix_from": matched })),
         },
@@ -596,9 +687,7 @@ pub async fn record_resolution(
     Ok(HttpResponse::Ok().json(serde_json::json!({ "recorded": true })))
 }
 
-/// GET /workspace-tickets/{id}/ai-fix — the ticket's AI-fix review state so the
-/// ticket page can show a pending spinner, the diff + the Commit/Push/Create-PR
-/// buttons (enabled by `status`), or the opened PR link. Same gate as dispatch.
+/// GET /workspace-tickets/{id}/ai-fix — the ticket's AI-fix review state.
 #[get("/workspace-tickets/{id}/ai-fix")]
 #[instrument(target = "http", skip(req, pool, path))]
 pub async fn get_ai_fix_state(
@@ -606,18 +695,48 @@ pub async fn get_ai_fix_state(
     pool: web::Data<PgPool>,
     path: web::Path<i32>,
 ) -> AppResult {
+    ai_fix_state(req, pool, path.into_inner(), TICKET_TARGET).await
+}
+
+/// GET /user-stories/{id}/ai-fix — the same, for a story.
+#[get("/user-stories/{id}/ai-fix")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn get_story_ai_fix_state(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> AppResult {
+    ai_fix_state(req, pool, path.into_inner(), STORY_TARGET).await
+}
+
+/// The item's AI-fix review state, so the editor can show a pending spinner, the
+/// diff + changed files + the Commit/Push/Create-PR buttons (enabled by
+/// `status`), or the opened PR link.
+///
+/// This is a READ, and it is deliberately gated more loosely than dispatch: if
+/// you can see the item, you can see the fix proposed for it. `manage_bugs` is
+/// still resolved, but only to widen the visibility predicate (it is what makes
+/// bug-derived tickets visible) — never to reject. Requiring `tickets:manage`
+/// here as well meant a platform admin browsing the board in the normal session
+/// mode is downscoped to personal, gets a 403, and sees an empty panel even
+/// though a reviewed diff is sitting on the row. Starting, editing, committing,
+/// pushing and opening the PR all keep the strict gate.
+async fn ai_fix_state(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    id: i32,
+    target: AiFixTarget,
+) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let id = path.into_inner();
     let owner = statuses::owner_for_user(pool.get_ref(), user_id).await?;
     let (org_id, uid) = owner_ids(owner);
     let manage_bugs = can_manage_bug_tickets(&req, pool.get_ref(), user_id).await;
-    if !manage_bugs {
-        return Err(AppError::Forbidden);
-    }
+    let (table, scope) = (target.table, target.scope);
 
     let row = sqlx::query(&format!(
-        "SELECT ai_fix_status, ai_fix_diff, ai_fix_commit_sha, ai_fix_branch, ai_fix_pr_url
-         FROM workspace_tickets WHERE id = $4 AND {VISIBLE_SCOPE}"
+        "SELECT ai_fix_status, ai_fix_diff, ai_fix_files, ai_fix_commit_sha,
+                ai_fix_branch, ai_fix_pr_url
+         FROM {table} WHERE id = $4 AND {scope}"
     ))
     .bind(org_id)
     .bind(uid)
@@ -625,11 +744,21 @@ pub async fn get_ai_fix_state(
     .bind(id)
     .fetch_optional(pool.get_ref())
     .await?
-    .ok_or(AppError::NotFound("workspace ticket"))?;
+    .ok_or(AppError::NotFound(target.not_found))?;
+
+    // `files` is what actually gets committed (the diff is for reading), so the
+    // editor needs it to offer per-file edits before the Commit step.
+    let files: Vec<AiFixFile> = row
+        .try_get::<Option<serde_json::Value>, _>("ai_fix_files")
+        .ok()
+        .flatten()
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default();
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "status": row.try_get::<Option<String>, _>("ai_fix_status").ok().flatten(),
         "diff": row.try_get::<Option<String>, _>("ai_fix_diff").ok().flatten(),
+        "files": files,
         "commit_sha": row.try_get::<Option<String>, _>("ai_fix_commit_sha").ok().flatten(),
         "branch": row.try_get::<Option<String>, _>("ai_fix_branch").ok().flatten(),
         "pr_url": row.try_get::<Option<String>, _>("ai_fix_pr_url").ok().flatten(),
@@ -659,11 +788,7 @@ pub struct AiFixDiffInput {
     pub files: Vec<AiFixFile>,
 }
 
-/// POST /workspace-tickets/{id}/ai-fix-diff — the CI callback. The fixer makes +
-/// verifies the change and posts the diff (for review) plus the changed files +
-/// base SHA (to build the commit later). It does NOT touch Git — the ticket
-/// page's Commit/Push/Create-PR buttons do. Authenticated by an API key mapped
-/// to a tickets:manage user, exactly like `record_resolution`.
+/// POST /workspace-tickets/{id}/ai-fix-diff — the CI callback for a ticket.
 #[post("/workspace-tickets/{id}/ai-fix-diff")]
 #[instrument(target = "http", skip(req, pool, path, body))]
 pub async fn record_ai_fix_diff(
@@ -672,11 +797,37 @@ pub async fn record_ai_fix_diff(
     path: web::Path<i32>,
     body: web::Json<AiFixDiffInput>,
 ) -> AppResult {
+    record_ai_fix(req, pool, path.into_inner(), body, TICKET_TARGET).await
+}
+
+/// POST /user-stories/{id}/ai-fix-diff — the CI callback for a story.
+#[post("/user-stories/{id}/ai-fix-diff")]
+#[instrument(target = "http", skip(req, pool, path, body))]
+pub async fn record_story_ai_fix_diff(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+    body: web::Json<AiFixDiffInput>,
+) -> AppResult {
+    record_ai_fix(req, pool, path.into_inner(), body, STORY_TARGET).await
+}
+
+/// The CI callback. The fixer makes + verifies the change and posts the diff (for
+/// review) plus the changed files + base SHA (to build the commit later). It does
+/// NOT touch Git — the editor's Commit/Push/Create-PR buttons do. Authenticated
+/// by an API key mapped to a tickets:manage user, exactly like `record_resolution`.
+async fn record_ai_fix(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    id: i32,
+    body: web::Json<AiFixDiffInput>,
+    target: AiFixTarget,
+) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let id = path.into_inner();
     if !can_manage_bug_tickets_service(pool.get_ref(), user_id).await {
         return Err(AppError::Forbidden);
     }
+    let table = target.table;
     let status = match body.status.trim() {
         s @ ("ready" | "no_change" | "error") => s.to_string(),
         _ => return Err(AppError::BadRequest("invalid status".into())),
@@ -698,14 +849,14 @@ pub async fn record_ai_fix_diff(
         (None, None, None)
     };
 
-    let updated = sqlx::query_scalar::<_, i32>(
-        "UPDATE workspace_tickets
+    let updated = sqlx::query_scalar::<_, i32>(&format!(
+        "UPDATE {table}
             SET ai_fix_status = $1, ai_fix_diff = $2, ai_fix_base_sha = $3, ai_fix_files = $4,
                 ai_fix_commit_sha = NULL, ai_fix_branch = NULL, ai_fix_pr_url = NULL,
                 updated_at = NOW()
           WHERE id = $5
-         RETURNING id",
-    )
+         RETURNING id"
+    ))
     .bind(&status)
     .bind(diff)
     .bind(base_sha)
@@ -714,7 +865,7 @@ pub async fn record_ai_fix_diff(
     .fetch_optional(pool.get_ref())
     .await?;
     if updated.is_none() {
-        return Err(AppError::NotFound("workspace ticket"));
+        return Err(AppError::NotFound(target.not_found));
     }
     Ok(HttpResponse::Ok().json(serde_json::json!({ "recorded": true })))
 }
@@ -780,6 +931,7 @@ async fn ai_fix_row(
     req: &HttpRequest,
     pool: &PgPool,
     id: i32,
+    target: AiFixTarget,
 ) -> Result<(i32, sqlx::postgres::PgRow), AppError> {
     let user_id = get_user_id_from_request(req).ok_or(AppError::Unauthorized)?;
     let owner = statuses::owner_for_user(pool, user_id).await?;
@@ -788,10 +940,11 @@ async fn ai_fix_row(
     if !manage_bugs {
         return Err(AppError::Forbidden);
     }
+    let (table, scope) = (target.table, target.scope);
     let row = sqlx::query(&format!(
         "SELECT name, ai_fix_status, ai_fix_diff, ai_fix_files, ai_fix_base_sha,
                 ai_fix_commit_sha, ai_fix_branch, ai_fix_pr_url
-         FROM workspace_tickets WHERE id = $4 AND {VISIBLE_SCOPE}"
+         FROM {table} WHERE id = $4 AND {scope}"
     ))
     .bind(org_id)
     .bind(uid)
@@ -799,8 +952,99 @@ async fn ai_fix_row(
     .bind(id)
     .fetch_optional(pool)
     .await?
-    .ok_or(AppError::NotFound("workspace ticket"))?;
+    .ok_or(AppError::NotFound(target.not_found))?;
     Ok((user_id, row))
+}
+
+/// Replacement contents for the reviewed fix, sent by the editor's "Save edits"
+/// action before Commit. Same shape as the CI callback's `files`.
+#[derive(serde::Deserialize)]
+pub struct AiFixEditInput {
+    pub files: Vec<AiFixFile>,
+    /// Regenerated unified diff to display. Optional — omitted leaves the
+    /// CI-reported diff in place.
+    pub diff: Option<String>,
+}
+
+/// POST /workspace-tickets/{id}/ai-fix-edit — save developer edits to a ticket fix.
+#[post("/workspace-tickets/{id}/ai-fix-edit")]
+#[instrument(target = "http", skip(req, pool, path, body))]
+pub async fn edit_ai_fix(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+    body: web::Json<AiFixEditInput>,
+) -> AppResult {
+    save_ai_fix_edits(req, pool, path.into_inner(), body, TICKET_TARGET).await
+}
+
+/// POST /user-stories/{id}/ai-fix-edit — save developer edits to a story fix.
+#[post("/user-stories/{id}/ai-fix-edit")]
+#[instrument(target = "http", skip(req, pool, path, body))]
+pub async fn edit_story_ai_fix(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+    body: web::Json<AiFixEditInput>,
+) -> AppResult {
+    save_ai_fix_edits(req, pool, path.into_inner(), body, STORY_TARGET).await
+}
+
+/// Overwrite the reviewed fix's file contents with the developer's edits, so the
+/// Commit step builds *their* version rather than Claude's. Only valid while the
+/// fix is still under review — once a commit object exists, its content is
+/// already on GitHub and editing here would silently diverge from it.
+async fn save_ai_fix_edits(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    id: i32,
+    body: web::Json<AiFixEditInput>,
+    target: AiFixTarget,
+) -> AppResult {
+    let (_user, row) = ai_fix_row(&req, pool.get_ref(), id, target).await?;
+    let status: Option<String> = row.try_get("ai_fix_status").ok().flatten();
+    if status.as_deref() != Some("ready") {
+        return Err(AppError::bad_request(
+            "Only a fix that is still awaiting review can be edited",
+        ));
+    }
+    let body = body.into_inner();
+    if body.files.is_empty() {
+        return Err(AppError::bad_request("A fix must change at least one file"));
+    }
+    // Base64 is how file bytes survive JSON; reject anything that would later
+    // blow up at blob-create time, when the error is far harder to attribute.
+    for f in &body.files {
+        if f.path.trim().is_empty() {
+            return Err(AppError::bad_request("A changed file needs a path"));
+        }
+        use base64::Engine as _;
+        if !f.deleted
+            && base64::engine::general_purpose::STANDARD
+                .decode(f.content.as_bytes())
+                .is_err()
+        {
+            return Err(AppError::bad_request(format!(
+                "Contents for {} are not valid base64",
+                f.path
+            )));
+        }
+    }
+    let files_json = serde_json::to_value(&body.files)
+        .map_err(|_| AppError::internal("could not serialize files"))?;
+    let table = target.table;
+    sqlx::query(&format!(
+        "UPDATE {table} SET ai_fix_files = $1,
+                ai_fix_diff = COALESCE($2, ai_fix_diff), updated_at = NOW()
+          WHERE id = $3"
+    ))
+    .bind(files_json)
+    .bind(body.diff)
+    .bind(id)
+    .execute(pool.get_ref())
+    .await?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "saved": true })))
 }
 
 /// POST /workspace-tickets/{id}/ai-fix-commit — step 1 of 3. Builds a Git commit
@@ -813,8 +1057,27 @@ pub async fn commit_ai_fix(
     pool: web::Data<PgPool>,
     path: web::Path<i32>,
 ) -> AppResult {
-    let id = path.into_inner();
-    let (_user, row) = ai_fix_row(&req, pool.get_ref(), id).await?;
+    commit_ai_fix_for(req, pool, path.into_inner(), TICKET_TARGET).await
+}
+
+/// POST /user-stories/{id}/ai-fix-commit — step 1 of 3 for a story.
+#[post("/user-stories/{id}/ai-fix-commit")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn commit_story_ai_fix(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> AppResult {
+    commit_ai_fix_for(req, pool, path.into_inner(), STORY_TARGET).await
+}
+
+async fn commit_ai_fix_for(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    id: i32,
+    target: AiFixTarget,
+) -> AppResult {
+    let (_user, row) = ai_fix_row(&req, pool.get_ref(), id, target).await?;
 
     if let Some(sha) = row
         .try_get::<Option<String>, _>("ai_fix_commit_sha")
@@ -911,7 +1174,7 @@ pub async fn commit_ai_fix(
         &format!("{repo}/git/commits"),
         &token,
         Some(serde_json::json!({
-            "message": format!("fix(ticket): #{id} {name}"),
+            "message": format!("fix({}): #{id} {name}", target.kind),
             "tree": tree_sha,
             "parents": [base_sha],
         })),
@@ -924,10 +1187,11 @@ pub async fn commit_ai_fix(
         .ok_or_else(|| AppError::internal("commit create returned no sha"))?
         .to_string();
 
-    sqlx::query(
-        "UPDATE workspace_tickets SET ai_fix_commit_sha = $1, ai_fix_status = 'committed',
-                updated_at = NOW() WHERE id = $2",
-    )
+    let table = target.table;
+    sqlx::query(&format!(
+        "UPDATE {table} SET ai_fix_commit_sha = $1, ai_fix_status = 'committed',
+                updated_at = NOW() WHERE id = $2"
+    ))
     .bind(&commit_sha)
     .bind(id)
     .execute(pool.get_ref())
@@ -945,8 +1209,27 @@ pub async fn push_ai_fix(
     pool: web::Data<PgPool>,
     path: web::Path<i32>,
 ) -> AppResult {
-    let id = path.into_inner();
-    let (_user, row) = ai_fix_row(&req, pool.get_ref(), id).await?;
+    push_ai_fix_for(req, pool, path.into_inner(), TICKET_TARGET).await
+}
+
+/// POST /user-stories/{id}/ai-fix-push — step 2 of 3 for a story.
+#[post("/user-stories/{id}/ai-fix-push")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn push_story_ai_fix(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> AppResult {
+    push_ai_fix_for(req, pool, path.into_inner(), STORY_TARGET).await
+}
+
+async fn push_ai_fix_for(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    id: i32,
+    target: AiFixTarget,
+) -> AppResult {
+    let (_user, row) = ai_fix_row(&req, pool.get_ref(), id, target).await?;
 
     if let Some(branch) = row
         .try_get::<Option<String>, _>("ai_fix_branch")
@@ -963,7 +1246,8 @@ pub async fn push_ai_fix(
         return Err(AppError::bad_request("Commit the fix before pushing"));
     };
     let branch = format!(
-        "ai-fix/ticket-{id}-{}",
+        "ai-fix/{}-{id}-{}",
+        target.kind,
         &commit_sha[..commit_sha.len().min(7)]
     );
 
@@ -977,10 +1261,11 @@ pub async fn push_ai_fix(
     )
     .await?;
 
-    sqlx::query(
-        "UPDATE workspace_tickets SET ai_fix_branch = $1, ai_fix_status = 'pushed',
-                updated_at = NOW() WHERE id = $2",
-    )
+    let table = target.table;
+    sqlx::query(&format!(
+        "UPDATE {table} SET ai_fix_branch = $1, ai_fix_status = 'pushed',
+                updated_at = NOW() WHERE id = $2"
+    ))
     .bind(&branch)
     .bind(id)
     .execute(pool.get_ref())
@@ -998,8 +1283,27 @@ pub async fn open_ai_fix_pr(
     pool: web::Data<PgPool>,
     path: web::Path<i32>,
 ) -> AppResult {
-    let id = path.into_inner();
-    let (user_id, row) = ai_fix_row(&req, pool.get_ref(), id).await?;
+    open_ai_fix_pr_for(req, pool, path.into_inner(), TICKET_TARGET).await
+}
+
+/// POST /user-stories/{id}/ai-fix-open-pr — step 3 of 3 for a story.
+#[post("/user-stories/{id}/ai-fix-open-pr")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn open_story_ai_fix_pr(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> AppResult {
+    open_ai_fix_pr_for(req, pool, path.into_inner(), STORY_TARGET).await
+}
+
+async fn open_ai_fix_pr_for(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    id: i32,
+    target: AiFixTarget,
+) -> AppResult {
+    let (user_id, row) = ai_fix_row(&req, pool.get_ref(), id, target).await?;
 
     if let Some(existing) = row
         .try_get::<Option<String>, _>("ai_fix_pr_url")
@@ -1025,11 +1329,12 @@ pub async fn open_ai_fix_pr(
         &format!("{api_base}/repos/{gh_owner}/{gh_repo}/pulls"),
         &token,
         Some(serde_json::json!({
-            "title": format!("fix(ticket): #{id} {name}"),
+            "title": format!("fix({}): #{id} {name}", target.kind),
             "head": branch,
             "base": "main",
             "body": format!(
-                "Automated fix for Workspace ticket #{id}, reviewed in-app before opening.\n\n🤖 Generated by the AI-fix pipeline (Claude Code). CI must pass before merge."
+                "Automated fix for Workspace {} #{id}, reviewed in-app before opening.\n\n🤖 Generated by the AI-fix pipeline (Claude Code). CI must pass before merge.",
+                target.kind
             ),
         })),
         false,
@@ -1041,10 +1346,11 @@ pub async fn open_ai_fix_pr(
         .unwrap_or_default()
         .to_string();
 
-    sqlx::query(
-        "UPDATE workspace_tickets SET ai_fix_pr_url = $1, ai_fix_status = 'pr_opened',
-                updated_at = NOW() WHERE id = $2",
-    )
+    let table = target.table;
+    sqlx::query(&format!(
+        "UPDATE {table} SET ai_fix_pr_url = $1, ai_fix_status = 'pr_opened',
+                updated_at = NOW() WHERE id = $2"
+    ))
     .bind(&pr_url)
     .bind(id)
     .execute(pool.get_ref())
@@ -1055,8 +1361,8 @@ pub async fn open_ai_fix_pr(
         &req,
         crate::audit::AuditEvent {
             actor_user_id: user_id,
-            action: "workspace_ticket_ai_fix_pr_opened",
-            resource_type: "workspace_ticket",
+            action: target.audit_pr_opened,
+            resource_type: target.resource_type,
             resource_id: Some(id.to_string()),
             metadata: Some(serde_json::json!({ "pr_url": pr_url, "branch": branch })),
         },

@@ -71,62 +71,8 @@ export const findRelatedTickets = async () => {
   return result;
 };
 
-// Kick off the Claude Code CI fixer for one ticket: the backend recalls a
-// similar past fix and dispatches the ai-fix-ticket workflow, which opens a PR.
-export type AiFixResult = {
-  dispatched: boolean;
-  reused_fix_from: number | null;
-};
-
-export const aiFixTicket = async (id: number) =>
-  apiFetchJson<AiFixResult>(`/api/workspace-tickets/${id}/ai-fix`, {
-    method: "POST",
-  });
-
-// The AI-fix review state for one ticket. CI posts the diff + changed files here
-// (status 'ready'); the ticket page then drives three GitHub steps in order:
-// Commit ('committed') → Push ('pushed') → Create PR ('pr_opened'). 'running' =
-// CI in flight; 'no_change'/'error' = the run produced nothing to review.
-export type AiFixStatus =
-  | "running"
-  | "ready"
-  | "committed"
-  | "pushed"
-  | "pr_opened"
-  | "no_change"
-  | "error";
-
-export type AiFixState = {
-  status: AiFixStatus | null;
-  diff: string | null;
-  commit_sha: string | null;
-  branch: string | null;
-  pr_url: string | null;
-};
-
-export const getAiFixState = async (id: number) =>
-  apiFetchJson<AiFixState>(`/api/workspace-tickets/${id}/ai-fix`);
-
-// Step 1: create the commit object on GitHub from the reviewed change. Idempotent.
-export const commitAiFix = async (id: number) =>
-  apiFetchJson<{ commit_sha: string }>(
-    `/api/workspace-tickets/${id}/ai-fix-commit`,
-    { method: "POST" }
-  );
-
-// Step 2: create the branch ref pointing at the commit (the "push"). Idempotent.
-export const pushAiFix = async (id: number) =>
-  apiFetchJson<{ branch: string }>(`/api/workspace-tickets/${id}/ai-fix-push`, {
-    method: "POST",
-  });
-
-// Step 3: open the PR from the pushed branch into main. Idempotent — returns the
-// existing PR url if one was already opened.
-export const openAiFixPr = async (id: number) =>
-  apiFetchJson<{ pr_url: string }>(
-    `/api/workspace-tickets/${id}/ai-fix-open-pr`,
-    { method: "POST" }
-  );
+// The AI-fix pipeline (dispatch, diff, edit, commit/push/PR) is collection-
+// agnostic and lives in api/aiFix.ts — use `ticketAiFix` from there.
 
 // Ticket attachments. Ticket-scoped mirror of the task-attachment API (see
 // api/tasks.ts). The backend serializes rows with `task_id` set to the ticket

@@ -22,11 +22,6 @@ vi.mock("../../api/tickets", () => ({
   ]),
   updateTicketApi: vi.fn(),
   deleteTicketApi: vi.fn(),
-  aiFixTicket: vi.fn(),
-  getAiFixState: vi.fn().mockResolvedValue(null),
-  commitAiFix: vi.fn(),
-  pushAiFix: vi.fn(),
-  openAiFixPr: vi.fn(),
 }));
 
 vi.mock("../../api/taskStatuses", () => ({

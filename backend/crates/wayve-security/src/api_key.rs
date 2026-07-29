@@ -159,11 +159,12 @@ pub fn required_scope(method: &str, path: &str) -> Option<&'static str> {
             }
         }
         // Management surfaces — keys, RBAC, audit, billing, org/platform admin.
-        // `workspace-tickets` is here so the AI-fix CI callbacks (resolution +
-        // ai-fix-diff) authenticate with an internal management key; the handlers
-        // then enforce tickets:manage on the key's user.
+        // `workspace-tickets` and `user-stories` are here so the AI-fix CI
+        // callbacks (resolution + ai-fix-diff) authenticate with an internal
+        // management key; the handlers then enforce tickets:manage on the key's
+        // user. Both boards run the same pipeline, so both need the same reach.
         "admin" | "keys" | "audit" | "organizations" | "platform" | "billing" | "v1"
-        | "workspace-tickets" | "pr-notify" => "admin",
+        | "workspace-tickets" | "user-stories" | "pr-notify" => "admin",
         _ => return None,
     };
     Some(scope)
@@ -493,6 +494,12 @@ mod tests {
         // AI-fix CI callbacks authenticate with an internal management key.
         assert_eq!(
             required_scope("POST", "/api/workspace-tickets/7/ai-fix-diff"),
+            Some("admin")
+        );
+        // Stories run the same AI-fix pipeline, so their CI callback needs the
+        // same reach as the ticket one.
+        assert_eq!(
+            required_scope("POST", "/api/user-stories/7/ai-fix-diff"),
             Some("admin")
         );
         assert_eq!(required_scope("GET", "/ws/chat"), Some("chat:write"));
