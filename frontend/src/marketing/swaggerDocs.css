@@ -1,12 +1,20 @@
-/* Layout shell for the Swagger UI page inside MarketingShell. Keeps
-   the editorial chrome (header / footer) in the same column width as
-   other /docs/* pages while letting the Swagger UI itself span the
-   full panel width below the intro. */
+/* Layout shell for the Swagger UI page inside MarketingShell. The page
+   is left-aligned and uncapped: everything starts at the left edge of
+   the docs pane and uses whatever width is available, rather than
+   sitting in a centred column. Prose stays readable because
+   `.docs-content` caps paragraphs at 75ch (see docsShell.css). */
 
 .swagger-docs-shell {
-  max-width: 1100px;
-  margin: 0 auto;
+  max-width: none;
+  width: 100%;
+  margin: 0;
   padding: 2.5rem 1.5rem 4rem;
+  /* `#root` still carries the Vite template's `text-align: center`, which
+     inherits into Swagger UI's rendered markdown (the info description,
+     its headings and lists set no alignment of their own) and centres
+     every line. Reset it for the whole page instead of touching #root,
+     which the rest of the app relies on. */
+  text-align: left;
 }
 
 .swagger-docs-header {
@@ -53,6 +61,16 @@
   border: 1px solid var(--color-border, #e5e7eb);
   overflow: hidden;
   margin-top: 1.5rem;
+}
+
+/* Swagger UI centres its own content in a 1460px `.wrapper` box. On a
+   wide monitor that leaves the operations floating in the middle of the
+   panel, so drop the cap and the auto margins — every block (info,
+   servers, auth, tag sections) then starts flush left. */
+.swagger-docs-ui .swagger-ui .wrapper {
+  max-width: none;
+  margin: 0;
+  padding: 0 24px;
 }
 
 /* Trim Swagger UI's default outer padding so the spec body lines up
