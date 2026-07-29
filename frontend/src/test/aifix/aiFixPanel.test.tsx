@@ -17,10 +17,19 @@ const READY: AiFixState = {
   pr_url: null,
 };
 
-const makeApi = (state: AiFixState | null): AiFixApi => ({
-  getState: vi.fn().mockImplementation(() =>
-    state ? Promise.resolve(state) : Promise.reject(new Error("no access"))
-  ),
+// "No run yet" is a resolved empty state — distinct from a failed read, which
+// the panel now reports rather than passing off as "nothing here".
+const EMPTY: AiFixState = {
+  status: null,
+  diff: null,
+  files: [],
+  commit_sha: null,
+  branch: null,
+  pr_url: null,
+};
+
+const makeApi = (state: AiFixState = EMPTY): AiFixApi => ({
+  getState: vi.fn().mockResolvedValue(state),
   start: vi.fn().mockResolvedValue({ reused_fix_from: null }),
   saveEdits: vi.fn().mockResolvedValue({ saved: true }),
   commit: vi.fn().mockResolvedValue({ commit_sha: "abc1234def" }),
@@ -45,7 +54,7 @@ describe("AiFixPanel", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("renders nothing when the priority is not eligible and no run exists", async () => {
-    const api = makeApi(null);
+    const api = makeApi();
     const { container } = render(
       <AiFixPanel itemId={1} api={api} canFix={false} />
     );
@@ -53,8 +62,20 @@ describe("AiFixPanel", () => {
     expect(container.querySelector(".aifix")).toBeNull();
   });
 
+  // Regression: a 403 on the read used to look exactly like "no fix yet", so a
+  // reviewed diff sitting on the row silently never appeared.
+  it("reports a failed read instead of looking empty", async () => {
+    const api = makeApi();
+    (api.getState as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error("forbidden")
+    );
+    render(<AiFixPanel itemId={1} api={api} canFix={false} />);
+    expect(await screen.findByText(/Couldn’t load the AI fix/)).toBeTruthy();
+    expect(screen.getByText(/forbidden/)).toBeTruthy();
+  });
+
   it("offers Fix with AI when the priority is eligible", async () => {
-    render(<AiFixPanel itemId={1} api={makeApi(null)} canFix />);
+    render(<AiFixPanel itemId={1} api={makeApi()} canFix />);
     expect(
       await screen.findByRole("button", { name: /Fix with AI/ })
     ).toBeTruthy();

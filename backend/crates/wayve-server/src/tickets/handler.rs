@@ -711,7 +711,16 @@ pub async fn get_story_ai_fix_state(
 
 /// The item's AI-fix review state, so the editor can show a pending spinner, the
 /// diff + changed files + the Commit/Push/Create-PR buttons (enabled by
-/// `status`), or the opened PR link. Same gate as dispatch.
+/// `status`), or the opened PR link.
+///
+/// This is a READ, and it is deliberately gated more loosely than dispatch: if
+/// you can see the item, you can see the fix proposed for it. `manage_bugs` is
+/// still resolved, but only to widen the visibility predicate (it is what makes
+/// bug-derived tickets visible) — never to reject. Requiring `tickets:manage`
+/// here as well meant a platform admin browsing the board in the normal session
+/// mode is downscoped to personal, gets a 403, and sees an empty panel even
+/// though a reviewed diff is sitting on the row. Starting, editing, committing,
+/// pushing and opening the PR all keep the strict gate.
 async fn ai_fix_state(
     req: HttpRequest,
     pool: web::Data<PgPool>,
@@ -722,9 +731,6 @@ async fn ai_fix_state(
     let owner = statuses::owner_for_user(pool.get_ref(), user_id).await?;
     let (org_id, uid) = owner_ids(owner);
     let manage_bugs = can_manage_bug_tickets(&req, pool.get_ref(), user_id).await;
-    if !manage_bugs {
-        return Err(AppError::Forbidden);
-    }
     let (table, scope) = (target.table, target.scope);
 
     let row = sqlx::query(&format!(

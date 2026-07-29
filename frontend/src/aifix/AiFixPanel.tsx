@@ -43,6 +43,7 @@ export default function AiFixPanel({
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [openPath, setOpenPath] = useState<string | null>(null);
   const [savingEdits, setSavingEdits] = useState(false);
+  const [loadError, setLoadError] = useState("");
   // The last status we rendered, so `load` can tell a fresh run from a poll.
   const seenStatus = useRef<AiFixState["status"]>(null);
 
@@ -52,6 +53,7 @@ export default function AiFixPanel({
     if (!Number.isFinite(itemId)) return;
     try {
       const next = await api.getState(itemId);
+      setLoadError("");
       // A new run replaces the change under review, so any half-typed edits
       // against the old one are stale. Tracked on a ref rather than inside the
       // setState updater, which must stay pure.
@@ -61,8 +63,14 @@ export default function AiFixPanel({
       }
       seenStatus.current = next.status;
       setState(next);
-    } catch {
+    } catch (err) {
       setState(null);
+      // A failed read used to render as "no fix yet", which is
+      // indistinguishable from a real empty state — the reviewed diff simply
+      // never appeared and nothing said why.
+      setLoadError(
+        err instanceof Error ? err.message : "Couldn't load the AI fix state."
+      );
     }
   }, [api, itemId]);
 
@@ -165,8 +173,9 @@ export default function AiFixPanel({
   const showStart =
     canFix && (!status || status === "no_change" || status === "error");
 
-  // Nothing to say: no run has ever happened and this item can't start one.
-  if (!status && !showStart) return null;
+  // Nothing to say: no run has ever happened, this item can't start one, and
+  // the read didn't fail in a way worth reporting.
+  if (!status && !showStart && !loadError) return null;
 
   const reviewable = REVIEWABLE.includes(
     status as (typeof REVIEWABLE)[number]
@@ -200,6 +209,12 @@ export default function AiFixPanel({
           </button>
         )}
       </div>
+
+      {loadError && (
+        <p className="aifix-msg" role="status">
+          Couldn’t load the AI fix for this item: {loadError}
+        </p>
+      )}
 
       {status === "running" && (
         <p className="aifix-muted">
