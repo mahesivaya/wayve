@@ -15,7 +15,7 @@ use actix_web::{Error, HttpResponse, web};
 use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
 use sqlx::{FromRow, PgPool, Row};
-use tokio::{fs, io::AsyncWriteExt};
+use tokio::fs;
 use tracing::{error, instrument};
 use uuid::Uuid;
 use wayve_security::encryption::{decrypt_binary, encrypt_binary};
@@ -395,7 +395,7 @@ pub async fn delete_folder(
     }
 
     for p in paths {
-        let _ = fs::remove_file(&p).await;
+        let _ = crate::storage::delete(&p).await;
     }
     Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
 }
@@ -466,11 +466,6 @@ pub async fn upload_documents(
         (-1, 0) // -1 = unlimited; platform-wide set is not capped here
     };
 
-    let upload_dir = "./uploads";
-    fs::create_dir_all(upload_dir)
-        .await
-        .map_err(|_| actix_web::error::ErrorInternalServerError("Dir error"))?;
-
     let mut folder_id: Option<i64> = None;
 
     while let Some(item) = payload.next().await {
@@ -512,7 +507,7 @@ pub async fn upload_documents(
         let filename = raw_filename.replace(['/', '\\'], "");
 
         let disk_id = Uuid::new_v4().to_string();
-        let filepath = format!("{upload_dir}/{disk_id}_{filename}");
+        let filepath = crate::storage::stored_path(&format!("{disk_id}_{filename}"));
 
         let mut size: i64 = 0;
         let mut plaintext = Vec::new();
@@ -535,12 +530,12 @@ pub async fn upload_documents(
 
         let (file_iv, encrypted_bytes) = encrypt_binary(&plaintext)
             .map_err(|_| actix_web::error::ErrorInternalServerError("Encrypt error"))?;
-        let mut f = fs::File::create(&filepath)
+        crate::storage::put(&filepath, encrypted_bytes)
             .await
-            .map_err(|_| actix_web::error::ErrorInternalServerError("File create error"))?;
-        f.write_all(&encrypted_bytes)
-            .await
-            .map_err(|_| actix_web::error::ErrorInternalServerError("Write error"))?;
+            .map_err(|e| {
+                error!(target: "http", path = %filepath, error = %e, "document write failed");
+                actix_web::error::ErrorInternalServerError("Write error")
+            })?;
 
         let file_type = filename.rsplit('.').next().unwrap_or("").to_string();
 
@@ -597,7 +592,7 @@ pub async fn download_document(
     let file_path: String = row.get("file_path");
     let file_iv: Option<String> = row.get("file_iv");
 
-    match fs::read(&file_path).await {
+    match crate::storage::get(&file_path).await {
         Ok(bytes) => {
             let body = match file_iv.as_deref().filter(|v| !v.is_empty()) {
                 Some(iv) => decrypt_binary(iv, &bytes).map_err(|e| {
@@ -682,7 +677,7 @@ pub async fn delete_document(
 
     match removed {
         Some(file_path) => {
-            let _ = fs::remove_file(&file_path).await;
+            let _ = crate::storage::delete(&file_path).await;
             Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
         }
         None => {
@@ -746,22 +741,18 @@ pub async fn create_document(
         }
     }
 
-    let upload_dir = "./uploads";
-    fs::create_dir_all(upload_dir)
-        .await
-        .map_err(|_| AppError::internal("Dir error"))?;
     let disk_id = Uuid::new_v4().to_string();
     let safe_name = name.replace(['/', '\\'], "");
-    let filepath = format!("{upload_dir}/{disk_id}_{safe_name}");
+    let filepath = crate::storage::stored_path(&format!("{disk_id}_{safe_name}"));
 
     let (file_iv, encrypted_bytes) =
         encrypt_binary(plaintext).map_err(|_| AppError::internal("Encrypt error"))?;
-    let mut f = fs::File::create(&filepath)
+    crate::storage::put(&filepath, encrypted_bytes)
         .await
-        .map_err(|_| AppError::internal("File create error"))?;
-    f.write_all(&encrypted_bytes)
-        .await
-        .map_err(|_| AppError::internal("Write error"))?;
+        .map_err(|e| {
+            error!(target: "http", path = %filepath, error = %e, "document create failed");
+            AppError::internal("Write error")
+        })?;
 
     let file_type = match name.rsplit_once('.') {
         Some((_, ext)) if !ext.is_empty() => ext.to_string(),
@@ -819,7 +810,7 @@ pub async fn get_document_content(
     let file_path: String = row.get("file_path");
     let file_iv: Option<String> = row.get("file_iv");
 
-    let bytes = match fs::read(&file_path).await {
+    let bytes = match crate::storage::get(&file_path).await {
         Ok(b) => b,
         Err(_) => return Ok(HttpResponse::NotFound().finish()),
     };
@@ -869,12 +860,12 @@ pub async fn update_document_content(
     let size = plaintext.len() as i64;
     let (file_iv, encrypted_bytes) =
         encrypt_binary(plaintext).map_err(|_| AppError::internal("Encrypt error"))?;
-    let mut f = fs::File::create(&file_path)
+    crate::storage::put(&file_path, encrypted_bytes)
         .await
-        .map_err(|_| AppError::internal("File create error"))?;
-    f.write_all(&encrypted_bytes)
-        .await
-        .map_err(|_| AppError::internal("Write error"))?;
+        .map_err(|e| {
+            error!(target: "http", path = %file_path, error = %e, "document content write failed");
+            AppError::internal("Write error")
+        })?;
 
     sqlx::query(
         "UPDATE org_documents SET file_iv = $1, size = $2, updated_at = NOW()

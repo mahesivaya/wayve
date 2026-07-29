@@ -14,7 +14,6 @@ use actix_multipart::Multipart;
 use actix_web::http::header;
 use actix_web::{delete, put};
 use futures_util::StreamExt;
-use tokio::{fs, io::AsyncWriteExt};
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 use wayve_security::jwt::{get_user_id_from_request, mode_from_request};
@@ -296,19 +295,12 @@ pub async fn upload_avatar(
         })));
     };
 
-    let dir = "./uploads/avatars";
-    fs::create_dir_all(dir).await.map_err(|e| {
-        error!(target: "http", error = ?e, "avatar dir create failed");
-        AppError::internal("avatar dir")
-    })?;
-    // UUID filename — never the user-supplied name (no path traversal).
-    let filepath = format!("{}/{}.{}", dir, Uuid::new_v4(), ext);
-    let mut f = fs::File::create(&filepath).await.map_err(|e| {
-        error!(target: "http", path = %filepath, error = ?e, "avatar create failed");
-        AppError::internal("avatar create")
-    })?;
-    f.write_all(&bytes).await.map_err(|e| {
-        error!(target: "http", path = %filepath, error = ?e, "avatar write failed");
+    // UUID filename — never the user-supplied name (no path traversal). Avatars
+    // are the one upload stored as plaintext: they are served inline as images,
+    // and the bytes carry nothing the account itself doesn't already reveal.
+    let filepath = crate::storage::stored_path(&format!("avatars/{}.{}", Uuid::new_v4(), ext));
+    crate::storage::put(&filepath, bytes).await.map_err(|e| {
+        error!(target: "http", path = %filepath, error = %e, "avatar write failed");
         AppError::internal("avatar write")
     })?;
 
@@ -350,7 +342,7 @@ pub async fn get_avatar(
     let Some(stored) = avatar_path else {
         return Ok(HttpResponse::NotFound().finish());
     };
-    let bytes = match fs::read(&stored).await {
+    let bytes = match crate::storage::get(&stored).await {
         Ok(b) => b,
         Err(_) => return Ok(HttpResponse::NotFound().finish()),
     };
@@ -382,7 +374,7 @@ pub async fn delete_avatar(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
             .await?
             .flatten();
     if let Some(path) = existing {
-        let _ = fs::remove_file(&path).await;
+        let _ = crate::storage::delete(&path).await;
     }
 
     sqlx::query("UPDATE users SET avatar_path = NULL WHERE id = $1")

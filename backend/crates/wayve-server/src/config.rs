@@ -147,6 +147,33 @@ pub fn redis_url() -> String {
     var_or("REDIS_URL", "redis://redis:6379")
 }
 
+/// Bucket holding user-uploaded files. `None` — the default, and what local dev
+/// runs with — keeps every upload on the local disk under `./uploads`. Setting
+/// it switches new writes to S3; reads still fall back to disk so a deployment
+/// mid-migration serves both. See `storage.rs`.
+pub fn s3_bucket() -> Option<String> {
+    var_opt("S3_BUCKET")
+}
+
+/// Region of `s3_bucket()`. Only read when a bucket is configured; the SDK's own
+/// chain (AWS_REGION, instance metadata) fills in when this is unset.
+pub fn s3_region() -> Option<String> {
+    var_opt("S3_REGION").or_else(|| var_opt("AWS_REGION"))
+}
+
+/// Key prefix inside the bucket, so one bucket can host more than one
+/// environment. Stored paths keep their historical `./uploads/...` shape in the
+/// database; this is only the S3-side namespace.
+pub fn s3_prefix() -> String {
+    var_or("S3_PREFIX", "uploads").trim_matches('/').to_string()
+}
+
+/// Endpoint override for S3-compatible stores (MinIO, LocalStack) and for tests
+/// that point the SDK at a mock server. Unset in production.
+pub fn s3_endpoint() -> Option<String> {
+    var_opt("S3_ENDPOINT")
+}
+
 /// Path to an offline MaxMind GeoLite2-City `.mmdb`. When unset the User Logs
 /// "Location" column is simply blank.
 pub fn geoip_db_path() -> Option<String> {

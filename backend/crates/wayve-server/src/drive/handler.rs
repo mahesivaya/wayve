@@ -7,7 +7,6 @@ use actix_web::{Error, HttpResponse, delete, get, patch, web};
 use chrono::NaiveDateTime;
 use futures_util::StreamExt;
 use sqlx::{FromRow, PgPool, Row};
-use tokio::{fs, io::AsyncWriteExt};
 use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 use wayve_security::encryption::{decrypt_binary, encrypt_binary};
@@ -69,13 +68,6 @@ pub async fn upload_file(
             actix_web::error::ErrorInternalServerError("DB error")
         })?;
 
-    let upload_dir = "./uploads";
-
-    fs::create_dir_all(upload_dir).await.map_err(|e| {
-        error!(target: "http", error = ?e, "upload dir create failed");
-        actix_web::error::ErrorInternalServerError("Dir error")
-    })?;
-
     // Optional target folder, sent as a plain text part alongside the files and
     // validated once below before any INSERT happens.
     let mut folder_id: Option<i64> = None;
@@ -133,7 +125,7 @@ pub async fn upload_file(
         let filename = raw_filename.replace(['/', '\\'], "");
 
         let file_id = Uuid::new_v4().to_string();
-        let filepath = format!("{}/{}_{}", upload_dir, file_id, filename);
+        let filepath = crate::storage::stored_path(&format!("{file_id}_{filename}"));
 
         let mut size: i64 = 0;
         let mut plaintext = Vec::new();
@@ -161,15 +153,12 @@ pub async fn upload_file(
             actix_web::error::ErrorInternalServerError("File encrypt error")
         })?;
 
-        let mut f = fs::File::create(&filepath).await.map_err(|e| {
-            error!(target: "http", path = %filepath, error = ?e, "file create failed");
-            actix_web::error::ErrorInternalServerError("File create error")
-        })?;
-
-        f.write_all(&encrypted_bytes).await.map_err(|e| {
-            error!(target: "http", path = %filepath, error = ?e, "file write failed");
-            actix_web::error::ErrorInternalServerError("Write error")
-        })?;
+        crate::storage::put(&filepath, encrypted_bytes)
+            .await
+            .map_err(|e| {
+                error!(target: "http", path = %filepath, error = %e, "file write failed");
+                actix_web::error::ErrorInternalServerError("Write error")
+            })?;
 
         let file_type = filename.rsplit('.').next().unwrap_or("").to_string();
 
@@ -457,8 +446,8 @@ pub async fn delete_file(
 
     // Blob removal is best-effort: the row is already gone, so a stray file on
     // disk is unreachable and harmless. Log it, but do not fail the request.
-    if let Err(e) = fs::remove_file(&file_path).await {
-        warn!(target: "http", user_id, file_id, path = %file_path, error = ?e, "delete_file blob remove failed");
+    if let Err(e) = crate::storage::delete(&file_path).await {
+        warn!(target: "http", user_id, file_id, path = %file_path, error = %e, "delete_file blob remove failed");
     }
 
     if let Ok(owner) = resolve_owner(pool.get_ref(), user_id).await {
@@ -507,7 +496,7 @@ async fn serve_file_parts(
     file_path: String,
     file_iv: Option<String>,
 ) -> AppResult {
-    match fs::read(&file_path).await {
+    match crate::storage::get(&file_path).await {
         Ok(bytes) => {
             let body = match file_iv.as_deref().filter(|value| !value.is_empty()) {
                 Some(iv) => decrypt_binary(iv, &bytes).map_err(|e| {
@@ -525,7 +514,7 @@ async fn serve_file_parts(
                 .body(body))
         }
         Err(e) => {
-            error!(target: "http", user_id, file_id, error = ?e, "download_file open failed");
+            error!(target: "http", user_id, file_id, error = %e, "download_file open failed");
             Ok(HttpResponse::NotFound().finish())
         }
     }

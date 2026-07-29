@@ -51,6 +51,10 @@ moka = { version = "0.12", features = ["future"] }
 mimalloc = { version = "0.1", default-features = false }
 hickory-resolver = { version = "0.26", default-features = false, features = ["tokio", "system-config"] }
 async-trait = "0.1"
+# S3 storage for user-uploaded files (drive, attachments, documents, avatars).
+# Off unless S3_BUCKET is set — see storage.rs and ENVIRONMENTS.md.
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-sdk-s3 = "1"
 # Offline IP geolocation (GeoLite2-City .mmdb) for the User Logs page.
 maxminddb = "0.28"
 

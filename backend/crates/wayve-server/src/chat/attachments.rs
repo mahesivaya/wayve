@@ -18,7 +18,6 @@ use actix_web::http::header;
 use actix_web::{Error, HttpResponse, get, post, web};
 use futures_util::StreamExt;
 use sqlx::{PgPool, Row};
-use tokio::{fs, io::AsyncWriteExt};
 use tracing::{error, info, instrument};
 use uuid::Uuid;
 use wayve_security::encryption::{decrypt_binary, encrypt_binary};
@@ -38,12 +37,6 @@ pub async fn upload_chat_attachment(
         Some(id) => id,
         None => return Ok(HttpResponse::Unauthorized().finish()),
     };
-
-    let upload_dir = "./uploads";
-    fs::create_dir_all(upload_dir).await.map_err(|e| {
-        error!(target: "http", error = ?e, "upload dir create failed");
-        actix_web::error::ErrorInternalServerError("Dir error")
-    })?;
 
     let mut e2e = true;
     let mut filename: Option<String> = None;
@@ -79,7 +72,7 @@ pub async fn upload_chat_attachment(
         let clean = raw_filename.replace(['/', '\\'], "");
 
         let uuid = Uuid::new_v4().to_string();
-        let path = format!("{upload_dir}/{uuid}_{clean}");
+        let path = crate::storage::stored_path(&format!("{uuid}_{clean}"));
 
         let mut plaintext = Vec::new();
         while let Some(chunk) = field.next().await {
@@ -97,12 +90,8 @@ pub async fn upload_chat_attachment(
             actix_web::error::ErrorInternalServerError("File encrypt error")
         })?;
 
-        let mut f = fs::File::create(&path).await.map_err(|e| {
-            error!(target: "http", path = %path, error = ?e, "attachment create failed");
-            actix_web::error::ErrorInternalServerError("File create error")
-        })?;
-        f.write_all(&encrypted).await.map_err(|e| {
-            error!(target: "http", path = %path, error = ?e, "attachment write failed");
+        crate::storage::put(&path, encrypted).await.map_err(|e| {
+            error!(target: "http", path = %path, error = %e, "attachment write failed");
             actix_web::error::ErrorInternalServerError("Write error")
         })?;
 
@@ -193,10 +182,10 @@ pub async fn download_chat_attachment(
     let file_path: String = row.get("file_path");
     let file_iv: Option<String> = row.try_get("file_iv").ok().flatten();
 
-    let bytes = match fs::read(&file_path).await {
+    let bytes = match crate::storage::get(&file_path).await {
         Ok(b) => b,
         Err(e) => {
-            error!(target: "http", user_id, attachment_id, error = ?e, "attachment read failed");
+            error!(target: "http", user_id, attachment_id, error = %e, "attachment read failed");
             return Ok(HttpResponse::NotFound().finish());
         }
     };

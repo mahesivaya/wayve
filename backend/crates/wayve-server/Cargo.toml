@@ -55,6 +55,10 @@ hickory-resolver.workspace = true
 async-trait.workspace = true
 maxminddb.workspace = true
 
+# Object storage for uploaded files. Dormant unless S3_BUCKET is set.
+aws-config.workspace = true
+aws-sdk-s3.workspace = true
+
 # Yahoo Mail (IMAP + MIME). lettre (above) handles SMTP send.
 async-imap.workspace = true
 tokio-rustls.workspace = true
