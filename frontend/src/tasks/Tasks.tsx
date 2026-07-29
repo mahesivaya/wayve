@@ -1595,6 +1595,10 @@ export default function Tasks({
     .filter(Boolean)
     .join(" ");
 
+  // Until a grip is dragged the table keeps its original layout exactly: tracks
+  // sized to the container, no horizontal scroll.
+  const hasCustomCols = Object.keys(colWidths).length > 0;
+
   // Below this a column is unreadable, and a mis-drag could otherwise shrink one
   // to nothing with no obvious way back.
   const MIN_COL_PX = 56;
@@ -2833,7 +2837,7 @@ export default function Tasks({
             {useTable ? (
               (listPlaceholder ?? (
                 <div
-                  className="task-table"
+                  className={`task-table${hasCustomCols ? " task-table--resized" : ""}`}
                   style={{ "--task-cols": tableCols } as React.CSSProperties}
                   role="table"
                 >
@@ -2966,7 +2970,7 @@ export default function Tasks({
                 </h3>
                 {useTable ? (
                   <div
-                    className="task-table"
+                    className={`task-table${hasCustomCols ? " task-table--resized" : ""}`}
                     style={{ "--task-cols": tableCols } as React.CSSProperties}
                     role="table"
                   >

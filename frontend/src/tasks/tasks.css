@@ -1648,9 +1648,15 @@
   grid-template-columns: var(--task-cols);
   align-items: center;
   column-gap: 16px;
-  /* Without this the rows would shrink to the scroll container instead of to
-     their columns, so widening one column would squash the others rather than
-     scroll. */
+}
+
+/* Only once a column has actually been dragged do rows size to their columns
+   instead of to the container. Applying this unconditionally would resolve the
+   title's `1fr` track against its content, so the table would start out wider
+   than the pane and scroll — the default layout has to look exactly as it did
+   before anyone touched a grip. */
+.task-table--resized .task-thead,
+.task-table--resized .task-trow {
   min-width: max-content;
 }
 

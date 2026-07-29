@@ -92,12 +92,16 @@ describe("list-view column resizing", () => {
     vi.restoreAllMocks();
   });
 
-  it("starts with the title column flexible", async () => {
+  it("starts with the title column flexible and the default layout untouched", async () => {
     renderTasks();
     await screen.findByText(/A ticket name long enough/);
     expect(table().style.getPropertyValue("--task-cols")).toContain(
       "minmax(0, 1fr)"
     );
+    // The content-sizing/scroll behaviour must stay off until a grip is
+    // dragged: switching it on unconditionally resolves the title's 1fr track
+    // against its content, so the table starts wider than the pane.
+    expect(table().className).not.toContain("task-table--resized");
   });
 
   it("widens the title column as the grip is dragged", async () => {
@@ -113,6 +117,8 @@ describe("list-view column resizing", () => {
       // The flexible track is gone — this column is now explicitly sized.
       expect(cols).not.toContain("minmax(0, 1fr)");
     });
+    // ...and only now do rows size to their columns and the table scroll.
+    expect(table().className).toContain("task-table--resized");
   });
 
   it("clamps a shrink at the minimum instead of collapsing the column", async () => {
@@ -147,6 +153,8 @@ describe("list-view column resizing", () => {
         "minmax(0, 1fr)"
       )
     );
+    // Resetting the last custom width returns the table to its default layout.
+    expect(table().className).not.toContain("task-table--resized");
   });
 
   it("ignores a malformed saved width rather than collapsing the column", async () => {
