@@ -2736,12 +2736,18 @@ CREATE TABLE IF NOT EXISTS email_contacts (
     user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     address       TEXT NOT NULL,          -- lowercased plaintext, for ILIKE search
     display_name  TEXT,                   -- best-seen RFC5322 display name
+    photo_url     TEXT,                   -- Google profile photo (People API), if known
     last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     message_count INTEGER NOT NULL DEFAULT 1,
     UNIQUE (user_id, address)
 );
+ALTER TABLE email_contacts ADD COLUMN IF NOT EXISTS photo_url TEXT;
 CREATE INDEX IF NOT EXISTS idx_email_contacts_user_addr
     ON email_contacts (user_id, address text_pattern_ops);
+
+-- Throttle marker for the People API photo sync (see email::people). NULL = never
+-- synced; the sync worker refreshes photos at most every few hours per account.
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS photos_synced_at TIMESTAMPTZ;
 
 GRANT INSERT, UPDATE, DELETE ON email_contacts TO wayve_app;
 ALTER TABLE email_contacts ENABLE ROW LEVEL SECURITY;

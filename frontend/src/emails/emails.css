@@ -1815,7 +1815,8 @@
   color: var(--color-text-primary);
 }
 
-/* Generated initial-avatar for each suggestion (contacts have no photo). */
+/* Avatar for each suggestion: a real photo (img) when known, else a generated
+   initial (span). Both share these box metrics. */
 .email-mention-avatar {
   flex: 0 0 auto;
   width: 24px;
@@ -1828,6 +1829,10 @@
   font-size: 12px;
   font-weight: 700;
   line-height: 1;
+}
+
+img.email-mention-avatar {
+  object-fit: cover;
 }
 
 .email-mention-item.active,

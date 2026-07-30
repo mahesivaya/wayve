@@ -85,7 +85,7 @@ pub async fn search_contacts(
 
     let pattern = format!("%{}%", escape_like(trimmed));
     let rows = sqlx::query(
-        "SELECT address, display_name FROM email_contacts \
+        "SELECT address, display_name, photo_url FROM email_contacts \
          WHERE user_id = $1 AND (address ILIKE $2 OR display_name ILIKE $2) \
          ORDER BY message_count DESC, last_seen_at DESC \
          LIMIT 10",
@@ -100,7 +100,12 @@ pub async fn search_contacts(
         .map(|r| {
             let address: String = r.get("address");
             let display_name: Option<String> = r.get("display_name");
-            serde_json::json!({ "address": address, "display_name": display_name })
+            let photo_url: Option<String> = r.get("photo_url");
+            serde_json::json!({
+                "address": address,
+                "display_name": display_name,
+                "photo_url": photo_url,
+            })
         })
         .collect();
 

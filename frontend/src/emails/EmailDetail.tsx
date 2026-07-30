@@ -14,7 +14,8 @@ import { updateEmailState, type InboxState } from "../api/sharedInboxes";
 import { APP_TIME_ZONE } from "../utils/datetime";
 import { useAuth } from "../auth/useAuth";
 import { useMentionSearch, mentionLabel } from "./useMentionSearch";
-import { avatarColor, avatarInitial } from "../shared/avatar";
+import { avatarColor } from "../shared/avatar";
+import ContactAvatar from "../shared/ContactAvatar";
 
 interface EmailDetailProps {
   selectedEmail: EmailItem | null;
@@ -678,15 +679,10 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
                       }}
                       onMouseEnter={() => mention.setIndex(i)}
                     >
-                      <span
-                        className="email-mention-avatar"
-                        aria-hidden="true"
-                        style={{
-                          background: avatarColor(mentionLabel(candidate)),
-                        }}
-                      >
-                        {avatarInitial(mentionLabel(candidate))}
-                      </span>
+                      <ContactAvatar
+                        photoUrl={candidate.photo_url}
+                        label={mentionLabel(candidate)}
+                      />
                       <span className="email-mention-label">
                         {mentionLabel(candidate)}
                       </span>

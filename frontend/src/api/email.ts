@@ -382,6 +382,8 @@ export const searchUsers = async (q: string): Promise<UserSearchResult[]> => {
 export type ContactSuggestion = {
   address: string;
   display_name: string | null;
+  // Real Google profile photo (People API), when known; else null → initials.
+  photo_url: string | null;
 };
 
 /**

@@ -18,7 +18,7 @@ import {
 } from "./internalEnvelope";
 import { sealSecureMessage } from "./secureSend";
 import { formatFileSize } from "./renderUtils";
-import { avatarColor, avatarInitial } from "../shared/avatar";
+import ContactAvatar from "../shared/ContactAvatar";
 
 import { useState, useEffect, useRef, type ChangeEvent } from "react";
 
@@ -440,15 +440,10 @@ export default function SendEmail({
                   }}
                   onMouseEnter={() => setContactIndex(i)}
                 >
-                  <span
-                    className="email-mention-avatar"
-                    aria-hidden="true"
-                    style={{
-                      background: avatarColor(c.display_name || c.address),
-                    }}
-                  >
-                    {avatarInitial(c.display_name || c.address)}
-                  </span>
+                  <ContactAvatar
+                    photoUrl={c.photo_url}
+                    label={c.display_name || c.address}
+                  />
                   {c.display_name && (
                     <span className="email-mention-label">
                       {c.display_name}

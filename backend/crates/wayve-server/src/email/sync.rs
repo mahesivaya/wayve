@@ -223,6 +223,16 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
                 warn!(target: "worker", account_id = account.id, error = %e, "calendar import (tick) failed")
             }
         }
+
+        // Real Google profile photos for the contacts typeahead. Throttled to a
+        // few hours per account inside sync_photos_for_account; reuses the token.
+        crate::email::people::sync_photos_for_account(
+            pool,
+            account.id,
+            account.user_id,
+            &token.access_token,
+        )
+        .await;
     }
 
     // Fresh mail landed, so drop the profile caches rather than let the Storage

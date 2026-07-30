@@ -11,6 +11,7 @@ pub mod oauth;
 mod oauth_flow;
 pub mod outlook;
 mod outlook_oauth;
+pub mod people;
 pub mod profile;
 pub mod provider;
 pub(crate) mod provider_lookup;

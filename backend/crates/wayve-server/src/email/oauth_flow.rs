@@ -83,11 +83,18 @@ fn google_oauth_url(client_id: &str, redirect_uri: &str, scope: &str, state: &st
 }
 
 fn gmail_scope() -> &'static str {
+    // contacts.readonly + contacts.other.readonly let the People API return
+    // saved-contact and auto-collected-contact photos, which back the real
+    // Google profile pictures in the recipient typeahead. Both are sensitive
+    // scopes: a user must re-connect Gmail to grant them, and older tokens
+    // without them get a 403 from People (handled gracefully in email::people).
     "https://www.googleapis.com/auth/userinfo.email \
      https://www.googleapis.com/auth/gmail.send \
      https://www.googleapis.com/auth/gmail.modify \
      https://www.googleapis.com/auth/gmail.readonly \
-     https://www.googleapis.com/auth/calendar.readonly"
+     https://www.googleapis.com/auth/calendar.readonly \
+     https://www.googleapis.com/auth/contacts.readonly \
+     https://www.googleapis.com/auth/contacts.other.readonly"
 }
 
 fn load_google_client() -> std::result::Result<Value, HttpResponse> {
@@ -492,6 +499,13 @@ pub async fn oauth_callback(
                 return HttpResponse::InternalServerError().body("Failed to save account");
             }
         };
+
+        // Fresh consent may have just granted the contacts scopes; clear the
+        // throttle so the next sync tick fetches Google profile photos.
+        let _ = sqlx::query("UPDATE email_accounts SET photos_synced_at = NULL WHERE id = $1")
+            .bind(account_id)
+            .execute(pool.get_ref())
+            .await;
 
         let pool_clone = pool.clone();
         let token_clone = access_token.to_string();
