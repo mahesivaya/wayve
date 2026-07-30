@@ -196,12 +196,14 @@ pub struct OutgoingAttachment {
 }
 
 /// Builds a `lettre` message with a plain-text body and optional attachments.
-/// `to` may be a comma-separated list. Shared by the dev SMTP path and the Gmail
-/// raw-MIME path so both emit identical `multipart/mixed` output rather than
-/// hand-rolled boundaries.
+/// `to` may be a comma-separated list; `cc` is a pre-split list of addresses.
+/// Shared by the dev SMTP path and the Gmail raw-MIME path so both emit identical
+/// `multipart/mixed` output rather than hand-rolled boundaries.
+#[allow(clippy::too_many_arguments)]
 pub fn build_message(
     from: &str,
     to: &str,
+    cc: &[String],
     subject: &str,
     body: &str,
     attachments: &[OutgoingAttachment],
@@ -229,6 +231,16 @@ pub fn build_message(
     }
     if !has_recipient {
         return Err(MailError::NoRecipients);
+    }
+    for addr in cc.iter().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        let mailbox: Mailbox =
+            clean_mailbox(addr)
+                .parse()
+                .map_err(|source| MailError::InvalidMailbox {
+                    field: "cc",
+                    source,
+                })?;
+        builder = builder.cc(mailbox);
     }
 
     if attachments.is_empty() {
@@ -261,6 +273,7 @@ pub fn build_message(
 #[instrument(target = "smtp", skip(body, attachments), fields(to, subject))]
 pub async fn send_mail_with_attachments(
     to: &str,
+    cc: &[String],
     subject: &str,
     body: &str,
     attachments: &[OutgoingAttachment],
@@ -273,7 +286,7 @@ pub async fn send_mail_with_attachments(
         from,
     } = crate::config::smtp().map_err(MailError::MissingEnv)?;
 
-    let message = build_message(&from, to, subject, body, attachments)?;
+    let message = build_message(&from, to, cc, subject, body, attachments)?;
     let mailer = build_transport(&host, port, user, pass)?;
     match mailer.send(message).await {
         Ok(_) => {
@@ -293,7 +306,7 @@ mod tests {
 
     #[test]
     fn build_message_plain_when_no_attachments() {
-        let msg = build_message("from@example.com", "to@example.com", "Hi", "Body", &[])
+        let msg = build_message("from@example.com", "to@example.com", &[], "Hi", "Body", &[])
             .unwrap_or_else(|e| panic!("build failed: {e}"));
         let raw = String::from_utf8_lossy(&msg.formatted()).to_string();
         assert!(raw.contains("To: to@example.com"));
@@ -310,6 +323,7 @@ mod tests {
         let msg = build_message(
             "from@example.com",
             "to@example.com",
+            &[],
             "Hi",
             "Body",
             &attachments,
@@ -323,16 +337,40 @@ mod tests {
 
     #[test]
     fn build_message_handles_multiple_recipients() {
-        let msg = build_message("from@example.com", "a@x.com, b@y.com", "Hi", "Body", &[])
-            .unwrap_or_else(|e| panic!("build failed: {e}"));
+        let msg = build_message(
+            "from@example.com",
+            "a@x.com, b@y.com",
+            &[],
+            "Hi",
+            "Body",
+            &[],
+        )
+        .unwrap_or_else(|e| panic!("build failed: {e}"));
         let raw = String::from_utf8_lossy(&msg.formatted()).to_string();
         assert!(raw.contains("a@x.com"));
         assert!(raw.contains("b@y.com"));
     }
 
     #[test]
+    fn build_message_includes_cc_header() {
+        let cc = vec!["c@z.com".to_string()];
+        let msg = build_message("from@example.com", "to@example.com", &cc, "Hi", "Body", &[])
+            .unwrap_or_else(|e| panic!("build failed: {e}"));
+        let raw = String::from_utf8_lossy(&msg.formatted()).to_string();
+        assert!(raw.contains("Cc: c@z.com"), "cc header missing: {raw}");
+    }
+
+    #[test]
+    fn build_message_omits_cc_when_empty() {
+        let msg = build_message("from@example.com", "to@example.com", &[], "Hi", "Body", &[])
+            .unwrap_or_else(|e| panic!("build failed: {e}"));
+        let raw = String::from_utf8_lossy(&msg.formatted()).to_string();
+        assert!(!raw.contains("Cc:"));
+    }
+
+    #[test]
     fn build_message_rejects_no_recipients() {
-        let err = build_message("from@example.com", "  ,  ", "Hi", "Body", &[]);
+        let err = build_message("from@example.com", "  ,  ", &[], "Hi", "Body", &[]);
         assert!(matches!(err, Err(MailError::NoRecipients)));
     }
 }

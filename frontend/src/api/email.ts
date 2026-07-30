@@ -43,6 +43,9 @@ export type SendEmailPayload = {
   to: string;
   subject: string;
   body: string;
+  // Cc recipients (e.g. reply-box @mentions). Honoured by the standard
+  // Gmail/Outlook/IMAP path, not the E2E secure send.
+  cc?: string[];
   // Standard-mailbox attachments only (Gmail/Outlook MIME, not E2E).
   attachments?: EmailComposeAttachment[];
 };
@@ -353,6 +356,26 @@ export const getUserByEmail = async (
   const body = await res.json();
   if (!body || typeof body !== "object") return null;
   return body as WayveRecipient;
+};
+
+/** One match from the tenant user-directory typeahead (`/api/users/search`). */
+export type UserSearchResult = {
+  id: number;
+  email: string;
+  username: string | null;
+};
+
+/**
+ * Tenant-scoped user-directory typeahead for the reply-box `@mention` picker.
+ * Returns `[]` for a short/empty query (the backend also enforces a 2-char
+ * minimum) so callers can debounce without special-casing.
+ */
+export const searchUsers = async (q: string): Promise<UserSearchResult[]> => {
+  const trimmed = q.trim();
+  if (trimmed.length < 2) return [];
+  return apiFetchJson<UserSearchResult[]>(
+    `/api/users/search?q=${encodeURIComponent(trimmed)}`
+  );
 };
 
 export type SendInternalPayload = {

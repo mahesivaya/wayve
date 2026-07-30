@@ -298,9 +298,13 @@ pub async fn send_via_imap(
 }
 
 fn build_message(from_email: &str, data: &SendEmailRequest) -> anyhow::Result<Message> {
-    Message::builder()
+    let mut builder = Message::builder()
         .from(from_email.parse().context("from address")?)
-        .to(data.to.parse().context("to address")?)
+        .to(data.to.parse().context("to address")?);
+    for addr in crate::email::send::normalized_cc(data) {
+        builder = builder.cc(addr.parse().context("cc address")?);
+    }
+    builder
         .subject(&data.subject)
         .header(ContentType::TEXT_PLAIN)
         .body(data.body.clone())

@@ -26,6 +26,29 @@ fn sanitize_attachment_filename(name: &str) -> String {
     }
 }
 
+/// Normalises the Cc list for an outgoing send: trims each address, drops empties,
+/// lowercases for de-dup, and removes any address already present in `to` (so a
+/// recipient is never both To and Cc). Preserves first-seen order.
+pub(super) fn normalized_cc(data: &SendEmailRequest) -> Vec<String> {
+    let to_set: std::collections::HashSet<String> = data
+        .to
+        .split(',')
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for addr in data.cc.iter().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        let lower = addr.to_lowercase();
+        if to_set.contains(&lower) || !seen.insert(lower) {
+            continue;
+        }
+        out.push(addr.to_string());
+    }
+    out
+}
+
 /// Pre-flight cap check done from the base64 lengths, without decoding.
 fn validate_attachment_limits(attachments: &[EmailAttachmentInput]) -> Result<(), String> {
     if attachments.len() > MAX_OUTGOING_ATTACHMENTS {
@@ -119,13 +142,15 @@ pub async fn send(
         );
         let to = data.to.trim();
         let subject = data.subject.trim();
+        let cc = normalized_cc(&data);
         let send_result = if data.attachments.is_empty() {
-            crate::email::sender::send_mail(to, subject, &data.body).await
+            crate::email::sender::send_mail_with_attachments(to, &cc, subject, &data.body, &[])
+                .await
         } else {
             match decode_attachments(&data.attachments) {
                 Ok(decoded) => {
                     crate::email::sender::send_mail_with_attachments(
-                        to, subject, &data.body, &decoded,
+                        to, &cc, subject, &data.body, &decoded,
                     )
                     .await
                 }
@@ -196,6 +221,7 @@ pub async fn send(
                 "account_id": account.id,
                 "from": account.email,
                 "to": data.to,
+                "cc": normalized_cc(&data),
                 "subject": data.subject,
                 "attachments": data.attachments.iter().map(|a| a.filename.as_str()).collect::<Vec<_>>(),
                 "sent_at": chrono::Utc::now(),
@@ -203,7 +229,7 @@ pub async fn send(
         )
         .await;
 
-        // from/to/subject land in metadata, which is admin-readable by design.
+        // from/to/cc/subject land in metadata, which is admin-readable by design.
         crate::audit::record_action(
             pool.get_ref(),
             &req,
@@ -216,6 +242,7 @@ pub async fn send(
                     "direction": "sent",
                     "from": account.email,
                     "to": data.to,
+                    "cc": normalized_cc(&data),
                     "subject": data.subject,
                     "attachments": data.attachments.iter().map(|a| a.filename.as_str()).collect::<Vec<_>>(),
                     "provider": account.provider.as_db(),
@@ -404,10 +431,17 @@ pub(super) async fn send_via_gmail(
     data: &SendEmailRequest,
     user_id: i32,
 ) -> HttpResponse {
+    let cc = normalized_cc(data);
     let raw_bytes: Vec<u8> = if data.attachments.is_empty() {
+        let cc_header = if cc.is_empty() {
+            String::new()
+        } else {
+            format!("Cc: {}\r\n", cc.join(", "))
+        };
         format!(
             "From: {}\r\n\
         To: {}\r\n\
+        {}\
         Subject: {}\r\n\
         MIME-Version: 1.0\r\n\
         Content-Type: text/plain; charset=\"UTF-8\"\r\n\
@@ -416,6 +450,7 @@ pub(super) async fn send_via_gmail(
         {}",
             from_email.trim(),
             data.to.trim(),
+            cc_header,
             data.subject.trim(),
             data.body.replace("\n", "\r\n")
         )
@@ -432,6 +467,7 @@ pub(super) async fn send_via_gmail(
         match crate::email::sender::build_message(
             from_email.trim(),
             data.to.trim(),
+            &cc,
             data.subject.trim(),
             &data.body,
             &decoded,
@@ -492,6 +528,7 @@ pub(super) async fn send_via_outlook(
     match send_outlook_mail(
         access_token,
         data.to.trim(),
+        &normalized_cc(data),
         data.subject.trim(),
         &data.body,
         &attachments,
@@ -546,6 +583,46 @@ mod tests {
     fn limits_accept_small_and_empty() {
         assert!(validate_attachment_limits(&[att("aGVsbG8=")]).is_ok());
         assert!(validate_attachment_limits(&[]).is_ok());
+    }
+
+    fn req_with_cc(to: &str, cc: &[&str]) -> SendEmailRequest {
+        SendEmailRequest {
+            account_id: 1,
+            to: to.to_string(),
+            subject: "s".to_string(),
+            body: "b".to_string(),
+            cc: cc.iter().map(|s| s.to_string()).collect(),
+            attachments: vec![],
+        }
+    }
+
+    #[test]
+    fn normalized_cc_trims_and_drops_empties() {
+        let r = req_with_cc("to@x.com", &[" a@x.com ", "", "   "]);
+        assert_eq!(normalized_cc(&r), vec!["a@x.com".to_string()]);
+    }
+
+    #[test]
+    fn normalized_cc_dedups_case_insensitively() {
+        let r = req_with_cc("to@x.com", &["A@x.com", "a@x.com", "b@x.com"]);
+        assert_eq!(
+            normalized_cc(&r),
+            vec!["A@x.com".to_string(), "b@x.com".to_string()]
+        );
+    }
+
+    #[test]
+    fn normalized_cc_removes_addresses_already_in_to() {
+        let r = req_with_cc("to@x.com, keep@x.com", &["TO@x.com", "extra@x.com"]);
+        assert_eq!(normalized_cc(&r), vec!["extra@x.com".to_string()]);
+    }
+
+    #[test]
+    fn send_email_request_defaults_cc_when_absent() {
+        let r: SendEmailRequest =
+            serde_json::from_str(r#"{"account_id":1,"to":"a@x.com","subject":"s","body":"b"}"#)
+                .unwrap_or_else(|e| panic!("deserialize failed: {e}"));
+        assert!(r.cc.is_empty());
     }
 
     #[test]

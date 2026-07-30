@@ -1775,6 +1775,54 @@
   font: inherit;
 }
 
+/* Anchor for the absolutely-positioned @mention menu (reuses .chat-mention-menu
+   from chat.css, which positions itself relative to the nearest positioned
+   ancestor). */
+.email-reply-input {
+  position: relative;
+}
+
+/* Cc chips gathered from reply-box @mentions. */
+.email-reply-cc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.email-reply-cc-label {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.email-reply-cc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px var(--space-3);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+}
+
+.email-reply-cc-remove {
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  font-size: 1rem;
+}
+
+.email-reply-cc-remove:hover {
+  color: var(--color-text-primary);
+}
+
 .email-forward-box {
   display: grid;
   gap: var(--space-4);

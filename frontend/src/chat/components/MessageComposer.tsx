@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Conversation } from "../types";
 import EmojiPicker from "./EmojiPicker";
 import { AttachmentIcon, EmojiIcon } from "../../icons";
+import { activeMention } from "../../shared/mentions";
 
 // `label` is what gets inserted after the `@`; `email` is shown in the dropdown to
 // disambiguate people who share a label.
@@ -37,20 +38,6 @@ function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-// Finds an in-progress `@mention` left of the caret, returning the typed query and
-// the index of the `@` so a replacement can be spliced in. The `@` must start the
-// line or follow whitespace, so emails and mid-word handles don't trigger it.
-function activeMention(
-  text: string,
-  caret: number
-): { query: string; start: number } | null {
-  const upto = text.slice(0, caret);
-  const match = /(?:^|\s)@([\w.-]*)$/.exec(upto);
-  if (!match) return null;
-  const query = match[1];
-  return { query, start: caret - query.length - 1 };
 }
 
 export default function MessageComposer({

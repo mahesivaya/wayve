@@ -6,6 +6,10 @@ pub struct SendEmailRequest {
     pub to: String,
     pub subject: String,
     pub body: String,
+    /// Cc recipients. Honoured by the standard Gmail/Outlook/IMAP send paths, not
+    /// the E2E secure send. Normalised (trimmed, de-duped against `to`) before use.
+    #[serde(default)]
+    pub cc: Vec<String>,
     /// Honoured only by the standard Gmail and Outlook path, not the E2E secure
     /// send.
     #[serde(default)]
