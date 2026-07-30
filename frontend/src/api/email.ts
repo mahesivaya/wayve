@@ -378,6 +378,27 @@ export const searchUsers = async (q: string): Promise<UserSearchResult[]> => {
   );
 };
 
+/** One suggestion from the compose "To" contacts typeahead. */
+export type ContactSuggestion = {
+  address: string;
+  display_name: string | null;
+};
+
+/**
+ * Substring search over the caller's inbox contacts projection, backing the
+ * compose "To" typeahead. Returns `[]` for a short/empty query (the backend
+ * enforces a 2-char minimum too).
+ */
+export const searchContacts = async (
+  q: string
+): Promise<ContactSuggestion[]> => {
+  const trimmed = q.trim();
+  if (trimmed.length < 2) return [];
+  return apiFetchJson<ContactSuggestion[]>(
+    `/api/contacts/search?q=${encodeURIComponent(trimmed)}`
+  );
+};
+
 export type SendInternalPayload = {
   recipient_user_ids: number[];
   envelope: string;

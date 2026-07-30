@@ -37,12 +37,11 @@ export function useMentionSearch({ value, setValue, textareaRef, onPick }: Args)
   // Guards against out-of-order async responses clobbering a newer query.
   const reqId = useRef(0);
 
-  // Debounced search whenever the active query changes.
+  // Debounced search whenever the active query changes. Deliberately never sets
+  // state synchronously in the effect body — a short/empty query simply schedules
+  // no fetch, and `open` below hides any now-stale results.
   useEffect(() => {
-    if (query === null || query.trim().length < 2) {
-      setResults([]);
-      return;
-    }
+    if (query === null || query.trim().length < 2) return;
     const mine = ++reqId.current;
     const handle = setTimeout(() => {
       void searchUsers(query)
@@ -59,7 +58,8 @@ export function useMentionSearch({ value, setValue, textareaRef, onPick }: Args)
     return () => clearTimeout(handle);
   }, [query]);
 
-  const open = query !== null && results.length > 0;
+  const open =
+    query !== null && query.trim().length >= 2 && results.length > 0;
   const highlighted = Math.min(index, results.length - 1);
 
   const syncFromCaret = useCallback((el: HTMLTextAreaElement) => {

@@ -58,20 +58,21 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   // of truth for who gets added; the inline `@Name` text is cosmetic.
   const [replyCc, setReplyCc] = useState<string[]>([]);
   const replyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  // Latest reply-to address, read inside the (interaction-time) onPick to avoid
-  // Cc-ing the person already on the To line. Held in a ref because `replyTo` is
-  // computed after this component's early return.
-  const replyToRef = useRef("");
+  // Reply-to address, used inside onPick to avoid Cc-ing the person already on
+  // the To line. Recomputed each render, so the inline onPick always closes over
+  // the current value (no ref needed).
+  const replyToAddr = selectedEmail ? emailAddress(selectedEmail.sender) : "";
   const mention = useMentionSearch({
     value: replyBody,
     setValue: setReplyBody,
     textareaRef: replyTextareaRef,
     onPick: (u) => {
       const email = u.email.trim();
+      const replyToLower = (replyToAddr ?? "").toLowerCase();
       setReplyCc((prev) =>
         !email ||
         prev.some((e) => e.toLowerCase() === email.toLowerCase()) ||
-        email.toLowerCase() === replyToRef.current.toLowerCase()
+        email.toLowerCase() === replyToLower
           ? prev
           : [...prev, email]
       );
@@ -236,7 +237,6 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   };
 
   const replyTo = emailAddress(selectedEmail.sender);
-  replyToRef.current = replyTo ?? "";
   const originalSubject = selectedEmail.subject?.trim() || "(No Subject)";
   const forwardSubject = originalSubject.toLowerCase().startsWith("fwd:")
     ? originalSubject
@@ -659,14 +659,14 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         <div className="email-reply-box">
           <div className="email-reply-input">
             {mention.open && (
-              <ul className="chat-mention-menu" role="listbox">
+              <ul className="email-mention-menu" role="listbox">
                 {mention.results.map((candidate, i) => (
                   <li key={candidate.id} role="presentation">
                     <button
                       type="button"
                       role="option"
                       aria-selected={i === mention.highlighted}
-                      className={`chat-mention-item${
+                      className={`email-mention-item${
                         i === mention.highlighted ? " active" : ""
                       }`}
                       // onMouseDown (not onClick) so the textarea keeps focus and
@@ -677,10 +677,10 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
                       }}
                       onMouseEnter={() => mention.setIndex(i)}
                     >
-                      <span className="chat-mention-label">
+                      <span className="email-mention-label">
                         @{mentionLabel(candidate)}
                       </span>
-                      <span className="chat-mention-email">
+                      <span className="email-mention-email">
                         {candidate.email}
                       </span>
                     </button>
