@@ -972,7 +972,9 @@ pub async fn backfill_contacts(pool: &PgPool) -> sqlx::Result<u64> {
             let own_email: String = row.try_get("own_email").unwrap_or_default();
             let own = own_email.trim().to_lowercase();
             for raw in [read_sender(row), read_receiver(row)].into_iter().flatten() {
-                if let Some((addr, name)) = crate::email::contacts::parse_contact(&raw) {
+                // A single sender/receiver field can be a multi-recipient list;
+                // parse_contacts splits it so each address gets its own name.
+                for (addr, name) in crate::email::contacts::parse_contacts(&raw) {
                     if addr == own {
                         continue;
                     }

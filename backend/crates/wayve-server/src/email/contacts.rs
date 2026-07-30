@@ -14,31 +14,6 @@ use crate::prelude::*;
 use std::collections::HashMap;
 use tracing::warn;
 
-/// Splits `"Display Name <addr@x>"` or a bare `"addr@x"` into a lowercased
-/// address and a display name (empty when absent). Returns `None` when there is
-/// no usable address.
-pub fn parse_contact(raw: &str) -> Option<(String, String)> {
-    let raw = raw.trim();
-    if raw.is_empty() {
-        return None;
-    }
-    // "Name <addr>" form.
-    if let (Some(lt), Some(gt)) = (raw.rfind('<'), raw.rfind('>'))
-        && lt < gt
-    {
-        let addr = raw[lt + 1..gt].trim();
-        if addr.contains('@') && !addr.contains(' ') {
-            let name = raw[..lt].trim().trim_matches('"').trim();
-            return Some((addr.to_lowercase(), name.to_string()));
-        }
-    }
-    // Bare address.
-    if raw.contains('@') && !raw.contains(char::is_whitespace) {
-        return Some((raw.to_lowercase(), String::new()));
-    }
-    None
-}
-
 /// Trims a display-name fragment of the leftover separators, quotes, and space
 /// that sit between one recipient's `>` and the next name.
 fn clean_name(s: &str) -> String {
@@ -188,27 +163,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_contact_named_and_bare() {
+    fn parse_contacts_named_and_bare() {
         assert_eq!(
-            parse_contact("Alice Chen <Alice@Acme.com>"),
-            Some(("alice@acme.com".to_string(), "Alice Chen".to_string()))
+            parse_contacts("Alice Chen <Alice@Acme.com>"),
+            vec![("alice@acme.com".to_string(), "Alice Chen".to_string())]
         );
         assert_eq!(
-            parse_contact("bob@x.com"),
-            Some(("bob@x.com".to_string(), String::new()))
+            parse_contacts("bob@x.com"),
+            vec![("bob@x.com".to_string(), String::new())]
         );
         assert_eq!(
-            parse_contact("\"Quoted Name\" <q@x.com>"),
-            Some(("q@x.com".to_string(), "Quoted Name".to_string()))
+            parse_contacts("\"Quoted Name\" <q@x.com>"),
+            vec![("q@x.com".to_string(), "Quoted Name".to_string())]
         );
     }
 
     #[test]
-    fn parse_contact_rejects_non_addresses() {
-        assert_eq!(parse_contact(""), None);
-        assert_eq!(parse_contact("   "), None);
-        assert_eq!(parse_contact("no-at-sign"), None);
-        assert_eq!(parse_contact("<not an email>"), None);
+    fn parse_contacts_rejects_non_addresses() {
+        assert!(parse_contacts("").is_empty());
+        assert!(parse_contacts("   ").is_empty());
+        assert!(parse_contacts("no-at-sign").is_empty());
+        assert!(parse_contacts("<not an email>").is_empty());
     }
 
     #[test]
