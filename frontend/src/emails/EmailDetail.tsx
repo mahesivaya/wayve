@@ -14,6 +14,7 @@ import { updateEmailState, type InboxState } from "../api/sharedInboxes";
 import { APP_TIME_ZONE } from "../utils/datetime";
 import { useAuth } from "../auth/useAuth";
 import { useMentionSearch, mentionLabel } from "./useMentionSearch";
+import { avatarColor, avatarInitial } from "../shared/avatar";
 
 interface EmailDetailProps {
   selectedEmail: EmailItem | null;
@@ -677,8 +678,17 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
                       }}
                       onMouseEnter={() => mention.setIndex(i)}
                     >
+                      <span
+                        className="email-mention-avatar"
+                        aria-hidden="true"
+                        style={{
+                          background: avatarColor(mentionLabel(candidate)),
+                        }}
+                      >
+                        {avatarInitial(mentionLabel(candidate))}
+                      </span>
                       <span className="email-mention-label">
-                        @{mentionLabel(candidate)}
+                        {mentionLabel(candidate)}
                       </span>
                       <span className="email-mention-email">
                         {candidate.address}
@@ -955,20 +965,3 @@ function formatEmailDateTime(iso: string | null | undefined): string {
   });
 }
 
-// Hashed rather than random, so a sender keeps the same avatar color across
-// emails and sessions.
-const AVATAR_PALETTE = [
-  "#d7b29c",
-  "#7c9eb2",
-  "#a8c686",
-  "#c89bb0",
-  "#8d8aaa",
-  "#e0a36d",
-  "#6d9eb8",
-  "#b8857a",
-];
-function avatarColor(seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
-  return AVATAR_PALETTE[Math.abs(h) % AVATAR_PALETTE.length];
-}

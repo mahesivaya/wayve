@@ -1803,7 +1803,7 @@
 
 .email-mention-item {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   width: 100%;
   padding: 6px 10px;
@@ -1813,6 +1813,21 @@
   text-align: left;
   cursor: pointer;
   color: var(--color-text-primary);
+}
+
+/* Generated initial-avatar for each suggestion (contacts have no photo). */
+.email-mention-avatar {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .email-mention-item.active,

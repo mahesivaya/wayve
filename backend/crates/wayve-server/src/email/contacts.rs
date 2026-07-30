@@ -39,26 +39,58 @@ pub fn parse_contact(raw: &str) -> Option<(String, String)> {
     None
 }
 
-/// Splits a raw sender/receiver field — which may be a `"Name <a@x>, Name
-/// <b@y>"` recipient list — into individual `(address, display_name)` pairs.
-/// Commas inside `<…>` are preserved; unparseable segments are dropped.
+/// Trims a display-name fragment of the leftover separators, quotes, and space
+/// that sit between one recipient's `>` and the next name.
+fn clean_name(s: &str) -> String {
+    s.trim()
+        .trim_start_matches([',', ';'])
+        .trim()
+        .trim_matches('"')
+        .trim()
+        .to_string()
+}
+
+/// Extracts every `(address, display_name)` from a raw sender/receiver field,
+/// which may be a recipient list joined by commas *or* spaces (real-world
+/// headers do both), e.g. `"A" <a@x> B <b@y>, c@z`. Each `<addr>` takes the free
+/// text since the previous `>` as its name; a field with no angle brackets is
+/// treated as separator-delimited bare addresses. Unparseable pieces are dropped.
 pub fn parse_contacts(raw: &str) -> Vec<(String, String)> {
-    let mut segments: Vec<&str> = Vec::new();
+    let mut out: Vec<(String, String)> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    // Pass 1: each `<addr>` with the free text since the previous `>` as its name.
+    let mut rest = raw;
+    while let Some(lt) = rest.find('<') {
+        let name_part = &rest[..lt];
+        let after = &rest[lt + 1..];
+        let Some(gt) = after.find('>') else { break };
+        let addr = after[..gt].trim().to_lowercase();
+        if addr.contains('@') && !addr.contains(char::is_whitespace) && seen.insert(addr.clone()) {
+            out.push((addr, clean_name(name_part)));
+        }
+        rest = &after[gt + 1..];
+    }
+
+    // Pass 2: bare addresses anywhere outside the `<…>` groups (e.g. a trailing
+    // `plain@z.com` with no brackets).
+    let mut stripped = String::with_capacity(raw.len());
     let mut depth = 0i32;
-    let mut start = 0usize;
-    for (i, ch) in raw.char_indices() {
+    for ch in raw.chars() {
         match ch {
             '<' => depth += 1,
             '>' if depth > 0 => depth -= 1,
-            ',' if depth == 0 => {
-                segments.push(&raw[start..i]);
-                start = i + 1;
-            }
+            _ if depth == 0 => stripped.push(ch),
             _ => {}
         }
     }
-    segments.push(&raw[start..]);
-    segments.iter().filter_map(|s| parse_contact(s)).collect()
+    for seg in stripped.split([',', ';', ' ', '\t', '\n', '"']) {
+        let s = seg.trim().to_lowercase();
+        if s.contains('@') && seen.insert(s.clone()) {
+            out.push((s, String::new()));
+        }
+    }
+    out
 }
 
 /// Aggregates raw sender/receiver strings into `address -> (best name, count)`,
@@ -184,10 +216,31 @@ mod tests {
         let got = parse_contacts("\"Doe\" <a@x.com>, Bob <b@y.com>, plain@z.com");
         let addrs: Vec<&str> = got.iter().map(|(a, _)| a.as_str()).collect();
         assert_eq!(addrs, vec!["a@x.com", "b@y.com", "plain@z.com"]);
-        // Commas inside <> must not split.
-        let single = parse_contacts("Weird <a@x.com>");
-        assert_eq!(single.len(), 1);
-        assert_eq!(single[0].0, "a@x.com");
+    }
+
+    #[test]
+    fn parse_contacts_handles_space_separated_and_multi_angle() {
+        // Real-world messy field: quoted address-as-name, then space/comma-joined
+        // "Name <addr>" pairs. Each address must get its OWN clean name.
+        let raw = "x@x.com\" <x@x.com> Mahesh Gunturi <m@g.com>, Mahesh Chowdary <c@g.com>";
+        let got = parse_contacts(raw);
+        assert_eq!(
+            got,
+            vec![
+                ("x@x.com".to_string(), "x@x.com".to_string()),
+                ("m@g.com".to_string(), "Mahesh Gunturi".to_string()),
+                ("c@g.com".to_string(), "Mahesh Chowdary".to_string()),
+            ]
+        );
+        // Bare, no angle brackets.
+        let bare = parse_contacts("a@x.com, b@y.com");
+        assert_eq!(
+            bare,
+            vec![
+                ("a@x.com".to_string(), String::new()),
+                ("b@y.com".to_string(), String::new()),
+            ]
+        );
     }
 
     #[test]
