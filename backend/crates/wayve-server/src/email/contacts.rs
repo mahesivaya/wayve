@@ -39,8 +39,31 @@ pub fn parse_contact(raw: &str) -> Option<(String, String)> {
     None
 }
 
+/// Splits a raw sender/receiver field — which may be a `"Name <a@x>, Name
+/// <b@y>"` recipient list — into individual `(address, display_name)` pairs.
+/// Commas inside `<…>` are preserved; unparseable segments are dropped.
+pub fn parse_contacts(raw: &str) -> Vec<(String, String)> {
+    let mut segments: Vec<&str> = Vec::new();
+    let mut depth = 0i32;
+    let mut start = 0usize;
+    for (i, ch) in raw.char_indices() {
+        match ch {
+            '<' => depth += 1,
+            '>' if depth > 0 => depth -= 1,
+            ',' if depth == 0 => {
+                segments.push(&raw[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    segments.push(&raw[start..]);
+    segments.iter().filter_map(|s| parse_contact(s)).collect()
+}
+
 /// Aggregates raw sender/receiver strings into `address -> (best name, count)`,
-/// skipping the account owner's own address and anything unparseable.
+/// skipping the account owner's own address and anything unparseable. Each raw
+/// string may itself be a multi-recipient list.
 fn aggregate<'a>(
     raw_addresses: impl IntoIterator<Item = &'a str>,
     own_email: &str,
@@ -48,7 +71,7 @@ fn aggregate<'a>(
     let own = own_email.trim().to_lowercase();
     let mut agg: HashMap<String, (String, i32)> = HashMap::new();
     for raw in raw_addresses {
-        if let Some((addr, name)) = parse_contact(raw) {
+        for (addr, name) in parse_contacts(raw) {
             if addr == own {
                 continue;
             }
@@ -154,6 +177,17 @@ mod tests {
         assert_eq!(parse_contact("   "), None);
         assert_eq!(parse_contact("no-at-sign"), None);
         assert_eq!(parse_contact("<not an email>"), None);
+    }
+
+    #[test]
+    fn parse_contacts_splits_recipient_lists() {
+        let got = parse_contacts("\"Doe\" <a@x.com>, Bob <b@y.com>, plain@z.com");
+        let addrs: Vec<&str> = got.iter().map(|(a, _)| a.as_str()).collect();
+        assert_eq!(addrs, vec!["a@x.com", "b@y.com", "plain@z.com"]);
+        // Commas inside <> must not split.
+        let single = parse_contacts("Weird <a@x.com>");
+        assert_eq!(single.len(), 1);
+        assert_eq!(single[0].0, "a@x.com");
     }
 
     #[test]

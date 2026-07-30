@@ -66,8 +66,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     value: replyBody,
     setValue: setReplyBody,
     textareaRef: replyTextareaRef,
-    onPick: (u) => {
-      const email = u.email.trim();
+    onPick: (c) => {
+      const email = c.address.trim();
       const replyToLower = (replyToAddr ?? "").toLowerCase();
       setReplyCc((prev) =>
         !email ||
@@ -661,7 +661,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             {mention.open && (
               <ul className="email-mention-menu" role="listbox">
                 {mention.results.map((candidate, i) => (
-                  <li key={candidate.id} role="presentation">
+                  <li key={candidate.address} role="presentation">
                     <button
                       type="button"
                       role="option"
@@ -681,7 +681,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
                         @{mentionLabel(candidate)}
                       </span>
                       <span className="email-mention-email">
-                        {candidate.email}
+                        {candidate.address}
                       </span>
                     </button>
                   </li>

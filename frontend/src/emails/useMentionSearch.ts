@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { searchUsers, type UserSearchResult } from "../api/email";
+import { searchContacts, type ContactSuggestion } from "../api/email";
 import { activeMention } from "../shared/mentions";
 
 const DEBOUNCE_MS = 180;
 const MAX_SUGGESTIONS = 6;
 
 /** Display label inserted after the `@` and shown in the dropdown. */
-export function mentionLabel(u: UserSearchResult): string {
-  return u.username?.trim() || u.email;
+export function mentionLabel(c: ContactSuggestion): string {
+  return c.display_name?.trim() || c.address;
 }
 
 type Args = {
@@ -17,22 +17,23 @@ type Args = {
   setValue: (next: string) => void;
   /** Ref to the textarea so the caret can be read and restored. */
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
-  /** Called with the picked user after the `@label` is spliced into the text. */
-  onPick: (user: UserSearchResult) => void;
+  /** Called with the picked contact after the `@label` is spliced into the text. */
+  onPick: (contact: ContactSuggestion) => void;
 };
 
 /**
- * Drives an `@mention` typeahead over a plain `<textarea>`, backed by an async
- * user-directory search. Owns the query/results/highlight state and returns the
- * event handlers + render data the component wires onto the textarea and menu.
+ * Drives an `@mention` typeahead over a plain `<textarea>`, backed by the inbox
+ * contacts search (matching email addresses you've corresponded with). Owns the
+ * query/results/highlight state and returns the event handlers + render data the
+ * component wires onto the textarea and menu.
  *
  * The text splice happens here; the caller's `onPick` runs afterward for
- * side-effects (e.g. adding the user to a Cc list).
+ * side-effects (e.g. adding the contact's address to a Cc list).
  */
 export function useMentionSearch({ value, setValue, textareaRef, onPick }: Args) {
   const [query, setQuery] = useState<string | null>(null);
   const [start, setStart] = useState(0);
-  const [results, setResults] = useState<UserSearchResult[]>([]);
+  const [results, setResults] = useState<ContactSuggestion[]>([]);
   const [index, setIndex] = useState(0);
   // Guards against out-of-order async responses clobbering a newer query.
   const reqId = useRef(0);
@@ -44,7 +45,7 @@ export function useMentionSearch({ value, setValue, textareaRef, onPick }: Args)
     if (query === null || query.trim().length < 2) return;
     const mine = ++reqId.current;
     const handle = setTimeout(() => {
-      void searchUsers(query)
+      void searchContacts(query)
         .then((rows) => {
           if (mine === reqId.current) {
             setResults(rows.slice(0, MAX_SUGGESTIONS));
@@ -80,15 +81,15 @@ export function useMentionSearch({ value, setValue, textareaRef, onPick }: Args)
   }, []);
 
   const apply = useCallback(
-    (user: UserSearchResult) => {
+    (contact: ContactSuggestion) => {
       const el = textareaRef.current;
-      const label = mentionLabel(user);
+      const label = mentionLabel(contact);
       const before = value.slice(0, start);
       const after = value.slice(start + 1 + (query ?? "").length);
       const insert = `@${label} `;
       setValue(before + insert + after);
       close();
-      onPick(user);
+      onPick(contact);
       const caret = (before + insert).length;
       if (el) {
         requestAnimationFrame(() => {
