@@ -20,14 +20,26 @@ DOMPurify.addHook("afterSanitizeAttributes", (node) => {
 // text on a navy canvas and made messages unreadable; white keeps every email
 // legible in every theme. Emails that hardcode their own colors keep them.
 const FRAME_CSS = `
-  html, body { margin: 0; padding: 0; background: #ffffff; }
+  html, body { margin: 0; background: #ffffff; }
+  html { padding: 0; }
   body {
+    /* Reading gutter. The frame IS the white card, so this has to live inside
+       the document — padding on the <iframe> element would inset the card
+       itself and leave the gap on the app canvas instead of around the text.
+       Full-bleed email backgrounds get inset by the same amount, which is the
+       intended look (matches how Superhuman/Gmail frame a message). */
+    padding: 24px 32px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-size: 14px;
     line-height: 1.5;
     color: #1f2937;
     word-break: break-word;
     overflow-wrap: anywhere;
+  }
+  /* The media query resolves against the frame's own viewport (it tracks the
+     reading pane), so a narrow pane gets a proportionate gutter. */
+  @media (max-width: 600px) {
+    body { padding: 16px 18px; }
   }
   img, video { max-width: 100%; height: auto; }
   table { max-width: 100%; }
