@@ -672,6 +672,25 @@ pub async fn upsert_batch(
 
     stamp_last_message_at(pool, account_id, &results).await;
 
+    // Feed the contacts projection from genuinely-new rows only — sync re-fetches
+    // the last hour every tick, so recording every returned row would inflate the
+    // per-contact message count. Best-effort; never fails the upsert.
+    let new_ids: std::collections::HashSet<&str> = results
+        .iter()
+        .filter(|r| r.is_new)
+        .map(|r| r.gmail_id.as_str())
+        .collect();
+    if !new_ids.is_empty() {
+        let mut addrs: Vec<&str> = Vec::with_capacity(new_ids.len() * 2);
+        for row in batch {
+            if new_ids.contains(row.gmail_id) {
+                addrs.push(row.sender);
+                addrs.push(row.receiver);
+            }
+        }
+        crate::email::contacts::record_from_addresses(pool, account_id, addrs).await;
+    }
+
     Ok(results)
 }
 
@@ -894,6 +913,83 @@ pub async fn backfill_addresses(pool: &PgPool) -> sqlx::Result<u64> {
             .execute(pool)
             .await;
         }
+        total += count;
+        if (count as i64) < BATCH {
+            return Ok(total);
+        }
+    }
+}
+
+/// One-time backfill of the `email_contacts` projection from existing mail.
+///
+/// Gated on an empty table: it runs on the first startup after the projection
+/// ships, then never again — thereafter the sync path keeps contacts current
+/// (including the historical sync of newly-connected accounts). Because it only
+/// runs against an empty table, `increment = true` yields accurate per-contact
+/// counts without any cross-run inflation risk. Returns the number of email rows
+/// scanned (0 when skipped).
+pub async fn backfill_contacts(pool: &PgPool) -> sqlx::Result<u64> {
+    let already: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM email_contacts)")
+        .fetch_one(pool)
+        .await?;
+    if already {
+        return Ok(0);
+    }
+
+    const BATCH: i64 = 500;
+    let mut total: u64 = 0;
+    let mut last_id: i32 = 0;
+    loop {
+        let rows = sqlx::query(
+            "SELECT e.id, e.sender, e.receiver, e.sender_iv, e.sender_encrypted, \
+                    e.receiver_iv, e.receiver_encrypted, \
+                    ea.user_id AS acct_user_id, ea.email AS own_email \
+             FROM emails e \
+             JOIN email_accounts ea ON ea.id = e.account_id \
+             WHERE e.id > $1 \
+             ORDER BY e.id \
+             LIMIT $2",
+        )
+        .bind(last_id)
+        .bind(BATCH)
+        .fetch_all(pool)
+        .await?;
+        if rows.is_empty() {
+            return Ok(total);
+        }
+        let count = rows.len() as u64;
+
+        // Aggregate this page by (user_id, address) so a contact that appears on
+        // several rows is one upsert with the right count.
+        let mut agg: std::collections::HashMap<(i32, String), (String, i32)> =
+            std::collections::HashMap::new();
+        for row in &rows {
+            last_id = row.try_get("id").unwrap_or(last_id);
+            let user_id: i32 = match row.try_get("acct_user_id") {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let own_email: String = row.try_get("own_email").unwrap_or_default();
+            let own = own_email.trim().to_lowercase();
+            for raw in [read_sender(row), read_receiver(row)].into_iter().flatten() {
+                // A single sender/receiver field can be a multi-recipient list;
+                // parse_contacts splits it so each address gets its own name.
+                for (addr, name) in crate::email::contacts::parse_contacts(&raw) {
+                    if addr == own {
+                        continue;
+                    }
+                    let entry = agg.entry((user_id, addr)).or_insert((String::new(), 0));
+                    entry.1 += 1;
+                    if entry.0.is_empty() && !name.is_empty() {
+                        entry.0 = name;
+                    }
+                }
+            }
+        }
+        for ((user_id, address), (display_name, c)) in agg {
+            crate::email::contacts::upsert(pool, user_id, &address, &display_name, c, true).await;
+        }
+
         total += count;
         if (count as i64) < BATCH {
             return Ok(total);

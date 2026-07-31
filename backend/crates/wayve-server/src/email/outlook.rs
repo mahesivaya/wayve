@@ -618,10 +618,13 @@ pub async fn sync_outlook_account_before(
 }
 
 /// Sends a plain-text message from the connected Outlook mailbox via the Graph
-/// `sendMail` action. `to` may be a comma-separated list of addresses.
+/// `sendMail` action. `to` may be a comma-separated list of addresses; `cc` is a
+/// pre-split list.
+#[allow(clippy::too_many_arguments)]
 pub async fn send_outlook_mail(
     access_token: &str,
     to: &str,
+    cc: &[String],
     subject: &str,
     body: &str,
     attachments: &[crate::email::sender::OutgoingAttachment],
@@ -638,11 +641,21 @@ pub async fn send_outlook_mail(
         return Err(anyhow::anyhow!("no valid recipients"));
     }
 
+    let cc_recipients: Vec<Value> = cc
+        .iter()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|addr| serde_json::json!({ "emailAddress": { "address": addr } }))
+        .collect();
+
     let mut message = serde_json::json!({
         "subject": subject,
         "body": { "contentType": "Text", "content": body },
         "toRecipients": recipients,
     });
+    if !cc_recipients.is_empty() {
+        message["ccRecipients"] = Value::Array(cc_recipients);
+    }
     if !attachments.is_empty() {
         let graph_attachments: Vec<Value> = attachments
             .iter()

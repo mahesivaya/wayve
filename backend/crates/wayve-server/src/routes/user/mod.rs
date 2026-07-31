@@ -143,6 +143,168 @@ mod auth_regression_tests {
     }
 
     #[actix_web::test]
+    async fn search_users_requires_auth() {
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(lazy_pool()))
+                .service(search_users),
+        )
+        .await;
+
+        let req = actix_test::TestRequest::get()
+            .uri("/users/search?q=al")
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[actix_web::test]
+    async fn search_users_short_query_returns_empty() {
+        use crate::test_support::{insert_local_user, jwt_for, random_email, test_pool};
+        let pool = test_pool().await;
+
+        let caller_email = random_email();
+        let caller = insert_local_user(&pool, &caller_email, "password123").await;
+        let bearer = format!("Bearer {}", jwt_for(caller, &caller_email));
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(search_users),
+        )
+        .await;
+
+        // Single-char query is below the 2-char minimum → empty, no scan.
+        let req = actix_test::TestRequest::get()
+            .uri("/users/search?q=a")
+            .insert_header(("Authorization", bearer))
+            .to_request();
+        let body: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
+        assert_eq!(body, serde_json::json!([]));
+    }
+
+    #[actix_web::test]
+    async fn search_users_matches_email_and_scopes_to_tenant() {
+        use crate::test_support::{insert_local_user, jwt_for, random_email, test_pool};
+        let pool = test_pool().await;
+
+        // Caller + a matching personal user share the personal scope.
+        let caller_email = random_email();
+        let caller = insert_local_user(&pool, &caller_email, "password123").await;
+
+        let needle = format!("zzsearch-{}", uuid::Uuid::new_v4().simple());
+        let match_email = format!("{needle}@personal.example");
+        let match_id = insert_local_user(&pool, &match_email, "password123").await;
+
+        // An organization user must NOT surface for a personal-scope caller.
+        let org_id: i32 =
+            sqlx::query_scalar("INSERT INTO organizations (name) VALUES ($1) RETURNING id")
+                .bind(format!("Search Org {}", random_email()))
+                .fetch_one(&pool)
+                .await
+                .unwrap_or_else(|e| panic!("create org: {e}"));
+        let org_email = format!("{needle}@org.example");
+        let org_user = insert_local_user(&pool, &org_email, "password123").await;
+        sqlx::query(
+            "UPDATE users SET account_type = 'organization', organization_id = $1 WHERE id = $2",
+        )
+        .bind(org_id)
+        .bind(org_user)
+        .execute(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("attach org user: {e}"));
+
+        let bearer = format!("Bearer {}", jwt_for(caller, &caller_email));
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(search_users),
+        )
+        .await;
+
+        let req = actix_test::TestRequest::get()
+            .uri(&format!("/users/search?q={needle}"))
+            .insert_header(("Authorization", bearer))
+            .to_request();
+        let body: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
+
+        let arr = body.as_array().unwrap_or_else(|| panic!("expected array"));
+        let ids: Vec<i64> = arr
+            .iter()
+            .filter_map(|u| u.get("id").and_then(|v| v.as_i64()))
+            .collect();
+        assert!(ids.contains(&(match_id as i64)), "personal match missing");
+        assert!(
+            !ids.contains(&(org_user as i64)),
+            "org user leaked into personal-scope search"
+        );
+        // Shape: {id, email, username}, and never public_key.
+        let hit = arr
+            .iter()
+            .find(|u| u.get("id").and_then(|v| v.as_i64()) == Some(match_id as i64))
+            .unwrap_or_else(|| panic!("hit not found"));
+        assert!(hit.get("email").is_some());
+        assert!(hit.get("username").is_some());
+        assert!(hit.get("public_key").is_none());
+
+        // Cleanup.
+        for uid in [caller, match_id, org_user] {
+            let _ = sqlx::query("DELETE FROM users WHERE id = $1")
+                .bind(uid)
+                .execute(&pool)
+                .await;
+        }
+        let _ = sqlx::query("DELETE FROM organizations WHERE id = $1")
+            .bind(org_id)
+            .execute(&pool)
+            .await;
+    }
+
+    #[actix_web::test]
+    async fn search_users_escapes_like_metacharacters() {
+        use crate::test_support::{insert_local_user, jwt_for, random_email, test_pool};
+        let pool = test_pool().await;
+
+        let caller_email = random_email();
+        let caller = insert_local_user(&pool, &caller_email, "password123").await;
+        // A user whose email does NOT contain a literal '%' must not be matched
+        // by a query of '%', which would otherwise be a match-all wildcard.
+        let plain_email = format!("plain-{}@personal.example", uuid::Uuid::new_v4().simple());
+        let plain_id = insert_local_user(&pool, &plain_email, "password123").await;
+
+        let bearer = format!("Bearer {}", jwt_for(caller, &caller_email));
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(search_users),
+        )
+        .await;
+
+        let req = actix_test::TestRequest::get()
+            .uri("/users/search?q=%25%25")
+            .insert_header(("Authorization", bearer))
+            .to_request();
+        let body: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
+        let arr = body.as_array().unwrap_or_else(|| panic!("expected array"));
+        let ids: Vec<i64> = arr
+            .iter()
+            .filter_map(|u| u.get("id").and_then(|v| v.as_i64()))
+            .collect();
+        assert!(
+            !ids.contains(&(plain_id as i64)),
+            "'%' was treated as a wildcard and matched a non-'%' email"
+        );
+
+        for uid in [caller, plain_id] {
+            let _ = sqlx::query("DELETE FROM users WHERE id = $1")
+                .bind(uid)
+                .execute(&pool)
+                .await;
+        }
+    }
+
+    #[actix_web::test]
     async fn update_organization_member_role_authorization() {
         use crate::test_support::{insert_local_user, jwt_for, random_email, test_pool};
         let pool = test_pool().await;
@@ -264,6 +426,7 @@ pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
         .service(set_organization_member_projects)
         .service(get_user_by_email)
         .service(get_all_users)
+        .service(search_users)
         .service(get_profile)
         .service(update_profile)
         .service(upload_avatar)

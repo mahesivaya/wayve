@@ -1,0 +1,235 @@
+//! Email contacts projection — the searchable address book behind the compose
+//! "To" typeahead.
+//!
+//! The `emails` table stores sender/receiver encrypted at rest (only an
+//! exact-match HMAC hash is queryable), so it cannot back a substring search.
+//! This module maintains a plaintext, per-user `email_contacts` table, fed from
+//! the sync/insert path (`record_from_addresses`) and a one-time startup
+//! backfill (`backfill`, in `repo.rs`, which owns the address decryptors).
+//!
+//! Writes go through the plain (superuser) pool, which bypasses RLS the same way
+//! the `emails` upsert does; the user-facing read scopes explicitly by `user_id`.
+
+use crate::prelude::*;
+use std::collections::HashMap;
+use tracing::warn;
+
+/// Trims a display-name fragment of the leftover separators, quotes, and space
+/// that sit between one recipient's `>` and the next name.
+fn clean_name(s: &str) -> String {
+    s.trim()
+        .trim_start_matches([',', ';'])
+        .trim()
+        .trim_matches('"')
+        .trim()
+        .to_string()
+}
+
+/// Extracts every `(address, display_name)` from a raw sender/receiver field,
+/// which may be a recipient list joined by commas *or* spaces (real-world
+/// headers do both), e.g. `"A" <a@x> B <b@y>, c@z`. Each `<addr>` takes the free
+/// text since the previous `>` as its name; a field with no angle brackets is
+/// treated as separator-delimited bare addresses. Unparseable pieces are dropped.
+pub fn parse_contacts(raw: &str) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    // Pass 1: each `<addr>` with the free text since the previous `>` as its name.
+    let mut rest = raw;
+    while let Some(lt) = rest.find('<') {
+        let name_part = &rest[..lt];
+        let after = &rest[lt + 1..];
+        let Some(gt) = after.find('>') else { break };
+        let addr = after[..gt].trim().to_lowercase();
+        if addr.contains('@') && !addr.contains(char::is_whitespace) && seen.insert(addr.clone()) {
+            out.push((addr, clean_name(name_part)));
+        }
+        rest = &after[gt + 1..];
+    }
+
+    // Pass 2: bare addresses anywhere outside the `<…>` groups (e.g. a trailing
+    // `plain@z.com` with no brackets).
+    let mut stripped = String::with_capacity(raw.len());
+    let mut depth = 0i32;
+    for ch in raw.chars() {
+        match ch {
+            '<' => depth += 1,
+            '>' if depth > 0 => depth -= 1,
+            _ if depth == 0 => stripped.push(ch),
+            _ => {}
+        }
+    }
+    for seg in stripped.split([',', ';', ' ', '\t', '\n', '"']) {
+        let s = seg.trim().to_lowercase();
+        if s.contains('@') && seen.insert(s.clone()) {
+            out.push((s, String::new()));
+        }
+    }
+    out
+}
+
+/// Aggregates raw sender/receiver strings into `address -> (best name, count)`,
+/// skipping the account owner's own address and anything unparseable. Each raw
+/// string may itself be a multi-recipient list.
+fn aggregate<'a>(
+    raw_addresses: impl IntoIterator<Item = &'a str>,
+    own_email: &str,
+) -> HashMap<String, (String, i32)> {
+    let own = own_email.trim().to_lowercase();
+    let mut agg: HashMap<String, (String, i32)> = HashMap::new();
+    for raw in raw_addresses {
+        for (addr, name) in parse_contacts(raw) {
+            if addr == own {
+                continue;
+            }
+            let entry = agg.entry(addr).or_insert((String::new(), 0));
+            entry.1 += 1;
+            if entry.0.is_empty() && !name.is_empty() {
+                entry.0 = name;
+            }
+        }
+    }
+    agg
+}
+
+/// Best-effort: upsert the given correspondent addresses into `email_contacts`
+/// for the account's owning user. Resolves the owner and own address from
+/// `account_id`. Never errors the caller — logs and returns on any failure so a
+/// sync tick is never failed by contact bookkeeping.
+pub async fn record_from_addresses<'a>(
+    pool: &PgPool,
+    account_id: i32,
+    raw_addresses: impl IntoIterator<Item = &'a str>,
+) {
+    let owner = sqlx::query("SELECT user_id, email FROM email_accounts WHERE id = $1")
+        .bind(account_id)
+        .fetch_optional(pool)
+        .await;
+    let row = match owner {
+        Ok(Some(row)) => row,
+        Ok(None) => return,
+        Err(e) => {
+            warn!(target: "worker", account_id, error = ?e, "contacts: owner lookup failed");
+            return;
+        }
+    };
+    let user_id: i32 = row.get("user_id");
+    let own_email: String = row.get("email");
+
+    let agg = aggregate(raw_addresses, &own_email);
+    for (address, (display_name, count)) in agg {
+        upsert(pool, user_id, &address, &display_name, count, true).await;
+    }
+}
+
+/// Upsert one contact. When `increment` is true (live sync), the message count
+/// accumulates; when false (backfill), an existing row is left untouched so a
+/// re-run can't inflate counts. Best-effort — logs on failure.
+#[allow(clippy::too_many_arguments)]
+pub async fn upsert(
+    pool: &PgPool,
+    user_id: i32,
+    address: &str,
+    display_name: &str,
+    count: i32,
+    increment: bool,
+) {
+    let sql = if increment {
+        "INSERT INTO email_contacts (user_id, address, display_name, message_count) \
+         VALUES ($1, $2, NULLIF($3, ''), $4) \
+         ON CONFLICT (user_id, address) DO UPDATE \
+         SET message_count = email_contacts.message_count + EXCLUDED.message_count, \
+             last_seen_at = NOW(), \
+             display_name = COALESCE(email_contacts.display_name, EXCLUDED.display_name)"
+    } else {
+        "INSERT INTO email_contacts (user_id, address, display_name, message_count) \
+         VALUES ($1, $2, NULLIF($3, ''), $4) \
+         ON CONFLICT (user_id, address) DO NOTHING"
+    };
+    if let Err(e) = sqlx::query(sql)
+        .bind(user_id)
+        .bind(address)
+        .bind(display_name)
+        .bind(count.max(1))
+        .execute(pool)
+        .await
+    {
+        warn!(target: "worker", user_id, error = ?e, "email_contacts upsert failed");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_contacts_named_and_bare() {
+        assert_eq!(
+            parse_contacts("Alice Chen <Alice@Acme.com>"),
+            vec![("alice@acme.com".to_string(), "Alice Chen".to_string())]
+        );
+        assert_eq!(
+            parse_contacts("bob@x.com"),
+            vec![("bob@x.com".to_string(), String::new())]
+        );
+        assert_eq!(
+            parse_contacts("\"Quoted Name\" <q@x.com>"),
+            vec![("q@x.com".to_string(), "Quoted Name".to_string())]
+        );
+    }
+
+    #[test]
+    fn parse_contacts_rejects_non_addresses() {
+        assert!(parse_contacts("").is_empty());
+        assert!(parse_contacts("   ").is_empty());
+        assert!(parse_contacts("no-at-sign").is_empty());
+        assert!(parse_contacts("<not an email>").is_empty());
+    }
+
+    #[test]
+    fn parse_contacts_splits_recipient_lists() {
+        let got = parse_contacts("\"Doe\" <a@x.com>, Bob <b@y.com>, plain@z.com");
+        let addrs: Vec<&str> = got.iter().map(|(a, _)| a.as_str()).collect();
+        assert_eq!(addrs, vec!["a@x.com", "b@y.com", "plain@z.com"]);
+    }
+
+    #[test]
+    fn parse_contacts_handles_space_separated_and_multi_angle() {
+        // Real-world messy field: quoted address-as-name, then space/comma-joined
+        // "Name <addr>" pairs. Each address must get its OWN clean name.
+        let raw = "x@x.com\" <x@x.com> Mahesh Gunturi <m@g.com>, Mahesh Chowdary <c@g.com>";
+        let got = parse_contacts(raw);
+        assert_eq!(
+            got,
+            vec![
+                ("x@x.com".to_string(), "x@x.com".to_string()),
+                ("m@g.com".to_string(), "Mahesh Gunturi".to_string()),
+                ("c@g.com".to_string(), "Mahesh Chowdary".to_string()),
+            ]
+        );
+        // Bare, no angle brackets.
+        let bare = parse_contacts("a@x.com, b@y.com");
+        assert_eq!(
+            bare,
+            vec![
+                ("a@x.com".to_string(), String::new()),
+                ("b@y.com".to_string(), String::new()),
+            ]
+        );
+    }
+
+    #[test]
+    fn aggregate_skips_own_and_counts() {
+        let addrs = vec![
+            "Alice <alice@x.com>",
+            "alice@x.com",
+            "me@own.com",
+            "Me <me@own.com>",
+        ];
+        let agg = aggregate(addrs, "me@own.com");
+        assert_eq!(agg.len(), 1);
+        let (name, count) = &agg["alice@x.com"];
+        assert_eq!(name, "Alice");
+        assert_eq!(*count, 2);
+    }
+}

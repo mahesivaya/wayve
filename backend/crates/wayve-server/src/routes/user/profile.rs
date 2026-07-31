@@ -25,6 +25,24 @@ pub struct UserLookupQuery {
     pub email: String,
 }
 
+#[derive(Deserialize)]
+pub struct UserSearchQuery {
+    pub q: String,
+}
+
+/// Escapes the LIKE metacharacters (`\` `%` `_`) so a user-typed query is matched
+/// literally inside a `%…%` ILIKE pattern instead of acting as a wildcard.
+fn escape_like(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for ch in input.chars() {
+        if matches!(ch, '\\' | '%' | '_') {
+            out.push('\\');
+        }
+        out.push(ch);
+    }
+    out
+}
+
 #[get("/users")]
 #[instrument(target = "http", skip(req, pool, query))]
 pub async fn get_user_by_email(
@@ -591,6 +609,64 @@ pub async fn get_all_users(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
                 "email": email,
                 "public_key": public_key
             })
+        })
+        .collect();
+
+    Ok(HttpResponse::Ok().json(users))
+}
+
+/// Typeahead over the caller's tenant directory, filtered by an email/username
+/// substring. Powers the reply-box `@mention` picker. Same tenant scoping as
+/// `get_all_users`, but returns `{id, email, username}` (no public_key) and caps
+/// the result set. A short query returns an empty list to avoid broad scans.
+#[get("/users/search")]
+#[instrument(target = "http", skip(req, pool, query))]
+pub async fn search_users(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<UserSearchQuery>,
+) -> AppResult {
+    let user_id = match get_user_id_from_request(&req) {
+        Some(id) => id,
+        None => return Ok(HttpResponse::Unauthorized().finish()),
+    };
+
+    let trimmed = query.q.trim();
+    if trimmed.chars().count() < 2 {
+        return Ok(HttpResponse::Ok().json(Vec::<serde_json::Value>::new()));
+    }
+
+    let ctx = rbac::resolve_role_context(pool.get_ref(), user_id).await?;
+    let pattern = format!("%{}%", escape_like(trimmed));
+
+    let rows = sqlx::query(
+        r#"
+        SELECT id, email, username
+        FROM users u
+        WHERE (
+            ($1 = 'personal'     AND u.account_type = 'personal')
+         OR ($1 = 'platform'     AND u.account_type = 'platform_admin')
+         OR ($1 = 'organization' AND u.account_type IN ('organization', 'organization_admin')
+                                  AND u.organization_id = $2)
+        )
+          AND (u.email ILIKE $3 OR u.username ILIKE $3)
+        ORDER BY u.username NULLS LAST, u.email
+        LIMIT 10
+        "#,
+    )
+    .bind(ctx.scope.as_str())
+    .bind(ctx.organization_id)
+    .bind(&pattern)
+    .fetch_all(pool.get_ref())
+    .await?;
+
+    let users: Vec<_> = rows
+        .into_iter()
+        .map(|r| {
+            let id: i32 = r.get("id");
+            let email: String = r.get("email");
+            let username: Option<String> = r.get("username");
+            serde_json::json!({ "id": id, "email": email, "username": username })
         })
         .collect();
 

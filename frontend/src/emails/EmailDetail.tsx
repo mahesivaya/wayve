@@ -13,6 +13,9 @@ import { EmailItem } from "./types";
 import { updateEmailState, type InboxState } from "../api/sharedInboxes";
 import { APP_TIME_ZONE } from "../utils/datetime";
 import { useAuth } from "../auth/useAuth";
+import { useMentionSearch, mentionLabel } from "./useMentionSearch";
+import { avatarColor } from "../shared/avatar";
+import ContactAvatar from "../shared/ContactAvatar";
 
 interface EmailDetailProps {
   selectedEmail: EmailItem | null;
@@ -53,6 +56,30 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   // they are standard-mailbox only and never E2E.
   const [replyAttachments, setReplyAttachments] = useState<File[]>([]);
   const replyFileRef = useRef<HTMLInputElement>(null);
+  // Cc recipients gathered from reply-box @mentions. The chip list is the source
+  // of truth for who gets added; the inline `@Name` text is cosmetic.
+  const [replyCc, setReplyCc] = useState<string[]>([]);
+  const replyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // Reply-to address, used inside onPick to avoid Cc-ing the person already on
+  // the To line. Recomputed each render, so the inline onPick always closes over
+  // the current value (no ref needed).
+  const replyToAddr = selectedEmail ? emailAddress(selectedEmail.sender) : "";
+  const mention = useMentionSearch({
+    value: replyBody,
+    setValue: setReplyBody,
+    textareaRef: replyTextareaRef,
+    onPick: (c) => {
+      const email = c.address.trim();
+      const replyToLower = (replyToAddr ?? "").toLowerCase();
+      setReplyCc((prev) =>
+        !email ||
+        prev.some((e) => e.toLowerCase() === email.toLowerCase()) ||
+        email.toLowerCase() === replyToLower
+          ? prev
+          : [...prev, email]
+      );
+    },
+  });
   const [forwardAttachments, setForwardAttachments] = useState<File[]>([]);
   const forwardFileRef = useRef<HTMLInputElement>(null);
   const [reconnecting, setReconnecting] = useState(false);
@@ -274,6 +301,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       await sendEmail({
         account_id: selectedEmail.account_id,
         to: replyTo,
+        cc: replyCc.length > 0 ? replyCc : undefined,
         subject: subject.toLowerCase().startsWith("re:")
           ? subject
           : `Re: ${subject}`,
@@ -282,6 +310,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       });
       setReplyBody("");
       setReplyAttachments([]);
+      setReplyCc([]);
       setReplyOpen(false);
     } catch (err) {
       setReplyError(
@@ -630,12 +659,83 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
 
       {replyOpen && (
         <div className="email-reply-box">
-          <textarea
-            value={replyBody}
-            onChange={(e) => setReplyBody(e.target.value)}
-            placeholder={`Reply to ${replyTo || "sender"}`}
-            aria-label="Reply body"
-          />
+          <div className="email-reply-input">
+            {mention.open && (
+              <ul className="email-mention-menu" role="listbox">
+                {mention.results.map((candidate, i) => (
+                  <li key={candidate.address} role="presentation">
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={i === mention.highlighted}
+                      className={`email-mention-item${
+                        i === mention.highlighted ? " active" : ""
+                      }`}
+                      // onMouseDown (not onClick) so the textarea keeps focus and
+                      // the caret splice lands correctly.
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        mention.apply(candidate);
+                      }}
+                      onMouseEnter={() => mention.setIndex(i)}
+                    >
+                      <ContactAvatar
+                        photoUrl={candidate.photo_url}
+                        label={mentionLabel(candidate)}
+                      />
+                      <span className="email-mention-label">
+                        {mentionLabel(candidate)}
+                      </span>
+                      <span className="email-mention-email">
+                        {candidate.address}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <textarea
+              ref={replyTextareaRef}
+              value={replyBody}
+              onChange={(e) => {
+                setReplyBody(e.target.value);
+                mention.syncFromCaret(e.target);
+              }}
+              onClick={(e) => mention.syncFromCaret(e.currentTarget)}
+              onKeyUp={(e) => {
+                if (
+                  e.key.startsWith("Arrow") ||
+                  e.key === "Home" ||
+                  e.key === "End"
+                ) {
+                  mention.syncFromCaret(e.currentTarget);
+                }
+              }}
+              onKeyDown={(e) => mention.onKeyDown(e)}
+              placeholder={`Reply to ${replyTo || "sender"} — @ to mention`}
+              aria-label="Reply body"
+            />
+          </div>
+          {replyCc.length > 0 && (
+            <div className="email-reply-cc" aria-label="Cc recipients">
+              <span className="email-reply-cc-label">Cc:</span>
+              {replyCc.map((email) => (
+                <span className="email-reply-cc-chip" key={email}>
+                  {email}
+                  <button
+                    type="button"
+                    className="email-reply-cc-remove"
+                    aria-label={`Remove ${email} from Cc`}
+                    onClick={() =>
+                      setReplyCc((cc) => cc.filter((e) => e !== email))
+                    }
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           {replyError && <p className="email-body-error">{replyError}</p>}
           {renderAttachField(
             replyAttachments,
@@ -658,6 +758,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
               onClick={() => {
                 setReplyOpen(false);
                 setReplyError(null);
+                setReplyCc([]);
               }}
             >
               Cancel
@@ -860,20 +961,3 @@ function formatEmailDateTime(iso: string | null | undefined): string {
   });
 }
 
-// Hashed rather than random, so a sender keeps the same avatar color across
-// emails and sessions.
-const AVATAR_PALETTE = [
-  "#d7b29c",
-  "#7c9eb2",
-  "#a8c686",
-  "#c89bb0",
-  "#8d8aaa",
-  "#e0a36d",
-  "#6d9eb8",
-  "#b8857a",
-];
-function avatarColor(seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
-  return AVATAR_PALETTE[Math.abs(h) % AVATAR_PALETTE.length];
-}

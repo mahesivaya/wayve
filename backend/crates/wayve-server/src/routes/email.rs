@@ -45,6 +45,73 @@ pub struct EmailAttachmentDownloadPath {
     pub id: i32,
 }
 
+#[derive(Deserialize)]
+pub struct ContactSearchQuery {
+    pub q: String,
+}
+
+/// Escapes LIKE metacharacters (`\` `%` `_`) so user input is matched literally
+/// inside a `%…%` ILIKE pattern rather than acting as a wildcard.
+fn escape_like(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for ch in input.chars() {
+        if matches!(ch, '\\' | '%' | '_') {
+            out.push('\\');
+        }
+        out.push(ch);
+    }
+    out
+}
+
+/// Compose "To" typeahead: substring search over the caller's own contacts
+/// projection (`email_contacts`), most-frequent first. Scoped explicitly by
+/// `user_id`; a short query returns an empty list.
+#[get("/contacts/search")]
+#[instrument(target = "http", skip(req, pool, query))]
+pub async fn search_contacts(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<ContactSearchQuery>,
+) -> AppResult {
+    let user_id = match get_user_id_from_request(&req) {
+        Some(id) => id,
+        None => return Ok(HttpResponse::Unauthorized().finish()),
+    };
+
+    let trimmed = query.q.trim();
+    if trimmed.chars().count() < 2 {
+        return Ok(HttpResponse::Ok().json(Vec::<Value>::new()));
+    }
+
+    let pattern = format!("%{}%", escape_like(trimmed));
+    let rows = sqlx::query(
+        "SELECT address, display_name, photo_url FROM email_contacts \
+         WHERE user_id = $1 AND (address ILIKE $2 OR display_name ILIKE $2) \
+         ORDER BY message_count DESC, last_seen_at DESC \
+         LIMIT 10",
+    )
+    .bind(user_id)
+    .bind(&pattern)
+    .fetch_all(pool.get_ref())
+    .await?;
+
+    let contacts: Vec<_> = rows
+        .into_iter()
+        .map(|r| {
+            let address: String = r.get("address");
+            let display_name: Option<String> = r.get("display_name");
+            let photo_url: Option<String> = r.get("photo_url");
+            serde_json::json!({
+                "address": address,
+                "display_name": display_name,
+                "photo_url": photo_url,
+            })
+        })
+        .collect();
+
+    Ok(HttpResponse::Ok().json(contacts))
+}
+
 #[get("/emails")]
 #[instrument(target = "http", skip(req, pool, _cache, query))]
 pub async fn get_emails(

@@ -2722,3 +2722,43 @@ CREATE POLICY message_reactions_rls ON message_reactions
            OR (user_id = nullif(current_setting('app.user_id', true), '')::int
                AND (EXISTS (SELECT 1 FROM messages m WHERE m.id = message_reactions.message_id)
                     OR EXISTS (SELECT 1 FROM channel_messages cm WHERE cm.id = message_reactions.channel_message_id))));
+
+-- ============================================================================
+-- Email contacts projection — a searchable address book for the compose "To"
+-- typeahead. The `emails` table stores sender/receiver ENCRYPTED at rest (only
+-- an exact-match HMAC hash is queryable), so it cannot back a substring search.
+-- This projection holds the plaintext, lowercased address + best-seen display
+-- name per user, populated from the sync/insert path (and a one-time backfill).
+-- Scoped per user_id and RLS-protected, the same as notes.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS email_contacts (
+    id            BIGSERIAL PRIMARY KEY,
+    user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    address       TEXT NOT NULL,          -- lowercased plaintext, for ILIKE search
+    display_name  TEXT,                   -- best-seen RFC5322 display name
+    photo_url     TEXT,                   -- Google profile photo (People API), if known
+    last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    message_count INTEGER NOT NULL DEFAULT 1,
+    UNIQUE (user_id, address)
+);
+ALTER TABLE email_contacts ADD COLUMN IF NOT EXISTS photo_url TEXT;
+CREATE INDEX IF NOT EXISTS idx_email_contacts_user_addr
+    ON email_contacts (user_id, address text_pattern_ops);
+
+-- Throttle marker for the People API photo sync (see email::people). NULL = never
+-- synced; the sync worker refreshes photos at most every few hours per account.
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS photos_synced_at TIMESTAMPTZ;
+
+GRANT INSERT, UPDATE, DELETE ON email_contacts TO wayve_app;
+ALTER TABLE email_contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE email_contacts FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS email_contacts_rls ON email_contacts;
+CREATE POLICY email_contacts_rls ON email_contacts
+    USING (
+        current_setting('app.bypass', true) = 'on'
+        OR user_id = nullif(current_setting('app.user_id', true), '')::int
+    )
+    WITH CHECK (
+        current_setting('app.bypass', true) = 'on'
+        OR user_id = nullif(current_setting('app.user_id', true), '')::int
+    );

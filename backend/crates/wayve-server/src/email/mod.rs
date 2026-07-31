@@ -2,6 +2,7 @@ pub mod account;
 pub mod attachments;
 mod body_handlers;
 pub mod body_worker;
+pub mod contacts;
 pub mod gmail_push;
 pub mod handler;
 pub mod imap;
@@ -10,6 +11,7 @@ pub mod oauth;
 mod oauth_flow;
 pub mod outlook;
 mod outlook_oauth;
+pub mod people;
 pub mod profile;
 pub mod provider;
 pub(crate) mod provider_lookup;
@@ -29,6 +31,7 @@ use actix_web::web;
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(crate::routes::email::get_emails)
         .service(crate::routes::email::get_unread_count)
+        .service(crate::routes::email::search_contacts)
         .service(crate::routes::email::delete_email)
         .service(crate::routes::email::mark_email_read)
         .service(crate::routes::email::mark_email_unread)

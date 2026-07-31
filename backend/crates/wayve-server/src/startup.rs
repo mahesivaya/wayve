@@ -910,6 +910,15 @@ pub async fn connect_db_and_migrate(role: RuntimeRole) -> PgPool {
         Err(e) => warn!(target: "startup", error = ?e, "address backfill failed"),
     }
 
+    // Seed the compose-typeahead contacts projection from existing mail. Gated on
+    // an empty table, so this is a one-time cost on the first startup after the
+    // projection ships; the sync path maintains it thereafter.
+    match email::repo::backfill_contacts(&pool).await {
+        Ok(0) => {}
+        Ok(n) => info!(target: "startup", scanned = n, "backfilled email contacts projection"),
+        Err(e) => warn!(target: "startup", error = ?e, "contacts backfill failed"),
+    }
+
     // Dev/test only; silently skips when STRIPE_SECRET_KEY is missing or live.
     billing::ensure_test_prices(&pool).await;
 

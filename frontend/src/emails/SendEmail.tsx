@@ -1,11 +1,13 @@
 import { logger } from "../utils/logger";
 import {
   getUserByEmail,
+  searchContacts,
   sendEmail as sendEmailApi,
   sendInternalEmail,
   sendSecureEmail,
   filesToAttachments,
   MAX_ATTACHMENTS_BYTES,
+  type ContactSuggestion,
   type WayveRecipient,
 } from "../api/email";
 import { useAuth } from "../auth/useAuth";
@@ -16,6 +18,7 @@ import {
 } from "./internalEnvelope";
 import { sealSecureMessage } from "./secureSend";
 import { formatFileSize } from "./renderUtils";
+import ContactAvatar from "../shared/ContactAvatar";
 
 import { useState, useEffect, useRef, type ChangeEvent } from "react";
 
@@ -34,6 +37,22 @@ function parseRecipients(raw: string): string[] {
     .filter((s) => s.length > 0);
 }
 
+const RECIPIENT_SEP = /[,;\s]/;
+
+// The recipient "token" under the caret — the maximal run of non-separator
+// characters containing the caret. Powers the To-field contacts typeahead so a
+// pick replaces just the address being typed, not the whole field.
+function currentRecipientToken(
+  value: string,
+  caret: number
+): { token: string; start: number; end: number } {
+  let start = caret;
+  while (start > 0 && !RECIPIENT_SEP.test(value[start - 1])) start--;
+  let end = caret;
+  while (end < value.length && !RECIPIENT_SEP.test(value[end])) end++;
+  return { token: value.slice(start, end), start, end };
+}
+
 export default function SendEmail({
   accountId,
   onClose,
@@ -41,6 +60,18 @@ export default function SendEmail({
 }: SendEmailProps) {
   const { user } = useAuth();
   const [to, setTo] = useState("");
+  // Compose "To" contacts typeahead. `contactQuery` is the token under the caret
+  // (null when inactive); `contactRange` is where a pick splices the address in.
+  const toInputRef = useRef<HTMLInputElement>(null);
+  const [contactQuery, setContactQuery] = useState<string | null>(null);
+  const [contactRange, setContactRange] = useState<{ start: number; end: number }>(
+    { start: 0, end: 0 }
+  );
+  const [contactSuggestions, setContactSuggestions] = useState<
+    ContactSuggestion[]
+  >([]);
+  const [contactIndex, setContactIndex] = useState(0);
+  const contactReqId = useRef(0);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   // When on, every recipient (Wayve or external) gets the magic-link path with
@@ -79,6 +110,67 @@ export default function SendEmail({
 
   const removeAttachment = (index: number) =>
     setAttachments((cur) => cur.filter((_, i) => i !== index));
+
+  // Debounced contacts search whenever the active To-field token changes. Never
+  // sets state synchronously in the effect body (a short token schedules no
+  // fetch); `contactOpen` below hides any now-stale suggestions.
+  useEffect(() => {
+    if (contactQuery === null || contactQuery.trim().length < 2) return;
+    const mine = ++contactReqId.current;
+    const handle = setTimeout(() => {
+      void searchContacts(contactQuery)
+        .then((rows) => {
+          if (mine === contactReqId.current) {
+            setContactSuggestions(rows.slice(0, 6));
+            setContactIndex(0);
+          }
+        })
+        .catch(() => {
+          if (mine === contactReqId.current) setContactSuggestions([]);
+        });
+    }, 180);
+    return () => clearTimeout(handle);
+  }, [contactQuery]);
+
+  const contactOpen =
+    contactQuery !== null &&
+    contactQuery.trim().length >= 2 &&
+    contactSuggestions.length > 0;
+  const contactHighlighted = Math.min(
+    contactIndex,
+    contactSuggestions.length - 1
+  );
+
+  // Reads the token under the caret and arms/dismisses the typeahead.
+  const syncContactToken = (el: HTMLInputElement) => {
+    const caret = el.selectionStart ?? el.value.length;
+    const { token, start, end } = currentRecipientToken(el.value, caret);
+    if (token.length >= 2) {
+      setContactQuery(token);
+      setContactRange({ start, end });
+    } else {
+      setContactQuery(null);
+    }
+  };
+
+  // Replaces the active token with the chosen address, followed by ", ".
+  const applyContact = (address: string) => {
+    const before = to.slice(0, contactRange.start);
+    const after = to.slice(contactRange.end);
+    const insert = `${address}, `;
+    const next = before + insert + after;
+    setTo(next);
+    setContactQuery(null);
+    setContactSuggestions([]);
+    const caret = (before + insert).length;
+    const el = toInputRef.current;
+    if (el) {
+      requestAnimationFrame(() => {
+        el.focus();
+        el.setSelectionRange(caret, caret);
+      });
+    }
+  };
 
   useEffect(() => {
     if (!status) return;
@@ -330,16 +422,87 @@ export default function SendEmail({
         gap: "10px",
       }}
     >
-      <input
-        placeholder="To — separate multiple addresses with commas"
-        value={to}
-        onChange={(e) => setTo(e.target.value)}
-        style={{
-          padding: "8px",
-          borderRadius: 5,
-          border: "1px solid #ccc",
-        }}
-      />
+      <div style={{ position: "relative" }}>
+        {contactOpen && (
+          <ul className="email-mention-menu" role="listbox">
+            {contactSuggestions.map((c, i) => (
+              <li key={c.address} role="presentation">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={i === contactHighlighted}
+                  className={`email-mention-item${
+                    i === contactHighlighted ? " active" : ""
+                  }`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    applyContact(c.address);
+                  }}
+                  onMouseEnter={() => setContactIndex(i)}
+                >
+                  <ContactAvatar
+                    photoUrl={c.photo_url}
+                    label={c.display_name || c.address}
+                  />
+                  {c.display_name && (
+                    <span className="email-mention-label">
+                      {c.display_name}
+                    </span>
+                  )}
+                  <span className="email-mention-email">{c.address}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <input
+          ref={toInputRef}
+          placeholder="To — separate multiple addresses with commas"
+          value={to}
+          onChange={(e) => {
+            setTo(e.target.value);
+            syncContactToken(e.target);
+          }}
+          onClick={(e) => syncContactToken(e.currentTarget)}
+          onKeyUp={(e) => {
+            if (
+              e.key.startsWith("Arrow") ||
+              e.key === "Home" ||
+              e.key === "End"
+            ) {
+              syncContactToken(e.currentTarget);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (!contactOpen) return;
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setContactIndex((n) => (n + 1) % contactSuggestions.length);
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setContactIndex(
+                (n) =>
+                  (n - 1 + contactSuggestions.length) %
+                  contactSuggestions.length
+              );
+            } else if (e.key === "Enter" || e.key === "Tab") {
+              e.preventDefault();
+              applyContact(contactSuggestions[contactHighlighted].address);
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setContactQuery(null);
+            }
+          }}
+          onBlur={() => setContactQuery(null)}
+          style={{
+            padding: "8px",
+            borderRadius: 5,
+            border: "1px solid #ccc",
+            width: "100%",
+            boxSizing: "border-box",
+          }}
+        />
+      </div>
 
       <input
         placeholder="Subject"
