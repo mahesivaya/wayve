@@ -79,12 +79,28 @@ impl SlackClient {
         })
     }
 
-    /// Returns `(team_name, team_id)`. A `false` `ok` means the token is bad.
-    pub async fn auth_test(&self) -> Result<(Option<String>, Option<String>), AppError> {
+    /// `auth.test` against a token the caller has just supplied — a bot token
+    /// pasted into the Slack panel, or one handed back by the OAuth callback.
+    /// Returns `(team_name, team_id)`.
+    ///
+    /// A rejection is bad *input*, not a dead session, so it is deliberately a
+    /// 400 and not a 401. The browser treats any 401 as session expiry and
+    /// redirects to /login, which meant pasting a wrong Slack token silently
+    /// logged the user out of Wayve instead of telling them the token was bad.
+    /// Slack's own reason (`invalid_auth`, `token_revoked`, `not_authed`, …) is
+    /// passed through so the panel can say what actually went wrong.
+    pub async fn validate_supplied_token(
+        &self,
+    ) -> Result<(Option<String>, Option<String>), AppError> {
         let r: SlackAuthTest = self.get_json("auth.test", &[]).await?;
         if !r.ok {
             warn!(target: "worker", error = ?r.error, "slack auth.test rejected token");
-            return Err(AppError::Unauthorized);
+            let reason = r.error.unwrap_or_else(|| "unknown_error".to_string());
+            return Err(AppError::bad_request(format!(
+                "Slack rejected this token ({reason}). It must be a bot token \
+                 beginning with `xoxb-`, taken from your Slack app's OAuth & \
+                 Permissions page."
+            )));
         }
         Ok((r.team, r.team_id))
     }
