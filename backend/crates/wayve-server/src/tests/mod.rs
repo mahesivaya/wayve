@@ -12,6 +12,7 @@ mod documents_rbac_test;
 mod email_provider_isp_test;
 mod embed_tokens_test;
 mod gitlab_test;
+mod integrations_status_test;
 mod jira_test;
 mod jira_webhook_test;
 mod mailbox_policy_test;

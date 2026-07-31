@@ -74,6 +74,7 @@ export {
   Folder as FolderIcon,
   // Sidebar collapsible-section headers
   Briefcase as WorkspaceIcon,
+  Plug as IntegrationsIcon,
   LayoutDashboard as PlatformIcon,
   Code2 as DevelopersIcon,
   Building2 as OrganizationIcon,

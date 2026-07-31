@@ -63,18 +63,61 @@
 
 .integration-tile-status {
   font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
+/* Connected reads as a filled pill rather than a line of coloured text, so a
+   glance down the grid separates the wired-up services from the rest. */
 .integration-tile-status--enabled {
-  color: var(--color-success, #16a34a);
+  align-self: flex-start;
+  padding: 1px 8px 1px 6px;
+  border-radius: var(--radius-pill, 999px);
+  font-weight: 600;
+  color: var(--color-success-strong, #15803d);
+  background: var(--color-success-soft, #dcfce7);
+  border: 1px solid var(--color-success-border, #86efac);
+}
+
+.integration-tile-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--color-success, #16a34a);
+}
+
+/* A green edge on the whole tile, so the connected ones are findable without
+   reading any labels. Left border only — a full ring competes with the hover
+   and focus states. */
+.integration-tile--connected {
+  border-left: 3px solid var(--color-success, #16a34a);
 }
 
 .integration-tile-status--available {
   color: var(--color-primary-action, #2563eb);
 }
 
-.integration-tile-status--soon {
+.integration-tile-status--soon,
+.integration-tile-status--enterprise {
   color: var(--color-text-muted);
+}
+
+/* Dark mode: the light-green pill would glare, so tint the surface instead and
+   let the text carry the colour. */
+@media (prefers-color-scheme: dark) {
+  .integration-tile-status--enabled {
+    color: var(--color-success, #4ade80);
+    background: rgb(22 163 74 / 18%);
+    border-color: rgb(22 163 74 / 45%);
+  }
+}
+
+:root[data-theme="dark"] .integration-tile-status--enabled {
+  color: var(--color-success, #4ade80);
+  background: rgb(22 163 74 / 18%);
+  border-color: rgb(22 163 74 / 45%);
 }
 
 .integration-tile-desc {

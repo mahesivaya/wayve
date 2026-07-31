@@ -113,8 +113,12 @@ pub async fn connect(
         return Err(AppError::bad_request("bot_token is required"));
     }
 
-    // Validating before storing means a bad token fails fast.
-    let (team_name, team_id) = SlackClient::from_token(&token).auth_test().await?;
+    // Validating before storing means a bad token fails fast. Uses the
+    // caller-supplied variant so a rejected token is a 400 the panel can show,
+    // not a 401 that the browser reads as an expired session and redirects on.
+    let (team_name, team_id) = SlackClient::from_token(&token)
+        .validate_supplied_token()
+        .await?;
 
     let (iv, ciphertext) = encrypt(&token).map_err(|e| {
         warn!(target: "worker", error = %e, "slack token encrypt failed");

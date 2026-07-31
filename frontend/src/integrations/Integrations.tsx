@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { getJiraConnection } from "../api/jira";
 import { getGithubConnection } from "../api/github";
 import { getGitlabConnection } from "../api/gitlab";
@@ -8,7 +9,6 @@ import { getMcpConnections } from "../api/mcp";
 import { getAccounts } from "../api/email";
 import { type EmailAccount } from "../emails/types";
 import { useAuth } from "../auth/useAuth";
-import { hasPermission } from "../auth/permissions";
 import SlackPanel from "./SlackPanel";
 import FigmaPanel from "./FigmaPanel";
 import McpPanel from "./McpPanel";
@@ -16,14 +16,21 @@ import GitLabPanel from "./GitLabPanel";
 import JiraPanel from "../tasks/JiraPanel";
 import GitHubPanel from "./GitHubPanel";
 import GmailPanel from "./GmailPanel";
-import { BrandIcon } from "./BrandIcon";
+import {
+  visibleIntegrations,
+  canManageMcp as viewerCanManageMcp,
+  type IntegrationKey,
+} from "./catalog";
+import { INTEGRATIONS_CHANGED_EVENT } from "./useConnectedIntegrations";
 import SettingsShell from "../profile/SettingsShell";
 import "./integrations.css";
 
 type Status = "enabled" | "available" | "soon" | "enterprise";
 
+// "Connected" rather than "Enabled": the question being answered at a glance is
+// whether the service is actually wired up, and "Enabled" reads like a setting.
 const STATUS_LABEL: Record<Status, string> = {
-  enabled: "Enabled",
+  enabled: "Connected",
   available: "Connect",
   soon: "Coming soon",
   enterprise: "Enterprise",
@@ -33,10 +40,7 @@ export default function Integrations() {
   const { user } = useAuth();
   // Slack is an enterprise-only feature (it needs server-readable chat).
   const isEnterprise = user?.current_plan?.tier === "enterprise";
-  // UI visibility only; the backend enforces the same tier/scope gate.
-  const canManageMcp =
-    hasPermission(user, "mcp:manage") &&
-    (isEnterprise || user?.scope === "platform");
+  const canManageMcp = viewerCanManageMcp(user);
 
   // Mirrors the backend gate `require_external_mailbox_actor`: any signed-in
   // account may connect its own mailbox — the address it logged in with —
@@ -151,48 +155,69 @@ export default function Integrations() {
     };
   }, [canConnectMailbox]);
 
-  const services: {
-    key: string;
-    name: string;
-    description: string;
-    icon: ReactNode;
-    status: Status;
-    onClick?: () => void;
-  }[] = [
-    {
-      key: "gmail",
-      name: "Gmail",
+  // The sidebar lists connected services only, so tell it to re-check whenever
+  // something here connects or disconnects. (The first probes fire this too;
+  // it's one cached request.)
+  useEffect(() => {
+    window.dispatchEvent(new Event(INTEGRATIONS_CHANGED_EVENT));
+  }, [
+    gmailConnected,
+    jiraConnected,
+    githubConnected,
+    slackConnected,
+    gitlabConnected,
+    figmaConnected,
+    mcpConnected,
+  ]);
+
+  // The sidebar's Integrations group links to /integrations?service=<key>, so
+  // picking a service there lands with that panel already open instead of on a
+  // wall of tiles. Panels are independent toggles, so this only ever opens one
+  // — closing it again (or opening others) is left to the tiles.
+  const [searchParams] = useSearchParams();
+  const requestedService = searchParams.get("service");
+  useEffect(() => {
+    const openers: Partial<Record<IntegrationKey, () => void>> = {
+      gmail: () => setShowGmail(true),
+      jira: () => setShowJira(true),
+      github: () => setShowGithub(true),
+      slack: () => setShowSlack(true),
+      gitlab: () => setShowGitlab(true),
+      figma: () => setShowFigma(true),
+      mcp: () => setShowMcp(true),
+    };
+    if (requestedService) openers[requestedService as IntegrationKey]?.();
+  }, [requestedService]);
+
+  // Per-service copy and behaviour. The name, icon, order, and who may see a
+  // service at all come from the shared catalog, so the sidebar's Integrations
+  // group and this page always list the same services.
+  const detail: Record<
+    IntegrationKey,
+    { description: string; status: Status; onClick?: () => void }
+  > = {
+    gmail: {
       description:
         "Connect your Gmail with OAuth to read, send, and manage all your email from the Fluxze inbox.",
-      icon: <BrandIcon name="gmail" />,
       status: gmailConnected ? "enabled" : "available",
       onClick: () => setShowGmail((v) => !v),
     },
-    {
-      key: "jira",
-      name: "Jira",
+    jira: {
       description:
         "Sync Jira issues into Tasks and get real-time updates from Jira via webhook.",
-      icon: <BrandIcon name="jira" />,
       status: jiraConnected ? "enabled" : "available",
       onClick: () => setShowJira((v) => !v),
     },
-    {
-      key: "github",
-      name: "GitHub",
+    github: {
       description:
         "Browse repositories, commits, diffs, and CI runs from your linked projects.",
-      icon: <BrandIcon name="github" />,
       status: githubConnected ? "enabled" : "available",
       onClick: () => setShowGithub((v) => !v),
     },
-    {
-      key: "slack",
-      name: "Slack",
+    slack: {
       description: isEnterprise
         ? "Bridge Slack channels into Wayve Chat — import history and post replies back to Slack."
         : "Bridge Slack into Wayve Chat. Available on the Enterprise plan.",
-      icon: <BrandIcon name="slack" />,
       status: isEnterprise
         ? slackConnected
           ? "enabled"
@@ -200,47 +225,38 @@ export default function Integrations() {
         : "enterprise",
       onClick: isEnterprise ? () => setShowSlack((v) => !v) : undefined,
     },
-    {
-      key: "gitlab",
-      name: "GitLab",
+    gitlab: {
       description:
         "Connect GitLab (cloud or self-hosted) and import your assigned issues into Tasks.",
-      icon: <BrandIcon name="gitlab" />,
       status: gitlabConnected ? "enabled" : "available",
       onClick: () => setShowGitlab((v) => !v),
     },
-    {
-      key: "figma",
-      name: "Figma",
+    figma: {
       description:
         "Attach designs to tickets and user stories \u2014 paste a Figma link and it shows as a titled, thumbnailed reference.",
-      icon: <BrandIcon name="figma" />,
       status: figmaConnected ? "enabled" : "available",
       onClick: () => setShowFigma((v) => !v),
     },
-    {
-      key: "mcp",
-      name: "Connect MCP",
+    mcp: {
       description:
         "Connect your own MCP server so the AI can read your systems (e.g. your database) through tools you control.",
-      icon: <span aria-hidden="true">🔌</span>,
       status: mcpConnected ? "enabled" : "available",
       onClick: () => setShowMcp((v) => !v),
     },
-  ];
+  };
 
-  // Tiles an account can't use at all are hidden rather than shown disabled.
+  // Services an account can't use at all are hidden rather than shown disabled
+  // — the catalog's per-service `visible` rules decide.
   //
   // Slack is the exception: it stays on the list for every plan, carrying its
   // "Enterprise" badge, because hiding it answered the question "can I connect
   // Slack?" with silence. The card is inert below that tier and the backend
   // gates the endpoints regardless, so showing it advertises the feature
   // without granting it.
-  const visibleServices = services.filter(
-    (s) =>
-      (s.key !== "mcp" || canManageMcp) &&
-      (s.key !== "gmail" || canConnectMailbox)
-  );
+  const visibleServices = visibleIntegrations(user).map((s) => ({
+    ...s,
+    ...detail[s.key],
+  }));
 
   return (
     <SettingsShell title="Integrations">
@@ -251,7 +267,9 @@ export default function Integrations() {
             <button
               key={s.key}
               type="button"
-              className="integration-tile"
+              className={`integration-tile${
+                s.status === "enabled" ? " integration-tile--connected" : ""
+              }`}
               onClick={s.onClick}
               disabled={s.status === "soon" || s.status === "enterprise"}
             >
@@ -262,6 +280,14 @@ export default function Integrations() {
                   <span
                     className={`integration-tile-status integration-tile-status--${s.status}`}
                   >
+                    {/* The dot is decorative — the word "Connected" carries the
+                        meaning, so the state never rests on colour alone. */}
+                    {s.status === "enabled" && (
+                      <span
+                        className="integration-tile-dot"
+                        aria-hidden="true"
+                      />
+                    )}
                     {STATUS_LABEL[s.status]}
                   </span>
                 </span>

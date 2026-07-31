@@ -955,6 +955,41 @@
   white-space: nowrap;
 }
 
+/* Integration rows under Workspace → Integrations. Same flex-row treatment as
+   the badged sub-items (and scoped the same way to out-specify the block base),
+   so the brand mark and the service name sit on one line with the name
+   ellipsing if the sidebar is dragged narrow. */
+.sidebar-subitems .sidebar-integration-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-integration-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The brand marks ship at their tile size (23–24px); a nav row wants ~16px, so
+   scale them here rather than parameterizing every mark in BrandIcon. */
+.sidebar-integration-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  font-size: 13px; /* the MCP entry is an emoji, not an SVG */
+}
+
+.sidebar-integration-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
 /* Unread / activity badge on the right edge of a sidebar nav item.
    Fed by /api/emails/unread-count for the Emails row; tile-shape pill
    styled to match the active state's color tokens so it doesn't clash. */

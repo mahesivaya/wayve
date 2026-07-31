@@ -100,6 +100,83 @@ mod tests {
             .await;
     }
 
+    /// A bot token Slack rejects must be a 400, never a 401.
+    ///
+    /// The frontend treats every 401 as session expiry and redirects to /login,
+    /// so returning 401 here logged the user out of Wayve for pasting a wrong
+    /// Slack token — the session was fine; only the third-party credential was
+    /// bad. Slack's own reason has to reach the client so the panel can explain.
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn rejected_bot_token_is_a_bad_request_not_a_logout() {
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/auth.test"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "ok": false, "error": "invalid_auth"
+            })))
+            .mount(&mock)
+            .await;
+
+        // SAFETY: env mutation is serialized by #[serial]; CI runs --test-threads=1.
+        unsafe {
+            std::env::set_var("AES_KEY", HEX64_TEST_KEY);
+            std::env::set_var("SLACK_API_BASE", mock.uri());
+        }
+
+        let pool = test_pool().await;
+        let email = random_email();
+        let user_id = insert_local_user(&pool, &email, "password123").await;
+        let org_id = make_enterprise(&pool, user_id).await;
+        let bearer = format!("Bearer {}", jwt_for(user_id, &email));
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(integrations::slack::handler::connect),
+        )
+        .await;
+
+        let req = actix_test::TestRequest::put()
+            .uri("/integrations/slack/connection")
+            .insert_header(("Authorization", bearer))
+            .set_json(serde_json::json!({ "bot_token": "xoxb-not-a-real-token" }))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(
+            resp.status(),
+            StatusCode::BAD_REQUEST,
+            "a token Slack refuses must not read as an expired Wayve session"
+        );
+
+        // Slack's reason reaches the client, so the panel can say what was wrong
+        // rather than failing blankly.
+        let body = actix_test::read_body(resp).await;
+        let text = String::from_utf8_lossy(&body);
+        assert!(
+            text.contains("invalid_auth"),
+            "expected Slack's reason in the body, got: {text}"
+        );
+
+        // Nothing was stored — validation happens before the insert.
+        let stored: Option<i32> =
+            sqlx::query_scalar("SELECT 1 FROM slack_connections WHERE organization_id = $1")
+                .bind(org_id)
+                .fetch_optional(&pool)
+                .await
+                .unwrap_or_else(|e| panic!("connection lookup: {e}"));
+        assert!(stored.is_none(), "a rejected token must not be persisted");
+
+        unsafe {
+            std::env::remove_var("SLACK_API_BASE");
+        }
+        let _ = sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_id)
+            .execute(&pool)
+            .await;
+    }
+
     #[actix_web::test]
     #[serial_test::serial]
     async fn connect_link_and_import() {
