@@ -28,6 +28,7 @@ mod integrations;
 mod middleware;
 mod models;
 mod notes;
+mod oauth_provider;
 mod observability;
 mod openapi;
 mod organization;

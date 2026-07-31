@@ -102,6 +102,7 @@ const SwaggerDocs = lazy(() => import("./marketing/SwaggerDocs"));
 const DocsIndex = lazy(() => import("./docs/DocsIndex"));
 const ApiKeysPage = lazy(() => import("./apikeys/ApiKeysPage"));
 const DeveloperAppsPage = lazy(() => import("./developer/DeveloperAppsPage"));
+const ConnectPage = lazy(() => import("./oauth/ConnectPage"));
 const ProjectsPage = lazy(() => import("./projects/ProjectsPage"));
 const ProjectDetail = lazy(() => import("./projects/ProjectDetail"));
 const SsoSettings = lazy(() => import("./settings/SsoSettings"));
@@ -232,6 +233,9 @@ export default function App() {
           />
 
           <Route element={<ProtectedRoute />}>
+            {/* OAuth "Connect with Fluxze" consent — full-screen, no app chrome,
+              but still requires the user to be signed in. */}
+            <Route path="/connect" element={<ConnectPage />} />
             <Route element={<Layout />}>
               {/* Sidebar split-pane app routes are generated from the SPLIT_APPS
                 registry in LayoutConfig.ts, so adding an app there adds both the

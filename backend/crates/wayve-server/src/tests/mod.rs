@@ -20,6 +20,7 @@ mod mcp_test;
 mod meeting_alert_minutes_test;
 mod meeting_link_test;
 mod mode_switch_test;
+mod oauth_provider_test;
 mod org_keys_test;
 mod platform_billing_feature_access_test;
 mod platform_users_test;

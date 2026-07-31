@@ -55,6 +55,26 @@ pub fn generate_client_secret() -> String {
     format!("wv_cs_{hex}")
 }
 
+/// A random `<prefix>` + 48 hex chars (192-bit) credential. Used for OAuth
+/// authorization codes and access/refresh tokens; store only its `hash_api_key`
+/// hash. The prefix (`wv_oac_`, `wv_oat_`, `wv_ort_`) identifies the kind.
+pub fn generate_prefixed_token(prefix: &str) -> String {
+    let mut bytes = [0u8; 24];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+    format!("{prefix}{hex}")
+}
+
+/// Verify a PKCE `code_verifier` against a stored S256 `code_challenge`:
+/// BASE64URL(SHA256(verifier)) == challenge. Used at the token endpoint so a
+/// public client proves it began the flow.
+pub fn verify_pkce_s256(verifier: &str, challenge: &str) -> bool {
+    use base64::Engine;
+    let digest = Sha256::digest(verifier.as_bytes());
+    let computed = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest);
+    computed == challenge
+}
+
 /// SHA-256 hex of an API key. API keys are high-entropy tokens, so a fast
 /// deterministic hash is correct here — it lets validation be a single indexed
 /// lookup on `key_hash` rather than a bcrypt scan over every row.
@@ -534,5 +554,21 @@ mod tests {
         assert!(is_valid_scope("*"));
         assert!(!is_valid_scope("notes:destroy"));
         assert!(!is_valid_scope(""));
+    }
+
+    #[test]
+    fn pkce_s256_matches_rfc7636_vector() {
+        // RFC 7636 Appendix B: verifier → BASE64URL(SHA256(verifier)) challenge.
+        let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+        let challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+        assert!(verify_pkce_s256(verifier, challenge));
+        assert!(!verify_pkce_s256("wrong-verifier", challenge));
+    }
+
+    #[test]
+    fn prefixed_tokens_have_expected_shape() {
+        let t = generate_prefixed_token("wv_oat_");
+        assert!(t.starts_with("wv_oat_"));
+        assert_eq!(t.len(), "wv_oat_".len() + 48);
     }
 }
