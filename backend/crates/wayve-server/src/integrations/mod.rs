@@ -3,6 +3,7 @@ pub mod gitlab;
 pub mod jira;
 pub mod mcp;
 pub mod slack;
+pub mod status;
 
 /// Authenticated, `/api`-scoped integration endpoints.
 pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
@@ -11,6 +12,7 @@ pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     jira::routes(cfg);
     mcp::routes(cfg);
     slack::routes(cfg);
+    status::routes(cfg);
 }
 
 /// Unauthenticated, root-mounted integration receivers (e.g. the Jira webhook),

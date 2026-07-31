@@ -23,7 +23,13 @@ vi.mock("../../auth/useAuth", () => ({
     logout: vi.fn(),
   }),
 }));
-vi.mock("../../auth/permissions", () => ({ hasPermission: () => true }));
+vi.mock("../../auth/permissions", () => ({
+  hasPermission: () => true,
+  canViewIntegrations: () => true,
+}));
+vi.mock("../../api/integrations", () => ({
+  getConnectedIntegrations: vi.fn().mockResolvedValue({ connected: [] }),
+}));
 vi.mock("../../api/activity", () => ({ recordActivity: vi.fn() }));
 vi.mock("../../api/workspace", () => ({
   listTeams: vi.fn().mockResolvedValue([]),
