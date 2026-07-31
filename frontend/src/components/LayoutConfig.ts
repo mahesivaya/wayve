@@ -16,6 +16,7 @@ export type AppKey =
   | "github"
   | "about"
   | "reminders"
+  | "requests"
   | "test_access";
 
 const HomeView = lazy(() => import("../home/Home"));
@@ -31,6 +32,7 @@ const AIChatView = lazy(() => import("../aichat/AIChat"));
 const GitHubRepoView = lazy(() => import("../github/GitHubRepo"));
 const AboutView = lazy(() => import("../about/About"));
 const RemindersView = lazy(() => import("../reminders/Reminders"));
+const RequestsView = lazy(() => import("../requests/RequestsPage"));
 
 // Single source of truth for the split-pane apps and their top-level routes:
 // App.tsx auto-renders a route per entry, so a new sidebar app needs only one
@@ -115,5 +117,16 @@ export const SPLIT_APPS: SplitApp[] = [
     // into the focused split pane (resolved via SPLIT_APPS like any app).
     autoRoute: false,
     Comp: RemindersView,
+  },
+  {
+    key: "requests",
+    label: "Requests",
+    path: "/requests",
+    icon: "🔑",
+    // App.tsx already declares /requests (with its ?tab redirects); opt out of
+    // the generated route so it isn't defined twice. The entry exists so the
+    // Requests sidebar item can open into the focused split pane.
+    autoRoute: false,
+    Comp: RequestsView,
   },
 ];
