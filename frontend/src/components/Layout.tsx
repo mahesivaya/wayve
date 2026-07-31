@@ -892,19 +892,38 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // (Home by default). Clicking a half focuses it, so a sidebar click retargets
   // only that half. The ✕/toggle collapses the sub-split. When not split, the
   // single app fills the body (the pane's own toolbar sits above, separately).
-  const renderPaneBody = (key: PaneKey, label: string, node: ReactNode) => {
+  // Every wrapper below is rendered in EVERY state and collapsed with
+  // `display: contents` when it isn't needed, so the page node always sits at
+  // the same depth: stack > half > body > Suspense > page.
+  //
+  // Both splits used to move it. Opening a column swapped a bare <Suspense> for
+  // a .split-pane-body wrapper; stacking pushed it two levels deeper into a
+  // .pane-half. React reconciles by position, so a changed depth reads as a new
+  // element — it tore the page down and built a fresh one, and every bit of
+  // page-local useState went with it (an in-progress AI conversation, an unsaved
+  // draft, a scroll position). Holding the shape fixed keeps the page mounted.
+  //
+  // Class names and props may change freely between states; only element type
+  // and position drive remounting. `inSplit` is false only for the left pane
+  // while the layout is entirely unsplit.
+  const renderPaneBody = (
+    key: PaneKey,
+    label: string,
+    node: ReactNode,
+    inSplit = true
+  ) => {
+    const stacked = subSplit[key];
     const bodyOf = (content: ReactNode) => (
-      <div className="split-pane-body">
-        <SplitPaneContext.Provider value={true}>
+      <div
+        className={`split-pane-body${inSplit ? "" : " split-pane-body--full"}`}
+      >
+        <SplitPaneContext.Provider value={inSplit}>
           <Suspense fallback={<div className="split-loading">Loading…</div>}>
             {content}
           </Suspense>
         </SplitPaneContext.Provider>
       </div>
     );
-    if (!subSplit[key]) {
-      return bodyOf(node);
-    }
     const bottomApp =
       SPLIT_APPS.find((a) => a.key === subBottomView[key]) ?? homeApp;
     const BottomComp = bottomApp?.Comp ?? HomeComp;
@@ -916,55 +935,74 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       content: ReactNode,
       grow: number
     ) => {
-      const focused = splitTarget === key && focusHalf === whichHalf;
+      const focused = stacked && splitTarget === key && focusHalf === whichHalf;
       return (
         <div
-          className={`pane-half ${focused ? "active-target" : ""}`.trim()}
-          style={{ flexGrow: grow }}
+          className={
+            stacked
+              ? `pane-half ${focused ? "active-target" : ""}`.trim()
+              : "pane-half--flat"
+          }
+          style={stacked ? { flexGrow: grow } : undefined}
           // Capture phase + focus: any interaction in the half re-targets it,
-          // even children that stop propagation or take keyboard focus.
-          onMouseDownCapture={() => focusPane(key, whichHalf)}
-          onFocusCapture={() => focusPane(key, whichHalf)}
+          // even children that stop propagation or take keyboard focus. Bound
+          // only while stacked — unstacked there is no half to target, and the
+          // pane div's own handler already owns focus.
+          onMouseDownCapture={
+            stacked ? () => focusPane(key, whichHalf) : undefined
+          }
+          onFocusCapture={stacked ? () => focusPane(key, whichHalf) : undefined}
         >
-          <div className="split-pane-toolbar">
-            <span
-              className="split-pane-title"
-              {...titleDragProps(key, whichHalf)}
-            >
-              {title}
-            </span>
-            <div className="split-pane-tools">
-              <button
-                className="split-close-btn"
-                onClick={() => closeHalf(key, whichHalf)}
-                data-tooltip="Close this pane"
-                aria-label="Close this pane"
+          {stacked && (
+            <div className="split-pane-toolbar">
+              <span
+                className="split-pane-title"
+                {...titleDragProps(key, whichHalf)}
               >
-                ✕
-              </button>
+                {title}
+              </span>
+              <div className="split-pane-tools">
+                <button
+                  className="split-close-btn"
+                  onClick={() => closeHalf(key, whichHalf)}
+                  data-tooltip="Close this pane"
+                  aria-label="Close this pane"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
-          </div>
+          )}
           {bodyOf(content)}
-          {dropOverlay(key, whichHalf)}
+          {stacked && dropOverlay(key, whichHalf)}
         </div>
       );
     };
     return (
-      <div className="split-pane-body split-pane-body--stacked">
+      <div
+        className={
+          stacked
+            ? "split-pane-body split-pane-body--stacked"
+            : "pane-stack--flat"
+        }
+      >
         {half("top", label, node, subTop[key])}
-        <div
-          className="split-resize-handle split-resize-handle--horizontal"
-          role="separator"
-          aria-orientation="horizontal"
-          aria-label="Resize pane"
-          onPointerDown={handleSubResize(key)}
-        />
-        {half(
-          "bottom",
-          bottomLabel,
-          BottomComp ? <BottomComp /> : node,
-          1 - subTop[key]
+        {stacked && (
+          <div
+            className="split-resize-handle split-resize-handle--horizontal"
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="Resize pane"
+            onPointerDown={handleSubResize(key)}
+          />
         )}
+        {stacked &&
+          half(
+            "bottom",
+            bottomLabel,
+            BottomComp ? <BottomComp /> : node,
+            1 - subTop[key]
+          )}
       </div>
     );
   };
@@ -1341,13 +1379,32 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           {/* Moved down here from the top-level app list — a workspace tool, not
               a personal app. Test Access and Access Requests are one page now,
               so one entry covers both; it needs no gate of its own, since the
-              section's `visible` is the same scope test Test Access carried. */}
-          {renderSidebarLink(
-            "/requests",
-            "Requests",
-            <AccessRequestsIcon size={16} />,
-            location.pathname === "/requests"
-          )}
+              section's `visible` is the same scope test Test Access carried.
+              Split-aware onClick (mirrors Code Repo) so it opens in the focused
+              pane, not always the left column. */}
+          <Link
+            to="/requests"
+            title="Requests"
+            className={`sidebar-project-label${
+              location.pathname === "/requests" ? " active" : ""
+            }`}
+            onClick={(e) => {
+              setNavOpen(false);
+              if (!splitOpen) return;
+              if (focusHalf === "bottom" && subSplit[splitTarget]) {
+                e.preventDefault();
+                setSubBottomView((v) => ({ ...v, [splitTarget]: "requests" }));
+              } else if (splitTarget === "center") {
+                e.preventDefault();
+                setMiddleView("requests");
+              } else if (splitTarget === "right") {
+                e.preventDefault();
+                setRightView("requests");
+              }
+            }}
+          >
+            <AccessRequestsIcon size={16} /> Requests
+          </Link>
         </div>
       ),
     },
@@ -1849,43 +1906,43 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 }}
                 style={splitOpen ? { flexGrow: paneWeights.left } : undefined}
               >
-                {splitOpen ? (
-                  <>
-                    {!subSplit.left && (
-                      <div className="split-pane-toolbar">
-                        <span
-                          className="split-pane-title"
-                          {...titleDragProps("left")}
-                        >
-                          {leftLabel}
-                        </span>
-                        <div className="split-pane-tools">
-                          <button
-                            className="split-close-btn"
-                            onClick={closeLeftPane}
-                            data-tooltip="Close pane"
-                            aria-label="Close left pane"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    {renderPaneBody("left", leftLabel, children ?? <Outlet />)}
-                    {!subSplit.left && dropOverlay("left", "top")}
-                  </>
-                ) : (
-                  <>
-                    <Suspense
-                      fallback={<div className="split-loading">Loading…</div>}
+                {/* One branch, not a `splitOpen ? … : …` pair. The two branches
+                    used to place <Outlet/> at different depths (bare <Suspense>
+                    vs. nested inside .split-pane-body), so opening a split
+                    remounted the page and every page-local useState went with
+                    it — an in-progress AI conversation was wiped by splitting.
+                    Keeping one structure keeps the page mounted. `splitOpen` is
+                    false only while unsplit, and subSplit.left implies splitOpen,
+                    so `!subSplit.left` alone gates the overlay for both cases. */}
+                {splitOpen && !subSplit.left && (
+                  <div className="split-pane-toolbar">
+                    <span
+                      className="split-pane-title"
+                      {...titleDragProps("left")}
                     >
-                      {children ?? <Outlet />}
-                    </Suspense>
-                    {/* No split open yet: dropping here is how the first one
-                        gets created, so the whole page is a drop target. */}
-                    {dropOverlay("left", "top")}
-                  </>
+                      {leftLabel}
+                    </span>
+                    <div className="split-pane-tools">
+                      <button
+                        className="split-close-btn"
+                        onClick={closeLeftPane}
+                        data-tooltip="Close pane"
+                        aria-label="Close left pane"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
                 )}
+                {renderPaneBody(
+                  "left",
+                  leftLabel,
+                  children ?? <Outlet />,
+                  splitOpen
+                )}
+                {/* Unsplit, dropping anywhere on the page is how the first split
+                    gets created, so the overlay covers the whole pane. */}
+                {!subSplit.left && dropOverlay("left", "top")}
               </div>
 
               {hasSecondPane && (
