@@ -6,6 +6,7 @@ pub mod audit;
 pub mod auth;
 pub mod chat_keys;
 pub mod config;
+pub mod developer_apps;
 pub mod email;
 pub mod error_logs;
 pub mod health;
@@ -26,6 +27,7 @@ pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     auth::routes(cfg);
     user::routes(cfg);
     api_keys::routes(cfg);
+    developer_apps::routes(cfg);
     audit::routes(cfg);
     activity::routes(cfg);
     account::routes(cfg);

@@ -2762,3 +2762,34 @@ CREATE POLICY email_contacts_rls ON email_contacts
         current_setting('app.bypass', true) = 'on'
         OR user_id = nullif(current_setting('app.user_id', true), '')::int
     );
+
+-- ---------------------------------------------------------------------------
+-- Developer apps (app registration for the developer platform).
+--
+-- A registered third-party integration owned by a user (and their org, if any).
+-- `client_id` is a public, non-secret identifier; `client_secret` is shown once
+-- at creation/rotation and only its SHA-256 hash is stored, exactly like
+-- api_keys. `redirect_uris` + `scopes` are captured now so the future OAuth
+-- authorize/token flow can consume them without a schema change. Access is
+-- application-enforced via RBAC (the `api_keys:manage` permission) plus an
+-- owner-scope check, mirroring api_keys — no RLS/GRANT here.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS developer_apps (
+    id                    SERIAL PRIMARY KEY,
+    user_id               INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    organization_id       INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+    name                  TEXT NOT NULL,
+    description           TEXT,
+    homepage_url          TEXT,
+    client_id             TEXT NOT NULL UNIQUE,
+    client_secret_hash    TEXT NOT NULL,
+    client_secret_preview TEXT NOT NULL,
+    redirect_uris         TEXT[] NOT NULL DEFAULT '{}',
+    scopes                TEXT[] NOT NULL DEFAULT '{}',
+    created_by            INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    revoked_at            TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS developer_apps_user_idx ON developer_apps(user_id);
+CREATE INDEX IF NOT EXISTS developer_apps_org_idx ON developer_apps(organization_id);

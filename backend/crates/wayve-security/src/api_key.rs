@@ -35,6 +35,26 @@ pub fn generate_api_key() -> String {
     format!("wv_sk_{hex}")
 }
 
+/// A public client identifier for a registered developer app: `wv_app_` + 32
+/// hex chars. Non-secret — safe to display, log, and embed in OAuth redirect
+/// flows. Unique per app (enforced by the `developer_apps.client_id` constraint).
+pub fn generate_client_id() -> String {
+    let mut bytes = [0u8; 16];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+    format!("wv_app_{hex}")
+}
+
+/// A developer-app client secret: `wv_cs_` + 48 hex chars (192 bits). Shown once
+/// at creation/rotation; only its SHA-256 hash (via [`hash_api_key`]) is stored,
+/// so a leaked database exposes no usable secrets.
+pub fn generate_client_secret() -> String {
+    let mut bytes = [0u8; 24];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+    format!("wv_cs_{hex}")
+}
+
 /// SHA-256 hex of an API key. API keys are high-entropy tokens, so a fast
 /// deterministic hash is correct here — it lets validation be a single indexed
 /// lookup on `key_hash` rather than a bcrypt scan over every row.
@@ -163,8 +183,8 @@ pub fn required_scope(method: &str, path: &str) -> Option<&'static str> {
         // callbacks (resolution + ai-fix-diff) authenticate with an internal
         // management key; the handlers then enforce tickets:manage on the key's
         // user. Both boards run the same pipeline, so both need the same reach.
-        "admin" | "keys" | "audit" | "organizations" | "platform" | "billing" | "v1"
-        | "workspace-tickets" | "user-stories" | "pr-notify" => "admin",
+        "admin" | "keys" | "developer" | "audit" | "organizations" | "platform" | "billing"
+        | "v1" | "workspace-tickets" | "user-stories" | "pr-notify" => "admin",
         _ => return None,
     };
     Some(scope)
