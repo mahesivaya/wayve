@@ -189,13 +189,38 @@ mod auth_regression_tests {
         use crate::test_support::{insert_local_user, jwt_for, random_email, test_pool};
         let pool = test_pool().await;
 
-        // Caller + a matching personal user share the personal scope.
         let caller_email = random_email();
         let caller = insert_local_user(&pool, &caller_email, "password123").await;
 
         let needle = format!("zzsearch-{}", uuid::Uuid::new_v4().simple());
+
+        // A personal user who shares a channel with the caller MUST surface.
         let match_email = format!("{needle}@personal.example");
         let match_id = insert_local_user(&pool, &match_email, "password123").await;
+
+        // A personal user with no shared channel or DM must NOT surface: personal
+        // accounts are not one tenant, so `account_type = 'personal'` alone is not
+        // grounds for visibility.
+        let stranger_email = format!("{needle}@stranger.example");
+        let stranger_id = insert_local_user(&pool, &stranger_email, "password123").await;
+
+        let channel_id: i32 = sqlx::query_scalar(
+            "INSERT INTO channels (name, created_by, visibility)
+             VALUES ($1, $2, 'private') RETURNING id",
+        )
+        .bind(format!("search-scope-{needle}"))
+        .bind(caller)
+        .fetch_one(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("create channel: {e}"));
+        for uid in [caller, match_id] {
+            sqlx::query("INSERT INTO channel_members (channel_id, user_id) VALUES ($1, $2)")
+                .bind(channel_id)
+                .bind(uid)
+                .execute(&pool)
+                .await
+                .unwrap_or_else(|e| panic!("add channel member: {e}"));
+        }
 
         // An organization user must NOT surface for a personal-scope caller.
         let org_id: i32 =
@@ -234,7 +259,14 @@ mod auth_regression_tests {
             .iter()
             .filter_map(|u| u.get("id").and_then(|v| v.as_i64()))
             .collect();
-        assert!(ids.contains(&(match_id as i64)), "personal match missing");
+        assert!(
+            ids.contains(&(match_id as i64)),
+            "personal user sharing a channel with the caller is missing"
+        );
+        assert!(
+            !ids.contains(&(stranger_id as i64)),
+            "unrelated personal user leaked into personal-scope search"
+        );
         assert!(
             !ids.contains(&(org_user as i64)),
             "org user leaked into personal-scope search"
@@ -248,8 +280,12 @@ mod auth_regression_tests {
         assert!(hit.get("username").is_some());
         assert!(hit.get("public_key").is_none());
 
-        // Cleanup.
-        for uid in [caller, match_id, org_user] {
+        // Cleanup. `channels` cascades to `channel_members`.
+        let _ = sqlx::query("DELETE FROM channels WHERE id = $1")
+            .bind(channel_id)
+            .execute(&pool)
+            .await;
+        for uid in [caller, match_id, stranger_id, org_user] {
             let _ = sqlx::query("DELETE FROM users WHERE id = $1")
                 .bind(uid)
                 .execute(&pool)

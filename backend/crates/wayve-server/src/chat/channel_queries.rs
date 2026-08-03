@@ -11,11 +11,14 @@ pub async fn get_channels(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     // A channel is visible only when its creator shares the caller's scope, so
-    // cross-tenant channels never appear.
+    // cross-tenant channels never appear. Personal accounts share no tenant with
+    // each other, so for them visibility narrows to channels they actually
+    // belong to — see `directory_scope::VISIBLE_CHANNELS`.
     let ctx = rbac::resolve_role_context(pool.get_ref(), user_id).await?;
 
-    let rows = sqlx::query(
-        r#"
+    // Built by concatenation rather than `format!` because the SQL contains
+    // `'{}'` empty-array literals, which `format!` would read as placeholders.
+    let sql = r#"
         SELECT
             c.id,
             c.name,
@@ -78,20 +81,19 @@ pub async fn get_channels(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
             ON mine.channel_id = c.id AND mine.user_id = $1
         LEFT JOIN channel_join_requests jr
             ON jr.channel_id = c.id AND jr.user_id = $1 AND jr.status = 'pending'
-        WHERE (
-            ($2 = 'personal'     AND creator.account_type = 'personal')
-         OR ($2 = 'platform'     AND creator.account_type = 'platform_admin')
-         OR ($2 = 'organization' AND creator.account_type IN ('organization', 'organization_admin')
-                                  AND creator.organization_id = $3)
-        )
+        WHERE "#
+        .to_string()
+        + crate::directory_scope::VISIBLE_CHANNELS
+        + r#"
         ORDER BY c.created_at DESC
-        "#,
-    )
-    .bind(user_id)
-    .bind(ctx.scope.as_str())
-    .bind(ctx.organization_id)
-    .fetch_all(pool.get_ref())
-    .await?;
+        "#;
+
+    let rows = sqlx::query(&sql)
+        .bind(user_id)
+        .bind(ctx.scope.as_str())
+        .bind(ctx.organization_id)
+        .fetch_all(pool.get_ref())
+        .await?;
 
     let channels: Vec<_> = rows
         .into_iter()

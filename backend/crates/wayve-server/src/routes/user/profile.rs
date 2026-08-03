@@ -576,21 +576,20 @@ pub async fn get_all_users(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
 
     // Scoping the directory to the caller's own tenant is what keeps the chat
     // people-picker from leaking accounts across tenants: platform sees platform,
-    // an org sees its own members, and a personal account sees only personal ones.
+    // and an org sees its own members. Personal accounts share no tenant, so they
+    // see only people they already share a channel or DM with —
+    // see `directory_scope::VISIBLE_USERS`.
     let ctx = rbac::resolve_role_context(pool.get_ref(), user_id).await?;
 
-    let rows = sqlx::query(
+    let rows = sqlx::query(&format!(
         r#"
         SELECT id, email, public_key
         FROM users u
-        WHERE (
-            ($1 = 'personal'     AND u.account_type = 'personal')
-         OR ($1 = 'platform'     AND u.account_type = 'platform_admin')
-         OR ($1 = 'organization' AND u.account_type IN ('organization', 'organization_admin')
-                                  AND u.organization_id = $2)
-        )
+        WHERE {visible_users}
         "#,
-    )
+        visible_users = crate::directory_scope::VISIBLE_USERS,
+    ))
+    .bind(user_id)
     .bind(ctx.scope.as_str())
     .bind(ctx.organization_id)
     .fetch_all(pool.get_ref())
@@ -639,21 +638,18 @@ pub async fn search_users(
     let ctx = rbac::resolve_role_context(pool.get_ref(), user_id).await?;
     let pattern = format!("%{}%", escape_like(trimmed));
 
-    let rows = sqlx::query(
+    let rows = sqlx::query(&format!(
         r#"
         SELECT id, email, username
         FROM users u
-        WHERE (
-            ($1 = 'personal'     AND u.account_type = 'personal')
-         OR ($1 = 'platform'     AND u.account_type = 'platform_admin')
-         OR ($1 = 'organization' AND u.account_type IN ('organization', 'organization_admin')
-                                  AND u.organization_id = $2)
-        )
-          AND (u.email ILIKE $3 OR u.username ILIKE $3)
+        WHERE {visible_users}
+          AND (u.email ILIKE $4 OR u.username ILIKE $4)
         ORDER BY u.username NULLS LAST, u.email
         LIMIT 10
         "#,
-    )
+        visible_users = crate::directory_scope::VISIBLE_USERS,
+    ))
+    .bind(user_id)
     .bind(ctx.scope.as_str())
     .bind(ctx.organization_id)
     .bind(&pattern)
