@@ -805,6 +805,9 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* `#root` sets `text-align: center` globally, which leaked into the modal and
+     centred every field label. */
+  text-align: left;
 }
 .form-group {
   display: flex;
@@ -813,10 +816,11 @@
 }
 .form-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
 }
 .form-row > .form-group {
-  flex: 1;
+  flex: 1 1 140px;
   min-width: 0;
 }
 .form-group label {
@@ -845,61 +849,94 @@
 
 .time-select {
   position: relative;
+  /* The open list must sit above the fields below it. */
+  z-index: 0;
 }
-.time-select-button {
+.time-select.is-open {
+  z-index: 30;
+}
+input.time-select-input {
   width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 10px;
+  /* Room for the caret so a long label ("10:45 AM") never runs under it. */
+  padding: 8px 28px 8px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface-alt);
   color: var(--text);
   font-size: var(--text-md);
   font-family: inherit;
-  cursor: pointer;
   text-align: left;
+  cursor: text;
 }
-.time-select-button:focus {
+input.time-select-input:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgb(26, 115, 232, 0.18);
 }
+input.time-select-input.is-invalid,
+input.time-select-input.is-invalid:focus {
+  border-color: var(--danger, #dc2626);
+  box-shadow: 0 0 0 3px rgb(220, 38, 38, 0.15);
+}
 .time-select-caret {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
   color: var(--text-muted);
   font-size: 12px;
-  margin-left: 8px;
+  line-height: 1;
+  cursor: pointer;
+}
+.time-select.is-open .time-select-caret {
+  transform: translateY(-50%) rotate(180deg);
 }
 .time-select-list {
   position: absolute;
-  top: calc(100% + 2px);
+  top: calc(100% + 4px);
   left: 0;
   right: 0;
-  max-height: 168px;
+  /* max-height is set inline from the room actually left inside the modal's
+     scroll box, so the list can't be clipped by it or cover the actions. */
   overflow-y: auto;
+  overscroll-behavior: contain;
   margin: 0;
-  padding: 2px 0;
+  padding: 4px 0;
   list-style: none;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
-  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.08);
-  z-index: 20;
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 20px rgb(0, 0, 0, 0.14);
+  z-index: 30;
+}
+/* Not enough room below the field — open upward instead. */
+.time-select-list.is-up {
+  top: auto;
+  bottom: calc(100% + 4px);
 }
 .time-select-list li {
-  padding: 4px 10px;
-  font-size: var(--text-sm, 13px);
-  line-height: 1.4;
+  padding: 7px 10px;
+  font-size: var(--text-md);
+  line-height: 1.3;
   color: var(--text);
   cursor: pointer;
+  white-space: nowrap;
 }
-.time-select-list li:hover {
+.time-select-list li.is-active {
   background: var(--surface-alt);
 }
 .time-select-list li.is-selected {
   background: var(--accent);
-  color: white;
+  color: var(--color-surface, white);
+  font-weight: 600;
 }
 
 .modal-actions {

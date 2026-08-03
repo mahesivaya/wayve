@@ -5,6 +5,7 @@ import { PersonIcon } from "../icons";
 import "./scheduler.css";
 import { computeLanes } from "./eventLayout";
 import Modal from "../components/Modal";
+import TimeSelect from "./TimeSelect";
 import {
   createMeetingApi,
   createMeetingLinkApi,
@@ -67,75 +68,6 @@ type CreatedMeeting = {
   invites_sent?: boolean | null;
 };
 
-type TimeOption = { value: string; label: string };
-
-function TimeSelect({
-  value,
-  options,
-  onChange,
-}: {
-  value: string;
-  options: TimeOption[];
-  onChange: (next: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (event: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  // Scroll the selected row into view on open, so the user lands near their
-  // existing pick instead of at midnight.
-  useEffect(() => {
-    if (!open || !listRef.current) return;
-    const selected =
-      listRef.current.querySelector<HTMLLIElement>("li.is-selected");
-    selected?.scrollIntoView({ block: "nearest" });
-  }, [open]);
-
-  const current = options.find((opt) => opt.value === value);
-
-  return (
-    <div className="time-select" ref={wrapRef}>
-      <button
-        type="button"
-        className="time-select-button"
-        onClick={() => setOpen((prev) => !prev)}
-      >
-        <span>{current?.label ?? value}</span>
-        <span className="time-select-caret">▾</span>
-      </button>
-      {open && (
-        <ul className="time-select-list" role="listbox" ref={listRef}>
-          {options.map((opt) => (
-            <li
-              key={opt.value}
-              role="option"
-              aria-selected={opt.value === value}
-              className={opt.value === value ? "is-selected" : ""}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                onChange(opt.value);
-                setOpen(false);
-              }}
-            >
-              {opt.label}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
 
 export default function Scheduler() {
   const { normalizedSearchQuery } = useGlobalSearch();
@@ -527,8 +459,9 @@ export default function Scheduler() {
     setSelectedCalendarId("office");
   };
 
-  // Snap to the nearest 15-minute boundary so the value always matches one of
-  // the dropdown options.
+  // Snap a *seeded* time to the nearest 15-minute boundary so a new meeting
+  // starts on a tidy slot. Times the user picked are never re-snapped — the
+  // field accepts any minute.
   const snap15 = (time: string) => {
     const mins = toMinutes(time);
     const snapped = Math.min(Math.round(mins / 15) * 15, 23 * 60 + 45);
@@ -541,8 +474,9 @@ export default function Scheduler() {
     const seeded = {
       title: event.title,
       date: event.date,
-      start: snap15(toTime(event.start)),
-      end: snap15(toTime(event.end)),
+      // Kept exact: re-opening a 10:47 meeting must not silently shift it.
+      start: toTime(event.start),
+      end: toTime(event.end),
       calendarId: getCalendarIdForEvent(event),
       participants: event.participants ?? [],
     };
@@ -644,14 +578,15 @@ export default function Scheduler() {
     return slots;
   }, []);
 
+  const startMinMins =
+    !editingEvent && selectedDate === todayStr() ? toMinutes(nowTimeStr()) : -1;
+
   const startOptions = useMemo(() => {
-    const minMins =
-      !editingEvent && selectedDate === todayStr()
-        ? toMinutes(nowTimeStr())
-        : -1;
     const startMins = toMinutes(start);
-    return timeSlots.filter((s) => s.mins > minMins || s.mins === startMins);
-  }, [timeSlots, editingEvent, selectedDate, start]);
+    return timeSlots.filter(
+      (s) => s.mins > startMinMins || s.mins === startMins
+    );
+  }, [timeSlots, startMinMins, start]);
 
   const endOptions = useMemo(() => {
     const startMins = toMinutes(start);
@@ -1116,45 +1051,20 @@ export default function Scheduler() {
         onClose={resetModal}
         title={editingEvent ? "Edit Meeting" : "Schedule Meeting"}
       >
+        {/* Ordered the way a meeting is actually described: what it is, who's
+            in it, then where and when it lands. */}
         <div className="form">
           <div className="form-group">
-            <label>Date</label>
+            <label htmlFor="meeting-title">Title</label>
             <input
-              type="date"
-              value={selectedDate}
-              min={editingEvent ? undefined : todayStr()}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (!editingEvent && v && v < todayStr()) {
-                  setSelectedDate(todayStr());
-                } else {
-                  setSelectedDate(v);
-                }
-              }}
+              id="meeting-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
             />
           </div>
 
           <div className="form-group">
-            <label>Title</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} />
-          </div>
-
-          <div className="form-group">
-            <label>Calendar</label>
-            <select
-              value={selectedCalendarId}
-              onChange={(e) => setSelectedCalendarId(e.target.value)}
-            >
-              {calendars.map((calendar) => (
-                <option key={calendar.id} value={calendar.id}>
-                  {calendar.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label>Participants</label>
+            <label htmlFor="meeting-participants">Participants</label>
             <div className="chips">
               {participants.map((p) => (
                 <div key={p} className="chip">
@@ -1166,6 +1076,7 @@ export default function Scheduler() {
             <div className="participant-input">
               <div className="participant-typeahead">
                 <input
+                  id="meeting-participants"
                   type="text"
                   placeholder="Type a name or email…"
                   value={emailInput}
@@ -1218,12 +1129,47 @@ export default function Scheduler() {
             </div>
           </div>
 
+          <div className="form-group">
+            <label htmlFor="meeting-calendar">Calendar</label>
+            <select
+              id="meeting-calendar"
+              value={selectedCalendarId}
+              onChange={(e) => setSelectedCalendarId(e.target.value)}
+            >
+              {calendars.map((calendar) => (
+                <option key={calendar.id} value={calendar.id}>
+                  {calendar.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="meeting-date">Date</label>
+            <input
+              id="meeting-date"
+              type="date"
+              value={selectedDate}
+              min={editingEvent ? undefined : todayStr()}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (!editingEvent && v && v < todayStr()) {
+                  setSelectedDate(todayStr());
+                } else {
+                  setSelectedDate(v);
+                }
+              }}
+            />
+          </div>
+
           <div className="form-row">
             <div className="form-group">
-              <label>Start</label>
+              <label htmlFor="meeting-start">Start</label>
               <TimeSelect
+                id="meeting-start"
                 value={start}
                 options={startOptions}
+                minMins={startMinMins}
                 onChange={(v) => {
                   setStart(v);
                   if (toMinutes(end) <= toMinutes(v)) {
@@ -1234,10 +1180,12 @@ export default function Scheduler() {
             </div>
 
             <div className="form-group">
-              <label>End</label>
+              <label htmlFor="meeting-end">End</label>
               <TimeSelect
+                id="meeting-end"
                 value={end}
                 options={endOptions}
+                minMins={toMinutes(start)}
                 onChange={(v) => setEnd(v)}
               />
             </div>
