@@ -1051,45 +1051,20 @@ export default function Scheduler() {
         onClose={resetModal}
         title={editingEvent ? "Edit Meeting" : "Schedule Meeting"}
       >
+        {/* Ordered the way a meeting is actually described: what it is, who's
+            in it, then where and when it lands. */}
         <div className="form">
           <div className="form-group">
-            <label>Date</label>
+            <label htmlFor="meeting-title">Title</label>
             <input
-              type="date"
-              value={selectedDate}
-              min={editingEvent ? undefined : todayStr()}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (!editingEvent && v && v < todayStr()) {
-                  setSelectedDate(todayStr());
-                } else {
-                  setSelectedDate(v);
-                }
-              }}
+              id="meeting-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
             />
           </div>
 
           <div className="form-group">
-            <label>Title</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} />
-          </div>
-
-          <div className="form-group">
-            <label>Calendar</label>
-            <select
-              value={selectedCalendarId}
-              onChange={(e) => setSelectedCalendarId(e.target.value)}
-            >
-              {calendars.map((calendar) => (
-                <option key={calendar.id} value={calendar.id}>
-                  {calendar.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label>Participants</label>
+            <label htmlFor="meeting-participants">Participants</label>
             <div className="chips">
               {participants.map((p) => (
                 <div key={p} className="chip">
@@ -1101,6 +1076,7 @@ export default function Scheduler() {
             <div className="participant-input">
               <div className="participant-typeahead">
                 <input
+                  id="meeting-participants"
                   type="text"
                   placeholder="Type a name or email…"
                   value={emailInput}
@@ -1151,6 +1127,39 @@ export default function Scheduler() {
                 Add
               </button>
             </div>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="meeting-calendar">Calendar</label>
+            <select
+              id="meeting-calendar"
+              value={selectedCalendarId}
+              onChange={(e) => setSelectedCalendarId(e.target.value)}
+            >
+              {calendars.map((calendar) => (
+                <option key={calendar.id} value={calendar.id}>
+                  {calendar.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="meeting-date">Date</label>
+            <input
+              id="meeting-date"
+              type="date"
+              value={selectedDate}
+              min={editingEvent ? undefined : todayStr()}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (!editingEvent && v && v < todayStr()) {
+                  setSelectedDate(todayStr());
+                } else {
+                  setSelectedDate(v);
+                }
+              }}
+            />
           </div>
 
           <div className="form-row">
