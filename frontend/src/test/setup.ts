@@ -69,6 +69,13 @@ if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
   });
 }
 
+// jsdom has no layout, so it implements no scrolling APIs either. Components
+// that keep a highlighted row in view (the scheduler's time picker, chat lists)
+// would throw on mount without this no-op.
+if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
+
 afterEach(() => {
   cleanup();
   (globalThis as unknown as { localStorage: Storage }).localStorage.clear();
