@@ -100,6 +100,12 @@ function appKeyFromPath(pathname: string): AppKey {
 // keeps it intact on return.
 const SPLIT_STORAGE_KEY = "rwayve.layout.split";
 
+// Reminders is hidden from the sidebar for now. The row, the bell component and
+// the /reminders page all stay in place — flip this back to true to restore it.
+// Everything else reminder-related (the popup alerts, the page itself) is
+// unaffected.
+const SHOW_REMINDERS_NAV = false;
+
 // Opt-in apps a personal account can add to its sidebar. Entries without a
 // `path` are placeholders that route to the Coming Soon page.
 const PERSONAL_APPS_STORAGE_KEY = "rwayve.layout.personalApps";
@@ -1793,7 +1799,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             >
               <div className="sidebar-section">
                 {renderSidebarItem("/", "home", "Home", <HomeIcon size={18} />)}
-                <NotificationBell variant="sidebar" />
+                {SHOW_REMINDERS_NAV && <NotificationBell variant="sidebar" />}
                 {renderSidebarItem(
                   "/emails",
                   "emails",
