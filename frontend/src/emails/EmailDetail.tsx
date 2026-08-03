@@ -15,6 +15,7 @@ import { APP_TIME_ZONE } from "../utils/datetime";
 import { useAuth } from "../auth/useAuth";
 import { useMentionSearch, mentionLabel } from "./useMentionSearch";
 import { avatarColor } from "../shared/avatar";
+import { useShortcuts } from "../shared/useShortcuts";
 import ContactAvatar from "../shared/ContactAvatar";
 
 interface EmailDetailProps {
@@ -193,19 +194,13 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     }
   }
 
-  // The attachments view is no longer rendered here: it is a list pane plus a
-  // detail pane of its own (EmailFilesPane), mounted by Emails.tsx alongside
-  // the email list rather than inside the message pane.
-
-  if (!selectedEmail) {
-    return (
-      <div className="email-detail">
-        <p>Select an email</p>
-      </div>
-    );
-  }
+  // The three entry points below sit above the "no email selected" early return
+  // because the shortcut hook has to run unconditionally, and it needs them.
 
   const handleDelete = async () => {
+    // The button carries disabled={deleting}; the keyboard path needs its own
+    // guard so a second `D` can't fire a concurrent delete.
+    if (!selectedEmail || deleting) return;
     const ok = window.confirm(
       "Delete this email permanently from Fluxze and your mail provider?"
     );
@@ -224,6 +219,83 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     }
   };
 
+  // These take an explicit target state rather than toggling, so the shortcuts
+  // can force-open (pressing R twice must not close the composer) while the
+  // header buttons keep their toggle behaviour by passing the negated state.
+  const showReply = (next: boolean) => {
+    setReplyOpen(next);
+    setReplyError(null);
+    setForwardOpen(false);
+    setForwardError(null);
+  };
+
+  const showForward = (next: boolean) => {
+    if (!selectedEmail) return;
+    setReplyOpen(false);
+    setReplyError(null);
+    setForwardOpen(next);
+    if (next && !forwardBody.trim()) {
+      setForwardBody(buildForwardBody(selectedEmail));
+    }
+    setForwardError(null);
+  };
+
+  // Gmail-style shortcuts for the open message: fixed bindings, no remapping.
+  // useShortcuts already drops bare keys while a text field has focus, so typing
+  // "reply" into the composer is safe; overlayOpen() covers the popups on top.
+  useShortcuts(
+    {
+      r: () => {
+        if (overlayOpen()) return;
+        showReply(true);
+      },
+      f: () => {
+        if (overlayOpen()) return;
+        showForward(true);
+      },
+      d: () => {
+        if (overlayOpen()) return;
+        void handleDelete();
+      },
+      escape: () => {
+        if (overlayOpen()) return;
+        // Peel one layer: dismiss an open composer first, mirroring its Cancel
+        // button, and only leave the message when there is nothing to dismiss.
+        // Closing the composer drops focus to <body>; hand it back to the pane
+        // so arrow-key scrolling keeps working on the message.
+        if (replyOpen) {
+          setReplyOpen(false);
+          setReplyError(null);
+          setReplyCc([]);
+          detailRef.current?.focus({ preventScroll: true });
+          return;
+        }
+        if (forwardOpen) {
+          setForwardOpen(false);
+          setForwardError(null);
+          detailRef.current?.focus({ preventScroll: true });
+          return;
+        }
+        onBack();
+      },
+    },
+    // The hook runs before the early return below, so !!selectedEmail is what
+    // keeps `D` from firing over the "Select an email" placeholder.
+    viewMode === "email" && !!selectedEmail
+  );
+
+  // The attachments view is no longer rendered here: it is a list pane plus a
+  // detail pane of its own (EmailFilesPane), mounted by Emails.tsx alongside
+  // the email list rather than inside the message pane.
+
+  if (!selectedEmail) {
+    return (
+      <div className="email-detail">
+        <p>Select an email</p>
+      </div>
+    );
+  }
+
   const handleMarkNoise = async () => {
     if (!onMarkNoise) return;
     try {
@@ -239,38 +311,10 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   };
 
   const replyTo = emailAddress(selectedEmail.sender);
-  const originalSubject = selectedEmail.subject?.trim() || "(No Subject)";
+  const originalSubject = displaySubject(selectedEmail);
   const forwardSubject = originalSubject.toLowerCase().startsWith("fwd:")
     ? originalSubject
     : `Fwd: ${originalSubject}`;
-
-  const openForward = () => {
-    const originalBody = bodyToPlainText(selectedEmail.body || "");
-    setReplyOpen(false);
-    setReplyError(null);
-    setForwardOpen((open) => {
-      const nextOpen = !open;
-      if (nextOpen && !forwardBody.trim()) {
-        setForwardBody(
-          [
-            "",
-            "",
-            "---------- Forwarded message ---------",
-            `From: ${selectedEmail.sender || "Unknown sender"}`,
-            selectedEmail.receiver ? `To: ${selectedEmail.receiver}` : null,
-            `Date: ${formatEmailDate(selectedEmail.created_at) || "Unknown date"}`,
-            `Subject: ${originalSubject}`,
-            "",
-            originalBody,
-          ]
-            .filter((line): line is string => line !== null)
-            .join("\n")
-        );
-      }
-      return nextOpen;
-    });
-    setForwardError(null);
-  };
 
   const handleReply = async () => {
     const body = replyBody.trim();
@@ -445,13 +489,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         <div className="email-detail-actions">
           <button
             className="email-detail-reply"
-            onClick={() => {
-              setReplyOpen((open) => !open);
-              setReplyError(null);
-              setForwardOpen(false);
-              setForwardError(null);
-            }}
-            data-tooltip="Reply"
+            onClick={() => showReply(!replyOpen)}
+            data-tooltip="Reply (R)"
             aria-label="Reply"
           >
             <svg
@@ -466,8 +505,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
           </button>
           <button
             className="email-detail-forward"
-            onClick={openForward}
-            data-tooltip="Forward"
+            onClick={() => showForward(!forwardOpen)}
+            data-tooltip="Forward (F)"
             aria-label="Forward"
           >
             <svg
@@ -484,7 +523,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             className="email-detail-delete"
             onClick={() => void handleDelete()}
             disabled={deleting}
-            data-tooltip="Delete email"
+            data-tooltip="Delete email (D)"
+            data-tooltip-align="right"
             aria-label="Delete email"
           >
             {deleting ? (
@@ -506,7 +546,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
           <button
             className="email-detail-back"
             onClick={onBack}
-            data-tooltip="Close"
+            data-tooltip="Close (Esc)"
+            data-tooltip-align="right"
             aria-label="Close"
           >
             ✕
@@ -714,6 +755,11 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
               onKeyDown={(e) => mention.onKeyDown(e)}
               placeholder={`Reply to ${replyTo || "sender"} — @ to mention`}
               aria-label="Reply body"
+              // Fires on the commit that mounts the textarea, i.e. exactly the
+              // closed -> open transition, so `R` lands the caret here. An
+              // effect on replyOpen would instead race the pane-focus timeout
+              // when switching emails and leave focus on <body>.
+              autoFocus
             />
           </div>
           {replyCc.length > 0 && (
@@ -879,6 +925,43 @@ function emailAddress(value?: string | null) {
   const text = value?.trim() || "";
   const match = text.match(/<([^>]+)>/);
   return (match?.[1] || text).trim();
+}
+
+function displaySubject(email: EmailItem): string {
+  return email.subject?.trim() || "(No Subject)";
+}
+
+// The quoted header + body a forward is pre-filled with. Module-level so the
+// component can expose a single `showForward` entry point above its early
+// return, which both the Forward button and the `F` shortcut call.
+function buildForwardBody(email: EmailItem): string {
+  return [
+    "",
+    "",
+    "---------- Forwarded message ---------",
+    `From: ${email.sender || "Unknown sender"}`,
+    email.receiver ? `To: ${email.receiver}` : null,
+    `Date: ${formatEmailDate(email.created_at) || "Unknown date"}`,
+    `Subject: ${displaySubject(email)}`,
+    "",
+    bodyToPlainText(email.body || ""),
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
+}
+
+// A popup owns the keyboard while it is open. Every overlay in the app installs
+// its own Escape handler and none of them stopPropagation, so the reading pane
+// stands down rather than double-handling the keystroke — otherwise Escape over
+// the compose modal would close the message *behind* it. Matched by role rather
+// than by refs because the overlays live in sibling trees (the compose Modal,
+// EmailList's select menu, this pane's kebab, the @mention list, ProviderPicker,
+// ThemeToggle, SplitMenu). A false positive costs one inert keypress, never a
+// wrong action.
+const OVERLAY_SELECTOR = '[role="dialog"],[role="menu"],[role="listbox"]';
+
+function overlayOpen(): boolean {
+  return document.querySelector(OVERLAY_SELECTOR) !== null;
 }
 
 function bodyToPlainText(value: string): string {
