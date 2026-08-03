@@ -9,6 +9,7 @@ mod chat;
 mod config;
 mod db;
 mod demo;
+mod directory_scope;
 mod docs;
 mod documents;
 mod drive;

@@ -6,6 +6,7 @@
 mod admin_create_verification_test;
 mod ai_config_test;
 mod billing_audit_test;
+mod channel_scope_test;
 mod chat_logging_test;
 mod contacts_test;
 mod documents_rbac_test;
