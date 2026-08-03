@@ -6,7 +6,10 @@
 // (enterprise is a plan tier, not a separate scope) or the platform owner.
 // Non-owner members are bounced.
 import { describe, expect, it } from "vitest";
-import { canViewIntegrations } from "../../auth/permissions";
+import {
+  canViewIntegrations,
+  canViewIntegrationsNav,
+} from "../../auth/permissions";
 
 describe("canViewIntegrations", () => {
   it("lets personal accounts in — it is their only route to Gmail connect", () => {
@@ -77,5 +80,46 @@ describe("canViewIntegrations", () => {
     expect(canViewIntegrations(null)).toBe(false);
     expect(canViewIntegrations(undefined)).toBe(false);
     expect(canViewIntegrations({})).toBe(false);
+  });
+});
+
+// The sidebar group is narrower than page access: personal accounts reach
+// /integrations from the profile menu and Settings instead of carrying a
+// permanent nav group for a mailbox they connect once.
+describe("canViewIntegrationsNav", () => {
+  it("keeps personal accounts out of the sidebar while leaving the page open", () => {
+    for (const user of [
+      { scope: "personal" },
+      { scope: "personal", effective_role: "member" },
+      { account_type: "personal" },
+    ]) {
+      expect(canViewIntegrationsNav(user)).toBe(false);
+      // The page itself must stay reachable, or the profile-menu and Settings
+      // entries would render a route they get bounced from.
+      expect(canViewIntegrations(user)).toBe(true);
+    }
+  });
+
+  it("still shows the group to organization and platform owners", () => {
+    expect(
+      canViewIntegrationsNav({ scope: "organization", effective_role: "owner" })
+    ).toBe(true);
+    expect(
+      canViewIntegrationsNav({ scope: "platform", effective_role: "owner" })
+    ).toBe(true);
+    expect(
+      canViewIntegrationsNav({
+        account_type: "organization_admin",
+        effective_role: "owner",
+      })
+    ).toBe(true);
+  });
+
+  it("inherits the non-owner and absent-user exclusions", () => {
+    expect(
+      canViewIntegrationsNav({ scope: "organization", effective_role: "member" })
+    ).toBe(false);
+    expect(canViewIntegrationsNav(null)).toBe(false);
+    expect(canViewIntegrationsNav({})).toBe(false);
   });
 });
