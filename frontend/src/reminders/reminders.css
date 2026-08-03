@@ -3,6 +3,9 @@
   width: 100%;
   margin: 0;
   padding: 24px 40px 48px;
+  /* The page also renders inside `.split-pane-body`, so the responsive rules
+     below key off this element's width, not the viewport's. */
+  container-type: inline-size;
 }
 
 .reminders-page *,
@@ -23,7 +26,9 @@
 
 .reminders-main-col {
   order: 1;
-  flex: 1 1 auto;
+  /* Never let the side column squeeze this one down to a sliver — below its
+     basis the columns stack instead (see the container query). */
+  flex: 1 1 380px;
   min-width: 0;
 }
 
@@ -40,7 +45,7 @@
   margin-top: 0;
 }
 
-@media (max-width: 860px) {
+@container (max-width: 860px) {
   .reminders-layout {
     flex-direction: column;
   }
@@ -54,6 +59,22 @@
     order: 2;
     align-self: stretch;
     width: 100%;
+    flex-basis: auto;
+  }
+}
+
+/* Narrow pane: the row's fixed-width lead column plus padding leaves too
+   little for the title, so tighten both and let the meta line wrap. */
+@container (max-width: 420px) {
+  .reminders-page {
+    padding: 16px 16px 32px;
+  }
+  .reminder-row {
+    gap: 10px;
+    padding: 10px 12px;
+  }
+  .reminder-when {
+    min-width: 0;
   }
 }
 
@@ -86,6 +107,7 @@
   font-size: var(--text-lg);
   font-weight: 700;
   color: var(--color-text-primary);
+  white-space: nowrap;
 }
 
 .reminders-count {
