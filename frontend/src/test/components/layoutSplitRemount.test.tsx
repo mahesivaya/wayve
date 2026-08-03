@@ -26,6 +26,7 @@ vi.mock("../../auth/useAuth", () => ({
 vi.mock("../../auth/permissions", () => ({
   hasPermission: () => true,
   canViewIntegrations: () => true,
+  canViewIntegrationsNav: () => true,
 }));
 vi.mock("../../api/integrations", () => ({
   getConnectedIntegrations: vi.fn().mockResolvedValue({ connected: [] }),

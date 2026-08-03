@@ -2,7 +2,7 @@ import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { BRAND_NAME } from "../config/brand";
 import BrandLogo from "./BrandLogo";
 import { useAuth } from "../auth/useAuth";
-import { hasPermission, canViewIntegrations } from "../auth/permissions";
+import { hasPermission, canViewIntegrationsNav } from "../auth/permissions";
 import { INTEGRATIONS } from "../integrations/catalog";
 import { useConnectedIntegrations } from "../integrations/useConnectedIntegrations";
 import { recordActivity } from "../api/activity";
@@ -255,7 +255,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const userStoriesCount = useUserStoriesCount(Boolean(user));
   // The Integrations group lists live connections only, so it needs the
   // server's answer rather than the catalog's per-account visibility rules.
-  const connectedIntegrations = useConnectedIntegrations(Boolean(user));
+  // Gated on the same predicate that renders the group, so accounts without it
+  // (personal ones) don't pay for a status call nothing reads.
+  const showIntegrationsNav = canViewIntegrationsNav(user);
+  const connectedIntegrations = useConnectedIntegrations(showIntegrationsNav);
 
   // Activity telemetry: a page view per route change and a click on every
   // button/link. Fire-and-forget; surfaced per-user on the User Audit page.
@@ -1304,7 +1307,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   //
   // It sits at the top level (not inside Workspace, which personal accounts
   // don't get) and starts expanded — the point is seeing what's live at a
-  // glance. `canViewIntegrations` matches the /integrations route guard.
+  // glance. Personal accounts are excluded entirely; see the render site below.
   const activeService =
     location.pathname === "/integrations"
       ? new URLSearchParams(location.search).get("service")
@@ -1910,11 +1913,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
               {sectionDefs.map(renderSection)}
 
-              {/* Its own top-level group, not nested under Workspace: personal
-              accounts have no Workspace section and connect services too, so
-              the list stands beside the other groups for everyone who can reach
-              /integrations. */}
-              {canViewIntegrations(user) && (
+              {/* Its own top-level group, not nested under Workspace, which
+              org/platform accounts alone get. Personal accounts are left out:
+              they connect a mailbox once and rarely revisit, so the group is
+              reached from the profile menu and Settings instead of holding a
+              permanent slot in their sidebar. The route and both menu entries
+              stay open to them — only this nav group is hidden. */}
+              {showIntegrationsNav && (
                 <div className="sidebar-section">{integrationsGroup}</div>
               )}
 

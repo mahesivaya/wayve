@@ -173,6 +173,27 @@ export function canViewPricing(
   return !PRICING_HIDDEN_ROLES.includes(normalizeRole(user?.effective_role));
 }
 
+type ScopedUser = {
+  scope?: string | null;
+  account_type?: string | null;
+  effective_role?: string | null;
+};
+
+// `scope` is the authority; account_type is only a fallback for before it
+// resolves. The two use different vocabularies, so the account_type
+// discriminators have to be mapped onto scopes here.
+function resolveScope(user: ScopedUser): string | undefined {
+  return (
+    user.scope ??
+    {
+      personal: "personal",
+      organization: "organization",
+      organization_admin: "organization",
+      platform_admin: "platform",
+    }[user.account_type ?? ""]
+  );
+}
+
 /**
  * Visible to personal accounts, for whom it is the only route to connecting a
  * Gmail mailbox, and to the owner of an organization or of the platform. Nobody
@@ -183,33 +204,32 @@ export function canViewPricing(
  * 403 anyway.
  */
 export function canViewIntegrations(
-  user:
-    | {
-        scope?: string | null;
-        account_type?: string | null;
-        effective_role?: string | null;
-      }
-    | null
-    | undefined
+  user: ScopedUser | null | undefined
 ): boolean {
   if (!user) return false;
-  // `scope` is the authority; account_type is only a fallback for before it
-  // resolves. The two use different vocabularies, so the account_type
-  // discriminators have to be mapped onto scopes here.
-  const scope =
-    user.scope ??
-    {
-      personal: "personal",
-      organization: "organization",
-      organization_admin: "organization",
-      platform_admin: "platform",
-    }[user.account_type ?? ""];
+  const scope = resolveScope(user);
 
   if (scope === "personal") return true;
   if (scope === "organization" || scope === "platform") {
     return normalizeRole(user.effective_role) === "owner";
   }
   return false;
+}
+
+/**
+ * Whether the Integrations group belongs in the left sidebar. Deliberately
+ * narrower than `canViewIntegrations`: a personal account keeps full access to
+ * /integrations, but reaches it from the profile menu and Settings rather than
+ * from a permanent nav group, so their sidebar stays the apps they use daily.
+ *
+ * Anyone this returns false for can still open the page — use
+ * `canViewIntegrations` for route and menu gating.
+ */
+export function canViewIntegrationsNav(
+  user: ScopedUser | null | undefined
+): boolean {
+  if (!canViewIntegrations(user)) return false;
+  return resolveScope(user as ScopedUser) !== "personal";
 }
 
 type PermissionHolder = { permissions?: string[] | null } | null | undefined;
