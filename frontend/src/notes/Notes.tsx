@@ -12,7 +12,7 @@ import { useGlobalSearch } from "../search/SearchContext";
 import SearchBar from "../search/SearchBar";
 import { useAuth } from "../auth/useAuth";
 import { logger } from "../utils/logger";
-import { decryptForSelf, encryptForSelf } from "../crypto/selfEncrypt";
+import { decryptForSelf } from "../crypto/selfEncrypt";
 import { fmtShortDate } from "../utils/datetime";
 
 const formatDate = (iso: string | null | undefined) => {
@@ -43,7 +43,11 @@ export default function Notes() {
     if (!userId) return;
     try {
       const raw = await getNotes();
-      const decrypted = await Promise.all(
+      // Notes are stored in the clear. decryptForSelf is kept purely to read
+      // rows written before that change: it passes a non-envelope string
+      // through untouched, so plaintext costs nothing here, and a legacy note
+      // stops being ciphertext the first time it is saved again.
+      const readable = await Promise.all(
         raw.map(async (note) => ({
           ...note,
           title: note.title
@@ -54,7 +58,7 @@ export default function Notes() {
             : note.content,
         }))
       );
-      setNotes(decrypted);
+      setNotes(readable);
     } catch (err) {
       logger.error(err);
     }
@@ -104,32 +108,17 @@ export default function Notes() {
         setStatus("Sign-in required");
         return;
       }
-      // Wrap title + content in WAYVE_SECURE_V1 envelopes so the server
-      // only ever sees ciphertext (see decryptForSelf in fetchNotes).
-      const cipherTitle = await encryptForSelf(title, userId);
-      const cipherContent = await encryptForSelf(content, userId);
-
       const isNew = selectedId === "new" || selectedId === null;
       const saved = isNew
-        ? await createNoteApi({
-            title: cipherTitle,
-            content: cipherContent,
-          })
-        : await updateNoteApi(selectedId, {
-            title: cipherTitle,
-            content: cipherContent,
-          });
+        ? await createNoteApi({ title, content })
+        : await updateNoteApi(selectedId, { title, content });
       setSelectedId(saved.id);
       setStatus(isNew ? "Created ✓" : "Saved ✓");
       await fetchNotes();
       closeEditor();
     } catch (err) {
       logger.error(err);
-      setStatus(
-        err instanceof Error && err.message.includes("public key")
-          ? "Generate an encryption key first (see chat setup)"
-          : "Save failed"
-      );
+      setStatus("Save failed");
     } finally {
       setSaving(false);
     }
@@ -154,11 +143,11 @@ export default function Notes() {
   const editorOpen = selectedId !== null;
   const isEditing = typeof selectedId === "number";
 
-  // Save is gated on the editor differing from the note it opened (the decrypted
-  // copy in `notes`, which `fetchNotes` refreshes after every save), so opening a
-  // note and closing it can't post a no-op update. Compared raw: `save` encrypts
-  // exactly what's in the fields, without trimming. Creating is never gated —
-  // there is no stored note to differ from.
+  // Save is gated on the editor differing from the note it opened (the copy in
+  // `notes`, which `fetchNotes` refreshes after every save), so opening a note
+  // and closing it can't post a no-op update. Compared raw: `save` posts exactly
+  // what's in the fields, without trimming. Creating is never gated — there is
+  // no stored note to differ from.
   const editingNote = isEditing
     ? notes.find((note) => note.id === selectedId)
     : undefined;
