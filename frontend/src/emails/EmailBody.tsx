@@ -148,6 +148,30 @@ function HtmlEmail({ html }: { html: string }) {
         );
       }
     }
+
+    // Keystrokes in a focused frame stay in the frame's document and never
+    // reach the parent, so the reading pane's shortcuts (R/F/D/Esc) would die
+    // the moment the user clicks the message. The sandbox has no allow-scripts,
+    // so nothing can be injected into the frame — but it is same-origin, so the
+    // parent can listen here and re-dispatch a copy on the host document. The
+    // clone is untrusted, so it reaches JS listeners only and can never trigger
+    // a native browser action. Re-bound per load like the wheel handler above.
+    doc.addEventListener("keydown", (event) => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: event.key,
+          code: event.code,
+          location: event.location,
+          repeat: event.repeat,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+          shiftKey: event.shiftKey,
+          altKey: event.altKey,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    });
   };
 
   return (
