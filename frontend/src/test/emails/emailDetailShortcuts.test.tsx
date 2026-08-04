@@ -1,7 +1,7 @@
 // Gmail-style shortcuts on the open message: R replies, F forwards, D deletes
-// (behind the existing confirm), Escape peels one layer off. The cases that
-// matter most are the ones where a shortcut must NOT act: typing "reply" into
-// the composer, and Escape while a popup owns the keyboard.
+// (behind the existing confirm). The cases that matter most are the ones where
+// a shortcut must NOT act: typing "reply" into the composer, and any keypress
+// while a popup owns the keyboard.
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 
@@ -49,7 +49,7 @@ function setup(overrides: Partial<Parameters<typeof EmailDetail>[0]> = {}) {
       {...overrides}
     />
   );
-  return { onBack, onDeleteEmail };
+  return { onDeleteEmail };
 }
 
 // Two mount effects defer to setTimeout(…, 0) — the composer reset and the
@@ -121,46 +121,26 @@ describe("EmailDetail keyboard shortcuts", () => {
     expect(onDeleteEmail).not.toHaveBeenCalled();
   });
 
-  it("closes the composer on Escape without leaving the message", async () => {
-    const { onBack } = setup();
-    await flushMountEffects();
-    fireEvent.keyDown(document, { key: "r" });
-
-    fireEvent.keyDown(screen.getByLabelText("Reply body"), { key: "Escape" });
-
-    expect(screen.queryByLabelText("Reply body")).toBeNull();
-    expect(onBack).not.toHaveBeenCalled();
-  });
-
-  it("leaves the message on Escape when nothing is open", async () => {
-    const { onBack } = setup();
-    await flushMountEffects();
-
-    fireEvent.keyDown(document, { key: "Escape" });
-
-    expect(onBack).toHaveBeenCalledTimes(1);
-  });
-
-  it("stands down on Escape while a menu owns the keyboard", async () => {
-    const { onBack } = setup();
+  it("stands down while a menu owns the keyboard", async () => {
+    const { onDeleteEmail } = setup();
     await flushMountEffects();
     fireEvent.click(screen.getByLabelText("More actions"));
 
-    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.keyDown(document, { key: "r" });
+    fireEvent.keyDown(document, { key: "d" });
 
-    expect(onBack).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Reply body")).toBeNull();
+    expect(onDeleteEmail).not.toHaveBeenCalled();
   });
 
   it("is inert with no email selected", async () => {
-    const { onDeleteEmail, onBack } = setup({ selectedEmail: null });
+    const { onDeleteEmail } = setup({ selectedEmail: null });
     await flushMountEffects();
 
     fireEvent.keyDown(document, { key: "r" });
     fireEvent.keyDown(document, { key: "d" });
-    fireEvent.keyDown(document, { key: "Escape" });
 
     expect(screen.queryByLabelText("Reply body")).toBeNull();
     expect(onDeleteEmail).not.toHaveBeenCalled();
-    expect(onBack).not.toHaveBeenCalled();
   });
 });

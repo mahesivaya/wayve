@@ -257,27 +257,6 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         if (overlayOpen()) return;
         void handleDelete();
       },
-      escape: () => {
-        if (overlayOpen()) return;
-        // Peel one layer: dismiss an open composer first, mirroring its Cancel
-        // button, and only leave the message when there is nothing to dismiss.
-        // Closing the composer drops focus to <body>; hand it back to the pane
-        // so arrow-key scrolling keeps working on the message.
-        if (replyOpen) {
-          setReplyOpen(false);
-          setReplyError(null);
-          setReplyCc([]);
-          detailRef.current?.focus({ preventScroll: true });
-          return;
-        }
-        if (forwardOpen) {
-          setForwardOpen(false);
-          setForwardError(null);
-          detailRef.current?.focus({ preventScroll: true });
-          return;
-        }
-        onBack();
-      },
     },
     // The hook runs before the early return below, so !!selectedEmail is what
     // keeps `D` from firing over the "Select an email" placeholder.
@@ -546,8 +525,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
           <button
             className="email-detail-back"
             onClick={onBack}
-            data-tooltip="Close (Esc)"
-            data-tooltip-align="right"
+            data-tooltip="Close"
             aria-label="Close"
           >
             ✕
@@ -950,14 +928,13 @@ function buildForwardBody(email: EmailItem): string {
     .join("\n");
 }
 
-// A popup owns the keyboard while it is open. Every overlay in the app installs
-// its own Escape handler and none of them stopPropagation, so the reading pane
-// stands down rather than double-handling the keystroke — otherwise Escape over
-// the compose modal would close the message *behind* it. Matched by role rather
-// than by refs because the overlays live in sibling trees (the compose Modal,
-// EmailList's select menu, this pane's kebab, the @mention list, ProviderPicker,
-// ThemeToggle, SplitMenu). A false positive costs one inert keypress, never a
-// wrong action.
+// A popup owns the keyboard while it is open, so the reading pane behind it
+// stands down — otherwise typing in the compose modal, or arrowing through the
+// list's select menu, would fire actions on the message underneath. Matched by
+// role rather than by refs because the overlays live in sibling trees (the
+// compose Modal, EmailList's select menu, this pane's kebab, the @mention list,
+// ProviderPicker, ThemeToggle, SplitMenu). A false positive costs one inert
+// keypress, never a wrong action.
 const OVERLAY_SELECTOR = '[role="dialog"],[role="menu"],[role="listbox"]';
 
 function overlayOpen(): boolean {
