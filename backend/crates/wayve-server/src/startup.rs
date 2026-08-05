@@ -132,10 +132,15 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "UPDATE email_accounts \
          SET last_sync = EXTRACT(EPOCH FROM NOW())::BIGINT \
          WHERE last_sync IS NULL",
-        "ALTER TABLE notes ADD COLUMN IF NOT EXISTS title_encrypted TEXT",
-        "ALTER TABLE notes ADD COLUMN IF NOT EXISTS title_iv TEXT",
-        "ALTER TABLE notes ADD COLUMN IF NOT EXISTS content_encrypted TEXT",
-        "ALTER TABLE notes ADD COLUMN IF NOT EXISTS content_iv TEXT",
+        // Notes are stored in the clear, and these four columns were never
+        // written even before that: the notes handler has only ever used
+        // `title`/`content`. Dropped rather than left NULL so the schema stops
+        // advertising an encryption-at-rest story that was never true for notes.
+        // (`meetings.title_encrypted` below is a different table and is live.)
+        "ALTER TABLE notes DROP COLUMN IF EXISTS title_encrypted",
+        "ALTER TABLE notes DROP COLUMN IF EXISTS title_iv",
+        "ALTER TABLE notes DROP COLUMN IF EXISTS content_encrypted",
+        "ALTER TABLE notes DROP COLUMN IF EXISTS content_iv",
         "ALTER TABLE drive_files ADD COLUMN IF NOT EXISTS file_iv TEXT",
         "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS title_encrypted TEXT",
         "ALTER TABLE meetings ADD COLUMN IF NOT EXISTS title_iv TEXT",

@@ -106,7 +106,7 @@ pub async fn admin_list_organizations(req: HttpRequest, pool: web::Data<PgPool>)
                JOIN users eu ON eu.id = ea.user_id WHERE eu.organization_id = o.id)
             + (SELECT COALESCE(SUM(octet_length(m.content_encrypted)), 0)::BIGINT FROM messages m
                JOIN users mu ON mu.id = m.sender_id WHERE mu.organization_id = o.id)
-            + (SELECT COALESCE(SUM(octet_length(coalesce(n.content_encrypted, n.content, ''))), 0)::BIGINT FROM notes n
+            + (SELECT COALESCE(SUM(octet_length(coalesce(n.content, ''))), 0)::BIGINT FROM notes n
                JOIN users nu ON nu.id = n.user_id WHERE nu.organization_id = o.id)
             )::BIGINT AS storage_used_bytes,
             (SELECT json_build_object('id', u2.id, 'email', u2.email)
