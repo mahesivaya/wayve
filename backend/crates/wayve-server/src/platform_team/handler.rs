@@ -377,7 +377,7 @@ pub async fn users_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
                JOIN users u ON ea.user_id = u.id WHERE u.account_type = 'personal')
           + (SELECT COALESCE(SUM(octet_length(m.content_encrypted)), 0)::BIGINT FROM messages m
                JOIN users u ON m.sender_id = u.id WHERE u.account_type = 'personal')
-          + (SELECT COALESCE(SUM(octet_length(coalesce(n.content_encrypted, n.content, ''))), 0)::BIGINT FROM notes n
+          + (SELECT COALESCE(SUM(octet_length(coalesce(n.content, ''))), 0)::BIGINT FROM notes n
                JOIN users u ON n.user_id = u.id WHERE u.account_type = 'personal')
           + (SELECT COALESCE(SUM(octet_length(t.name) + octet_length(coalesce(t.description, ''))), 0)::BIGINT FROM tasks t
                JOIN users u ON t.user_id = u.id WHERE u.account_type = 'personal')
@@ -449,7 +449,7 @@ pub async fn platform_users(
                  JOIN email_accounts ea ON e.account_id = ea.id WHERE ea.user_id = u.id)
             + (SELECT COALESCE(SUM(f.size), 0)::BIGINT FROM drive_files f WHERE f.user_id = u.id)
             + (SELECT COALESCE(SUM(octet_length(m.content_encrypted)), 0)::BIGINT FROM messages m WHERE m.sender_id = u.id)
-            + (SELECT COALESCE(SUM(octet_length(coalesce(n.content_encrypted, n.content, ''))), 0)::BIGINT FROM notes n WHERE n.user_id = u.id)
+            + (SELECT COALESCE(SUM(octet_length(coalesce(n.content, ''))), 0)::BIGINT FROM notes n WHERE n.user_id = u.id)
             + (SELECT COALESCE(SUM(octet_length(t.name) + octet_length(coalesce(t.description, ''))), 0)::BIGINT FROM tasks t WHERE t.user_id = u.id)
             )::BIGINT AS storage_bytes
         FROM users u

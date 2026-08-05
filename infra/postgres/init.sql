@@ -1043,18 +1043,19 @@ CREATE TABLE IF NOT EXISTS notes (
     user_id INTEGER NOT NULL,
     title TEXT,
     content TEXT,
-    title_encrypted TEXT,
-    title_iv TEXT,
-    content_encrypted TEXT,
-    content_iv TEXT,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-ALTER TABLE notes ADD COLUMN IF NOT EXISTS title_encrypted TEXT;
-ALTER TABLE notes ADD COLUMN IF NOT EXISTS title_iv TEXT;
-ALTER TABLE notes ADD COLUMN IF NOT EXISTS content_encrypted TEXT;
-ALTER TABLE notes ADD COLUMN IF NOT EXISTS content_iv TEXT;
+-- Notes hold plaintext in `title`/`content`. The former title_encrypted /
+-- title_iv / content_encrypted / content_iv columns are dropped here so a
+-- database created before this change converges on re-apply; the same drops run
+-- at boot (see startup.rs). They were never written even when notes were
+-- end-to-end encrypted — the envelope was stored in `content` itself.
+ALTER TABLE notes DROP COLUMN IF EXISTS title_encrypted;
+ALTER TABLE notes DROP COLUMN IF EXISTS title_iv;
+ALTER TABLE notes DROP COLUMN IF EXISTS content_encrypted;
+ALTER TABLE notes DROP COLUMN IF EXISTS content_iv;
 
 -- Reminders (personal, time-based). Distinct from meetings/tasks: a standalone
 -- "remind me at" entry that the client pops a minute before `remind_at`.

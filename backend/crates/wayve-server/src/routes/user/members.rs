@@ -413,7 +413,7 @@ async fn load_member_detail(
                JOIN email_accounts ea ON e.account_id = ea.id WHERE ea.user_id = $1) AS gmail_bytes,
             (SELECT COALESCE(SUM(f.size), 0)::BIGINT FROM drive_files f WHERE f.user_id = $1) AS drive_bytes,
             (SELECT COALESCE(SUM(octet_length(m.content_encrypted)), 0)::BIGINT FROM messages m WHERE m.sender_id = $1) AS chat_bytes,
-            (SELECT COALESCE(SUM(octet_length(coalesce(n.content_encrypted, n.content, ''))), 0)::BIGINT FROM notes n WHERE n.user_id = $1) AS notes_bytes,
+            (SELECT COALESCE(SUM(octet_length(coalesce(n.content, ''))), 0)::BIGINT FROM notes n WHERE n.user_id = $1) AS notes_bytes,
             (SELECT COALESCE(SUM(octet_length(t.name) + octet_length(coalesce(t.description, ''))), 0)::BIGINT FROM tasks t WHERE t.user_id = $1) AS tasks_bytes
         "#,
     )
