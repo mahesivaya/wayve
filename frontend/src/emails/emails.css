@@ -803,12 +803,45 @@
   background: var(--color-surface-hover);
 }
 
-/* ACTIVE */
+/* ACTIVE
+   The marker must not depend on --color-surface being lighter than the
+   --color-canvas behind .mail-filters: both are themeable and a custom theme
+   can set them to the same colour, which left the selected folder identifiable
+   only by its font weight (and a stray-looking shadow edge). Tint and accent
+   bar are both derived from --color-primary, so the row stays marked on any
+   canvas. */
 .filter-btn.active {
-  background: var(--color-surface);
+  position: relative;
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
   color: var(--color-text-black);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgb(15, 23, 42, 0.08);
+}
+
+.filter-btn.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 60%;
+  width: 3px;
+  transform: translateY(-50%);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--color-primary);
+}
+
+/* The unambiguous cue. The tint and bar are deliberately quiet, so the row
+   still needs one mark that reads as "this is the one" at a glance.
+   `margin-left: auto` parks it on the right edge for both row shapes — the
+   plain-text folders and the "All Accounts" row, which is a label plus an
+   unread chip. */
+.filter-btn.active::after {
+  content: "✓";
+  margin-left: auto;
+  padding-left: var(--space-2);
+  flex: 0 0 auto;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-primary);
 }
 
 .account-filter {
@@ -830,11 +863,27 @@
   background: var(--color-surface-hover);
 }
 
+/* Same treatment as .filter-btn.active above, and for the same reason — the two
+   sit one above the other in the sidebar, so they have to read alike. The bar
+   lands in .account-filter-main's left padding, not on its content. */
 .account-filter.active {
-  background: var(--color-surface);
+  position: relative;
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
   color: var(--color-text-black);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgb(15, 23, 42, 0.08);
+}
+
+.account-filter.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 60%;
+  width: 3px;
+  transform: translateY(-50%);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--color-primary);
+  z-index: 1;
 }
 
 .account-filter-main {
