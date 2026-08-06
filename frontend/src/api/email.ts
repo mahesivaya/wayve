@@ -17,7 +17,11 @@ export type EmailFolder =
   // Client-only inbox sub-views; callers short-circuit these to an empty list
   // and never send them here (see `useEmailInbox`).
   | "signal"
-  | "noise";
+  | "noise"
+  // Cross-folder search. Relies on the "unknown folder returns all" behaviour
+  // noted above — the backend has no `all` arm, and its fallback applies no
+  // folder clause at all, which is exactly what this needs.
+  | "all";
 
 export type EmailListParams = {
   folder: EmailFolder;

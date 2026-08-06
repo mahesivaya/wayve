@@ -34,8 +34,12 @@ const HAS_ACCOUNTS_STORAGE_KEY = "rwayve.emailHasAccounts";
 
 export default function Emails() {
   const { user, logout } = useAuth();
-  const { normalizedSearchQuery, emailViewLayout, setEmailViewLayout } =
-    useGlobalSearch();
+  const {
+    normalizedSearchQuery,
+    setSearchQuery,
+    emailViewLayout,
+    setEmailViewLayout,
+  } = useGlobalSearch();
 
   const {
     accounts,
@@ -776,6 +780,13 @@ export default function Emails() {
             }}
             onDeleteEmail={deleteEmail}
             onMarkNoise={markSenderNoise}
+            onFilterBySender={(address) => {
+              // Leave the current folder: the sender's mail is spread across
+              // Sent, Reviews and the category folders, and the inbox query
+              // drops both noise senders and PR notifications.
+              setActiveFolder("all");
+              setSearchQuery(address);
+            }}
           />
         )}
       </div>

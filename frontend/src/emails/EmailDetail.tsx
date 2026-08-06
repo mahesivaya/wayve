@@ -25,6 +25,10 @@ interface EmailDetailProps {
   onDeleteEmail: (emailId: number) => Promise<void>;
   // Marks the email's sender as noise (routes their mail to the Noise folder).
   onMarkNoise?: (emailId: number) => Promise<void>;
+  // Narrows the mail list to one sender. The host owns this because showing
+  // *all* of a sender's mail means leaving the current folder, which is the
+  // host's state. Omit to hide the menu entry.
+  onFilterBySender?: (address: string) => void;
 }
 
 export const EmailDetail: React.FC<EmailDetailProps> = ({
@@ -33,6 +37,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   onBack,
   onDeleteEmail,
   onMarkNoise,
+  onFilterBySender,
 }) => {
   const { user } = useAuth();
   const [deleting, setDeleting] = useState(false);
@@ -40,6 +45,10 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   // Gmail-style "more actions" kebab menu (temporary placeholder items).
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement | null>(null);
+  // Sender chip menu: copy the address, or narrow the list to this sender.
+  const [senderMenuOpen, setSenderMenuOpen] = useState(false);
+  const [senderCopied, setSenderCopied] = useState(false);
+  const senderMenuRef = useRef<HTMLDivElement | null>(null);
   // The reading pane is the scroll container for the (auto-height) body iframe.
   // Focus it when an email opens so the first wheel/arrow-key scroll lands here
   // instead of the list row that was just clicked. See the focus effect below.
@@ -141,6 +150,10 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       setForwardTo("");
       setForwardBody("");
       setForwardError(null);
+      // Otherwise the menu lingers over the next message, showing the previous
+      // sender's address.
+      setSenderMenuOpen(false);
+      setSenderCopied(false);
     }, 0);
     return () => window.clearTimeout(timer);
   }, [selectedEmail?.id]);
@@ -177,6 +190,41 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       document.removeEventListener("keydown", onKey);
     };
   }, [moreOpen]);
+
+  // Same dismissal contract as the kebab above.
+  useEffect(() => {
+    if (!senderMenuOpen) return;
+    const onPointer = (event: MouseEvent) => {
+      if (
+        senderMenuRef.current &&
+        event.target instanceof Node &&
+        !senderMenuRef.current.contains(event.target)
+      ) {
+        setSenderMenuOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSenderMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [senderMenuOpen]);
+
+  const copySenderAddress = (address: string) => {
+    void navigator.clipboard?.writeText(address).then(() => {
+      setSenderCopied(true);
+      window.setTimeout(() => setSenderCopied(false), 1500);
+    });
+  };
+
+  const filterBySender = (address: string) => {
+    onFilterBySender?.(address);
+    setSenderMenuOpen(false);
+  };
 
   async function patchInboxState(
     patch: Parameters<typeof updateEmailState>[1]
@@ -593,14 +641,60 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
               {initial}
             </div>
             <div className="email-meta-info">
-              <div className="email-meta-from">
-                <span className="email-meta-name">
-                  {senderName || senderEmail || "Unknown sender"}
-                </span>
-                {senderName && senderEmail && (
-                  <span className="email-meta-email">
-                    &lt;{senderEmail}&gt;
+              <div className="email-meta-from" ref={senderMenuRef}>
+                {/* The whole from-line is the trigger, not just the address:
+                    splitSender puts a name-less sender in `senderName`, so an
+                    address-only target would miss those messages entirely. */}
+                <button
+                  type="button"
+                  className="email-meta-sender"
+                  onClick={() => setSenderMenuOpen((open) => !open)}
+                  disabled={!senderEmail}
+                  aria-haspopup="menu"
+                  aria-expanded={senderMenuOpen}
+                  data-tooltip={senderEmail ? "Copy or filter by sender" : ""}
+                >
+                  <span className="email-meta-name">
+                    {senderName || senderEmail || "Unknown sender"}
                   </span>
+                  {senderName && senderEmail && (
+                    <span className="email-meta-email">
+                      &lt;{senderEmail}&gt;
+                    </span>
+                  )}
+                </button>
+                {senderMenuOpen && senderEmail && (
+                  // role="menu" is load-bearing: overlayOpen() keys off it to
+                  // stand the R/F/D shortcuts down while this is open.
+                  <div className="email-sender-menu" role="menu">
+                    <div className="email-sender-menu-head">
+                      <span className="email-sender-menu-address">
+                        {senderEmail}
+                      </span>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="email-sender-menu-copy"
+                        onClick={() => copySenderAddress(senderEmail)}
+                        data-tooltip={senderCopied ? "Copied!" : "Copy address"}
+                        aria-label={
+                          senderCopied ? "Address copied" : "Copy address"
+                        }
+                      >
+                        {senderCopied ? "✓" : "⧉"}
+                      </button>
+                    </div>
+                    {onFilterBySender && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="email-sender-menu-item"
+                        onClick={() => filterBySender(senderEmail)}
+                      >
+                        Messages from this sender
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
               {selectedEmail.receiver && (
@@ -1020,4 +1114,3 @@ function formatEmailDateTime(iso: string | null | undefined): string {
     minute: "2-digit",
   });
 }
-
