@@ -10,7 +10,9 @@ interface EmailListProps {
   selectedEmailId: number | null;
   onOpenEmail: (email: EmailItem) => void;
   hasMore: boolean;
-  loadMore: () => void;
+  // May be async: `triggerLoadMore` clears its in-flight guard when the
+  // returned promise settles, so a call the parent rejects can't wedge paging.
+  loadMore: () => void | Promise<void>;
   loadingMore: boolean;
   onCompose?: () => void;
   width?: number;
@@ -215,7 +217,14 @@ export const EmailList: React.FC<EmailListProps> = ({
     if (inFlightRef.current) return;
     if (!hasMoreRef.current || loadingMoreRef.current) return;
     inFlightRef.current = true;
-    loadMoreRef.current();
+    // `loadMore` has guards of its own (no rows yet, a fetch already running)
+    // and returns silently when they reject the call — `loadingMore` never
+    // flips, so the effect above never clears this flag and paging would stay
+    // wedged for the rest of the mount. Clearing it when the call settles makes
+    // a rejected attempt cost one no-op instead of the whole feature.
+    void Promise.resolve(loadMoreRef.current()).finally(() => {
+      inFlightRef.current = false;
+    });
   };
 
   // Paging is driven by a sentinel below the last row: whenever it comes within
@@ -223,6 +232,13 @@ export const EmailList: React.FC<EmailListProps> = ({
   // covers every case a scroll handler alone would miss — rows that don't fill
   // the pane (nothing to scroll), and a resize that makes them stop filling it —
   // which is why there is no manual "load more" button.
+  //
+  // Re-bound on every page because IntersectionObserver reports *changes*: if a
+  // page lands and the sentinel is still inside the margin, the intersection
+  // never changed and no further callback would arrive, stalling the list with
+  // rows still to fetch. Observing afresh always delivers one initial callback,
+  // so each page re-asks "still in view?" and the cascade continues until the
+  // pane is full or `hasMore` goes false.
   useEffect(() => {
     const root = listScrollRef.current;
     const target = sentinelRef.current;
@@ -235,9 +251,9 @@ export const EmailList: React.FC<EmailListProps> = ({
     );
     observer.observe(target);
     return () => observer.disconnect();
-    // `triggerLoadMore` reads hasMore/loadingMore/loadMore through refs, so the
-    // observer is bound once and never needs re-attaching as pages arrive.
-  }, [isStubFolder]);
+    // `triggerLoadMore` reads hasMore/loadingMore/loadMore through refs, so only
+    // the row count needs to be a dependency.
+  }, [isStubFolder, emails.length]);
 
   return (
     <div
