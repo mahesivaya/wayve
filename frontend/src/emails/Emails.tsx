@@ -786,6 +786,13 @@ export default function Emails() {
               // drops both noise senders and PR notifications.
               setActiveFolder("all");
               setSearchQuery(address);
+              // Close the message so the results are on screen immediately. In
+              // list layout (and narrow split) `showList` is gated on
+              // `selectedEmail === null`, so leaving it set would render the
+              // detail over the very list the user just asked to see, forcing a
+              // Back press. Closing also avoids stranding the pane on a message
+              // that may not be in the filtered results.
+              setSelectedEmail(null);
             }}
           />
         )}
