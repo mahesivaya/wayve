@@ -1,7 +1,14 @@
-/* ================= LOAD MORE BUTTON =================
+/* ================= LOAD MORE =================
    Lives at the bottom of the .email-list scroll container.
    For sticky positioning to work, .email-list must have a
    bounded height (it does — see emails.css). */
+
+/* Invisible paging trigger. It has to occupy a real line box — a zero-height
+   element is never reported as intersecting — but stays visually absent. */
+.load-more-sentinel {
+  height: 1px;
+  flex: 0 0 auto;
+}
 
 .load-more-wrap {
   position: sticky;
@@ -22,33 +29,10 @@
   margin-top: 0;
 }
 
-.load-more-btn {
-  display: block;
-  width: 100%;
-  padding: 10px 12px;
-  background: var(--color-primary);
-  color: var(--color-surface);
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-size: var(--text-md);
-  font-weight: 600;
-}
-
-.load-more-btn:hover:not(:disabled) {
-  background: var(--color-primary-hover);
-}
-
-.load-more-btn:disabled {
-  background: var(--color-input-border-strong);
-  cursor: default;
-}
-
-/* Status row for infinite-scroll: a faint "Loading more…" while a
-   fetch is in flight, and a quiet "No more emails." when the inbox
-   has been exhausted. Replaces the explicit "Show more emails"
-   button — the row scrolls into view on its own as the user nears
-   the bottom of the list. */
+/* Status row for infinite scroll: a faint "Loading more…" while a fetch is in
+   flight, and a quiet "No more emails." when the inbox has been exhausted.
+   There is no button — the sentinel above pages the list automatically as the
+   user nears the bottom. */
 .load-more-status {
   display: block;
   text-align: center;

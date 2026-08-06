@@ -190,11 +190,12 @@ export const EmailList: React.FC<EmailListProps> = ({
     }
   };
 
-  // Infinite scroll. The listener binds once and reads through refs, because
+  // Infinite scroll. The observer binds once and reads through refs, because
   // `loadMore` is re-created every parent render and would churn it. `inFlightRef`
-  // guards duplicates: scroll fires faster than React commits, so the `loadingMore`
-  // state alone is not enough.
+  // guards duplicates: the callback can fire again before React commits the
+  // resulting state, so `loadingMore` alone is not enough.
   const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
   const inFlightRef = useRef(false);
   const hasMoreRef = useRef(hasMore);
   const loadingMoreRef = useRef(loadingMore);
@@ -217,34 +218,26 @@ export const EmailList: React.FC<EmailListProps> = ({
     loadMoreRef.current();
   };
 
+  // Paging is driven by a sentinel below the last row: whenever it comes within
+  // 400px of the bottom of the pane, the next page is fetched. One observer
+  // covers every case a scroll handler alone would miss — rows that don't fill
+  // the pane (nothing to scroll), and a resize that makes them stop filling it —
+  // which is why there is no manual "load more" button.
   useEffect(() => {
-    const el = listScrollRef.current;
-    if (!el) return;
-    const onScroll = () => {
-      // Trigger ahead of the bottom edge so the next page usually arrives before
-      // the user runs out of rows.
-      if (el.scrollHeight - el.scrollTop - el.clientHeight < 400) {
-        triggerLoadMore();
-      }
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-    // `triggerLoadMore` reads through refs so it's safe to bind once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // If the loaded rows don't fill the container it can never be scrolled, so the
-  // handler above would never fire. Kick loadMore directly when that happens.
-  useEffect(() => {
-    const el = listScrollRef.current;
-    if (!el) return;
-    if (!hasMore || loadingMore) return;
-    if (emails.length === 0) return;
-    if (el.scrollHeight <= el.clientHeight + 1) {
-      triggerLoadMore();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [emails.length, hasMore, loadingMore]);
+    const root = listScrollRef.current;
+    const target = sentinelRef.current;
+    if (!root || !target) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) triggerLoadMore();
+      },
+      { root, rootMargin: "400px" }
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+    // `triggerLoadMore` reads hasMore/loadingMore/loadMore through refs, so the
+    // observer is bound once and never needs re-attaching as pages arrive.
+  }, [isStubFolder]);
 
   return (
     <div
@@ -602,21 +595,18 @@ export const EmailList: React.FC<EmailListProps> = ({
         </>
       )}
 
-      {/* Fallback for what infinite scroll can't cover, e.g. a shrunk pane where
-          the page fits without overflowing, so there is nothing to scroll. */}
-      {!isStubFolder && hasMore && (
+      {/* Rendered whenever the folder can page, even while a fetch is in flight,
+          so the observer above keeps a stable target across renders. */}
+      {!isStubFolder && (
+        <div
+          ref={sentinelRef}
+          className="load-more-sentinel"
+          aria-hidden="true"
+        />
+      )}
+      {!isStubFolder && hasMore && loadingMore && (
         <div className="load-more-wrap">
-          {loadingMore ? (
-            <span className="load-more-status">Loading more…</span>
-          ) : (
-            <button
-              type="button"
-              className="load-more-btn"
-              onClick={triggerLoadMore}
-            >
-              Load more emails
-            </button>
-          )}
+          <span className="load-more-status">Loading more…</span>
         </div>
       )}
       {!isStubFolder && !hasMore && emails.length > 0 && (
