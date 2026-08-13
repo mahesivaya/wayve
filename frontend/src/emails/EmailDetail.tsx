@@ -944,7 +944,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
               onClick={() => void handleForward()}
               disabled={forwardSending}
             >
-              {forwardSending ? "Forwarding..." : "Send forward"}
+              {forwardSending ? "Forwarding..." : "Send"}
             </button>
             <button
               type="button"

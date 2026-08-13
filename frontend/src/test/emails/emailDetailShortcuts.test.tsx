@@ -147,6 +147,35 @@ describe("EmailDetail keyboard shortcuts", () => {
     expect(box.value).toContain("Numbers attached.");
   });
 
+  it("takes the forward composer away when R opens the reply", async () => {
+    // The two composers are mutually exclusive: replying must clear the forward
+    // box rather than stack a second one under it.
+    setup();
+    await flushMountEffects();
+    fireEvent.keyDown(document, { key: "f" });
+    expect(screen.getByLabelText("Forward body")).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: "r" });
+
+    expect(screen.queryByLabelText("Forward body")).toBeNull();
+    expect(screen.queryByLabelText("Forward recipient")).toBeNull();
+    expect(screen.getByLabelText("Reply body")).toBeTruthy();
+  });
+
+  it("takes the forward composer away when the Reply button is clicked", async () => {
+    // Same rule via the toolbar, which passes the negated state rather than a
+    // forced `true` — the toggle must not leave the forward box behind.
+    setup();
+    await flushMountEffects();
+    fireEvent.click(screen.getByLabelText("Forward"));
+    expect(screen.getByLabelText("Forward body")).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("Reply"));
+
+    expect(screen.queryByLabelText("Forward body")).toBeNull();
+    expect(screen.queryByLabelText("Forward recipient")).toBeNull();
+  });
+
   it("deletes on D once the confirm is accepted", async () => {
     const { onDeleteEmail } = setup();
     await flushMountEffects();
