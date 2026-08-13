@@ -21,12 +21,12 @@ function subscribe(onChange: () => void): () => void {
 
 // A primitive, so React can compare snapshots without a cache.
 function getSnapshot(): boolean {
-  return document.documentElement.getAttribute("data-theme") !== "light";
+  return document.documentElement.getAttribute("data-theme") === "dark";
 }
 
-// Dark is the app's default, and what the pre-paint script assumes.
+// Light is the app's default, and what the pre-paint script assumes.
 function getServerSnapshot(): boolean {
-  return true;
+  return false;
 }
 
 export function useIsDarkTheme(): boolean {

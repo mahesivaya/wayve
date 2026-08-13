@@ -168,6 +168,8 @@ describe("user stories timeline", () => {
   });
 
   it("re-tunes the block colours when the surface flips light", async () => {
+    // Light is the app default, so the dark surface has to be asked for.
+    document.documentElement.setAttribute("data-theme", "dark");
     const { container: dark } = await renderCard();
     const onDark = blockFills(dark);
 

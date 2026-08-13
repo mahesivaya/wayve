@@ -1,40 +1,25 @@
-// Dark is the default for every visitor; the OS preference is deliberately
-// ignored. A pre-paint script in index.html sets data-theme before React mounts
-// to avoid a flash, and this hook keeps that attribute in sync as the user
-// toggles.
+// Light — a white background — is the default for every visitor; the OS
+// preference is deliberately ignored. A pre-paint script in index.html sets
+// data-theme before React mounts to avoid a flash, and this hook keeps that
+// attribute in sync as the user toggles.
 
 import { useCallback, useState } from "react";
 
+import { readMode, rememberMode } from "./themeStorage";
+
 export type ThemeChoice = "light" | "dark";
-
-const STORAGE_KEY = "wayve-theme";
-
-function readChoice(): ThemeChoice {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved === "light") return "light";
-  } catch {
-    // ignore — storage may be blocked
-  }
-  return "dark";
-}
 
 function applyChoice(choice: ThemeChoice) {
   document.documentElement.setAttribute("data-theme", choice);
 }
 
 export function useTheme() {
-  const [choice, setChoiceState] = useState<ThemeChoice>(() => readChoice());
+  const [choice, setChoiceState] = useState<ThemeChoice>(() => readMode());
 
   const setTheme = useCallback((next: ThemeChoice) => {
     setChoiceState(next);
-    try {
-      // Only an explicit light override is persisted; dark stores no key.
-      if (next === "dark") localStorage.removeItem(STORAGE_KEY);
-      else localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      // ignore — storage blocked
-    }
+    // Only an explicit dark override is persisted; light stores no key.
+    rememberMode(next);
     applyChoice(next);
   }, []);
 

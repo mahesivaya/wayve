@@ -6,10 +6,35 @@ import type {
   PersistedTheme,
   SavedTheme,
   ThemeChoice,
+  ThemeMode,
   UiOverrides,
 } from "./customThemeShared";
 
 export type { PersistedTheme };
+
+// Mirror of the currently applied light/dark mode, read by the pre-paint script
+// in index.html before React mounts. Light (a white background) is the default
+// for every visitor, so only "dark" is ever stored — a missing key, or the
+// legacy "light" value, both mean light.
+export const MODE_STORAGE_KEY = "wayve-theme";
+
+export function readMode(): ThemeMode {
+  try {
+    if (localStorage.getItem(MODE_STORAGE_KEY) === "dark") return "dark";
+  } catch {
+    // ignore — storage may be blocked
+  }
+  return "light";
+}
+
+export function rememberMode(mode: ThemeMode) {
+  try {
+    if (mode === "dark") localStorage.setItem(MODE_STORAGE_KEY, "dark");
+    else localStorage.removeItem(MODE_STORAGE_KEY);
+  } catch {
+    // ignore — storage may be blocked
+  }
+}
 
 export const EMPTY_PERSISTED: PersistedTheme = {
   active: { kind: "default" },
