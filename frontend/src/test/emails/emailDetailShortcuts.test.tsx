@@ -90,6 +90,51 @@ describe("EmailDetail keyboard shortcuts", () => {
     expect(screen.getByLabelText("Reply body")).toBeTruthy();
   });
 
+  it("cancels the reply on Escape fired from inside the box", async () => {
+    // The case that matters: after R the caret is in the textarea, and the hook
+    // drops bare keys while a field has focus. Escape only reaches here because
+    // it is exempt (ALWAYS_ACTIVE), so this guards that exemption.
+    setup();
+    await flushMountEffects();
+    fireEvent.keyDown(document, { key: "r" });
+
+    const box = screen.getByLabelText("Reply body");
+    fireEvent.keyDown(box, { key: "Escape" });
+
+    expect(screen.queryByLabelText("Reply body")).toBeNull();
+  });
+
+  it("keeps the draft when Escape cancels, so reopening restores it", async () => {
+    setup();
+    await flushMountEffects();
+    fireEvent.keyDown(document, { key: "r" });
+
+    const box = screen.getByLabelText("Reply body");
+    fireEvent.change(box, { target: { value: "half-written thought" } });
+    fireEvent.keyDown(box, { key: "Escape" });
+    // Assert it really closed, or the reopen below proves nothing.
+    expect(screen.queryByLabelText("Reply body")).toBeNull();
+
+    fireEvent.keyDown(document, { key: "r" });
+
+    expect(screen.getByLabelText("Reply body")).toHaveProperty(
+      "value",
+      "half-written thought"
+    );
+  });
+
+  it("does not leave the message when Escape has no composer to cancel", async () => {
+    // Escape cancels the composer and nothing else — closing the message was
+    // explicitly rejected when these shortcuts landed.
+    const onBack = vi.fn();
+    setup({ onBack });
+    await flushMountEffects();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(onBack).not.toHaveBeenCalled();
+  });
+
   it("seeds the quoted body on F", async () => {
     setup();
     await flushMountEffects();
@@ -100,6 +145,35 @@ describe("EmailDetail keyboard shortcuts", () => {
     expect(box.value).toContain("---------- Forwarded message ---------");
     expect(box.value).toContain("Quarterly report");
     expect(box.value).toContain("Numbers attached.");
+  });
+
+  it("takes the forward composer away when R opens the reply", async () => {
+    // The two composers are mutually exclusive: replying must clear the forward
+    // box rather than stack a second one under it.
+    setup();
+    await flushMountEffects();
+    fireEvent.keyDown(document, { key: "f" });
+    expect(screen.getByLabelText("Forward body")).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: "r" });
+
+    expect(screen.queryByLabelText("Forward body")).toBeNull();
+    expect(screen.queryByLabelText("Forward recipient")).toBeNull();
+    expect(screen.getByLabelText("Reply body")).toBeTruthy();
+  });
+
+  it("takes the forward composer away when the Reply button is clicked", async () => {
+    // Same rule via the toolbar, which passes the negated state rather than a
+    // forced `true` — the toggle must not leave the forward box behind.
+    setup();
+    await flushMountEffects();
+    fireEvent.click(screen.getByLabelText("Forward"));
+    expect(screen.getByLabelText("Forward body")).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("Reply"));
+
+    expect(screen.queryByLabelText("Forward body")).toBeNull();
+    expect(screen.queryByLabelText("Forward recipient")).toBeNull();
   });
 
   it("deletes on D once the confirm is accepted", async () => {

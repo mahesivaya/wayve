@@ -456,7 +456,8 @@
    ------------------------------------------------------------
    Activation is explicit-only: the pre-paint script in index.html
    sets `data-theme="light"` by default and `data-theme="dark"` only
-   if the user has clicked the toggle (localStorage `wayve-theme`).
+   if the user has picked a dark theme in the customizer (mirrored to
+   localStorage `wayve-theme`).
    The OS `prefers-color-scheme` preference is intentionally ignored.
    ============================================================ */
 

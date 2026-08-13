@@ -34,6 +34,7 @@ import { findPreset, tokensForPreset } from "./themePresets";
 import {
   EMPTY_PERSISTED,
   parsePersisted,
+  rememberMode,
   serializePersisted,
   type PersistedTheme,
 } from "./themeStorage";
@@ -99,9 +100,11 @@ function baseTokensFor(
   return generatePalette(active.input, active.mode);
 }
 
-// Drives the data-theme attribute.
-function modeFor(active: ThemeChoice, library: SavedTheme[]): ThemeMode | null {
-  if (active.kind === "default") return null;
+// Drives the data-theme attribute. The default choice resolves to light, so
+// resetting lands back on the white default rather than keeping whatever mode
+// the previously active theme happened to paint.
+function modeFor(active: ThemeChoice, library: SavedTheme[]): ThemeMode {
+  if (active.kind === "default") return "light";
   if (active.kind === "preset")
     return findPreset(active.presetId)?.mode ?? "light";
   if (active.kind === "saved") {
@@ -135,7 +138,10 @@ export function CustomThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     applyTokensToRoot({ ...baseTokens, ...ui });
     const mode = modeFor(active, library);
-    if (mode) document.documentElement.setAttribute("data-theme", mode);
+    document.documentElement.setAttribute("data-theme", mode);
+    // Mirror it for the pre-paint script, so the next load opens on the right
+    // surface instead of flashing the light default first.
+    rememberMode(mode);
   }, [baseTokens, ui, active, library]);
 
   const setChoice = useCallback((next: ThemeChoice) => {
@@ -258,8 +264,10 @@ export function CustomThemeProvider({ children }: { children: ReactNode }) {
 
   const clearPreview = useCallback(() => {
     applyTokensToRoot({ ...baseTokens, ...ui });
-    const mode = modeFor(active, library);
-    if (mode) document.documentElement.setAttribute("data-theme", mode);
+    document.documentElement.setAttribute(
+      "data-theme",
+      modeFor(active, library)
+    );
   }, [baseTokens, ui, active, library]);
 
   const value = useMemo<CustomThemeValue>(

@@ -288,6 +288,23 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     setForwardError(null);
   };
 
+  // Shared by the Cancel buttons and Escape so the two can't drift. Neither
+  // clears the draft body — reopening the composer gets your text back, which
+  // matters far more for a stray Escape than for a deliberate Cancel click.
+  // Focus returns to the pane so the next shortcut still lands.
+  const cancelReply = () => {
+    setReplyOpen(false);
+    setReplyError(null);
+    setReplyCc([]);
+    detailRef.current?.focus({ preventScroll: true });
+  };
+
+  const cancelForward = () => {
+    setForwardOpen(false);
+    setForwardError(null);
+    detailRef.current?.focus({ preventScroll: true });
+  };
+
   // Gmail-style shortcuts for the open message: fixed bindings, no remapping.
   // useShortcuts already drops bare keys while a text field has focus, so typing
   // "reply" into the composer is safe; overlayOpen() covers the popups on top.
@@ -304,6 +321,22 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       d: () => {
         if (overlayOpen()) return;
         void handleDelete();
+      },
+      // Escape is exempt from the hook's typing guard (ALWAYS_ACTIVE), which is
+      // the whole point here: after R the caret is in the reply box, so a bare
+      // key that respected focus could never reach this. It cancels the
+      // composer and nothing else — deliberately not a way out of the message,
+      // since that was the behaviour rejected when these shortcuts landed.
+      escape: () => {
+        // A popup owns Escape while open. The @mention list is a role="listbox"
+        // and handles its own Escape, so this covers it twice over — the hook
+        // also skips anything already defaultPrevented.
+        if (overlayOpen()) return;
+        if (replyOpen) {
+          cancelReply();
+          return;
+        }
+        if (forwardOpen) cancelForward();
       },
     },
     // The hook runs before the early return below, so !!selectedEmail is what
@@ -873,11 +906,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             <button
               type="button"
               className="email-reply-cancel"
-              onClick={() => {
-                setReplyOpen(false);
-                setReplyError(null);
-                setReplyCc([]);
-              }}
+              onClick={cancelReply}
             >
               Cancel
             </button>
@@ -915,15 +944,12 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
               onClick={() => void handleForward()}
               disabled={forwardSending}
             >
-              {forwardSending ? "Forwarding..." : "Send forward"}
+              {forwardSending ? "Forwarding..." : "Send"}
             </button>
             <button
               type="button"
               className="email-reply-cancel"
-              onClick={() => {
-                setForwardOpen(false);
-                setForwardError(null);
-              }}
+              onClick={cancelForward}
             >
               Cancel
             </button>

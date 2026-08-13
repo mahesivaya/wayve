@@ -1810,6 +1810,10 @@
   border: 1px solid var(--color-border-soft);
   border-radius: var(--radius-md);
   background: var(--color-overlay-soft);
+  /* Set once here because every field inside is `font: inherit`. Without it
+     they inherit the 16px root size and the composer renders visibly larger
+     than the message chrome it sits under. */
+  font-size: var(--text-md);
 }
 
 .email-reply-box textarea {
@@ -1822,6 +1826,9 @@
   background: var(--color-surface);
   color: var(--color-text-primary);
   font: inherit;
+  /* There is no global border-box reset, so without this the padding and
+     borders are added to the 100% and the field overhangs the box it sits in. */
+  box-sizing: border-box;
 }
 
 /* Anchor for the absolutely-positioned suggestion menu below. */
@@ -1862,6 +1869,9 @@
   text-align: left;
   cursor: pointer;
   color: var(--color-text-primary);
+  /* Same reason as the composer textarea: 100% plus padding overhangs the
+     menu's own 4px padding without this. */
+  box-sizing: border-box;
 }
 
 /* Avatar for each suggestion: a real photo (img) when known, else a generated
@@ -1950,7 +1960,7 @@ img.email-mention-avatar {
 
 .email-forward-to {
   width: 100%;
-  height: 34px;
+  height: 30px;
   border: 1px solid var(--color-input-border);
   border-radius: var(--radius-md);
   padding: 0 var(--space-4);
@@ -1960,13 +1970,13 @@ img.email-mention-avatar {
   font: inherit;
 }
 
+/* The subject is derived, not editable. Borrowing the input chrome next to it
+   made it read as a field you could type into, so it is a plain line of
+   metadata instead. */
 .email-forward-subject {
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border-soft);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+  padding: 0 var(--space-1);
   color: var(--color-text-secondary);
-  font-weight: 700;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 
