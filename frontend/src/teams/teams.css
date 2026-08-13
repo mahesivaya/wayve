@@ -7,17 +7,16 @@
   gap: 16px;
 }
 
-.team-header {
+/* The member list is the whole page, so its heading row carries the count on
+   the left and the add action on the right. */
+.team-members-head {
   display: flex;
   align-items: center;
   gap: 14px;
+  margin-bottom: 10px;
 }
 
-.team-header-text {
-  min-width: 0;
-}
-
-/* "Add member" button — pinned to the right of the header (manager-only). */
+/* "Add member" button — pinned to the right of that row (manager-only). */
 .team-add-btn {
   margin-left: auto;
   flex-shrink: 0;
@@ -84,34 +83,8 @@
   border-color: var(--color-text-muted);
 }
 
-.team-header-icon {
-  width: 48px;
-  height: 48px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 26px;
-  border-radius: 12px;
-  background: var(--color-surface-hover);
-  border: 1px solid var(--color-border);
-}
-
-.team-title {
-  margin: 0;
-  font-size: var(--text-2xl);
-  font-weight: 700;
-  color: var(--color-text-primary);
-}
-
-.team-tagline {
-  margin: 2px 0 0;
-  font-size: var(--text-md);
-  color: var(--color-text-muted);
-}
-
 .team-section-title {
-  margin: 0 0 10px;
+  margin: 0;
   font-size: var(--text-lg);
   font-weight: 600;
   color: var(--color-text-primary);
@@ -128,13 +101,6 @@
   border-radius: 999px;
   padding: 1px 9px;
   line-height: 1.6;
-}
-
-.team-description {
-  margin: 0;
-  font-size: var(--text-md);
-  line-height: 1.6;
-  color: var(--color-text-secondary);
 }
 
 .team-member-list {

@@ -4,6 +4,7 @@ import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import { getTeam, type Team } from "../api/workspace";
 import { PersonIcon } from "../icons";
+import { findSampleTeam } from "./sampleTeams";
 import "./teams.css";
 
 // Members aren't yet persisted server-side, so the member list is local-only
@@ -46,11 +47,24 @@ export default function TeamPage() {
     setDraft(EMPTY_DRAFT);
   }
 
+  // A real backend team wins. Only when there is no row for the slug does the
+  // display-only sample take over, bringing its own roster — a real team must
+  // never be shown invented members, so the seeding happens on this branch
+  // alone.
   useEffect(() => {
     let cancelled = false;
     getTeam(slug)
       .then((t) => !cancelled && setTeam(t))
-      .catch(() => !cancelled && setTeam(null));
+      .catch(() => {
+        if (cancelled) return;
+        const sample = findSampleTeam(slug);
+        if (sample) {
+          setTeam(sample);
+          setMembers(sample.members);
+        } else {
+          setTeam(null);
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -97,38 +111,25 @@ export default function TeamPage() {
 
   return (
     <div className="team-page u-page-shell">
-      <header className="team-header">
-        <div className="team-header-icon" aria-hidden="true">
-          👥
-        </div>
-        <div className="team-header-text">
-          <h1 className="team-title">{team.name}</h1>
-          {team.tagline && <p className="team-tagline">{team.tagline}</p>}
-        </div>
-        {/* Add-member action — visible only to a team admin / manager. */}
-        {canManageMembers && (
-          <button
-            type="button"
-            className="team-add-btn"
-            onClick={() => setAdding((open) => !open)}
-            aria-expanded={adding}
-          >
-            ＋ Add member
-          </button>
-        )}
-      </header>
-
-      <section className="team-about u-panel">
-        <h2 className="team-section-title">About</h2>
-        <p className="team-description">
-          {team.description || "No description yet."}
-        </p>
-      </section>
-
       <section className="team-members u-panel">
-        <h2 className="team-section-title">
-          Members <span className="team-member-count">{members.length}</span>
-        </h2>
+        {/* The page is the member list and nothing else, so this row carries
+            both the count and the add action the header used to hold. */}
+        <div className="team-members-head">
+          <h2 className="team-section-title">
+            Members <span className="team-member-count">{members.length}</span>
+          </h2>
+          {/* Add-member action — visible only to a team admin / manager. */}
+          {canManageMembers && (
+            <button
+              type="button"
+              className="team-add-btn"
+              onClick={() => setAdding((open) => !open)}
+              aria-expanded={adding}
+            >
+              ＋ Add member
+            </button>
+          )}
+        </div>
 
         {canManageMembers && adding && (
           <form

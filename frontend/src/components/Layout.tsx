@@ -45,6 +45,9 @@ import {
 } from "./paneDnd";
 import { applyPaneDrop, type PaneArrangement } from "./paneLayout";
 import { listTeams, createTeam, type Team } from "../api/workspace";
+// Display-only fallback for an org with no teams yet; shared with TeamPage so
+// the rows in this sidebar lead to a page that knows about them.
+import { SAMPLE_TEAMS } from "../teams/sampleTeams";
 import { getFeatureAccess } from "../api/featureAccess";
 import { isDesktopApp } from "../utils/desktop";
 import "./Layout.css";
@@ -130,26 +133,6 @@ const ADDABLE_PERSONAL_APPS: {
   },
   { key: "insights", label: "Insights", icon: <InsightsIcon size={22} /> },
   { key: "assistant", label: "Assistant", icon: <AssistantIcon size={22} /> },
-];
-
-// Display-only fallback when the org has no teams yet. Negative ids so they can
-// never collide with a real backend row.
-const SAMPLE_TEAMS: Team[] = [
-  {
-    id: -1,
-    name: "Engineering",
-    slug: "engineering",
-    tagline: null,
-    description: null,
-  },
-  { id: -2, name: "Design", slug: "design", tagline: null, description: null },
-  {
-    id: -3,
-    name: "Operations",
-    slug: "operations",
-    tagline: null,
-    description: null,
-  },
 ];
 
 function isValidAppKey(value: unknown): value is AppKey {
