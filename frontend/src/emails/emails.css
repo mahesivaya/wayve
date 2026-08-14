@@ -1912,6 +1912,16 @@ img.email-mention-avatar {
   white-space: nowrap;
 }
 
+/* The reply box's picker lists addresses alone, so the address carries the
+   row's primary weight there. Scoped rather than folded into the rule above
+   because the compose "To" typeahead shares these class names and keeps its
+   label + muted-address pairing. The ellipsis above still applies, which is
+   what stops a long bounce address from blowing the menu out. */
+.email-mention-menu--address .email-mention-email {
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+}
+
 /* Cc chips gathered from reply-box @mentions. */
 .email-reply-cc {
   display: flex;

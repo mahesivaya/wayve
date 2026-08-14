@@ -5,7 +5,7 @@ import { activeMention } from "../shared/mentions";
 const DEBOUNCE_MS = 180;
 const MAX_SUGGESTIONS = 6;
 
-/** Display label inserted after the `@` and shown in the dropdown. */
+/** Display label for a contact, used for the dropdown row's avatar initial. */
 export function mentionLabel(c: ContactSuggestion): string {
   return c.display_name?.trim() || c.address;
 }
@@ -65,7 +65,9 @@ export function useMentionSearch({ value, setValue, textareaRef, onPick }: Args)
 
   const syncFromCaret = useCallback((el: HTMLTextAreaElement) => {
     const caret = el.selectionStart ?? el.value.length;
-    const mention = activeMention(el.value, caret);
+    // Addresses allowed: filtering the contact list by typing a whole address
+    // is the point of this typeahead.
+    const mention = activeMention(el.value, caret, { allowAddress: true });
     if (mention) {
       setQuery(mention.query);
       setStart(mention.start);
@@ -83,10 +85,12 @@ export function useMentionSearch({ value, setValue, textareaRef, onPick }: Args)
   const apply = useCallback(
     (contact: ContactSuggestion) => {
       const el = textareaRef.current;
-      const label = mentionLabel(contact);
       const before = value.slice(0, start);
       const after = value.slice(start + 1 + (query ?? "").length);
-      const insert = `@${label} `;
+      // The address, not the display name: it is what the row showed and what
+      // was searched for, and unlike a name it contains no space, so the
+      // inserted token can be re-detected if the caret returns to it.
+      const insert = `@${contact.address} `;
       setValue(before + insert + after);
       close();
       onPick(contact);

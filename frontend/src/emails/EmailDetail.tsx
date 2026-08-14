@@ -807,7 +807,10 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         <div className="email-reply-box">
           <div className="email-reply-input">
             {mention.open && (
-              <ul className="email-mention-menu" role="listbox">
+              <ul
+                className="email-mention-menu email-mention-menu--address"
+                role="listbox"
+              >
                 {mention.results.map((candidate, i) => (
                   <li key={candidate.address} role="presentation">
                     <button
@@ -829,9 +832,9 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
                         photoUrl={candidate.photo_url}
                         label={mentionLabel(candidate)}
                       />
-                      <span className="email-mention-label">
-                        {mentionLabel(candidate)}
-                      </span>
+                      {/* The address alone. The label line above it used to be
+                          a verbatim duplicate for any contact with no display
+                          name, since mentionLabel falls back to the address. */}
                       <span className="email-mention-email">
                         {candidate.address}
                       </span>
