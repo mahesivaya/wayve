@@ -304,6 +304,12 @@ fn build_message(from_email: &str, data: &SendEmailRequest) -> anyhow::Result<Me
     for addr in crate::email::send::normalized_cc(data) {
         builder = builder.cc(addr.parse().context("cc address")?);
     }
+    // lettre strips the Bcc header once it has the envelope, which is what SMTP
+    // needs: the blind recipients are delivered to without appearing on the
+    // message the others receive.
+    for addr in crate::email::send::normalized_bcc(data) {
+        builder = builder.bcc(addr.parse().context("bcc address")?);
+    }
     builder
         .subject(&data.subject)
         .header(ContentType::TEXT_PLAIN)

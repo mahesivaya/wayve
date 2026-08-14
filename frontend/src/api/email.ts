@@ -50,6 +50,9 @@ export type SendEmailPayload = {
   // Cc recipients (e.g. reply-box @mentions). Honoured by the standard
   // Gmail/Outlook/IMAP path, not the E2E secure send.
   cc?: string[];
+  // Blind-carbon recipients. Same paths as `cc`; the server keeps them off the
+  // message the other recipients receive.
+  bcc?: string[];
   // Standard-mailbox attachments only (Gmail/Outlook MIME, not E2E).
   attachments?: EmailComposeAttachment[];
 };
