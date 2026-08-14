@@ -1,0 +1,113 @@
+/* Chip-based recipient rows (To / Cc / Bcc) in the reply composer. The label
+   sits in its own box to the left, mirroring how mail clients present these. */
+
+.recipient-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.recipient-label {
+  flex: 0 0 auto;
+  min-width: 34px;
+  padding: 6px var(--space-3);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-align: center;
+}
+
+/* Grows with its chips rather than scrolling, so a long list stays readable. */
+.recipient-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px var(--space-3);
+  min-height: 30px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-sizing: border-box;
+}
+
+.recipient-field:focus-within {
+  border-color: var(--color-primary-action);
+}
+
+.recipient-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 100%;
+  padding: 2px var(--space-2) 2px var(--space-3);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  /* A long address shortens rather than forcing the row wider. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recipient-chip-remove {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  padding: 0 2px;
+  line-height: 1;
+  font-size: 14px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.recipient-chip-remove:hover {
+  color: var(--color-text-primary);
+}
+
+/* Takes the leftover width so the caret sits after the last chip. */
+.recipient-input {
+  flex: 1 1 120px;
+  min-width: 80px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  padding: 2px 0;
+}
+
+.recipient-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: 4px;
+}
+
+.recipient-toggle {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.recipient-toggle:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface-hover);
+}
+
+.recipient-toggle.active {
+  color: var(--color-primary-action);
+}

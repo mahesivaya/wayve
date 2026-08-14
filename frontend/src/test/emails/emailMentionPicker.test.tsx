@@ -126,8 +126,32 @@ describe("reply composer @mention picker", () => {
     fireEvent.mouseDown(first);
 
     expect(box.value).toBe("@maheshy85@gmail.com ");
-    // The Cc chip is what actually reaches the wire.
+
+    // The Cc row stays shut — it opens only when asked for — so the count on
+    // the toggle is what shows the address was added.
+    expect(screen.queryByLabelText("Cc")).toBeNull();
+    const toggle = screen.getByRole("button", { name: "Cc (1)" });
+
+    // Opening it shows the chip that actually reaches the wire.
+    fireEvent.click(toggle);
+    expect(screen.getByLabelText("Cc")).toBeTruthy();
     expect(screen.getByText("maheshy85@gmail.com")).toBeTruthy();
+  });
+
+  it("paints the inserted mention, and only the mention, in the body", async () => {
+    setup();
+    await flushMountEffects();
+    fireEvent.keyDown(document, { key: "r" });
+    const box = await typeMention("hi @mahesh");
+
+    fireEvent.mouseDown(screen.getAllByRole("option")[0]);
+
+    // The textarea still holds the whole plain string — the colour comes from
+    // the mirror behind it.
+    expect(box.value).toBe("hi @maheshy85@gmail.com ");
+    const painted = document.querySelectorAll(".email-reply-mention");
+    expect(painted).toHaveLength(1);
+    expect(painted[0].textContent).toBe("@maheshy85@gmail.com");
   });
 
   it("does not search on a one-character query", async () => {

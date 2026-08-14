@@ -17,6 +17,8 @@ import { useMentionSearch, mentionLabel } from "./useMentionSearch";
 import { avatarColor } from "../shared/avatar";
 import { useShortcuts } from "../shared/useShortcuts";
 import ContactAvatar from "../shared/ContactAvatar";
+import RecipientChips from "./RecipientChips";
+import { splitMentions } from "./mentionHighlight";
 
 interface EmailDetailProps {
   selectedEmail: EmailItem | null;
@@ -57,7 +59,13 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   // To and Subject are seeded from the message when the composer opens (see
   // showReply) and are editable from there — the reply need not go back to the
   // sender, or keep the thread's subject.
-  const [replyToField, setReplyToField] = useState("");
+  const [replyToList, setReplyToList] = useState<string[]>([]);
+  const [replyBcc, setReplyBcc] = useState<string[]>([]);
+  // Cc and Bcc stay out of the way until asked for, the way mail clients do it.
+  // An @mention opens Cc on its own, so a mentioned address is never added to a
+  // row the user can't see.
+  const [ccOpen, setCcOpen] = useState(false);
+  const [bccOpen, setBccOpen] = useState(false);
   const [replySubject, setReplySubject] = useState("");
   const [replyBody, setReplyBody] = useState("");
   const [replySending, setReplySending] = useState(false);
@@ -75,6 +83,9 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   // of truth for who gets added; the inline `@Name` text is cosmetic.
   const [replyCc, setReplyCc] = useState<string[]>([]);
   const replyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // The mirror layer that paints the mention colour; scrolled in step with the
+  // textarea above it.
+  const replyBackdropRef = useRef<HTMLDivElement | null>(null);
   // Reply-to address, used inside onPick to avoid Cc-ing the person already on
   // the To line. Recomputed each render, so the inline onPick always closes over
   // the current value (no ref needed).
@@ -86,10 +97,11 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     onPick: (c) => {
       const email = c.address.trim();
       const replyToLower = (replyToAddr ?? "").toLowerCase();
+      if (!email || email.toLowerCase() === replyToLower) return;
+      // Deliberately does not open the Cc row: the rows appear only when asked
+      // for. The count on the Cc button is what keeps the addition visible.
       setReplyCc((prev) =>
-        !email ||
-        prev.some((e) => e.toLowerCase() === email.toLowerCase()) ||
-        email.toLowerCase() === replyToLower
+        prev.some((e) => e.toLowerCase() === email.toLowerCase())
           ? prev
           : [...prev, email]
       );
@@ -149,7 +161,11 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setReplyOpen(false);
-      setReplyToField("");
+      setReplyToList([]);
+      setReplyCc([]);
+      setReplyBcc([]);
+      setCcOpen(false);
+      setBccOpen(false);
       setReplySubject("");
       setReplyBody("");
       setReplyError(null);
@@ -284,7 +300,11 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     // stray Escape keeps an edited recipient or subject — the same rule the
     // body follows.
     if (next) {
-      setReplyToField((prev) => prev || emailAddress(selectedEmail.sender));
+      setReplyToList((prev) => {
+        if (prev.length > 0) return prev;
+        const sender = emailAddress(selectedEmail.sender);
+        return sender ? [sender] : [];
+      });
       setReplySubject((prev) => prev || replySubjectFor(selectedEmail));
     }
     setReplyError(null);
@@ -396,7 +416,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     // recipient is what actually goes out — an emptied one is an error below
     // rather than a silent fall back to the sender. A blank subject is filled
     // in instead, since a reply with no subject at all helps nobody.
-    const to = replyToField.trim();
+    // `to` is comma-joined because the API takes one string and splits it.
+    const to = replyToList.join(", ");
     const subject = replySubject.trim() || replySubjectFor(selectedEmail);
 
     if (!selectedEmail.account_id) {
@@ -425,15 +446,19 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         account_id: selectedEmail.account_id,
         to,
         cc: replyCc.length > 0 ? replyCc : undefined,
+        bcc: replyBcc.length > 0 ? replyBcc : undefined,
         subject,
         body,
         attachments,
       });
-      setReplyToField("");
+      setReplyToList([]);
       setReplySubject("");
       setReplyBody("");
       setReplyAttachments([]);
       setReplyCc([]);
+      setReplyBcc([]);
+      setCcOpen(false);
+      setBccOpen(false);
       setReplyOpen(false);
     } catch (err) {
       setReplyError(
@@ -825,13 +850,55 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       {replyOpen && (
         <div className="email-reply-box">
           <div className="email-reply-fields">
-            <input
-              className="email-composer-field"
-              value={replyToField}
-              onChange={(e) => setReplyToField(e.target.value)}
-              placeholder="To"
-              aria-label="Reply recipient"
+            <RecipientChips
+              label="To"
+              value={replyToList}
+              onChange={setReplyToList}
+              placeholder="Add a recipient"
+              actions={
+                <div className="recipient-actions">
+                  {/* A collapsed row still sends to whoever is in it, so the
+                      count is what stops an address going out unseen — an
+                      @mention adds to Cc without opening the row. */}
+                  <button
+                    type="button"
+                    className={`recipient-toggle${ccOpen ? " active" : ""}`}
+                    onClick={() => setCcOpen((open) => !open)}
+                    aria-pressed={ccOpen}
+                  >
+                    Cc{!ccOpen && replyCc.length > 0 ? ` (${replyCc.length})` : ""}
+                  </button>
+                  <button
+                    type="button"
+                    className={`recipient-toggle${bccOpen ? " active" : ""}`}
+                    onClick={() => setBccOpen((open) => !open)}
+                    aria-pressed={bccOpen}
+                  >
+                    Bcc
+                    {!bccOpen && replyBcc.length > 0
+                      ? ` (${replyBcc.length})`
+                      : ""}
+                  </button>
+                </div>
+              }
             />
+            {/* Shown only on request. */}
+            {ccOpen && (
+              <RecipientChips
+                label="Cc"
+                value={replyCc}
+                onChange={setReplyCc}
+                placeholder="Add a Cc recipient"
+              />
+            )}
+            {bccOpen && (
+              <RecipientChips
+                label="Bcc"
+                value={replyBcc}
+                onChange={setReplyBcc}
+                placeholder="Hidden from the other recipients"
+              />
+            )}
             <input
               className="email-composer-field"
               value={replySubject}
@@ -878,55 +945,66 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
                 ))}
               </ul>
             )}
-            <textarea
-              ref={replyTextareaRef}
-              value={replyBody}
-              onChange={(e) => {
-                setReplyBody(e.target.value);
-                mention.syncFromCaret(e.target);
-              }}
-              onClick={(e) => mention.syncFromCaret(e.currentTarget)}
-              onKeyUp={(e) => {
-                if (
-                  e.key.startsWith("Arrow") ||
-                  e.key === "Home" ||
-                  e.key === "End"
-                ) {
-                  mention.syncFromCaret(e.currentTarget);
-                }
-              }}
-              onKeyDown={(e) => mention.onKeyDown(e)}
-              // The recipient has its own field above now, so the placeholder
-              // only has to advertise the mention trigger.
-              placeholder="Write your reply — @ to mention"
-              aria-label="Reply body"
-              // Fires on the commit that mounts the textarea, i.e. exactly the
-              // closed -> open transition, so `R` lands the caret here. An
-              // effect on replyOpen would instead race the pane-focus timeout
-              // when switching emails and leave focus on <body>.
-              autoFocus
-            />
-          </div>
-          {replyCc.length > 0 && (
-            <div className="email-reply-cc" aria-label="Cc recipients">
-              <span className="email-reply-cc-label">Cc:</span>
-              {replyCc.map((email) => (
-                <span className="email-reply-cc-chip" key={email}>
-                  {email}
-                  <button
-                    type="button"
-                    className="email-reply-cc-remove"
-                    aria-label={`Remove ${email} from Cc`}
-                    onClick={() =>
-                      setReplyCc((cc) => cc.filter((e) => e !== email))
-                    }
-                  >
-                    ×
-                  </button>
-                </span>
-              ))}
+            {/* A textarea cannot colour part of its own value, so the text is
+                painted by this mirror and the textarea itself is made
+                transparent over the top of it. The two must stay glued
+                together: identical box, font and wrapping in CSS, and the
+                scroll position synced below. */}
+            <div className="email-reply-highlight-wrap">
+              <div
+                className="email-reply-highlight"
+                ref={replyBackdropRef}
+                aria-hidden="true"
+              >
+                {splitMentions(replyBody).map((run, i) =>
+                  run.mention ? (
+                    <span className="email-reply-mention" key={i}>
+                      {run.text}
+                    </span>
+                  ) : (
+                    <span key={i}>{run.text}</span>
+                  )
+                )}
+                {/* A value ending in a newline would otherwise lose its last
+                    line here, and every following line would sit one row off. */}
+                {replyBody.endsWith("\n") ? " " : ""}
+              </div>
+              <textarea
+                ref={replyTextareaRef}
+                value={replyBody}
+                onChange={(e) => {
+                  setReplyBody(e.target.value);
+                  mention.syncFromCaret(e.target);
+                }}
+                onClick={(e) => mention.syncFromCaret(e.currentTarget)}
+                onScroll={(e) => {
+                  const backdrop = replyBackdropRef.current;
+                  if (backdrop) backdrop.scrollTop = e.currentTarget.scrollTop;
+                }}
+                onKeyUp={(e) => {
+                  if (
+                    e.key.startsWith("Arrow") ||
+                    e.key === "Home" ||
+                    e.key === "End"
+                  ) {
+                    mention.syncFromCaret(e.currentTarget);
+                  }
+                }}
+                onKeyDown={(e) => mention.onKeyDown(e)}
+                // The recipient has its own field above now, so the placeholder
+                // only has to advertise the mention trigger.
+                placeholder="Write your reply — @ to mention"
+                aria-label="Reply body"
+                // Fires on the commit that mounts the textarea, i.e. exactly the
+                // closed -> open transition, so `R` lands the caret here. An
+                // effect on replyOpen would instead race the pane-focus timeout
+                // when switching emails and leave focus on <body>.
+                autoFocus
+              />
             </div>
-          )}
+          </div>
+          {/* The Cc chips that used to live here are now the editable Cc row
+              above, so a mentioned address can be removed as well as added. */}
           {replyError && <p className="email-body-error">{replyError}</p>}
           {renderAttachField(
             replyAttachments,
