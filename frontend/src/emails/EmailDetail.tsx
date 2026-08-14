@@ -54,6 +54,11 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   // instead of the list row that was just clicked. See the focus effect below.
   const detailRef = useRef<HTMLDivElement | null>(null);
   const [replyOpen, setReplyOpen] = useState(false);
+  // To and Subject are seeded from the message when the composer opens (see
+  // showReply) and are editable from there — the reply need not go back to the
+  // sender, or keep the thread's subject.
+  const [replyToField, setReplyToField] = useState("");
+  const [replySubject, setReplySubject] = useState("");
   const [replyBody, setReplyBody] = useState("");
   const [replySending, setReplySending] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
@@ -144,6 +149,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setReplyOpen(false);
+      setReplyToField("");
+      setReplySubject("");
       setReplyBody("");
       setReplyError(null);
       setForwardOpen(false);
@@ -271,7 +278,15 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   // can force-open (pressing R twice must not close the composer) while the
   // header buttons keep their toggle behaviour by passing the negated state.
   const showReply = (next: boolean) => {
+    if (!selectedEmail) return;
     setReplyOpen(next);
+    // Seed only what the user hasn't already filled in, so reopening after a
+    // stray Escape keeps an edited recipient or subject — the same rule the
+    // body follows.
+    if (next) {
+      setReplyToField((prev) => prev || emailAddress(selectedEmail.sender));
+      setReplySubject((prev) => prev || replySubjectFor(selectedEmail));
+    }
     setReplyError(null);
     setForwardOpen(false);
     setForwardError(null);
@@ -370,7 +385,6 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     }
   };
 
-  const replyTo = emailAddress(selectedEmail.sender);
   const originalSubject = displaySubject(selectedEmail);
   const forwardSubject = originalSubject.toLowerCase().startsWith("fwd:")
     ? originalSubject
@@ -378,14 +392,20 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
 
   const handleReply = async () => {
     const body = replyBody.trim();
+    // The fields win over the message they were seeded from, so an edited
+    // recipient is what actually goes out — an emptied one is an error below
+    // rather than a silent fall back to the sender. A blank subject is filled
+    // in instead, since a reply with no subject at all helps nobody.
+    const to = replyToField.trim();
+    const subject = replySubject.trim() || replySubjectFor(selectedEmail);
 
     if (!selectedEmail.account_id) {
       setReplyError("Missing sender account for this email.");
       return;
     }
 
-    if (!replyTo) {
-      setReplyError("Missing recipient for reply.");
+    if (!to) {
+      setReplyError("Enter a recipient for the reply.");
       return;
     }
 
@@ -397,21 +417,20 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     setReplySending(true);
     setReplyError(null);
     try {
-      const subject = selectedEmail.subject?.trim() || "(No Subject)";
       const attachments =
         replyAttachments.length > 0
           ? await filesToAttachments(replyAttachments)
           : undefined;
       await sendEmail({
         account_id: selectedEmail.account_id,
-        to: replyTo,
+        to,
         cc: replyCc.length > 0 ? replyCc : undefined,
-        subject: subject.toLowerCase().startsWith("re:")
-          ? subject
-          : `Re: ${subject}`,
+        subject,
         body,
         attachments,
       });
+      setReplyToField("");
+      setReplySubject("");
       setReplyBody("");
       setReplyAttachments([]);
       setReplyCc([]);
@@ -805,6 +824,22 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
 
       {replyOpen && (
         <div className="email-reply-box">
+          <div className="email-reply-fields">
+            <input
+              className="email-composer-field"
+              value={replyToField}
+              onChange={(e) => setReplyToField(e.target.value)}
+              placeholder="To"
+              aria-label="Reply recipient"
+            />
+            <input
+              className="email-composer-field"
+              value={replySubject}
+              onChange={(e) => setReplySubject(e.target.value)}
+              placeholder="Subject"
+              aria-label="Reply subject"
+            />
+          </div>
           <div className="email-reply-input">
             {mention.open && (
               <ul
@@ -861,7 +896,9 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
                 }
               }}
               onKeyDown={(e) => mention.onKeyDown(e)}
-              placeholder={`Reply to ${replyTo || "sender"} — @ to mention`}
+              // The recipient has its own field above now, so the placeholder
+              // only has to advertise the mention trigger.
+              placeholder="Write your reply — @ to mention"
               aria-label="Reply body"
               // Fires on the commit that mounts the textarea, i.e. exactly the
               // closed -> open transition, so `R` lands the caret here. An
@@ -1030,6 +1067,13 @@ function emailAddress(value?: string | null) {
 
 function displaySubject(email: EmailItem): string {
   return email.subject?.trim() || "(No Subject)";
+}
+
+// The subject a reply is pre-filled with. Module-level for the same reason as
+// buildForwardBody: `showReply` sits above the component's early return.
+function replySubjectFor(email: EmailItem): string {
+  const subject = displaySubject(email);
+  return subject.toLowerCase().startsWith("re:") ? subject : `Re: ${subject}`;
 }
 
 // The quoted header + body a forward is pre-filled with. Module-level so the
