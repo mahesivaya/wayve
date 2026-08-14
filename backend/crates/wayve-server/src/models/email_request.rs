@@ -10,6 +10,11 @@ pub struct SendEmailRequest {
     /// the E2E secure send. Normalised (trimmed, de-duped against `to`) before use.
     #[serde(default)]
     pub cc: Vec<String>,
+    /// Blind-carbon recipients, normalised like `cc` and additionally de-duped
+    /// against it. How the address is kept from the other recipients depends on
+    /// the transport — see `normalized_bcc` and `sender::BccHeader`.
+    #[serde(default)]
+    pub bcc: Vec<String>,
     /// Honoured only by the standard Gmail and Outlook path, not the E2E secure
     /// send.
     #[serde(default)]

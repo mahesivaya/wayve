@@ -49,6 +49,30 @@ pub(super) fn normalized_cc(data: &SendEmailRequest) -> Vec<String> {
     out
 }
 
+/// Same normalisation as `normalized_cc`, and additionally drops anything
+/// already visible in `cc`: an address that appears in both is not blind, so
+/// keeping it would only expose it twice.
+pub(super) fn normalized_bcc(data: &SendEmailRequest) -> Vec<String> {
+    let visible: std::collections::HashSet<String> = data
+        .to
+        .split(',')
+        .chain(data.cc.iter().map(String::as_str))
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for addr in data.bcc.iter().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        let lower = addr.to_lowercase();
+        if visible.contains(&lower) || !seen.insert(lower) {
+            continue;
+        }
+        out.push(addr.to_string());
+    }
+    out
+}
+
 /// Pre-flight cap check done from the base64 lengths, without decoding.
 fn validate_attachment_limits(attachments: &[EmailAttachmentInput]) -> Result<(), String> {
     if attachments.len() > MAX_OUTGOING_ATTACHMENTS {
@@ -143,14 +167,22 @@ pub async fn send(
         let to = data.to.trim();
         let subject = data.subject.trim();
         let cc = normalized_cc(&data);
+        let bcc = normalized_bcc(&data);
         let send_result = if data.attachments.is_empty() {
-            crate::email::sender::send_mail_with_attachments(to, &cc, subject, &data.body, &[])
-                .await
+            crate::email::sender::send_mail_with_attachments(
+                to,
+                &cc,
+                &bcc,
+                subject,
+                &data.body,
+                &[],
+            )
+            .await
         } else {
             match decode_attachments(&data.attachments) {
                 Ok(decoded) => {
                     crate::email::sender::send_mail_with_attachments(
-                        to, &cc, subject, &data.body, &decoded,
+                        to, &cc, &bcc, subject, &data.body, &decoded,
                     )
                     .await
                 }
@@ -229,7 +261,10 @@ pub async fn send(
         )
         .await;
 
-        // from/to/cc/subject land in metadata, which is admin-readable by design.
+        // from/to/cc/bcc/subject land in metadata, which is admin-readable by
+        // design. Bcc is included here — an audit trail that hides half the
+        // recipients is not an audit trail — but deliberately not in the
+        // webhook above, which leaves the system to a subscriber endpoint.
         crate::audit::record_action(
             pool.get_ref(),
             &req,
@@ -243,6 +278,7 @@ pub async fn send(
                     "from": account.email,
                     "to": data.to,
                     "cc": normalized_cc(&data),
+                    "bcc": normalized_bcc(&data),
                     "subject": data.subject,
                     "attachments": data.attachments.iter().map(|a| a.filename.as_str()).collect::<Vec<_>>(),
                     "provider": account.provider.as_db(),
@@ -432,15 +468,25 @@ pub(super) async fn send_via_gmail(
     user_id: i32,
 ) -> HttpResponse {
     let cc = normalized_cc(data);
+    let bcc = normalized_bcc(data);
     let raw_bytes: Vec<u8> = if data.attachments.is_empty() {
         let cc_header = if cc.is_empty() {
             String::new()
         } else {
             format!("Cc: {}\r\n", cc.join(", "))
         };
+        // Gmail reads the blind recipients from this header and removes it
+        // before delivering, so it must be present here — unlike the SMTP path,
+        // where the same header on the wire would expose them.
+        let bcc_header = if bcc.is_empty() {
+            String::new()
+        } else {
+            format!("Bcc: {}\r\n", bcc.join(", "))
+        };
         format!(
             "From: {}\r\n\
         To: {}\r\n\
+        {}\
         {}\
         Subject: {}\r\n\
         MIME-Version: 1.0\r\n\
@@ -451,6 +497,7 @@ pub(super) async fn send_via_gmail(
             from_email.trim(),
             data.to.trim(),
             cc_header,
+            bcc_header,
             data.subject.trim(),
             data.body.replace("\n", "\r\n")
         )
@@ -468,6 +515,10 @@ pub(super) async fn send_via_gmail(
             from_email.trim(),
             data.to.trim(),
             &cc,
+            &bcc,
+            // Keep: Gmail's `raw` field carries no envelope, so it is this
+            // header that tells Gmail who the blind recipients are.
+            crate::email::sender::BccHeader::Keep,
             data.subject.trim(),
             &data.body,
             &decoded,
@@ -529,6 +580,7 @@ pub(super) async fn send_via_outlook(
         access_token,
         data.to.trim(),
         &normalized_cc(data),
+        &normalized_bcc(data),
         data.subject.trim(),
         &data.body,
         &attachments,
@@ -586,12 +638,17 @@ mod tests {
     }
 
     fn req_with_cc(to: &str, cc: &[&str]) -> SendEmailRequest {
+        req_with_recipients(to, cc, &[])
+    }
+
+    fn req_with_recipients(to: &str, cc: &[&str], bcc: &[&str]) -> SendEmailRequest {
         SendEmailRequest {
             account_id: 1,
             to: to.to_string(),
             subject: "s".to_string(),
             body: "b".to_string(),
             cc: cc.iter().map(|s| s.to_string()).collect(),
+            bcc: bcc.iter().map(|s| s.to_string()).collect(),
             attachments: vec![],
         }
     }
@@ -623,6 +680,27 @@ mod tests {
             serde_json::from_str(r#"{"account_id":1,"to":"a@x.com","subject":"s","body":"b"}"#)
                 .unwrap_or_else(|e| panic!("deserialize failed: {e}"));
         assert!(r.cc.is_empty());
+        assert!(r.bcc.is_empty());
+    }
+
+    #[test]
+    fn normalized_bcc_trims_dedups_and_drops_empties() {
+        let r = req_with_recipients("to@x.com", &[], &[" a@x.com ", "", "A@x.com"]);
+        assert_eq!(normalized_bcc(&r), vec!["a@x.com".to_string()]);
+    }
+
+    #[test]
+    fn normalized_bcc_removes_addresses_already_in_to() {
+        let r = req_with_recipients("to@x.com", &[], &["TO@x.com", "blind@x.com"]);
+        assert_eq!(normalized_bcc(&r), vec!["blind@x.com".to_string()]);
+    }
+
+    #[test]
+    fn normalized_bcc_removes_addresses_already_in_cc() {
+        // Someone on both is not blind — listing them twice would only expose
+        // the address again, so Bcc yields to the visible Cc.
+        let r = req_with_recipients("to@x.com", &["seen@x.com"], &["SEEN@x.com", "blind@x.com"]);
+        assert_eq!(normalized_bcc(&r), vec!["blind@x.com".to_string()]);
     }
 
     #[test]

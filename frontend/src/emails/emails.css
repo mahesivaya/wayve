@@ -1826,9 +1826,77 @@
   background: var(--color-surface);
   color: var(--color-text-primary);
   font: inherit;
+  /* `font` does not cover these two, and the UA stylesheet resets both on form
+     controls — so a textarea does NOT pick up the letter-spacing (0.18px) and
+     text-rendering :root sets, while an ordinary element does. That difference
+     is invisible on its own but pulls the mention mirror below out of step with
+     the text it is painting, a little further with every character. */
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  text-rendering: inherit;
   /* There is no global border-box reset, so without this the padding and
      borders are added to the 100% and the field overhangs the box it sits in. */
   box-sizing: border-box;
+}
+
+/* ── Mention highlighting in the reply body ──────────────────────────────
+   A textarea can't colour part of its own value, so the visible text is
+   painted by .email-reply-highlight sitting behind a textarea whose own text
+   is transparent. Every property that affects where a glyph lands has to match
+   between the two, or the colour drifts away from the words. */
+
+.email-reply-highlight-wrap {
+  position: relative;
+  /* No height of its own: the textarea sets it, so dragging the resize grip
+     takes the mirror with it. */
+}
+
+.email-reply-highlight {
+  position: absolute;
+  inset: 0;
+  /* Same box as the textarea. The border is transparent rather than absent so
+     the text starts at the same offset; the textarea draws the visible one. */
+  padding: var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  box-sizing: border-box;
+  font: inherit;
+  /* Matches how a textarea lays text out. */
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  overflow: hidden;
+  /* It carries the surface, since the textarea above must be see-through. */
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  /* Clicks belong to the textarea. */
+  pointer-events: none;
+  user-select: none;
+}
+
+.email-reply-box .email-reply-highlight-wrap textarea {
+  position: relative;
+  background: transparent;
+  /* The mirror supplies the glyphs; only the caret and selection come from
+     here. */
+  color: transparent;
+  caret-color: var(--color-text-primary);
+}
+
+/* ::placeholder would otherwise inherit the transparent colour above and
+   leave the field looking empty of any prompt. */
+.email-reply-box .email-reply-highlight-wrap textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Keeps selected text legible: the mirror's glyphs are behind the selection
+   layer, so without this the highlight covers unreadable transparent text. */
+.email-reply-box .email-reply-highlight-wrap textarea::selection {
+  background: var(--color-primary);
+  color: var(--color-on-primary, #fff);
+}
+
+.email-reply-mention {
+  color: var(--color-primary);
 }
 
 /* Anchor for the absolutely-positioned suggestion menu below. */
@@ -1912,6 +1980,26 @@ img.email-mention-avatar {
   white-space: nowrap;
 }
 
+/* The reply box's picker lists addresses alone, so each row reads as the link
+   it behaves like — same colour token as `.email-body a`, so a mention target
+   looks the same as any other address in the app. Scoped rather than folded
+   into the rule above because the compose "To" typeahead shares these class
+   names and keeps its label + muted-address pairing. The ellipsis above still
+   applies, which is what stops a long bounce address from blowing the menu
+   out. */
+.email-mention-menu--address .email-mention-email {
+  font-size: var(--text-sm);
+  color: var(--color-primary);
+}
+
+/* Underline only the row under the cursor or keyboard highlight. Underlining
+   all six at rest turns the menu into a wall of rules and makes the current
+   row harder to pick out, which is the one thing the menu has to convey. */
+.email-mention-menu--address .email-mention-item:hover .email-mention-email,
+.email-mention-menu--address .email-mention-item.active .email-mention-email {
+  text-decoration: underline;
+}
+
 /* Cc chips gathered from reply-box @mentions. */
 .email-reply-cc {
   display: flex;
@@ -1958,7 +2046,10 @@ img.email-mention-avatar {
   gap: var(--space-4);
 }
 
-.email-forward-to {
+/* One line of composer chrome: the forward recipient, and the reply's To and
+   Subject. Grouped rather than duplicated so the three can't drift apart. */
+.email-forward-to,
+.email-composer-field {
   width: 100%;
   height: 30px;
   border: 1px solid var(--color-input-border);
@@ -1968,6 +2059,14 @@ img.email-mention-avatar {
   color: var(--color-text-primary);
   box-sizing: border-box;
   font: inherit;
+}
+
+/* The reply box is a plain block, unlike .email-forward-box's grid, so the
+   stacked fields need their own gap and separation from the body below. */
+.email-reply-fields {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
 }
 
 /* The subject is derived, not editable. Borrowing the input chrome next to it

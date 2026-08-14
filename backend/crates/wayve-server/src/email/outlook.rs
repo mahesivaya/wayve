@@ -625,6 +625,7 @@ pub async fn send_outlook_mail(
     access_token: &str,
     to: &str,
     cc: &[String],
+    bcc: &[String],
     subject: &str,
     body: &str,
     attachments: &[crate::email::sender::OutgoingAttachment],
@@ -648,6 +649,15 @@ pub async fn send_outlook_mail(
         .map(|addr| serde_json::json!({ "emailAddress": { "address": addr } }))
         .collect();
 
+    // Graph keeps bccRecipients off the delivered message itself, so the blind
+    // recipients stay blind without any header handling on our side.
+    let bcc_recipients: Vec<Value> = bcc
+        .iter()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|addr| serde_json::json!({ "emailAddress": { "address": addr } }))
+        .collect();
+
     let mut message = serde_json::json!({
         "subject": subject,
         "body": { "contentType": "Text", "content": body },
@@ -655,6 +665,9 @@ pub async fn send_outlook_mail(
     });
     if !cc_recipients.is_empty() {
         message["ccRecipients"] = Value::Array(cc_recipients);
+    }
+    if !bcc_recipients.is_empty() {
+        message["bccRecipients"] = Value::Array(bcc_recipients);
     }
     if !attachments.is_empty() {
         let graph_attachments: Vec<Value> = attachments
