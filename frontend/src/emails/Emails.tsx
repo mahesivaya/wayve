@@ -702,6 +702,7 @@ export default function Emails() {
             onCompose={() => setComposeOpen(true)}
             width={showEmailListResizer ? emailListWidth : undefined}
             isListView={emailViewLayout === "list"}
+            scrollKey={`${activeAccount ?? "all"}:${activeFolder}`}
             onBulkMarkRead={bulkMarkRead}
             onBulkDelete={bulkDelete}
             onMarkRead={markRead}
