@@ -3,6 +3,7 @@ import { EmailFolder, EmailItem, STUB_EMAIL_FOLDERS } from "./types";
 import { FolderChips } from "./FolderChips";
 import { AttachmentIcon, EmailsIcon, MailOpenIcon, TrashIcon } from "../icons";
 import { useGlobalSearch } from "../search/SearchContext";
+import { useListScrollMemory } from "./useListScrollMemory";
 import { fmtListTimestamp } from "../utils/datetime";
 
 interface EmailListProps {
@@ -42,6 +43,10 @@ interface EmailListProps {
   onSelectFolder?: (folder: EmailFolder) => void;
   // Omitted by embeddings that don't host the Files panel.
   onShowAttachments?: () => void;
+  // Identifies which list this is (account + folder), so the scroll offset
+  // restored on remount belongs to the rows being shown. Omitting it keeps the
+  // memory per-search-term only, which is right for a lone embedded list.
+  scrollKey?: string;
 }
 
 // Folders with no backing query. Important / Updates / Social are not stubs: they
@@ -94,6 +99,7 @@ export const EmailList: React.FC<EmailListProps> = ({
   showFolderTabs = false,
   onSelectFolder,
   onShowAttachments,
+  scrollKey = "emails",
 }) => {
   const isStubFolder = activeFolder
     ? (STUB_EMAIL_FOLDERS as ReadonlyArray<string>).includes(activeFolder)
@@ -254,6 +260,10 @@ export const EmailList: React.FC<EmailListProps> = ({
     // `triggerLoadMore` reads hasMore/loadingMore/loadMore through refs, so only
     // the row count needs to be a dependency.
   }, [isStubFolder, emails.length]);
+
+  // Opening an email unmounts this pane in list view, so the offset has to be
+  // kept outside the component and put back when Back mounts a fresh one.
+  useListScrollMemory(listScrollRef, `${scrollKey}|${searchQuery}`);
 
   return (
     <div
