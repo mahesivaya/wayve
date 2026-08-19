@@ -1564,9 +1564,41 @@
   opacity: 0;
 }
 
+/* Gmail-style columns. Every row is its own grid container, so the tracks have
+   to be FIXED widths — an `auto` or `1fr` track resolves against that one row's
+   content and the columns would land at a different x on every line, which is
+   the whole thing this is fixing. Only the subject flexes.
+   Tracks: checkbox/envelope · sender · subject · date. */
 .main.email-list-view .email-top {
+  display: grid;
+  grid-template-columns:
+    18px var(--email-sender-col, 180px) minmax(0, 1fr)
+    var(--email-date-col, 64px);
   align-items: center;
-  gap: 10px;
+  column-gap: 10px;
+}
+
+/* A fixed sender track buys alignment at the cost of flexibility, so give the
+   subject its space back as the pane narrows. Overriding the custom property
+   keeps the template itself in one place. */
+@media (max-width: 1000px) {
+  .main.email-list-view .email-top {
+    --email-sender-col: 140px;
+  }
+}
+
+/* The timestamp and the hover actions share the last track — they swap via
+   display:none, so only ever one is in flow, and pinning both here keeps the
+   column from resizing as the pointer moves down the list. 64px clears both
+   a "10:02 AM" and the two 28px buttons. */
+.main.email-list-view .email-row-meta,
+.main.email-list-view .email-row-actions {
+  grid-column: 4;
+  grid-row: 1;
+  justify-self: end;
+  /* The flex layout pinned these right with an auto margin; the track does it
+     now, and leaving it would fight `justify-self`. */
+  margin-left: 0;
 }
 
 .main.email-list-view .email-primary {
@@ -1586,9 +1618,16 @@
    [EmailList.tsx](./EmailList.tsx) gates it). Read rows fade the
    sender to muted grey alongside the subject. */
 .email-list-sender {
-  flex: 0 0 auto;
-  min-width: 120px;
-  max-width: 170px;
+  /* In list view this is a grid cell, so the track sets the width and the
+     min/max pair that used to size it to its own content — the reason senders
+     never lined up — would only fight the track. `min-width: 0` is what lets
+     the ellipsis happen inside a grid item. */
+  min-width: 0;
+  /* Required, not inherited: this span sits outside `.email-primary`, so it
+     does not pick up that element's override of the `text-align: center`
+     #root hands down. Without it the names centre inside a 180px track and
+     the column reads ragged even though the track edges line up. */
+  text-align: left;
   font-size: var(--text-sm);
   font-weight: 600;
   white-space: nowrap;

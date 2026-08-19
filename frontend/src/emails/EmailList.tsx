@@ -503,6 +503,14 @@ export const EmailList: React.FC<EmailListProps> = ({
                     </span>
                   </span>
                 )}
+                {/* A direct child of .email-top, not of .email-primary, so it
+                    can occupy a grid track of its own and line up with the
+                    senders above and below it. */}
+                {isListView && (
+                  <span className="email-list-sender">
+                    {displaySender(email.sender || email.receiver)}
+                  </span>
+                )}
                 <span className="email-primary">
                   {/* An untouched row has no help-desk state yet — an implicit
                   "open", which the unread style already conveys, so it gets no chip
@@ -510,11 +518,6 @@ export const EmailList: React.FC<EmailListProps> = ({
                   {email.is_shared && email.inbox_status && (
                     <span className={`inbox-status-chip ${email.inbox_status}`}>
                       {email.inbox_status}
-                    </span>
-                  )}
-                  {isListView && (
-                    <span className="email-list-sender">
-                      {displaySender(email.sender || email.receiver)}
                     </span>
                   )}
                   <span className="email-list-subject">
