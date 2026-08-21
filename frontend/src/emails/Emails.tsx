@@ -241,10 +241,17 @@ export default function Emails() {
   // for its header chips, so the folder menu relocates to the page toolbar
   // next to Compose.
   const inSplitPane = useInSplitPane();
+  // A Layout split pane is already a narrow column, so nesting this page's own
+  // list+detail split inside it leaves neither half usable. In a pane the page
+  // is always the list, and SearchBar hides the layout toggle to match.
+  //
+  // The stored preference is deliberately NOT rewritten — it is the user's
+  // choice for the full-width page, and closing the split has to give it back.
+  const effectiveLayout = inSplitPane ? "list" : emailViewLayout;
   // Layout only — opening the attachments view must NOT move the chips, or the
   // whole menu jumps up next to Compose mid-click. The files pane renders the
   // same bar flush at the top of its pane instead (see EmailDetail).
-  const chipsInToolbar = inSplitPane || emailViewLayout === "split";
+  const chipsInToolbar = inSplitPane || effectiveLayout === "split";
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const stored = localStorage.getItem("rwayve.emailSidebar.width");
     const parsed = stored ? Number(stored) : NaN;
@@ -359,22 +366,22 @@ export default function Emails() {
   // terms the email list would: in list view the full-width list until a file is
   // picked, in split view always on a wide screen and only until something is
   // selected on a narrow one.
-  const filesInListView = viewMode === "files" && emailViewLayout === "list";
+  const filesInListView = viewMode === "files" && effectiveLayout === "list";
   const showList =
     viewMode === "files"
       ? filesInListView
         ? selectedFile === null
         : !useSingleColumn || selectedFile === null
-      : (emailViewLayout === "list" && selectedEmail === null) ||
-        (emailViewLayout === "split" &&
+      : (effectiveLayout === "list" && selectedEmail === null) ||
+        (effectiveLayout === "split" &&
           (!useSingleColumn || selectedEmail === null));
   const showDetail =
     (viewMode === "files" &&
       (filesInListView
         ? selectedFile !== null
         : !useSingleColumn || selectedFile !== null)) ||
-    (emailViewLayout === "list" && selectedEmail !== null) ||
-    (emailViewLayout === "split" &&
+    (effectiveLayout === "list" && selectedEmail !== null) ||
+    (effectiveLayout === "split" &&
       (!useSingleColumn || selectedEmail !== null));
   const showEmailListResizer =
     viewMode === "email" && showList && showDetail && !useSingleColumn;
@@ -599,7 +606,7 @@ export default function Emails() {
         className={[
           "main",
           isNarrow ? "narrow" : "",
-          emailViewLayout === "list" ? "email-list-view" : "email-split-view",
+          effectiveLayout === "list" ? "email-list-view" : "email-split-view",
         ]
           .filter(Boolean)
           .join(" ")}
@@ -701,7 +708,7 @@ export default function Emails() {
             loadingMore={loadingMore}
             onCompose={() => setComposeOpen(true)}
             width={showEmailListResizer ? emailListWidth : undefined}
-            isListView={emailViewLayout === "list"}
+            isListView={effectiveLayout === "list"}
             scrollKey={`${activeAccount ?? "all"}:${activeFolder}`}
             onBulkMarkRead={bulkMarkRead}
             onBulkDelete={bulkDelete}

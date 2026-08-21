@@ -1,9 +1,13 @@
 import { useLocation } from "react-router-dom";
 import { useGlobalSearch } from "./SearchContext";
 import { getSearchLabel, shouldHideSearch } from "./SearchConfig";
+import { useInSplitPane } from "../components/SplitPaneContext";
 
 export default function SearchBar() {
   const location = useLocation();
+  // Inside a split pane Emails.tsx forces the list layout, so neither button
+  // would do anything — the whole group goes rather than sitting there inert.
+  const inSplitPane = useInSplitPane();
   const { searchQuery, setSearchQuery, emailViewLayout, setEmailViewLayout } =
     useGlobalSearch();
 
@@ -17,7 +21,7 @@ export default function SearchBar() {
     <div className="global-search-row">
       {/* On the emails page the view-layout toggles sit BEFORE the search box,
           and the box is pushed to the far right (see .emails-page-toolbar). */}
-      {location.pathname.startsWith("/emails") && (
+      {location.pathname.startsWith("/emails") && !inSplitPane && (
         <div
           className="email-layout-actions"
           role="group"
