@@ -29,6 +29,25 @@ use wayve_security::api_key::{
 
 const API_KEY_HEADER: &str = "X-API-KEY";
 
+/// The credential this middleware resolves — a service key or an OAuth token.
+enum Credential {
+    ApiKey(String),
+    OAuth(String),
+}
+
+/// The acting identity a credential resolves to, normalized across both kinds.
+struct Acting {
+    /// The api_keys row id for audit, or `None` for OAuth (no api_keys FK).
+    audit_key_id: Option<i32>,
+    /// A stable id for the rate-limit cache bucket.
+    rate_bucket: String,
+    user_id: i32,
+    key_type: String,
+    scopes: Vec<String>,
+    /// The credential's own per-minute cap, if any (OAuth relies on plan tier).
+    own_rate_limit: Option<i32>,
+}
+
 pub struct ApiKeyMiddleware;
 
 fn deny(status: u16, message: &str) -> HttpResponse {
@@ -85,16 +104,29 @@ where
     }
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
-        // No API key header: behave as if this middleware were absent.
+        // Two credentials flow through here. An `X-API-KEY` header is a service
+        // API key. An `Authorization: Bearer wv_oat_*` is an OAuth access token
+        // (a session JWT has no such prefix, so it passes straight through to
+        // the JWT path downstream). Either resolves to an ApiKeyPrincipal.
         let raw_key = req
             .headers()
             .get(API_KEY_HEADER)
             .and_then(|value| value.to_str().ok())
             .map(|value| value.to_string());
+        let oauth_token = req
+            .headers()
+            .get(actix_web::http::header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.strip_prefix("Bearer "))
+            .filter(|token| token.starts_with(crate::oauth_provider::OAUTH_TOKEN_PREFIX))
+            .map(|token| token.to_string());
 
         let srv = self.service.clone();
 
-        let Some(raw_key) = raw_key else {
+        let Some(credential) = raw_key
+            .map(Credential::ApiKey)
+            .or_else(|| oauth_token.map(Credential::OAuth))
+        else {
             return Box::pin(async move {
                 srv.call(req).await.map(ServiceResponse::map_into_left_body)
             });
@@ -131,66 +163,97 @@ where
                 ip: ip.clone(),
             };
 
-            let resolved = match resolve_api_key(&pool, &raw_key).await {
-                Ok(key) => key,
-                Err(failure) => {
-                    let outcome = match failure {
-                        AuthFailure::Invalid => AuditOutcome::Invalid,
-                        AuthFailure::Revoked => AuditOutcome::DeniedRevoked,
-                        AuthFailure::Expired => AuditOutcome::DeniedExpired,
-                    };
-                    audit(&pool, make_entry(None, None, 401, outcome));
-                    return Ok(req.into_response(
-                        deny(401, "Invalid, revoked, or expired API key").map_into_right_body(),
-                    ));
+            let acting = match credential {
+                Credential::ApiKey(raw_key) => match resolve_api_key(&pool, &raw_key).await {
+                    Ok(key) => Acting {
+                        audit_key_id: Some(key.id),
+                        rate_bucket: format!("apikey_rl:{}", key.id),
+                        user_id: key.user_id,
+                        key_type: key.key_type,
+                        scopes: key.scopes,
+                        own_rate_limit: Some(key.rate_limit_per_min),
+                    },
+                    Err(failure) => {
+                        let outcome = match failure {
+                            AuthFailure::Invalid => AuditOutcome::Invalid,
+                            AuthFailure::Revoked => AuditOutcome::DeniedRevoked,
+                            AuthFailure::Expired => AuditOutcome::DeniedExpired,
+                        };
+                        audit(&pool, make_entry(None, None, 401, outcome));
+                        return Ok(req.into_response(
+                            deny(401, "Invalid, revoked, or expired API key").map_into_right_body(),
+                        ));
+                    }
+                },
+                Credential::OAuth(raw_token) => {
+                    match crate::oauth_provider::resolve_oauth_token(&pool, &raw_token).await {
+                        Some((user_id, scopes)) => Acting {
+                            audit_key_id: None,
+                            rate_bucket: format!("oauth_rl:{user_id}"),
+                            user_id,
+                            key_type: "oauth".to_string(),
+                            scopes,
+                            // OAuth tokens have no per-token cap; the plan tier governs.
+                            own_rate_limit: None,
+                        },
+                        None => {
+                            audit(&pool, make_entry(None, None, 401, AuditOutcome::Invalid));
+                            return Ok(req.into_response(
+                                deny(401, "Invalid, revoked, or expired access token")
+                                    .map_into_right_body(),
+                            ));
+                        }
+                    }
                 }
             };
 
-            // The route's required scope must be satisfied by this key.
+            // The route's required scope must be satisfied by the credential.
             let in_scope = required_scope(&method, &path)
-                .map(|scope| scope_satisfied(&resolved.scopes, scope))
+                .map(|scope| scope_satisfied(&acting.scopes, scope))
                 .unwrap_or(false);
             if !in_scope {
                 audit(
                     &pool,
                     make_entry(
-                        Some(resolved.id),
-                        Some(resolved.user_id),
+                        acting.audit_key_id,
+                        Some(acting.user_id),
                         403,
                         AuditOutcome::DeniedScope,
                     ),
                 );
                 return Ok(req.into_response(
-                    deny(403, "API key is not permitted for this endpoint").map_into_right_body(),
+                    deny(403, "Credential is not permitted for this endpoint")
+                        .map_into_right_body(),
                 ));
             }
 
             // Rate limit and monthly quota both fail open when Redis is down.
-            // The effective rate limit is the minimum of the key's own cap and
-            // the plan-tier cap, so an over-generous key cannot exceed the plan.
-            // The monthly quota aggregates across all of the user's keys, so
-            // spreading load over several keys does not bypass the budget.
+            // The effective rate limit is the minimum of the credential's own cap
+            // (API keys only) and the plan-tier cap, so it can never exceed the
+            // plan. The monthly quota aggregates across all of the user's
+            // credentials, so spreading load over several does not bypass it.
             if let Some(cache_data) = req.app_data::<web::Data<Option<Cache>>>()
                 && let Some(cache) = cache_data.get_ref().clone()
             {
-                let tier =
-                    crate::billing::quotas::effective_for_user(&pool, resolved.user_id).await;
-                let effective_rl = i32::min(resolved.rate_limit_per_min, tier.rate_limit_per_min);
+                let tier = crate::billing::quotas::effective_for_user(&pool, acting.user_id).await;
+                let effective_rl = match acting.own_rate_limit {
+                    Some(cap) => i32::min(cap, tier.rate_limit_per_min),
+                    None => tier.rate_limit_per_min,
+                };
 
-                let rl_key = format!("apikey_rl:{}", resolved.id);
-                match cache.increment_with_ttl(&rl_key, 60).await {
+                match cache.increment_with_ttl(&acting.rate_bucket, 60).await {
                     Ok(count) if count > i64::from(effective_rl) => {
                         audit(
                             &pool,
                             make_entry(
-                                Some(resolved.id),
-                                Some(resolved.user_id),
+                                acting.audit_key_id,
+                                Some(acting.user_id),
                                 429,
                                 AuditOutcome::RateLimited,
                             ),
                         );
                         return Ok(req.into_response(
-                            deny(429, "API key rate limit exceeded").map_into_right_body(),
+                            deny(429, "Rate limit exceeded").map_into_right_body(),
                         ));
                     }
                     Ok(_) => {}
@@ -201,15 +264,15 @@ where
 
                 // A negative quota means unlimited (enterprise).
                 if tier.monthly_quota >= 0 {
-                    let q_key = crate::billing::quotas::monthly_quota_key(resolved.user_id);
+                    let q_key = crate::billing::quotas::monthly_quota_key(acting.user_id);
                     let ttl = crate::billing::quotas::monthly_quota_ttl_secs();
                     match cache.increment_with_ttl(&q_key, ttl).await {
                         Ok(count) if count > i64::from(tier.monthly_quota) => {
                             audit(
                                 &pool,
                                 make_entry(
-                                    Some(resolved.id),
-                                    Some(resolved.user_id),
+                                    acting.audit_key_id,
+                                    Some(acting.user_id),
                                     429,
                                     AuditOutcome::RateLimited,
                                 ),
@@ -231,21 +294,21 @@ where
             }
 
             // Inject the acting principal so handlers authenticate as the
-            // key's user.
-            let key_id = resolved.id;
-            let user_id = resolved.user_id;
+            // credential's user. `key_id` is 0 for OAuth (no api_keys row).
+            let audit_key_id = acting.audit_key_id;
+            let user_id = acting.user_id;
             req.extensions_mut().insert(ApiKeyPrincipal {
                 user_id,
-                key_id,
-                key_type: resolved.key_type,
-                scopes: resolved.scopes,
+                key_id: audit_key_id.unwrap_or(0),
+                key_type: acting.key_type,
+                scopes: acting.scopes,
             });
 
             let res = srv.call(req).await?;
             let status = i32::from(res.status().as_u16());
             audit(
                 &pool,
-                make_entry(Some(key_id), Some(user_id), status, AuditOutcome::Allowed),
+                make_entry(audit_key_id, Some(user_id), status, AuditOutcome::Allowed),
             );
             Ok(res.map_into_left_body())
         })

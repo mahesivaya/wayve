@@ -2763,3 +2763,90 @@ CREATE POLICY email_contacts_rls ON email_contacts
         current_setting('app.bypass', true) = 'on'
         OR user_id = nullif(current_setting('app.user_id', true), '')::int
     );
+
+-- ---------------------------------------------------------------------------
+-- Developer apps (app registration for the developer platform).
+--
+-- A registered third-party integration owned by a user (and their org, if any).
+-- `client_id` is a public, non-secret identifier; `client_secret` is shown once
+-- at creation/rotation and only its SHA-256 hash is stored, exactly like
+-- api_keys. `redirect_uris` + `scopes` are captured now so the future OAuth
+-- authorize/token flow can consume them without a schema change. Access is
+-- application-enforced via RBAC (the `api_keys:manage` permission) plus an
+-- owner-scope check, mirroring api_keys — no RLS/GRANT here.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS developer_apps (
+    id                    SERIAL PRIMARY KEY,
+    user_id               INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    organization_id       INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+    name                  TEXT NOT NULL,
+    description           TEXT,
+    homepage_url          TEXT,
+    client_id             TEXT NOT NULL UNIQUE,
+    client_secret_hash    TEXT NOT NULL,
+    client_secret_preview TEXT NOT NULL,
+    redirect_uris         TEXT[] NOT NULL DEFAULT '{}',
+    scopes                TEXT[] NOT NULL DEFAULT '{}',
+    created_by            INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    revoked_at            TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS developer_apps_user_idx ON developer_apps(user_id);
+CREATE INDEX IF NOT EXISTS developer_apps_org_idx ON developer_apps(organization_id);
+
+-- ---------------------------------------------------------------------------
+-- OAuth 2.0 authorization-code provider ("Connect with Fluxze").
+--
+-- Three short-lived credential stores, all hashing their secrets like api_keys:
+--   * oauth_pending_authorizations — a validated /oauth/authorize request held
+--     between the redirect and the user's consent decision (~10 min).
+--   * oauth_auth_codes — a single-use code issued on consent, exchanged once at
+--     /oauth/token (~60 s). Carries the PKCE challenge.
+--   * oauth_tokens — the access + refresh tokens issued to an app for a user,
+--     scoped and expiring. `wv_oat_*` access tokens authenticate API calls via
+--     the OAuth middleware; only their SHA-256 hashes are stored.
+-- Access is app-enforced (no RLS), consistent with api_keys / developer_apps.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS oauth_pending_authorizations (
+    request_id            TEXT PRIMARY KEY,
+    app_id                INTEGER NOT NULL REFERENCES developer_apps(id) ON DELETE CASCADE,
+    user_id               INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    redirect_uri          TEXT NOT NULL,
+    scopes                TEXT[] NOT NULL DEFAULT '{}',
+    state                 TEXT,
+    code_challenge        TEXT,
+    code_challenge_method TEXT,
+    expires_at            TIMESTAMPTZ NOT NULL,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS oauth_auth_codes (
+    code_hash             TEXT PRIMARY KEY,
+    app_id                INTEGER NOT NULL REFERENCES developer_apps(id) ON DELETE CASCADE,
+    user_id               INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    redirect_uri          TEXT NOT NULL,
+    scopes                TEXT[] NOT NULL DEFAULT '{}',
+    code_challenge        TEXT,
+    code_challenge_method TEXT,
+    expires_at            TIMESTAMPTZ NOT NULL,
+    consumed_at           TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS oauth_tokens (
+    id                    BIGSERIAL PRIMARY KEY,
+    access_token_hash     TEXT NOT NULL UNIQUE,
+    refresh_token_hash    TEXT UNIQUE,
+    app_id                INTEGER NOT NULL REFERENCES developer_apps(id) ON DELETE CASCADE,
+    user_id               INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    scopes                TEXT[] NOT NULL DEFAULT '{}',
+    access_expires_at     TIMESTAMPTZ NOT NULL,
+    refresh_expires_at    TIMESTAMPTZ,
+    revoked_at            TIMESTAMPTZ,
+    last_used_at          TIMESTAMPTZ,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS oauth_tokens_user_idx ON oauth_tokens(user_id);
+CREATE INDEX IF NOT EXISTS oauth_tokens_app_idx ON oauth_tokens(app_id);
+CREATE INDEX IF NOT EXISTS oauth_auth_codes_app_idx ON oauth_auth_codes(app_id);

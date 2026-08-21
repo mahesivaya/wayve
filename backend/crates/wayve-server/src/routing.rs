@@ -11,9 +11,9 @@ use actix_web::web;
 
 use crate::{
     ai, billing, call, chat, demo, docs, documents, drive, email, embed, feature_access, figma,
-    github_oauth, github_proxy, home, integrations, notes, openapi, organization, platform_billing,
-    platform_team, platform_ui, reminders, repo_access, routes, scheduler, scim, slack_oauth,
-    tasks, tickets, user_stories, webhooks, workspace,
+    github_oauth, github_proxy, home, integrations, notes, oauth_provider, openapi, organization,
+    platform_billing, platform_team, platform_ui, reminders, repo_access, routes, scheduler, scim,
+    slack_oauth, tasks, tickets, user_stories, webhooks, workspace,
 };
 
 pub fn wire(cfg: &mut web::ServiceConfig) {
@@ -41,6 +41,7 @@ pub fn wire(cfg: &mut web::ServiceConfig) {
             .configure(github_proxy::routes)
             .configure(repo_access::routes)
             .configure(github_oauth::routes)
+            .configure(oauth_provider::routes)
             .configure(slack_oauth::routes)
             .configure(figma::routes)
             .configure(openapi::routes)
@@ -57,6 +58,7 @@ pub fn wire(cfg: &mut web::ServiceConfig) {
     // caller: the Stripe webhook by signature, the Jira webhook by URL token.
     .configure(email::public_routes)
     .configure(github_oauth::public_routes)
+    .configure(oauth_provider::public_routes)
     .configure(slack_oauth::public_routes)
     .configure(figma::public_routes)
     .configure(billing::public_routes)
