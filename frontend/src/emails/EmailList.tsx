@@ -105,7 +105,9 @@ export const EmailList: React.FC<EmailListProps> = ({
     ? (STUB_EMAIL_FOLDERS as ReadonlyArray<string>).includes(activeFolder)
     : false;
   const showNoAccounts = accountsLoaded && !hasAccounts;
-  const { searchQuery, setSearchQuery } = useGlobalSearch();
+  // Read-only here: the query is set from the page toolbar's search box and is
+  // only needed as part of the scroll-memory key below.
+  const { searchQuery } = useGlobalSearch();
 
   const [checkedIds, setCheckedIds] = useState<Set<number>>(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -271,23 +273,9 @@ export const EmailList: React.FC<EmailListProps> = ({
       className="email-list"
       style={width ? { width } : undefined}
     >
-      <div className="mobile-mail-topbar">
-        <button type="button" className="mobile-mail-menu" aria-label="Menu">
-          ☰
-        </button>
-        <input
-          type="search"
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-          placeholder="Search in mail"
-          aria-label="Search in mail"
-        />
-        <div className="mobile-mail-avatar" aria-hidden="true">
-          M
-        </div>
-      </div>
-      <div className="mobile-mail-label">Inbox</div>
-
+      {/* No mobile search bar / "Inbox" caption here: the page toolbar above
+          already carries Compose and the global search box, so a second search
+          field plus a label only pushed the bulk bar ~90px down the screen. */}
       {isListView && showChrome && !showNoAccounts && (
         <div
           className="email-bulk-bar"

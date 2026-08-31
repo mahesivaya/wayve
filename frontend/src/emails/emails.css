@@ -983,8 +983,6 @@
      fully superseded the earlier declarations that used to sit here. */
 }
 
-.mobile-mail-topbar,
-.mobile-mail-label,
 .mobile-email-row,
 .mobile-compose-fab,
 .mobile-mail-bottom-nav {
@@ -2562,66 +2560,14 @@ img.email-mention-avatar {
     flex: 1;
     border-right: none;
     background: var(--color-surface);
-    padding: 10px 12px 76px;
+    /* No top padding: the bulk bar is the first child and sticks to `top: 0`,
+       so any padding here only opens a gap under the page toolbar (and a strip
+       the sticky bar can't cover, since its containing block starts below it).
+       Side + bottom padding still give the rows their gutter and clear the
+       sticky bottom nav. */
+    padding: 0 12px 76px;
     gap: 0;
     box-sizing: border-box;
-  }
-
-  .mobile-mail-topbar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    height: 42px;
-    margin: 2px 0 12px;
-    padding: 0 10px;
-    border-radius: 22px;
-    /* Themeable soft surface so it tracks the active theme (was the
-       non-themeable cool-faint navy). Matches the .sidebar change. */
-    background: var(--color-surface-soft);
-    color: var(--color-text-cool-foggy);
-  }
-
-  .mobile-mail-menu {
-    width: 28px;
-    height: 28px;
-    border: none;
-    background: transparent;
-    color: var(--color-text-secondary);
-    font-size: 18px;
-    line-height: 1;
-    cursor: pointer;
-  }
-
-  .mobile-mail-topbar input {
-    min-width: 0;
-    flex: 1;
-    border: none;
-    outline: none;
-    background: transparent;
-    color: var(--color-text-primary);
-    font-size: 14px;
-  }
-
-  .mobile-mail-avatar {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--color-primary-action);
-    color: var(--color-on-primary);
-    font-weight: 800;
-    font-size: 13px;
-    box-shadow: inset 0 0 0 2px var(--color-surface);
-  }
-
-  .mobile-mail-label {
-    display: block;
-    margin: 0 0 8px;
-    color: var(--color-text-slate-mid);
-    font-size: 12px;
-    font-weight: 700;
   }
 
   .email-item,
