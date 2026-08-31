@@ -571,10 +571,22 @@ export default function Emails() {
     <div className="emails-root">
       {showToolbar && (
         <div className="emails-page-toolbar">
-          {/* Personal accounts keep Compose in the email sidebar instead. */}
+          {/* Personal accounts keep Compose in the email sidebar on desktop, but
+            the sidebar (and its Compose button) is hidden below 700px, so this
+            copy is always rendered and CSS reveals it only at that width —
+            same top-toolbar placement business/org accounts use everywhere. */}
           {!isPersonalScope && (
             <button
               className="compose-btn compose-btn--toolbar"
+              onClick={() => setComposeOpen(true)}
+              data-tooltip="Compose"
+            >
+              Compose
+            </button>
+          )}
+          {isPersonalScope && (
+            <button
+              className="compose-btn compose-btn--toolbar compose-btn--toolbar-mobile-only"
               onClick={() => setComposeOpen(true)}
               data-tooltip="Compose"
             >
@@ -706,7 +718,6 @@ export default function Emails() {
             hasMore={hasMore}
             loadMore={loadMore}
             loadingMore={loadingMore}
-            onCompose={() => setComposeOpen(true)}
             width={showEmailListResizer ? emailListWidth : undefined}
             isListView={effectiveLayout === "list"}
             scrollKey={`${activeAccount ?? "all"}:${activeFolder}`}

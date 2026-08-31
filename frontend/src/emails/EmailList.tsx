@@ -15,7 +15,6 @@ interface EmailListProps {
   // returned promise settles, so a call the parent rejects can't wedge paging.
   loadMore: () => void | Promise<void>;
   loadingMore: boolean;
-  onCompose?: () => void;
   width?: number;
   isListView?: boolean;
   // Accepted but no longer read: the toolbar button that called it is gone and
@@ -84,7 +83,6 @@ export const EmailList: React.FC<EmailListProps> = ({
   hasMore,
   loadMore,
   loadingMore,
-  onCompose,
   width,
   isListView = false,
   onBulkDelete,
@@ -578,7 +576,7 @@ export const EmailList: React.FC<EmailListProps> = ({
               second line. */}
               <div className="mobile-email-row">
                 <div className="mobile-email-avatar" aria-hidden="true">
-                  {(email.sender || email.receiver || "?")
+                  {displaySender(email.sender || email.receiver)
                     .trim()
                     .charAt(0)
                     .toUpperCase()}
@@ -608,13 +606,6 @@ export const EmailList: React.FC<EmailListProps> = ({
                 <span className="mobile-email-time">
                   {formatMobileTime(email.created_at)}
                 </span>
-                <button
-                  type="button"
-                  className="mobile-email-star"
-                  aria-label="Star email"
-                >
-                  ☆
-                </button>
               </div>
             </div>
           ))}
@@ -640,22 +631,6 @@ export const EmailList: React.FC<EmailListProps> = ({
           <span className="load-more-status is-end">No more emails.</span>
         </div>
       )}
-
-      {onCompose && (
-        <button
-          type="button"
-          className="mobile-compose-fab"
-          onClick={onCompose}
-        >
-          ✎ <span>Compose</span>
-        </button>
-      )}
-      <div className="mobile-mail-bottom-nav" aria-hidden="true">
-        <span className="active">✉</span>
-        <span>□</span>
-        <span>♚</span>
-        <span>▭</span>
-      </div>
     </div>
   );
 };
