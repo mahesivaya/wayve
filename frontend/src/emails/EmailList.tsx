@@ -315,14 +315,6 @@ export const EmailList: React.FC<EmailListProps> = ({
                   type="button"
                   role="menuitem"
                   className="email-select-item"
-                  onClick={() => selectBy(() => false)}
-                >
-                  None
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="email-select-item"
                   onClick={() => selectBy((e) => e.is_read === true)}
                 >
                   Read
