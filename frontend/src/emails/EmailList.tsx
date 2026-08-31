@@ -230,21 +230,34 @@ export const EmailList: React.FC<EmailListProps> = ({
     // a rejected attempt cost one no-op instead of the whole feature.
     void Promise.resolve(loadMoreRef.current()).finally(() => {
       inFlightRef.current = false;
+      // A short pane (few rows, or rows shorter than the viewport) can still
+      // leave the sentinel within the trigger margin after this page lands,
+      // and nothing else will ask again — so check once, against real
+      // post-paint geometry, rather than relying on the observer firing its
+      // own "initial state" callback (see the effect below for why that used
+      // to cause a runaway fetch cascade once rows got shorter).
+      requestAnimationFrame(() => {
+        const root = listScrollRef.current;
+        const target = sentinelRef.current;
+        if (!root || !target) return;
+        const stillNear =
+          target.getBoundingClientRect().top -
+            root.getBoundingClientRect().bottom <
+          400;
+        if (stillNear) triggerLoadMore();
+      });
     });
   };
 
   // Paging is driven by a sentinel below the last row: whenever it comes within
-  // 400px of the bottom of the pane, the next page is fetched. One observer
-  // covers every case a scroll handler alone would miss — rows that don't fill
-  // the pane (nothing to scroll), and a resize that makes them stop filling it —
-  // which is why there is no manual "load more" button.
-  //
-  // Re-bound on every page because IntersectionObserver reports *changes*: if a
-  // page lands and the sentinel is still inside the margin, the intersection
-  // never changed and no further callback would arrive, stalling the list with
-  // rows still to fetch. Observing afresh always delivers one initial callback,
-  // so each page re-asks "still in view?" and the cascade continues until the
-  // pane is full or `hasMore` goes false.
+  // 400px of the bottom of the pane, the next page is fetched. The observer
+  // covers scroll-driven intersection changes; `triggerLoadMore` above covers
+  // the "pane isn't full yet" case explicitly, so this only needs to bind
+  // once per folder rather than re-arm on every row-count change — recreating
+  // it per page used to fire IntersectionObserver's implicit initial callback
+  // on every fetch, and once rows got shorter (denser mobile rows, tighter
+  // padding) the sentinel was often still in range, cascading into rapid
+  // repeated fetches ("emails loading again and again").
   useEffect(() => {
     const root = listScrollRef.current;
     const target = sentinelRef.current;
@@ -257,9 +270,11 @@ export const EmailList: React.FC<EmailListProps> = ({
     );
     observer.observe(target);
     return () => observer.disconnect();
-    // `triggerLoadMore` reads hasMore/loadingMore/loadMore through refs, so only
-    // the row count needs to be a dependency.
-  }, [isStubFolder, emails.length]);
+    // `triggerLoadMore` reads hasMore/loadingMore/loadMore through refs, so no
+    // further dependency is needed beyond the folder switch, which swaps the
+    // sentinel's containing list and warrants a fresh observer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStubFolder]);
 
   // Opening an email unmounts this pane in list view, so the offset has to be
   // kept outside the component and put back when Back mounts a fresh one.

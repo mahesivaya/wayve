@@ -60,7 +60,17 @@ export function useEmailInbox(
     emailCache.current = {};
   }, [activeAccount, user_id]);
 
+  // Tracks which (account, folder, query) the currently-loaded list belongs
+  // to, so the effect below can tell a genuine list switch (replace) apart
+  // from a `refreshTick` bump on the same view (merge) — see there for why
+  // that distinction matters.
+  const loadedKeyRef = useRef<string | null>(null);
+
   useEffect(() => {
+    const key = `${activeAccount ?? "all"}|${activeFolder}|${normalizedSearchQuery}`;
+    const isFreshLoad = loadedKeyRef.current !== key;
+    loadedKeyRef.current = key;
+
     const fetchInitialEmails = async () => {
       // Signal (important) and Noise (social + promotions) are resolved
       // server-side in email/repo.rs, so the raw folder is sent as-is.
@@ -71,19 +81,44 @@ export function useEmailInbox(
           query: normalizedSearchQuery,
         }
       );
-      setEmails(data);
-      // The backend's `hasMore` reflects DB state only; it doesn't know the
-      // provider may still hold older messages we haven't synced. Assume more
-      // might exist whenever the list is non-empty, so the user can always
-      // trigger `sync_older_page`. loadMore flips this off on an empty page.
-      setHasMore(hasMorePage || data.length > 0);
-      // Preserve the selection across a list refresh: Emails.tsx polls
-      // `refreshTick` every 2s after a mailbox is connected, and each tick
-      // would otherwise clobber the open email. Clear it only when the email
-      // genuinely left the list (account switch, folder change, delete).
-      setSelectedEmail((cur) =>
-        cur && data.some((email) => email.id === cur.id) ? cur : null
-      );
+
+      if (isFreshLoad) {
+        setEmails(data);
+        // The backend's `hasMore` reflects DB state only; it doesn't know the
+        // provider may still hold older messages we haven't synced. Assume
+        // more might exist whenever the list is non-empty, so the user can
+        // always trigger `sync_older_page`. loadMore flips this off on an
+        // empty page.
+        setHasMore(hasMorePage || data.length > 0);
+        // Preserve the selection across a list refresh: Emails.tsx polls
+        // `refreshTick` every 2s after a mailbox is connected, and each tick
+        // would otherwise clobber the open email. Clear it only when the
+        // email genuinely left the list (account switch, folder change,
+        // delete).
+        setSelectedEmail((cur) =>
+          cur && data.some((email) => email.id === cur.id) ? cur : null
+        );
+        return;
+      }
+
+      // `refreshTick` re-fetches only the first page (60s idle poll, or every
+      // 2s for ~24s right after connecting a mailbox). Wholesale-replacing
+      // `emails` with just that page used to truncate away every row the
+      // user had scrolled in via `loadMore`, and hand the list a fresh array
+      // of object references even when nothing changed — both read as the
+      // whole list silently reloading out from under an idle user. Merge
+      // instead: patch fields on rows the fresh page still has (read state,
+      // subject edits, etc.), prepend anything genuinely new, and leave
+      // already-loaded older pages and `hasMore` untouched. A row deleted on
+      // another device lingers until the next real folder/account/search
+      // switch — an acceptable staleness cost against a full list reset.
+      setEmails((prev) => {
+        const fresh = new Map(data.map((email) => [email.id, email]));
+        const merged = prev.map((email) => fresh.get(email.id) ?? email);
+        const existingIds = new Set(prev.map((email) => email.id));
+        const newAtTop = data.filter((email) => !existingIds.has(email.id));
+        return newAtTop.length > 0 ? [...newAtTop, ...merged] : merged;
+      });
     };
     void fetchInitialEmails();
   }, [activeAccount, activeFolder, refreshTick, normalizedSearchQuery]);

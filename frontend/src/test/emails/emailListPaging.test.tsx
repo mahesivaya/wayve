@@ -6,8 +6,7 @@ import type { EmailItem } from "../../emails/types";
 
 // jsdom ships no IntersectionObserver. The stub mirrors the one behaviour the
 // paging logic depends on: observing a target always delivers an initial
-// callback describing its current intersection, even if nothing moved. That is
-// exactly what makes re-observing after each page the fix for a stalled list.
+// callback describing its current intersection.
 let intersecting = true;
 
 class StubIntersectionObserver implements IntersectionObserver {
@@ -33,6 +32,12 @@ class StubIntersectionObserver implements IntersectionObserver {
     return [];
   }
 }
+
+// Controls whether the post-load geometry check in `triggerLoadMore` (see
+// EmailList.tsx) reports the sentinel as still within the load margin. `near`
+// makes every element's rect report a 0px gap; flipping it to `false` reports
+// a 1000px gap, matching a pane that's now been filled.
+let near = true;
 
 function makeEmails(count: number): EmailItem[] {
   return Array.from({ length: count }, (_, index) => ({
@@ -66,40 +71,54 @@ function renderList(props: {
 describe("EmailList paging", () => {
   beforeEach(() => {
     intersecting = true;
+    near = true;
     vi.stubGlobal("IntersectionObserver", StubIntersectionObserver);
+    // Run rAF callbacks synchronously so the post-load geometry check (which
+    // real browsers defer to the next paint) resolves within `act()`.
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      (cb: FrameRequestCallback): number => {
+        cb(0);
+        return 0;
+      }
+    );
+    // jsdom performs no real layout, so every element's rect is zeros by
+    // default — that already reads as "near" (a 0px gap). Overriding it lets
+    // tests flip to "far" once a page should stop the cascade.
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      () =>
+        ({
+          top: near ? 0 : 1000,
+          bottom: 0,
+          left: 0,
+          right: 0,
+          width: 0,
+          height: 0,
+          x: 0,
+          y: 0,
+          toJSON() {},
+        }) as DOMRect
+    );
   });
 
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
-  it("keeps paging while the sentinel stays in view", async () => {
-    // The regression this guards: IntersectionObserver reports *changes*, so an
-    // observer bound once never fires again when a page lands and the sentinel
-    // is still within the root margin — the list stalls with rows outstanding.
-    const loadMore = vi.fn(async () => {});
-    const { rerender } = renderList({
-      emails: makeEmails(2),
-      hasMore: true,
-      loadMore,
+  it("keeps paging on its own while the pane is still short", async () => {
+    // The regression this guards: a page lands but doesn't fill the visible
+    // pane (sentinel still within the load margin) and nothing else asks
+    // again — the list stalls with rows outstanding. `triggerLoadMore`'s
+    // post-load geometry check must re-trigger itself without needing the
+    // parent to hand back a bigger `emails` array.
+    const loadMore = vi.fn(async () => {
+      // Second page fills the pane — matches a real fetch's result changing
+      // what geometry looks like once rendered.
+      if (loadMore.mock.calls.length >= 2) near = false;
     });
-
-    await act(async () => {});
-    expect(loadMore).toHaveBeenCalledTimes(1);
-
-    // A page arrives and the sentinel is still visible: paging must continue.
-    rerender(
-      <EmailList
-        emails={makeEmails(4)}
-        selectedEmailId={null}
-        onOpenEmail={() => {}}
-        hasMore
-        loadMore={loadMore}
-        loadingMore={false}
-        activeFolder="inbox"
-      />
-    );
+    renderList({ emails: makeEmails(2), hasMore: true, loadMore });
 
     await act(async () => {});
     expect(loadMore).toHaveBeenCalledTimes(2);
@@ -117,27 +136,11 @@ describe("EmailList paging", () => {
     // `useEmailInbox.loadMore` returns early on its own guards, leaving
     // `loadingMore` false. The in-flight guard must not stay latched, or paging
     // is dead for the rest of the mount.
-    const loadMore = vi.fn(() => undefined);
-    const { rerender } = renderList({
-      emails: makeEmails(2),
-      hasMore: true,
-      loadMore,
+    const loadMore = vi.fn(() => {
+      if (loadMore.mock.calls.length >= 2) near = false;
+      return undefined;
     });
-
-    await act(async () => {});
-    expect(loadMore).toHaveBeenCalledTimes(1);
-
-    rerender(
-      <EmailList
-        emails={makeEmails(3)}
-        selectedEmailId={null}
-        onOpenEmail={() => {}}
-        hasMore
-        loadMore={loadMore}
-        loadingMore={false}
-        activeFolder="inbox"
-      />
-    );
+    renderList({ emails: makeEmails(2), hasMore: true, loadMore });
 
     await act(async () => {});
     expect(loadMore).toHaveBeenCalledTimes(2);
