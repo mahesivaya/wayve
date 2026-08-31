@@ -2594,19 +2594,34 @@ img.email-mention-avatar {
     box-shadow: none;
   }
 
+  /* Matches `.main.email-list-view .email-top`'s own specificity (three
+     classes) so this override actually wins the cascade — a bare
+     `.email-top { display: none }` here loses to that more specific desktop
+     rule once list view is forced on (including inside a narrow split pane),
+     leaving both the desktop row and `.mobile-email-row` stacked and visible
+     at once. */
+  .main.email-list-view .email-top,
   .email-top {
     display: none;
   }
 
+  /* One line per email, Gmail-mobile-app style: avatar · sender · subject
+     (+ preview flowing into the same truncating line) · attachment pin ·
+     time · star. Named areas (rather than source-order columns) so an email
+     with no attachment still lines up column-for-column with one that has
+     one — the pin's area is simply empty instead of shifting later columns
+     left. */
   .mobile-email-row {
     display: grid;
-    grid-template-columns: 28px minmax(0, 1fr) 20px;
-    gap: 8px;
-    width: 100%;
+    grid-template-columns: 26px 84px minmax(0, 1fr) 16px auto 20px;
+    grid-template-areas: "avatar sender subject pin time star";
     align-items: center;
+    column-gap: 8px;
+    width: 100%;
   }
 
   .mobile-email-avatar {
+    grid-area: avatar;
     width: 26px;
     height: 26px;
     border-radius: 50%;
@@ -2620,78 +2635,69 @@ img.email-mention-avatar {
     overflow: hidden;
   }
 
-  .mobile-email-content {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-  }
-
-  .mobile-email-sender-line {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 8px;
-    min-width: 0;
-  }
-
-  .mobile-email-sender,
-  .mobile-email-subject {
+  .mobile-email-sender {
+    grid-area: sender;
+    /* #root sets `text-align: center` and this span sits outside
+       `.email-primary` (the element that normally cancels that out), so
+       without an explicit override each sender name centers inside its own
+       84px track instead of starting flush left — the column reads ragged
+       even though the track edges themselves line up. Same fix as the
+       desktop `.email-list-sender` track. */
+    text-align: left;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--color-text-primary);
     font-size: 13px;
+    font-weight: 800;
     line-height: 1.2;
   }
 
-  .mobile-email-sender {
-    font-weight: 800;
+  /* Subject and preview are separate spans but both `display: inline`, so
+     they flow together as one continuous run of text and truncate as a
+     single unit — this is what gives "Subject – preview snippet…" rather
+     than the subject and preview each getting their own line. */
+  .mobile-email-subject-line {
+    grid-area: subject;
+    text-align: left;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    line-height: 1.2;
   }
 
   .mobile-email-subject {
-    font-weight: 700;
-  }
-
-  .mobile-email-time {
-    flex: 0 0 auto;
-    color: var(--color-text-slate-mid);
-    font-size: 11px;
+    display: inline;
+    color: var(--color-text-primary);
     font-weight: 700;
   }
 
   .mobile-email-preview {
-    display: -webkit-box;
-    -webkit-line-clamp: 1;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+    display: inline;
     color: var(--color-text-slate-mid);
-    font-size: 12px;
-    line-height: 1.25;
+    font-weight: 400;
   }
 
-  .mobile-email-attachment {
-    align-self: flex-start;
-    margin-top: 6px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    max-width: 180px;
-    border: 1px solid var(--color-border-muted);
-    border-radius: 999px;
-    padding: 3px 8px;
+  .mobile-email-attachment-pin {
+    grid-area: pin;
+    color: var(--color-text-ink);
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .mobile-email-time {
+    grid-area: time;
     color: var(--color-text-slate-mid);
     font-size: 11px;
     font-weight: 700;
-  }
-
-  .mobile-email-attachment span {
-    color: var(--color-danger);
-    font-size: 10px;
+    white-space: nowrap;
   }
 
   .mobile-email-star {
+    grid-area: star;
     width: 24px;
     height: 24px;
     border: none;

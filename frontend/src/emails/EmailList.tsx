@@ -570,6 +570,12 @@ export const EmailList: React.FC<EmailListProps> = ({
                   </span>
                 )}
               </div>
+              {/* Single-line, Gmail-mobile-style row: avatar, sender, then
+              subject and preview flowing together as one truncating line, with
+              the attachment pin and time pinned to the right edge. Sender and
+              subject/preview each get their own fixed-then-flexible grid track
+              (see `.mobile-email-row` in emails.css) so nothing wraps to a
+              second line. */}
               <div className="mobile-email-row">
                 <div className="mobile-email-avatar" aria-hidden="true">
                   {(email.sender || email.receiver || "?")
@@ -577,28 +583,31 @@ export const EmailList: React.FC<EmailListProps> = ({
                     .charAt(0)
                     .toUpperCase()}
                 </div>
-                <div className="mobile-email-content">
-                  <div className="mobile-email-sender-line">
-                    <span className="mobile-email-sender">
-                      {email.sender || email.receiver || "Unknown sender"}
-                    </span>
-                    <span className="mobile-email-time">
-                      {formatMobileTime(email.created_at)}
-                    </span>
-                  </div>
-                  <div className="mobile-email-subject">
+                <span className="mobile-email-sender">
+                  {displaySender(email.sender || email.receiver)}
+                </span>
+                <span className="mobile-email-subject-line">
+                  <span className="mobile-email-subject">
                     {email.subject || "(No Subject)"}
-                  </div>
-                  <div className="mobile-email-preview">
-                    {email.preview || email.body || "No preview available"}
-                  </div>
-                  {email.has_attachments && (
-                    <div className="mobile-email-attachment">
-                      <span aria-hidden="true">PDF</span>
-                      Attachment
-                    </div>
+                  </span>
+                  {(email.preview || email.body) && (
+                    <span className="mobile-email-preview">
+                      {" "}
+                      – {email.preview || email.body}
+                    </span>
                   )}
-                </div>
+                </span>
+                {email.has_attachments && (
+                  <span
+                    className="mobile-email-attachment-pin"
+                    aria-label="Has attachments"
+                  >
+                    📎
+                  </span>
+                )}
+                <span className="mobile-email-time">
+                  {formatMobileTime(email.created_at)}
+                </span>
                 <button
                   type="button"
                   className="mobile-email-star"
