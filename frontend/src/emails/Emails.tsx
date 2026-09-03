@@ -769,6 +769,7 @@ export default function Emails() {
           {composeAccountId !== null && (
             <SendEmail
               accountId={composeAccountId}
+              accounts={displayedAccounts}
               onClose={() => setComposeOpen(false)}
             />
           )}

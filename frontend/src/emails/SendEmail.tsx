@@ -19,14 +19,26 @@ import {
 import { sealSecureMessage } from "./secureSend";
 import { formatFileSize } from "./renderUtils";
 import ContactAvatar from "../shared/ContactAvatar";
+import type { EmailAccount } from "./types";
 
 import { useState, useEffect, useRef, type ChangeEvent } from "react";
 
 type SendEmailProps = {
   accountId: number;
+  // All of the user's connected mailboxes. Only used to offer a From picker
+  // when there's more than one — with a single account there's nothing to
+  // choose, so the field stays hidden and `accountId` is used as-is.
+  accounts?: EmailAccount[];
   onClose?: () => void;
   onSent?: () => void;
 };
+
+// Same fallback chain EmailSidebar uses for its account rows, so the two
+// pickers read as one design: a friendly display name, then a shared-inbox
+// label, then the raw address.
+function accountLabel(account: EmailAccount): string {
+  return account.display_name || account.shared_label || account.email;
+}
 
 // Accepts commas, semicolons, or whitespace as separators. Empty strings are
 // filtered out so a trailing separator doesn't produce a ghost address.
@@ -55,10 +67,18 @@ function currentRecipientToken(
 
 export default function SendEmail({
   accountId,
+  accounts,
   onClose,
   onSent,
 }: SendEmailProps) {
   const { user } = useAuth();
+  // Which connected mailbox external (SMTP) sends go out from. Defaults to
+  // whichever account was active when Compose opened; only surfaced as a
+  // picker when there's more than one to choose from (see the From field
+  // below). The Fluxze-native and secure-link channels are accountless — see
+  // the `sendInternalEmail`/`sendSecureEmail` calls below — so this only
+  // affects the external-recipient path.
+  const [fromAccountId, setFromAccountId] = useState(accountId);
   const [to, setTo] = useState("");
   // Compose "To" contacts typeahead. `contactQuery` is the token under the caret
   // (null when inactive); `contactRange` is where a pick splices the address in.
@@ -359,7 +379,7 @@ export default function SendEmail({
       for (const externalTo of externalEmails) {
         try {
           await sendEmailApi({
-            account_id: accountId,
+            account_id: fromAccountId,
             to: externalTo,
             subject,
             body,
@@ -422,6 +442,36 @@ export default function SendEmail({
         gap: "10px",
       }}
     >
+      {accounts && accounts.length > 1 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <label
+            htmlFor="send-email-from"
+            style={{ fontSize: 13, color: "#6b7280", flex: "0 0 auto" }}
+          >
+            From
+          </label>
+          <select
+            id="send-email-from"
+            value={fromAccountId}
+            onChange={(e) => setFromAccountId(Number(e.target.value))}
+            style={{
+              flex: 1,
+              padding: "8px",
+              borderRadius: 5,
+              border: "1px solid #ccc",
+              background: "var(--color-surface, #fff)",
+              color: "var(--color-text-primary, #111827)",
+            }}
+          >
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {accountLabel(account)}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div style={{ position: "relative" }}>
         {contactOpen && (
           <ul className="email-mention-menu" role="listbox">
