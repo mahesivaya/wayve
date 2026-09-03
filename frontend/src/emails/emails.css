@@ -99,21 +99,22 @@
   background: var(--color-canvas);
 }
 
-/* Compose sits at the far left; the search row flexes to fill the rest and
-   right-aligns its contents, so the view toggles + search box cluster at the
-   far right with the search box last. Drop the row's own background/border so
-   it blends into the toolbar instead of showing as a separate colored block. */
+/* Compose sits at the far left; the search row flexes to fill the rest but
+   left-aligns its contents, so the view toggles + search box cluster right
+   after Compose instead of drifting to the far right. Drop the row's own
+   background/border so it blends into the toolbar instead of showing as a
+   separate colored block. */
 .emails-page-toolbar .global-search-row {
   margin: 0;
   flex: 1 1 auto;
   min-width: 0;
   height: auto;
-  justify-content: flex-end;
+  justify-content: flex-start;
   background: transparent;
   border-bottom: none;
 }
 
-/* Keep the search box from expanding so it pins to the right rather than
+/* Keep the search box from expanding so it hugs the toggles rather than
    stretching across the toolbar; and shrink its height with the rest. */
 .emails-page-toolbar .global-search-box {
   flex: 0 1 280px;
@@ -154,19 +155,6 @@
   justify-content: center;
   text-align: center;
   white-space: nowrap;
-}
-
-/* Personal accounts' toolbar Compose copy: redundant with the sidebar's own
-   Compose button everywhere the sidebar is visible, so it stays hidden until
-   the same <=700px breakpoint that hides the sidebar. */
-.compose-btn--toolbar-mobile-only {
-  display: none;
-}
-
-@media (max-width: 700px) {
-  .compose-btn--toolbar-mobile-only {
-    display: inline-flex;
-  }
 }
 
 .emails-root > .main {
