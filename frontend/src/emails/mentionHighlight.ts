@@ -23,7 +23,8 @@ export function splitMentions(text: string): Run[] {
     // matchAll on a /g regex always yields an index; the guard keeps TS happy
     // without an assertion.
     const start = (match.index ?? 0) + lead.length;
-    if (start > last) runs.push({ text: text.slice(last, start), mention: false });
+    if (start > last)
+      runs.push({ text: text.slice(last, start), mention: false });
     runs.push({ text: mention, mention: true });
     last = start + mention.length;
   }

@@ -68,7 +68,6 @@ type CreatedMeeting = {
   invites_sent?: boolean | null;
 };
 
-
 export default function Scheduler() {
   const { normalizedSearchQuery } = useGlobalSearch();
   const daySlotsRef = useRef<HTMLDivElement>(null);

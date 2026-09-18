@@ -117,7 +117,10 @@ describe("canViewIntegrationsNav", () => {
 
   it("inherits the non-owner and absent-user exclusions", () => {
     expect(
-      canViewIntegrationsNav({ scope: "organization", effective_role: "member" })
+      canViewIntegrationsNav({
+        scope: "organization",
+        effective_role: "member",
+      })
     ).toBe(false);
     expect(canViewIntegrationsNav(null)).toBe(false);
     expect(canViewIntegrationsNav({})).toBe(false);

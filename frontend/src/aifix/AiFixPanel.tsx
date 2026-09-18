@@ -177,9 +177,7 @@ export default function AiFixPanel({
   // the read didn't fail in a way worth reporting.
   if (!status && !showStart && !loadError) return null;
 
-  const reviewable = REVIEWABLE.includes(
-    status as (typeof REVIEWABLE)[number]
-  );
+  const reviewable = REVIEWABLE.includes(status as (typeof REVIEWABLE)[number]);
   const order = reviewable
     ? { ready: 0, committed: 1, pushed: 2, pr_opened: 3 }[
         status as "ready" | "committed" | "pushed" | "pr_opened"
@@ -225,10 +223,10 @@ export default function AiFixPanel({
 
       {status === "no_change" && (
         <p className="aifix-muted">
-          🤖 Claude ran but proposed no code change — it couldn’t find a concrete
-          fix for this {kind} in the codebase. Refine the description with the
-          affected feature or file, the expected vs. actual behaviour, and steps
-          to reproduce, then retry.
+          🤖 Claude ran but proposed no code change — it couldn’t find a
+          concrete fix for this {kind} in the codebase. Refine the description
+          with the affected feature or file, the expected vs. actual behaviour,
+          and steps to reproduce, then retry.
         </p>
       )}
 
@@ -243,8 +241,8 @@ export default function AiFixPanel({
       {reviewable && (
         <>
           <p className="aifix-muted">
-            Review Claude’s proposed change — edit any file if you want to adjust
-            it — then commit → push → create the pull request.
+            Review Claude’s proposed change — edit any file if you want to
+            adjust it — then commit → push → create the pull request.
           </p>
 
           <pre className="aifix-diff">
@@ -393,7 +391,12 @@ export default function AiFixPanel({
           {order >= 2 && state?.branch && (
             <p className="aifix-muted">
               Branch <code>{state.branch}</code>
-              {state.commit_sha && <> at <code>{state.commit_sha.slice(0, 7)}</code></>}
+              {state.commit_sha && (
+                <>
+                  {" "}
+                  at <code>{state.commit_sha.slice(0, 7)}</code>
+                </>
+              )}
             </p>
           )}
           {state?.pr_url && (
