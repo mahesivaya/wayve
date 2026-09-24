@@ -20,7 +20,8 @@ export default function SearchBar() {
   return (
     <div className="global-search-row">
       {/* On the emails page the view-layout toggles sit BEFORE the search box,
-          and the box is pushed to the far right (see .emails-page-toolbar). */}
+          and the whole cluster sits left, right after Compose (see
+          .emails-page-toolbar). */}
       {location.pathname.startsWith("/emails") && !inSplitPane && (
         <div
           className="email-layout-actions"

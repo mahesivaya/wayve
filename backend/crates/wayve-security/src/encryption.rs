@@ -215,7 +215,9 @@ fn decode_hex64(hex: &str) -> Result<[u8; 32], String> {
 
     let mut bytes = [0u8; 32];
 
-    for (idx, chunk) in hex.as_bytes().chunks_exact(2).enumerate() {
+    // The length check above guarantees exactly 32 pairs, so the remainder
+    // `as_chunks` splits off is always empty.
+    for (idx, chunk) in hex.as_bytes().as_chunks::<2>().0.iter().enumerate() {
         let hi = hex_value(chunk[0])?;
         let lo = hex_value(chunk[1])?;
         bytes[idx] = (hi << 4) | lo;

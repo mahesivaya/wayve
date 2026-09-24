@@ -866,7 +866,10 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
                     onClick={() => setCcOpen((open) => !open)}
                     aria-pressed={ccOpen}
                   >
-                    Cc{!ccOpen && replyCc.length > 0 ? ` (${replyCc.length})` : ""}
+                    Cc
+                    {!ccOpen && replyCc.length > 0
+                      ? ` (${replyCc.length})`
+                      : ""}
                   </button>
                   <button
                     type="button"

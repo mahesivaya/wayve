@@ -11,7 +11,9 @@ import type { AiFixApi, AiFixState } from "../../api/aiFix";
 const READY: AiFixState = {
   status: "ready",
   diff: "diff --git a/src/a.ts b/src/a.ts\n@@ -1 +1 @@\n-old line\n+new line",
-  files: [{ path: "src/a.ts", content: encodeContent("new line\n"), deleted: false }],
+  files: [
+    { path: "src/a.ts", content: encodeContent("new line\n"), deleted: false },
+  ],
   commit_sha: null,
   branch: null,
   pr_url: null,
@@ -34,7 +36,9 @@ const makeApi = (state: AiFixState = EMPTY): AiFixApi => ({
   saveEdits: vi.fn().mockResolvedValue({ saved: true }),
   commit: vi.fn().mockResolvedValue({ commit_sha: "abc1234def" }),
   push: vi.fn().mockResolvedValue({ branch: "ai-fix/ticket-1-abc1234" }),
-  openPr: vi.fn().mockResolvedValue({ pr_url: "https://github.com/x/y/pull/1" }),
+  openPr: vi
+    .fn()
+    .mockResolvedValue({ pr_url: "https://github.com/x/y/pull/1" }),
 });
 
 describe("base64 round-trip", () => {

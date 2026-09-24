@@ -45,7 +45,9 @@ describe("TimeSelect", () => {
 
     await user.click(input);
     expect(screen.getByRole("listbox")).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /10:45 AM/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /10:45 AM/ })
+    ).toBeInTheDocument();
   });
 
   it("picks a preset from the list", async () => {

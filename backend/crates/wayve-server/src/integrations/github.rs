@@ -156,9 +156,13 @@ fn decode_hex(input: &str) -> Option<Vec<u8>> {
         return None;
     }
 
+    // The even-length check above means `as_chunks` splits off an empty
+    // remainder, so no input byte is dropped.
     input
         .as_bytes()
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|chunk| {
             let high = hex_value(chunk[0])?;
             let low = hex_value(chunk[1])?;

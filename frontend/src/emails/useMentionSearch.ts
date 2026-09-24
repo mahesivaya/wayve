@@ -30,7 +30,12 @@ type Args = {
  * The text splice happens here; the caller's `onPick` runs afterward for
  * side-effects (e.g. adding the contact's address to a Cc list).
  */
-export function useMentionSearch({ value, setValue, textareaRef, onPick }: Args) {
+export function useMentionSearch({
+  value,
+  setValue,
+  textareaRef,
+  onPick,
+}: Args) {
   const [query, setQuery] = useState<string | null>(null);
   const [start, setStart] = useState(0);
   const [results, setResults] = useState<ContactSuggestion[]>([]);
@@ -59,8 +64,7 @@ export function useMentionSearch({ value, setValue, textareaRef, onPick }: Args)
     return () => clearTimeout(handle);
   }, [query]);
 
-  const open =
-    query !== null && query.trim().length >= 2 && results.length > 0;
+  const open = query !== null && query.trim().length >= 2 && results.length > 0;
   const highlighted = Math.min(index, results.length - 1);
 
   const syncFromCaret = useCallback((el: HTMLTextAreaElement) => {

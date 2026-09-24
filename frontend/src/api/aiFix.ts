@@ -54,7 +54,7 @@ export type AiFixApi = {
 /// Build the client for one collection — "workspace-tickets" or "user-stories".
 export function makeAiFixApi(collection: string): AiFixApi {
   const base = (id: number) => `/api/${collection}/${id}`;
-  const post = <T,>(url: string, body?: unknown) =>
+  const post = <T>(url: string, body?: unknown) =>
     apiFetchJson<T>(url, {
       method: "POST",
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),

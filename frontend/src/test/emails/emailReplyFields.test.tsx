@@ -1,7 +1,13 @@
 // The reply composer's recipient rows and Subject: seeded from the message,
 // edited as chips, and what actually reaches sendEmail.
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  waitFor,
+} from "@testing-library/react";
 
 const sendEmail = vi.fn();
 
@@ -73,7 +79,8 @@ function chips(field: HTMLInputElement): string[] {
   );
 }
 
-const send = () => fireEvent.click(screen.getByRole("button", { name: "Send" }));
+const send = () =>
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
 describe("reply composer recipients and subject", () => {
   beforeEach(() => {
@@ -152,7 +159,9 @@ describe("reply composer recipients and subject", () => {
 
   it("refuses to send with every recipient removed", async () => {
     const { body } = await openReply();
-    fireEvent.click(screen.getByRole("button", { name: "Remove ada@test.local" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove ada@test.local" })
+    );
     fireEvent.change(body, { target: { value: "Sounds good." } });
 
     send();
@@ -228,7 +237,10 @@ describe("reply composer Cc and Bcc", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cc" }));
     fireEvent.click(screen.getByRole("button", { name: "Bcc" }));
     addChip(screen.getByLabelText("Cc") as HTMLInputElement, "cc@corp.test");
-    addChip(screen.getByLabelText("Bcc") as HTMLInputElement, "blind@corp.test");
+    addChip(
+      screen.getByLabelText("Bcc") as HTMLInputElement,
+      "blind@corp.test"
+    );
     fireEvent.change(body, { target: { value: "Sounds good." } });
 
     send();
@@ -257,7 +269,10 @@ describe("reply composer Cc and Bcc", () => {
   it("collapses a populated row but counts it on the toggle", async () => {
     const { body } = await openReply();
     fireEvent.click(screen.getByRole("button", { name: "Bcc" }));
-    addChip(screen.getByLabelText("Bcc") as HTMLInputElement, "blind@corp.test");
+    addChip(
+      screen.getByLabelText("Bcc") as HTMLInputElement,
+      "blind@corp.test"
+    );
 
     // While the row is open the count is redundant, so the button is plain
     // "Bcc" until this click closes it.

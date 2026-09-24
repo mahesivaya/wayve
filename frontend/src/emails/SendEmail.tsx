@@ -19,14 +19,26 @@ import {
 import { sealSecureMessage } from "./secureSend";
 import { formatFileSize } from "./renderUtils";
 import ContactAvatar from "../shared/ContactAvatar";
+import type { EmailAccount } from "./types";
 
 import { useState, useEffect, useRef, type ChangeEvent } from "react";
 
 type SendEmailProps = {
   accountId: number;
+  // All of the user's connected mailboxes. Only used to offer a From picker
+  // when there's more than one — with a single account there's nothing to
+  // choose, so the field stays hidden and `accountId` is used as-is.
+  accounts?: EmailAccount[];
   onClose?: () => void;
   onSent?: () => void;
 };
+
+// Same fallback chain EmailSidebar uses for its account rows, so the two
+// pickers read as one design: a friendly display name, then a shared-inbox
+// label, then the raw address.
+function accountLabel(account: EmailAccount): string {
+  return account.display_name || account.shared_label || account.email;
+}
 
 // Accepts commas, semicolons, or whitespace as separators. Empty strings are
 // filtered out so a trailing separator doesn't produce a ghost address.
@@ -55,18 +67,27 @@ function currentRecipientToken(
 
 export default function SendEmail({
   accountId,
+  accounts,
   onClose,
   onSent,
 }: SendEmailProps) {
   const { user } = useAuth();
+  // Which connected mailbox external (SMTP) sends go out from. Defaults to
+  // whichever account was active when Compose opened; only surfaced as a
+  // picker when there's more than one to choose from (see the From field
+  // below). The Fluxze-native and secure-link channels are accountless — see
+  // the `sendInternalEmail`/`sendSecureEmail` calls below — so this only
+  // affects the external-recipient path.
+  const [fromAccountId, setFromAccountId] = useState(accountId);
   const [to, setTo] = useState("");
   // Compose "To" contacts typeahead. `contactQuery` is the token under the caret
   // (null when inactive); `contactRange` is where a pick splices the address in.
   const toInputRef = useRef<HTMLInputElement>(null);
   const [contactQuery, setContactQuery] = useState<string | null>(null);
-  const [contactRange, setContactRange] = useState<{ start: number; end: number }>(
-    { start: 0, end: 0 }
-  );
+  const [contactRange, setContactRange] = useState<{
+    start: number;
+    end: number;
+  }>({ start: 0, end: 0 });
   const [contactSuggestions, setContactSuggestions] = useState<
     ContactSuggestion[]
   >([]);
@@ -78,6 +99,13 @@ export default function SendEmail({
   // the same user-supplied passphrase, overriding the encryption mode below.
   const [secureSend, setSecureSend] = useState(false);
   const [passphrase, setPassphrase] = useState("");
+
+  // Strict Fluxze-only delivery. Implies E2E and removes the SMTP fallback
+  // entirely, so the content can never land in Gmail or any other external
+  // mailbox. A recipient who isn't a Fluxze account with a key blocks the whole
+  // send rather than quietly downgrading to plaintext — see the gate in
+  // `sendEmail`. Mutually exclusive with Secure send, which has its own channel.
+  const [fluxzeOnly, setFluxzeOnly] = useState(false);
 
   // "standard" (default) sends plain SMTP to the recipient's real mailbox: it
   // reaches external accounts but is not E2E. "e2e" encrypts in-browser and is
@@ -172,11 +200,28 @@ export default function SendEmail({
     }
   };
 
+  // A 3s auto-dismiss is right for "sent ✅", but wrong for a refusal: the user
+  // pressed Send, nothing went out, and they need time to read which address is
+  // the problem. Sticky statuses stay until they change something (see the
+  // `clearBlockingStatus` calls on the To field and the Fluxze-only checkbox).
+  const [statusSticky, setStatusSticky] = useState(false);
+
+  const blockSend = (message: string) => {
+    setStatusSticky(true);
+    setStatus(message);
+  };
+  const clearBlockingStatus = () => {
+    setStatusSticky((sticky) => {
+      if (sticky) setStatus("");
+      return false;
+    });
+  };
+
   useEffect(() => {
-    if (!status) return;
+    if (!status || statusSticky) return;
     const timer = setTimeout(() => setStatus(""), 3000);
     return () => clearTimeout(timer);
-  }, [status]);
+  }, [status, statusSticky]);
 
   const sendEmail = async () => {
     const recipients = parseRecipients(to);
@@ -196,9 +241,19 @@ export default function SendEmail({
       );
       return;
     }
+    // Attachments are standard-mailbox only (`forceStandard` below pushes every
+    // recipient to SMTP), which is exactly the path Fluxze-only forbids. Block
+    // the combination rather than leak the files to a real mailbox.
+    if (fluxzeOnly && attachments.length > 0) {
+      blockSend(
+        "Fluxze-only can't include attachments — remove them or turn off Fluxze-only ⚠️"
+      );
+      return;
+    }
 
     setLoading(true);
     setStatus("");
+    setStatusSticky(false);
 
     try {
       // Secure send treats Wayve and non-Wayve recipients identically and never
@@ -256,25 +311,40 @@ export default function SendEmail({
       const forceStandard = attachments.length > 0;
 
       // Only "e2e" needs to detect Fluxze users; standard mode skips the
-      // lookups entirely. A lookup failure is treated as "not on Wayve", so a
-      // transient API hiccup degrades to SMTP rather than failing the send.
-      const lookups: Array<{ email: string; user: WayveRecipient | null }> =
-        encryptionMode === "standard" || forceStandard
-          ? recipients.map((email) => ({ email, user: null }))
-          : await Promise.all(
-              recipients.map(async (email) => {
-                try {
-                  return { email, user: await getUserByEmail(email) };
-                } catch (err) {
-                  logger.warn(
-                    "Wayve recipient lookup failed; treating as external",
-                    err,
-                    email
-                  );
-                  return { email, user: null };
-                }
-              })
-            );
+      // lookups entirely. Fluxze-only implies E2E, so it needs them too even
+      // when the radio is still on "standard". Under plain E2E a lookup failure
+      // degrades to SMTP rather than failing the send; under Fluxze-only it is
+      // a refusal instead — see `failed` below.
+      const needsLookup =
+        (encryptionMode === "e2e" || fluxzeOnly) && !forceStandard;
+      const lookups: Array<{
+        email: string;
+        user: WayveRecipient | null;
+        failed: boolean;
+      }> = !needsLookup
+        ? recipients.map((email) => ({ email, user: null, failed: false }))
+        : await Promise.all(
+            recipients.map(async (email) => {
+              try {
+                return {
+                  email,
+                  user: await getUserByEmail(email),
+                  failed: false,
+                };
+              } catch (err) {
+                logger.warn(
+                  "Wayve recipient lookup failed; treating as external",
+                  err,
+                  email
+                );
+                // Under Fluxze-only a failed lookup must not read as "external":
+                // that would be the silent downgrade this mode exists to
+                // prevent. `failed` keeps "checked, not on Fluxze" apart from
+                // "couldn't check" so the gate below can refuse both and say why.
+                return { email, user: null, failed: true };
+              }
+            })
+          );
 
       // Only a Wayve user with a non-empty public key can take the native
       // channel. An unknown address, or a Wayve user with no key on file,
@@ -291,6 +361,28 @@ export default function SendEmail({
         } else {
           externalEmails.push(l.email);
         }
+      }
+
+      // Fluxze-only: nothing goes out unless every recipient can receive the
+      // encrypted envelope. Refusing the whole send is the point — a partial
+      // send would put the content in an external mailbox, which is precisely
+      // what this mode promises never happens.
+      if (fluxzeOnly && externalEmails.length > 0) {
+        const unresolved = lookups.filter((l) => l.failed).map((l) => l.email);
+        const notOnFluxze = externalEmails.filter(
+          (email) => !unresolved.includes(email)
+        );
+        const reasons: string[] = [];
+        if (notOnFluxze.length > 0) {
+          reasons.push(`not Fluxze accounts: ${notOnFluxze.join(", ")}`);
+        }
+        if (unresolved.length > 0) {
+          reasons.push(`couldn't be verified: ${unresolved.join(", ")}`);
+        }
+        blockSend(
+          `Nothing sent — Fluxze-only is on and ${reasons.join("; ")}. Remove them, or turn off Fluxze-only to send a regular email ⚠️`
+        );
+        return;
       }
 
       let internalDelivered = 0;
@@ -349,6 +441,14 @@ export default function SendEmail({
           );
         }
       } else if (wayveLookups.length > 0 && senderId === undefined) {
+        if (fluxzeOnly) {
+          // No sender identity means no envelope, and the SMTP fallback below
+          // is forbidden in this mode — so fail loudly instead of downgrading.
+          blockSend(
+            "Nothing sent — couldn't resolve your Fluxze account. Reload and try again ⚠️"
+          );
+          return;
+        }
         // Wayve users resolved but the SPA hasn't resolved the signed-in user
         // yet, so there is no sender key. Fall back to SMTP rather than stall.
         externalEmails.push(...wayveLookups.map((l) => l.email));
@@ -359,7 +459,7 @@ export default function SendEmail({
       for (const externalTo of externalEmails) {
         try {
           await sendEmailApi({
-            account_id: accountId,
+            account_id: fromAccountId,
             to: externalTo,
             subject,
             body,
@@ -422,6 +522,36 @@ export default function SendEmail({
         gap: "10px",
       }}
     >
+      {accounts && accounts.length > 1 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <label
+            htmlFor="send-email-from"
+            style={{ fontSize: 13, color: "#6b7280", flex: "0 0 auto" }}
+          >
+            From
+          </label>
+          <select
+            id="send-email-from"
+            value={fromAccountId}
+            onChange={(e) => setFromAccountId(Number(e.target.value))}
+            style={{
+              flex: 1,
+              padding: "8px",
+              borderRadius: 5,
+              border: "1px solid #ccc",
+              background: "var(--color-surface, #fff)",
+              color: "var(--color-text-primary, #111827)",
+            }}
+          >
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {accountLabel(account)}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div style={{ position: "relative" }}>
         {contactOpen && (
           <ul className="email-mention-menu" role="listbox">
@@ -462,6 +592,9 @@ export default function SendEmail({
           onChange={(e) => {
             setTo(e.target.value);
             syncContactToken(e.target);
+            // Editing the recipients is the fix for a blocked send, so the
+            // alert naming them stops being true the moment they're touched.
+            clearBlockingStatus();
           }}
           onClick={(e) => syncContactToken(e.currentTarget)}
           onKeyUp={(e) => {
@@ -541,8 +674,10 @@ export default function SendEmail({
           borderRadius: 6,
           background: "#f9fafb",
           fontSize: 13,
-          opacity: secureSend ? 0.5 : 1,
-          pointerEvents: secureSend ? "none" : "auto",
+          // Secure send overrides the mode outright; Fluxze-only forces it to
+          // "e2e", so in both cases the radio is not the user's to change.
+          opacity: secureSend || fluxzeOnly ? 0.5 : 1,
+          pointerEvents: secureSend || fluxzeOnly ? "none" : "auto",
         }}
       >
         <span style={{ fontWeight: 600, color: "#374151" }}>
@@ -558,32 +693,71 @@ export default function SendEmail({
           }}
         >
           <input
-            type="radio"
-            name="encryptionMode"
+            type="checkbox"
+            // A checkbox, not a radio: there is no separate "Standard" option
+            // to belong to a group with — this is a standalone on/off toggle.
             checked={encryptionMode === "e2e"}
-            // Clicking the selected radio toggles back to standard, since there
-            // is no separate "Standard" radio to return to.
-            onClick={() =>
+            onChange={() =>
               setEncryptionMode((m) => (m === "e2e" ? "standard" : "e2e"))
             }
-            readOnly
             style={{ marginTop: 2 }}
           />
           <span>
             <strong>🛡️ End-to-End Encryption</strong>
-            <br />
-            <small style={{ color: "#6b7280" }}>
-              Only visible to other Fluxze accounts.
-            </small>
           </span>
         </label>
 
-        {encryptionMode === "e2e" && (
-          <small style={{ color: "#6b7280", lineHeight: 1.4 }}>
-            Encrypted in your browser — delivered inside Fluxze. Recipients who
-            aren’t on Fluxze get a standard email instead.
-          </small>
-        )}
+        <small style={{ color: "#6b7280", lineHeight: 1.4 }}>
+          {encryptionMode === "e2e"
+            ? fluxzeOnly
+              ? "Required by Fluxze-only, so it can’t be switched off here."
+              : "Encrypted in your browser — delivered inside Fluxze. Recipients who aren’t on Fluxze get a standard email instead."
+            : "Secured and readable by Gmail and other mail service."}
+        </small>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          padding: 10,
+          border: "1px solid #d1d5db",
+          borderRadius: 6,
+          background: "#f9fafb",
+          fontSize: 13,
+          opacity: secureSend ? 0.5 : 1,
+          pointerEvents: secureSend ? "none" : "auto",
+        }}
+      >
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            cursor: "pointer",
+            fontWeight: 600,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={fluxzeOnly}
+            onChange={(e) => {
+              setFluxzeOnly(e.target.checked);
+              // Independent of the End-to-End checkbox: `needsLookup` above
+              // already ORs in `fluxzeOnly` directly, so the envelope/lookup
+              // path works whether or not `encryptionMode` is separately set
+              // to "e2e" — no need to force it here.
+              clearBlockingStatus();
+            }}
+          />
+          <span>🏢 Fluxze-only (never leaves Fluxze)</span>
+        </label>
+        <small style={{ color: "#6b7280", lineHeight: 1.4 }}>
+          {fluxzeOnly
+            ? "Readable only after signing in at fluxze.com. A recipient who isn’t a Fluxze account blocks the send — nothing is emailed to them."
+            : "Readable only inside Fluxze. Blocks the send if any recipient isn’t a Fluxze account, so content can never reach Gmail or another mail service."}
+        </small>
       </div>
 
       <div
@@ -610,7 +784,12 @@ export default function SendEmail({
           <input
             type="checkbox"
             checked={secureSend}
-            onChange={(e) => setSecureSend(e.target.checked)}
+            onChange={(e) => {
+              setSecureSend(e.target.checked);
+              // Two different channels; letting both claim the send would be
+              // ambiguous, so the newer one yields.
+              if (e.target.checked) setFluxzeOnly(false);
+            }}
           />
           <span>🔒 Secure send (end-to-end via Fluxze magic link)</span>
         </label>
@@ -738,19 +917,42 @@ export default function SendEmail({
         {loading ? "Sending..." : "Send"}
       </button>
 
-      {status && (
-        <div
-          style={{
-            fontSize: 12,
-            color:
-              status.includes("success") || status.includes("✅")
-                ? "green"
-                : "red",
-          }}
-        >
-          {status}
-        </div>
-      )}
+      {status &&
+        (statusSticky ? (
+          // A refusal is the one status the user has to act on, so it gets the
+          // weight of a real alert instead of a line of small red text, and
+          // `role="alert"` announces it to screen readers on send.
+          <div
+            role="alert"
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 8,
+              fontSize: 13,
+              lineHeight: 1.45,
+              padding: "10px 12px",
+              borderRadius: 6,
+              border: "1px solid #fca5a5",
+              background: "#fef2f2",
+              color: "#b91c1c",
+            }}
+          >
+            <span aria-hidden="true">⛔</span>
+            <span>{status}</span>
+          </div>
+        ) : (
+          <div
+            style={{
+              fontSize: 12,
+              color:
+                status.includes("success") || status.includes("✅")
+                  ? "green"
+                  : "red",
+            }}
+          >
+            {status}
+          </div>
+        ))}
     </div>
   );
 }

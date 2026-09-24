@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { Task, TaskPriority } from "../api/tasks";
-import {
-  getTickets,
-  updateTicketApi,
-  deleteTicketApi,
-} from "../api/tickets";
+import { getTickets, updateTicketApi, deleteTicketApi } from "../api/tickets";
 import { ticketAiFix } from "../api/aiFix";
 import AiFixPanel from "../aifix/AiFixPanel";
 import { getTaskStatuses, type TaskStatusRow } from "../api/taskStatuses";
@@ -124,7 +120,6 @@ export default function TicketDetail() {
       setStatusMsg(err instanceof Error ? err.message : "Delete failed.");
     }
   };
-
 
   return (
     <div className="ticket-detail">

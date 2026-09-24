@@ -571,22 +571,14 @@ export default function Emails() {
     <div className="emails-root">
       {showToolbar && (
         <div className="emails-page-toolbar">
-          {/* Personal accounts keep Compose in the email sidebar on desktop, but
-            the sidebar (and its Compose button) is hidden below 700px, so this
-            copy is always rendered and CSS reveals it only at that width —
-            same top-toolbar placement business/org accounts use everywhere. */}
+          {/* Personal accounts keep a single Compose button in the email
+            sidebar — the toolbar copy used to also render for personal scope
+            (meant to appear only below 700px, once the sidebar hides) but
+            showed up duplicated alongside the sidebar's own button, so it's
+            dropped here entirely. */}
           {!isPersonalScope && (
             <button
               className="compose-btn compose-btn--toolbar"
-              onClick={() => setComposeOpen(true)}
-              data-tooltip="Compose"
-            >
-              Compose
-            </button>
-          )}
-          {isPersonalScope && (
-            <button
-              className="compose-btn compose-btn--toolbar compose-btn--toolbar-mobile-only"
               onClick={() => setComposeOpen(true)}
               data-tooltip="Compose"
             >
@@ -777,6 +769,7 @@ export default function Emails() {
           {composeAccountId !== null && (
             <SendEmail
               accountId={composeAccountId}
+              accounts={displayedAccounts}
               onClose={() => setComposeOpen(false)}
             />
           )}

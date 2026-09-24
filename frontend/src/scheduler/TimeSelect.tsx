@@ -57,10 +57,16 @@ export default function TimeSelect({
     !query || query === currentLabel.toLowerCase()
       ? options
       : options.filter((opt) =>
-          opt.label.toLowerCase().replace(/\s/g, "").includes(query.replace(/\s/g, ""))
+          opt.label
+            .toLowerCase()
+            .replace(/\s/g, "")
+            .includes(query.replace(/\s/g, ""))
         );
 
-  const parsed = query && query !== currentLabel.toLowerCase() ? parseTimeInput(draft) : null;
+  const parsed =
+    query && query !== currentLabel.toLowerCase()
+      ? parseTimeInput(draft)
+      : null;
   const customOption: TimeOption | null =
     parsed && isAllowed(parsed) && !filtered.some((opt) => opt.value === parsed)
       ? { value: parsed, label: formatHour(toMinutes(parsed)) }
@@ -141,7 +147,8 @@ export default function TimeSelect({
         return;
       }
       if (!rows.length) return;
-      const next = event.key === "ArrowDown" ? activeIndex + 1 : activeIndex - 1;
+      const next =
+        event.key === "ArrowDown" ? activeIndex + 1 : activeIndex - 1;
       setActiveOverride((next + rows.length) % rows.length);
       return;
     }
