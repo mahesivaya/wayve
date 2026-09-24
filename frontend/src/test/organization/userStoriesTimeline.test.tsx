@@ -2,7 +2,7 @@
 // bound to sprint boundaries: the side arrows step a whole sprint, and dragging
 // the plot slides it a day at a time, so any date range is reachable.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";
 
 vi.mock("../../auth/useAuth", () => ({
@@ -123,7 +123,11 @@ function blockFills(container: HTMLElement): string[] {
 
 async function renderCard() {
   const { container } = render(<UserStoriesSummaryCard />);
-  await screen.findByText("#7");
+  // Scope the wait to this render's own container. The theme test renders a
+  // second card while the first is still mounted, and a `screen` query spans
+  // the whole body — it would match the card already on the page and return
+  // before this one has its data, leaving the caller reading an empty chart.
+  await within(container).findByText("#7");
   const chart = container.querySelector(".us-summary-chart") as HTMLElement;
   return { chart, container };
 }
