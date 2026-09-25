@@ -515,7 +515,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     }
   };
 
-  // Shared by the reply and forward composers. The 20 MB total cap matches the
+  // Shared by the reply and forward composers. The 25 MB total cap matches the
   // backend's limit.
   const renderAttachField = (
     files: File[],
@@ -535,7 +535,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
           if (picked.length === 0) return;
           const next = [...files, ...picked];
           if (next.reduce((n, f) => n + f.size, 0) > MAX_ATTACHMENTS_BYTES) {
-            setErr("Attachments exceed the 20 MB limit");
+            setErr("Attachments exceed the 25 MB limit");
             return;
           }
           setFiles(next);

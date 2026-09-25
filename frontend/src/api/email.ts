@@ -338,8 +338,11 @@ export const filesToAttachments = async (
     }))
   );
 
-// Must stay in sync with the backend's `MAX_OUTGOING_ATTACHMENTS_BYTES`.
-export const MAX_ATTACHMENTS_BYTES = 20 * 1024 * 1024;
+// Must stay in sync with the backend's `MAX_OUTGOING_ATTACHMENTS_BYTES`. Set to
+// 25 MB to match Gmail/Outlook/Yahoo's own attachment ceiling — sends go out
+// over real SMTP, so a recipient's mail server enforces this regardless of
+// what we allow here; going higher would just move the failure downstream.
+export const MAX_ATTACHMENTS_BYTES = 25 * 1024 * 1024;
 
 export type WayveRecipient = {
   id: number;

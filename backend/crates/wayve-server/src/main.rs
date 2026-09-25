@@ -92,6 +92,11 @@ async fn main() -> std::io::Result<()> {
     // clone the handle into each worker.
     let geoip_data = web::Data::new(startup::load_geoip());
 
+    // Shared across every worker so the cap is truly server-wide, not
+    // per-worker — see `prelude::MAX_CONCURRENT_UPLOADS`.
+    let upload_semaphore =
+        web::Data::new(tokio::sync::Semaphore::new(prelude::MAX_CONCURRENT_UPLOADS));
+
     let frontend_url = crate::config::frontend_url();
     let port = listen_port();
     info!(port, "Listen port selected");
@@ -109,6 +114,27 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(redis_cache.clone()))
             .app_data(geoip_data.clone())
+            .app_data(upload_semaphore.clone())
+            // Without these, a malformed body/path/query param never reaches a
+            // handler at all — Actix renders its own plain-text error before
+            // `?` or AppError get a chance to run, so it bypasses the
+            // `{"message": ...}` shape every other error uses. Routing errors
+            // through AppError::BadRequest here makes that consistent
+            // app-wide. A narrower scope's own JsonConfig (e.g. `email/mod.rs`,
+            // for its bigger attachment limit) overrides this one for that
+            // scope, so it needs its own `.error_handler` too — checked there.
+            .app_data(
+                web::JsonConfig::default()
+                    .error_handler(|err, _req| error::AppError::BadRequest(err.to_string()).into()),
+            )
+            .app_data(
+                web::PathConfig::default()
+                    .error_handler(|err, _req| error::AppError::BadRequest(err.to_string()).into()),
+            )
+            .app_data(
+                web::QueryConfig::default()
+                    .error_handler(|err, _req| error::AppError::BadRequest(err.to_string()).into()),
+            )
             .configure(routing::wire)
     })
     .bind(("0.0.0.0", port))?;

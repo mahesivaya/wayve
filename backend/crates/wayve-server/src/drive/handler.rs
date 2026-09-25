@@ -44,11 +44,12 @@ pub struct FileRecord {
 // Blobs are written to disk encrypted at rest (AES-GCM, per-file IV stored in
 // `drive_files.file_iv`) and are never served statically; reads go through the
 // authenticated `/api/files/{id}/download` handler below.
-#[instrument(target = "http", skip(req, payload, pool))]
+#[instrument(target = "http", skip(req, payload, pool, semaphore))]
 pub async fn upload_file(
     req: HttpRequest,
     mut payload: Multipart,
     pool: web::Data<PgPool>,
+    semaphore: web::Data<tokio::sync::Semaphore>,
 ) -> Result<HttpResponse, Error> {
     // Owner comes from the verified JWT, never the request body; a `user_id`
     // form field, if present, is ignored.
@@ -56,6 +57,20 @@ pub async fn upload_file(
         Some(id) => id,
         None => return Ok(HttpResponse::Unauthorized().finish()),
     };
+
+    // Acquired only once the caller is authenticated, so an unauthenticated
+    // request can't consume a slot. Held for the rest of the request
+    // (released on return, by drop) so at most `MAX_CONCURRENT_UPLOADS`
+    // requests server-wide are buffering file bytes in memory at once,
+    // regardless of how many are in flight or how large each one is.
+    // `acquire` queues rather than rejecting outright when the server's
+    // already at capacity — a burst makes uploads wait a little longer
+    // instead of failing them.
+    let _permit = semaphore
+        .acquire()
+        .await
+        .map_err(|_| actix_web::error::ErrorInternalServerError("Upload semaphore closed"))?;
+
     let owner = match resolve_owner(pool.get_ref(), user_id).await {
         Ok(owner) => owner,
         Err(resp) => return Ok(resp),
@@ -134,18 +149,23 @@ pub async fn upload_file(
             let data = chunk.map_err(|_| actix_web::error::ErrorBadRequest("Chunk error"))?;
 
             size += data.len() as i64;
-            plaintext.extend_from_slice(&data);
-        }
 
-        if entitlement.storage_limit_bytes >= 0
-            && current_storage.saturating_add(size) > entitlement.storage_limit_bytes
-        {
-            return Ok(HttpResponse::PaymentRequired().json(serde_json::json!({
-                "message": "Storage limit exceeded. Upgrade your plan or remove files to upload more.",
-                "storage_limit_bytes": entitlement.storage_limit_bytes,
-                "storage_used_bytes": current_storage,
-                "upload_size_bytes": size
-            })));
+            // Checked per chunk rather than once after the whole field is
+            // read, so an over-quota upload stops growing `plaintext` the
+            // moment it's known to be rejected instead of buffering the rest
+            // of a possibly huge file just to throw it away.
+            if entitlement.storage_limit_bytes >= 0
+                && current_storage.saturating_add(size) > entitlement.storage_limit_bytes
+            {
+                return Ok(HttpResponse::PaymentRequired().json(serde_json::json!({
+                    "message": "Storage limit exceeded. Upgrade your plan or remove files to upload more.",
+                    "storage_limit_bytes": entitlement.storage_limit_bytes,
+                    "storage_used_bytes": current_storage,
+                    "upload_size_bytes": size
+                })));
+            }
+
+            plaintext.extend_from_slice(&data);
         }
 
         let (file_iv, encrypted_bytes) = encrypt_binary(&plaintext).map_err(|e| {
@@ -553,6 +573,9 @@ mod auth_regression_tests {
         let app = test::init_service(
             App::new()
                 .app_data(web::Data::new(lazy_pool()))
+                .app_data(web::Data::new(tokio::sync::Semaphore::new(
+                    crate::prelude::MAX_CONCURRENT_UPLOADS,
+                )))
                 .route("/files", web::post().to(upload_file)),
         )
         .await;

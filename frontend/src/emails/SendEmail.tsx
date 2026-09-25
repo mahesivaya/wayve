@@ -130,7 +130,7 @@ export default function SendEmail({
     if (picked.length === 0) return;
     const next = [...attachments, ...picked];
     if (next.reduce((n, f) => n + f.size, 0) > MAX_ATTACHMENTS_BYTES) {
-      setStatus("Attachments exceed the 20 MB limit ⚠️");
+      setStatus("Attachments exceed the 25 MB limit ⚠️");
       return;
     }
     setAttachments(next);
@@ -896,7 +896,7 @@ export default function SendEmail({
               }}
             >
               Attachments are sent via your mailbox and aren’t end-to-end
-              encrypted ({formatFileSize(totalAttachmentBytes)} of 20 MB).
+              encrypted ({formatFileSize(totalAttachmentBytes)} of 25 MB).
             </small>
           </>
         )}

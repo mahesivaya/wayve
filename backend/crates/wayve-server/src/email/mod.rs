@@ -42,15 +42,32 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(handler::get_email_body)
         .service(handler::get_email_by_id)
         // The raised JSON limit allows base64 attachments (the `web::Json`
-        // default is 2 MB); the handler enforces the real 20 MB total cap.
+        // default is 2 MB); the handler enforces the real 25 MB total cap.
+        // 35 MB covers 25 MB of raw attachment bytes inflated ~4/3 by base64
+        // (~33 MB) plus headroom for the rest of the JSON payload (subject,
+        // recipients, filenames). `.error_handler` overrides the app-wide one
+        // from `main.rs` for this narrower scope — see the note there — so it
+        // has to be set here too, not just the higher `.limit()`.
         .service(
             web::resource("/emails")
-                .app_data(web::JsonConfig::default().limit(28 * 1024 * 1024))
+                .app_data(
+                    web::JsonConfig::default()
+                        .limit(35 * 1024 * 1024)
+                        .error_handler(|err, _req| {
+                            crate::error::AppError::BadRequest(err.to_string()).into()
+                        }),
+                )
                 .route(web::post().to(handler::send)),
         )
         .service(
             web::resource("/send")
-                .app_data(web::JsonConfig::default().limit(28 * 1024 * 1024))
+                .app_data(
+                    web::JsonConfig::default()
+                        .limit(35 * 1024 * 1024)
+                        .error_handler(|err, _req| {
+                            crate::error::AppError::BadRequest(err.to_string()).into()
+                        }),
+                )
                 .route(web::post().to(handler::send)),
         )
         // Each canonical route below keeps a legacy alias for compatibility.

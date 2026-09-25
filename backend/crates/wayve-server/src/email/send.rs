@@ -12,8 +12,11 @@ use tracing::{error, info, instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
 
 /// Caps for standard-mailbox attachments (the E2E/secure paths stay text-only).
+/// 25 MB matches Gmail/Outlook/Yahoo's own ceiling — mail goes out over real
+/// SMTP, so a recipient's server enforces this regardless of what we allow
+/// here. Must stay in sync with the frontend's `MAX_ATTACHMENTS_BYTES`.
 const MAX_OUTGOING_ATTACHMENTS: usize = 10;
-const MAX_OUTGOING_ATTACHMENTS_BYTES: usize = 20 * 1024 * 1024;
+const MAX_OUTGOING_ATTACHMENTS_BYTES: usize = 25 * 1024 * 1024;
 
 /// Strips path components so a browser-supplied filename can't inject a header
 /// or an odd MIME name. Falls back to "attachment".
@@ -86,7 +89,7 @@ fn validate_attachment_limits(attachments: &[EmailAttachmentInput]) -> Result<()
         .map(|a| a.content_base64.len() / 4 * 3)
         .sum();
     if estimated > MAX_OUTGOING_ATTACHMENTS_BYTES {
-        return Err("Attachments exceed the 20 MB total limit.".to_string());
+        return Err("Attachments exceed the 25 MB total limit.".to_string());
     }
     Ok(())
 }
