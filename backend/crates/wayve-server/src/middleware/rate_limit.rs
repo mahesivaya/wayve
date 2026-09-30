@@ -47,12 +47,10 @@ fn auth_limit_rule(method: &str, path: &str) -> Option<LimitRule> {
     }
 }
 
+/// Bucketed per client IP. The IP must not be client-choosable, or rotating a
+/// forged `X-Forwarded-For` gets a fresh bucket per request (see `client_ip`).
 fn client_key(req: &ServiceRequest) -> String {
-    let ip = req
-        .connection_info()
-        .realip_remote_addr()
-        .unwrap_or("unknown")
-        .to_string();
+    let ip = crate::client_ip::client_ip(req.request()).unwrap_or_else(|| "unknown".to_string());
 
     format!("rl:{}:{}:{}", req.method(), req.path(), ip)
 }
@@ -155,6 +153,70 @@ where
 mod tests {
     use super::*;
     use actix_web::{App, HttpResponse, http::StatusCode, test as actix_test, web};
+
+    fn key_for(peer: &str, forwarded_for: Option<&str>) -> String {
+        let mut req = actix_test::TestRequest::post().uri("/api/login").peer_addr(
+            format!("{peer}:40000")
+                .parse()
+                .unwrap_or_else(|e| panic!("peer: {e}")),
+        );
+        if let Some(value) = forwarded_for {
+            req = req.insert_header(("X-Forwarded-For", value));
+        }
+        client_key(&req.to_srv_request())
+    }
+
+    #[test]
+    fn forged_forwarded_for_from_the_internet_does_not_change_the_bucket() {
+        let plain = key_for("203.0.113.9", None);
+        assert_eq!(key_for("203.0.113.9", Some("1.1.1.1")), plain);
+        assert_eq!(key_for("203.0.113.9", Some("2.2.2.2, 3.3.3.3")), plain);
+        assert!(plain.ends_with(":203.0.113.9"));
+    }
+
+    #[test]
+    fn behind_nginx_the_bucket_is_the_real_client() {
+        // nginx on the Docker bridge network, overwriting XFF with $remote_addr.
+        assert!(key_for("172.18.0.5", Some("198.51.100.7")).ends_with(":198.51.100.7"));
+        // Even if a hop were appended to a forged value, the forged part is ignored.
+        assert!(key_for("172.18.0.5", Some("6.6.6.6, 198.51.100.7")).ends_with(":198.51.100.7"));
+    }
+
+    /// End to end against Redis: rotating forged `X-Forwarded-For` values from
+    /// one client used to get a fresh bucket per request. Skips without Redis.
+    #[actix_web::test]
+    async fn rotating_forwarded_for_still_hits_the_limit() {
+        let Ok(cache) = Cache::connect().await else {
+            eprintln!("Redis unavailable — skipping rate limit spoofing test");
+            return;
+        };
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(Some(cache)))
+                .wrap(RateLimitMiddleware)
+                .route("/api/register", web::post().to(HttpResponse::Ok)),
+        )
+        .await;
+
+        // A fresh documentation-range client per run, so reruns inside the
+        // 5-minute window don't share a bucket.
+        let n = uuid::Uuid::new_v4().as_u128();
+        let peer = format!("[2001:db8::{:x}:{:x}]:40000", (n >> 16) as u16, n as u16);
+        let mut statuses = Vec::new();
+        for i in 0..6 {
+            let req = actix_test::TestRequest::post()
+                .uri("/api/register")
+                .peer_addr(peer.parse().unwrap_or_else(|e| panic!("peer: {e}")))
+                .insert_header(("X-Forwarded-For", format!("10.9.8.{i}")))
+                .to_request();
+            statuses.push(actix_test::call_service(&app, req).await.status());
+        }
+        assert!(
+            statuses[..5].iter().all(|s| *s == StatusCode::OK),
+            "{statuses:?}"
+        );
+        assert_eq!(statuses[5], StatusCode::TOO_MANY_REQUESTS, "{statuses:?}");
+    }
 
     #[test]
     fn only_limits_auth_mutation_routes() {

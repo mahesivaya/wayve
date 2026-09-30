@@ -3978,6 +3978,7 @@ dependencies = [
  "hickory-resolver",
  "hkdf",
  "hmac 0.12.1",
+ "ipnet",
  "jsonwebtoken",
  "lazy_static",
  "lettre",

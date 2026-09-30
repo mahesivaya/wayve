@@ -50,7 +50,13 @@ http {
             proxy_pass http://backend:8080;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            # nginx is the only hop in front of the app, so X-Forwarded-For is overwritten
+            # with the peer address instead of appended to: a client-sent value would
+            # otherwise come first, and the backend would rate-limit and audit-log an
+            # IP of the client's choosing. Client-sent Forwarded headers are dropped for
+            # the same reason. See backend/crates/wayve-server/src/client_ip.rs.
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Forwarded "";
             proxy_set_header X-Forwarded-Proto $scheme;
             proxy_redirect off;
         }
@@ -59,7 +65,8 @@ http {
             proxy_pass http://backend:8080;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-For $remote_addr;
+            proxy_set_header Forwarded "";
             proxy_set_header X-Forwarded-Proto $scheme;
             proxy_redirect off;
         }

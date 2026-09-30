@@ -28,6 +28,7 @@ chrono-tz.workspace = true
 futures.workspace = true
 futures-util.workspace = true
 once_cell.workspace = true
+ipnet.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 bcrypt.workspace = true

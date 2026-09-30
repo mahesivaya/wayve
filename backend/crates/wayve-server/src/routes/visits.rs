@@ -69,7 +69,7 @@ pub async fn ingest_page_visit(
     let path = if trimmed.is_empty() { "/" } else { trimmed };
 
     let user_id = get_user_id_from_request(&req);
-    // IP and user-agent are read server-side (X-Forwarded-For aware) and never
+    // IP and user-agent are read server-side (trusted-proxy aware, see client_ip.rs) and never
     // trusted from the client body.
     let ip = crate::audit::client_ip(&req);
     let user_agent = crate::audit::user_agent(&req).map(|v| truncate(&v, UA_MAX));
