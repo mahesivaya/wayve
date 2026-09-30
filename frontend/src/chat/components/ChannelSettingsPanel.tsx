@@ -266,8 +266,8 @@ export default function ChannelSettingsPanel({
 
       {recovering && (
         <div className="channel-settings-note">
-          This channel has no admin. As an owner you can make a member an
-          admin to hand it back to the team.
+          This channel has no admin. As an owner you can make a member an admin
+          to hand it back to the team.
         </div>
       )}
 
