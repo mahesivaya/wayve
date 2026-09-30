@@ -90,6 +90,7 @@ const CHAT_ACTIONS = new Set([
   "channel_created",
   "channel_joined",
   "channel_left",
+  "channel_role_changed",
   "call",
 ]);
 
@@ -97,6 +98,7 @@ const CHAT_ACTION_LABEL: Record<string, string> = {
   channel_created: "Channel created",
   channel_joined: "Joined channel",
   channel_left: "Left channel",
+  channel_role_changed: "Channel role changed",
 };
 
 // Derive a chat row's display label + css class. Calls fan out by media +
@@ -1188,6 +1190,7 @@ export default function AuditSecurity({
                 <option value="channel_created">Channel created</option>
                 <option value="channel_joined">Joined channel</option>
                 <option value="channel_left">Left channel</option>
+                <option value="channel_role_changed">Channel role changed</option>
                 <option value="call_audio">Audio call</option>
                 <option value="call_video">Video call</option>
                 <option value="call_failed">Call failed</option>

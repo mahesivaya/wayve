@@ -2,7 +2,8 @@ use crate::prelude::*;
 use wayve_security::jwt::get_user_id_from_request;
 
 use super::dto::{UpdateChannelSubjectInput, UpdateChannelVisibilityInput};
-use super::helpers::is_channel_admin;
+use super::helpers::can_manage_channel;
+use wayve_security::rbac::resolve_role_context_moded;
 
 use actix_web::patch;
 use tracing::instrument;
@@ -18,7 +19,8 @@ pub async fn update_channel_subject(
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let channel_id = channel_id.into_inner();
 
-    if !is_channel_admin(pool.get_ref(), channel_id, user_id).await? {
+    let ctx = resolve_role_context_moded(&req, pool.get_ref(), user_id).await?;
+    if !can_manage_channel(pool.get_ref(), &ctx, channel_id).await? {
         return Ok(HttpResponse::Forbidden().json(serde_json::json!({
             "error": "Only channel admins can change the subject"
         })));
@@ -51,7 +53,8 @@ pub async fn update_channel_visibility(
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let channel_id = channel_id.into_inner();
 
-    if !is_channel_admin(pool.get_ref(), channel_id, user_id).await? {
+    let ctx = resolve_role_context_moded(&req, pool.get_ref(), user_id).await?;
+    if !can_manage_channel(pool.get_ref(), &ctx, channel_id).await? {
         return Ok(HttpResponse::Forbidden().json(serde_json::json!({
             "error": "Only channel admins can change visibility"
         })));

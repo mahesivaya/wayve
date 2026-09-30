@@ -41,6 +41,8 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
     .service(handler::approve_channel_join_request)
     .service(handler::add_channel_users)
     .service(handler::remove_channel_user)
+    .service(handler::set_channel_member_role)
+    .service(handler::leave_channel)
     .service(handler::get_channel_messages)
     .service(handler::get_channel_thread)
     .service(attachments::upload_chat_attachment)

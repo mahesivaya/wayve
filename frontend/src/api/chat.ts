@@ -139,6 +139,9 @@ export type ChatChannel = {
   // Null when the channel has no messages yet. Drives the sidebar "Recent" group.
   last_message_at?: string | null;
   current_user_role?: "admin" | "user";
+  // Backend-computed: the caller is a channel admin, or an org/platform owner
+  // (admin mode) recovering a channel that has no admin left.
+  can_manage?: boolean;
   is_member: boolean;
   join_status?: "pending";
   member_ids: number[];
@@ -368,6 +371,33 @@ export const removeChatChannelUser = async (
   if (!res.ok) {
     const data = await res.json().catch(() => null);
     throw new Error(data?.error ?? "Failed to delete channel user");
+  }
+};
+
+export const setChatChannelMemberRole = async (
+  channelId: number,
+  email: string,
+  role: "admin" | "user"
+) => {
+  const res = await apiFetch(`/api/chat/channels/${channelId}/members/role`, {
+    method: "PATCH",
+    body: JSON.stringify({ email, role }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.error ?? "Failed to change role");
+  }
+};
+
+export const leaveChatChannel = async (channelId: number) => {
+  const res = await apiFetch(`/api/chat/channels/${channelId}/leave`, {
+    method: "POST",
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.error ?? "Failed to leave channel");
   }
 };
 
