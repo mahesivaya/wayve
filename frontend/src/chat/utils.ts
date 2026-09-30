@@ -71,6 +71,10 @@ export const relativeTime = (iso: string | null | undefined): string => {
   });
 };
 
+// Whether the current user may manage the channel. Trusts the backend's
+// `can_manage` (which covers owner recovery of an admin-less channel); the
+// admin-list check is the fallback for payloads without it. Being the creator
+// alone doesn't count: a creator can have been demoted.
 export const isChannelAdmin = (
   channel: ChatChannel | null,
   currentUser?: { id: number; email: string } | null
@@ -78,7 +82,7 @@ export const isChannelAdmin = (
   Boolean(
     channel &&
     currentUser &&
-    (channel.created_by === currentUser.id ||
+    (channel.can_manage ??
       (channel.admin_emails ?? []).some(
         (email) => email.toLowerCase() === currentUser.email.toLowerCase()
       ))

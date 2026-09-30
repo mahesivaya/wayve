@@ -913,6 +913,39 @@
   color: var(--color-danger-strong);
 }
 
+.channel-member-role-toggle {
+  flex: 0 0 auto;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-slate-soft);
+  padding: 2px 6px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.channel-member-role-toggle:hover {
+  background: var(--color-surface-soft);
+  color: var(--color-text-slate);
+}
+
+/* Leave — any member; the backend refuses the last admin of a populated channel. */
+.channel-settings-leave {
+  align-self: flex-start;
+  border: 1px solid var(--color-danger-soft);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-danger-strong);
+  padding: 6px 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.channel-settings-leave:hover {
+  background: var(--color-danger-soft);
+}
+
 .channel-invite-row {
   display: flex;
   gap: 8px;

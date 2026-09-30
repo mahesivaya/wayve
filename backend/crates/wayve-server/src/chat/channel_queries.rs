@@ -15,6 +15,11 @@ pub async fn get_channels(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
     // each other, so for them visibility narrows to channels they actually
     // belong to — see `directory_scope::VISIBLE_CHANNELS`.
     let ctx = rbac::resolve_role_context(pool.get_ref(), user_id).await?;
+    // `can_manage` mirrors `helpers::can_manage_channel`, whose recovery path
+    // follows the session mode (normal mode downscopes owners).
+    let tenant_admin = super::helpers::is_tenant_admin(
+        &rbac::resolve_role_context_moded(&req, pool.get_ref(), user_id).await?,
+    );
 
     // Built by concatenation rather than `format!` because the SQL contains
     // `'{}'` empty-array literals, which `format!` would read as placeholders.
@@ -28,6 +33,12 @@ pub async fn get_channels(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
             (SELECT MAX(cm_last.created_at) FROM channel_messages cm_last
                 WHERE cm_last.channel_id = c.id) AS last_message_at,
             mine.role AS current_user_role,
+            COALESCE(mine.role = 'admin', FALSE) OR (
+                $4 AND NOT EXISTS (
+                    SELECT 1 FROM channel_members adm
+                    WHERE adm.channel_id = c.id AND adm.role = 'admin'
+                )
+            ) AS can_manage,
             mine.user_id IS NOT NULL AS is_member,
             jr.status AS join_status,
             COALESCE((
@@ -92,6 +103,7 @@ pub async fn get_channels(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
         .bind(user_id)
         .bind(ctx.scope.as_str())
         .bind(ctx.organization_id)
+        .bind(tenant_admin)
         .fetch_all(pool.get_ref())
         .await?;
 
@@ -120,6 +132,7 @@ pub async fn get_channels(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
                 "created_at": created_at.to_rfc3339(),
                 "last_message_at": last_message_at,
                 "current_user_role": row.get::<Option<String>, _>("current_user_role"),
+                "can_manage": row.get::<bool, _>("can_manage"),
                 "is_member": row.get::<bool, _>("is_member"),
                 "join_status": row.get::<Option<String>, _>("join_status"),
                 "member_ids": row.get::<Vec<i32>, _>("member_ids"),

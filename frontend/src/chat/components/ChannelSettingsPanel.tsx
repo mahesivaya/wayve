@@ -22,6 +22,8 @@ type Props = {
   // waiting for the draft state to flush.
   onSaveVisibility: (value?: ChannelVisibility) => void;
   onDeleteUser: (email: string) => void;
+  onChangeRole: (email: string, role: ChannelRole) => void;
+  onLeave: () => void;
   onAddUsers: () => void;
   onApproveJoinRequest: (userId: number) => void;
 };
@@ -43,6 +45,8 @@ export default function ChannelSettingsPanel({
   onSaveSubject,
   onSaveVisibility,
   onDeleteUser,
+  onChangeRole,
+  onLeave,
   onAddUsers,
   onApproveJoinRequest,
 }: Props) {
@@ -51,6 +55,9 @@ export default function ChannelSettingsPanel({
   // `admins` is a subset of `users`, since the backend's member_emails already
   // includes admins, so tagging while iterating `users` lists each person once.
   const adminSet = new Set(admins);
+  // Managing without being a channel admin means an owner is recovering a
+  // channel that lost every admin.
+  const recovering = isAdmin && channel.current_user_role !== "admin";
   const members = users.map((email) => ({
     email,
     role: adminSet.has(email) ? "Admin" : "Member",
@@ -153,6 +160,20 @@ export default function ChannelSettingsPanel({
                 >
                   {member.role}
                 </span>
+                {isAdmin && !member.invited && (
+                  <button
+                    type="button"
+                    className="channel-member-role-toggle"
+                    onClick={() =>
+                      onChangeRole(
+                        member.email,
+                        member.role === "Admin" ? "user" : "admin"
+                      )
+                    }
+                  >
+                    {member.role === "Admin" ? "Make member" : "Make admin"}
+                  </button>
+                )}
                 {isAdmin && (
                   <button
                     type="button"
@@ -243,10 +264,27 @@ export default function ChannelSettingsPanel({
         </div>
       )}
 
+      {recovering && (
+        <div className="channel-settings-note">
+          This channel has no admin. As an owner you can make a member an
+          admin to hand it back to the team.
+        </div>
+      )}
+
       {!isAdmin && (
         <div className="channel-settings-note">
           Only admins can change the name, privacy, or members.
         </div>
+      )}
+
+      {channel.is_member && (
+        <button
+          type="button"
+          className="channel-settings-leave"
+          onClick={onLeave}
+        >
+          Leave channel
+        </button>
       )}
 
       {error && <div className="channel-error">{error}</div>}

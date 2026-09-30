@@ -10,8 +10,10 @@ import {
   getChannelThread,
   getChatMessages,
   joinChatChannel,
+  leaveChatChannel,
   reactionFrame,
   removeChatChannelUser,
+  setChatChannelMemberRole,
   uploadChatAttachment,
   type ChatChannel,
   type ChatMessage,
@@ -825,6 +827,37 @@ export default function Chat() {
     }
   };
 
+  const changeMemberRole = async (email: string, role: ChannelRole) => {
+    if (!selectedChannel) return;
+    setSettingsError("");
+
+    try {
+      await setChatChannelMemberRole(selectedChannel.id, email, role);
+      await refreshChannels(selectedChannel.id);
+    } catch (err) {
+      setSettingsError(
+        err instanceof Error ? err.message : "Failed to change role"
+      );
+    }
+  };
+
+  const leaveChannel = async () => {
+    if (!selectedChannel) return;
+    if (!window.confirm(`Leave #${selectedChannel.name}?`)) return;
+    setSettingsError("");
+
+    try {
+      await leaveChatChannel(selectedChannel.id);
+      setChannelSettingsOpen(false);
+      setSelectedConversation(null);
+      await fetchChannels();
+    } catch (err) {
+      setSettingsError(
+        err instanceof Error ? err.message : "Failed to leave channel"
+      );
+    }
+  };
+
   const approveJoinRequest = async (userId: number) => {
     if (!selectedChannel) return;
     setSettingsError("");
@@ -1029,6 +1062,8 @@ export default function Chat() {
               onSaveSubject={saveSubject}
               onSaveVisibility={saveVisibility}
               onDeleteUser={deleteUser}
+              onChangeRole={changeMemberRole}
+              onLeave={leaveChannel}
               onAddUsers={addUsers}
               onApproveJoinRequest={approveJoinRequest}
             />

@@ -2,7 +2,8 @@ use crate::prelude::*;
 use wayve_security::jwt::get_user_id_from_request;
 
 use super::dto::JoinRequestActionInput;
-use super::helpers::is_channel_admin;
+use super::helpers::can_manage_channel;
+use wayve_security::rbac::resolve_role_context_moded;
 
 use sqlx::Row;
 use tracing::instrument;
@@ -97,7 +98,8 @@ pub async fn approve_channel_join_request(
     let admin_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let channel_id = channel_id.into_inner();
 
-    if !is_channel_admin(pool.get_ref(), channel_id, admin_id).await? {
+    let ctx = resolve_role_context_moded(&req, pool.get_ref(), admin_id).await?;
+    if !can_manage_channel(pool.get_ref(), &ctx, channel_id).await? {
         return Ok(HttpResponse::Forbidden().json(serde_json::json!({
             "error": "Only channel admins can approve requests"
         })));

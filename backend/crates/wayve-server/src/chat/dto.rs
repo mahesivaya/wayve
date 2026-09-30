@@ -40,6 +40,12 @@ pub struct RemoveChannelUserInput {
 }
 
 #[derive(Deserialize)]
+pub struct SetChannelMemberRoleInput {
+    pub email: String,
+    pub role: String,
+}
+
+#[derive(Deserialize)]
 pub struct JoinRequestActionInput {
     pub user_id: i32,
 }

@@ -374,6 +374,11 @@
   color: var(--color-warning);
 }
 
+.audit-activity.channel_role_changed {
+  background: var(--color-accent-indigo-mist);
+  color: var(--color-accent-indigo-deep);
+}
+
 .audit-activity.call_audio,
 .audit-activity.call_video {
   background: var(--color-accent-indigo-mist);
