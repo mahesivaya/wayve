@@ -9,6 +9,7 @@ mod billing_audit_test;
 mod channel_admin_test;
 mod channel_scope_test;
 mod chat_logging_test;
+mod chat_multi_session_test;
 mod contacts_test;
 mod documents_rbac_test;
 mod email_provider_isp_test;

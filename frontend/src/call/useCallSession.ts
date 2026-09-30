@@ -408,49 +408,70 @@ export function useCallSession(
     ]
   );
 
-  // One WS for the lifetime of the host component; torn down on unmount so a route
-  // change doesn't leak the connection.
+  // The socket reads the handler through a ref: handleSignal closes over call
+  // state and changes often, and every reconnected socket must use the latest.
+  const handleSignalRef = useRef(handleSignal);
+  useEffect(() => {
+    handleSignalRef.current = handleSignal;
+  }, [handleSignal]);
+
+  // One WS for the lifetime of the host component, reconnected with backoff if it
+  // drops (a network change, laptop sleep, a server restart); without that, the
+  // tab silently stopped receiving calls until a reload. Torn down on unmount so
+  // a route change doesn't leak the connection.
   useEffect(() => {
     if (myId === null) return;
-    const ws = new WebSocket(`${getWsBase()}/ws/call`);
-    wsRef.current = ws;
+    let cancelled = false;
+    let attempts = 0;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-    ws.onopen = () => setConnected(true);
-    ws.onclose = () => setConnected(false);
-    ws.onerror = () => setConnected(false);
+    const connect = () => {
+      if (cancelled) return;
+      const ws = new WebSocket(`${getWsBase()}/ws/call`);
+      wsRef.current = ws;
 
-    ws.onmessage = (event) => {
-      try {
-        const signal = JSON.parse(event.data) as CallSignal;
-        void handleSignal(signal);
-      } catch (err) {
-        log.error("failed to parse signal", err);
-      }
+      ws.onopen = () => {
+        if (cancelled) return;
+        attempts = 0;
+        setConnected(true);
+      };
+      ws.onmessage = (event) => {
+        try {
+          const signal = JSON.parse(event.data) as CallSignal;
+          void handleSignalRef.current(signal);
+        } catch (err) {
+          log.error("failed to parse signal", err);
+        }
+      };
+      ws.onclose = () => {
+        if (cancelled) return;
+        setConnected(false);
+        // Capped exponential backoff with ±20% jitter, as for the chat socket.
+        attempts += 1;
+        const base = Math.min(1000 * 2 ** (attempts - 1), 15000);
+        const jitter = base * 0.2 * (Math.random() * 2 - 1);
+        reconnectTimer = setTimeout(
+          connect,
+          Math.max(500, Math.round(base + jitter))
+        );
+      };
+      // `onclose` fires right after and owns the reconnect scheduling.
+      ws.onerror = () => {
+        if (!cancelled) setConnected(false);
+      };
     };
+
+    connect();
 
     return () => {
-      ws.close();
+      cancelled = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      wsRef.current?.close();
       teardownPeer();
     };
-    // handleSignal closes over call state, so the effect below re-binds onmessage
-    // rather than tearing down this socket.
+    // teardownPeer is stable; the socket must not be rebuilt when it changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myId]);
-
-  // Re-bind the message handler whenever its closure changes, or the WS would call a
-  // stale handler and miss state transitions.
-  useEffect(() => {
-    const ws = wsRef.current;
-    if (!ws) return;
-    ws.onmessage = (event) => {
-      try {
-        const signal = JSON.parse(event.data) as CallSignal;
-        void handleSignal(signal);
-      } catch (err) {
-        log.error("failed to parse signal", err);
-      }
-    };
-  }, [handleSignal]);
 
   // attachLocalMedia runs before setCallState flips to "active", so localVideoRef is
   // still null there and its inline srcObject assignment no-ops. This attaches the

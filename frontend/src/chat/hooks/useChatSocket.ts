@@ -124,6 +124,11 @@ export function useChatSocket(
           }
           return;
         }
+        // This user read a DM in another tab or device: refresh unread counts.
+        if (msg.type === "conversation_read") {
+          onInboundRef.current?.(msg);
+          return;
+        }
         if (msg.type === "status_update") {
           if (msg.message_id != null && msg.status) {
             onStatusUpdateRef.current?.(msg.message_id, msg.status);
@@ -143,10 +148,9 @@ export function useChatSocket(
           }
           return;
         }
-        // A self-broadcast without a client_id is legacy or multi-tab, and the
-        // optimistic local copy already covers it. One WITH a client_id is the
-        // reconciliation echo, so pass it through to patch the optimistic copy with
-        // the server-assigned message_id.
+        // A self-broadcast without a client_id is legacy. One WITH a client_id is
+        // either this tab's reconciliation echo or a message this user sent from
+        // another tab or device; the message handler tells them apart.
         if (msg.sender_id === userId && !msg.client_id) return;
 
         // Self-echoes are excluded so we never bump our own unread count.
