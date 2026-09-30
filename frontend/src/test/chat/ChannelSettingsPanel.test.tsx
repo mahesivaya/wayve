@@ -66,13 +66,19 @@ describe("ChannelSettingsPanel roles and leaving", () => {
       false
     );
     expect(screen.queryByRole("button", { name: "Make admin" })).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Leave channel" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Leave channel" })
+    );
     expect(onLeave).toHaveBeenCalled();
   });
 
   it("explains owner recovery of a channel with no admin", () => {
     renderPanel(
-      channel({ is_member: false, current_user_role: undefined, admin_emails: [] }),
+      channel({
+        is_member: false,
+        current_user_role: undefined,
+        admin_emails: [],
+      }),
       true
     );
     expect(screen.getByText(/This channel has no admin/)).toBeTruthy();
