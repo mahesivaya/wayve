@@ -1190,7 +1190,9 @@ export default function AuditSecurity({
                 <option value="channel_created">Channel created</option>
                 <option value="channel_joined">Joined channel</option>
                 <option value="channel_left">Left channel</option>
-                <option value="channel_role_changed">Channel role changed</option>
+                <option value="channel_role_changed">
+                  Channel role changed
+                </option>
                 <option value="call_audio">Audio call</option>
                 <option value="call_video">Video call</option>
                 <option value="call_failed">Call failed</option>
