@@ -122,6 +122,9 @@ pub async fn get_messages(
         .to_string();
         super::websocket::fan_out_user(cache.get_ref(), query.user2, payload).await;
     }
+    if !read_ids.is_empty() {
+        super::websocket::notify_conversation_read(cache.get_ref(), query.user1, query.user2).await;
+    }
 
     // `decrypt` strips only the storage-at-rest layer. What comes back is the
     // client E2E envelope, which the browser decrypts; the server never holds

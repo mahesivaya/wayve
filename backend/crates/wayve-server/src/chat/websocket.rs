@@ -5,7 +5,7 @@ use wayve_security::encryption::encrypt;
 
 use super::dto::WsAuthQuery;
 
-use crate::ws_registry::SessionRegistry;
+use crate::ws_registry::{ConnId, SessionRegistry};
 
 use actix::{Actor, ActorFutureExt, AsyncContext, Handler, Message as ActixMessage, StreamHandler};
 use actix_web_actors::ws;
@@ -34,17 +34,26 @@ pub fn user_channel(user_id: i32) -> String {
     format!("ws:user:{user_id}")
 }
 
-/// Deliver a payload to a user's session on this instance, if they have one.
+/// Deliver a payload to every session (tab or device) the user has on this
+/// instance.
 pub fn deliver_local(user_id: i32, payload: String) {
-    if let Some(addr) = SESSIONS.addr(user_id) {
-        addr.do_send(WsMessage(payload));
+    for addr in SESSIONS.addrs(user_id) {
+        addr.do_send(WsMessage(payload.clone()));
     }
 }
 
-/// Whether this user holds a live chat socket on this instance. The presence
-/// source of truth when Redis is unavailable; see [`crate::chat::presence`].
+/// Whether this user holds at least one live chat socket on this instance. The
+/// presence source of truth when Redis is unavailable; see
+/// [`crate::chat::presence`].
 pub fn is_online_local(user_id: i32) -> bool {
-    SESSIONS.addr(user_id).is_some()
+    SESSIONS.is_connected(user_id)
+}
+
+/// Tell the reader's own sessions that they read `other`'s messages, so their
+/// other tabs and devices clear that conversation's unread badge.
+pub async fn notify_conversation_read(cache: &Option<Cache>, reader: i32, other: i32) {
+    let payload = serde_json::json!({ "type": "conversation_read", "user_id": other }).to_string();
+    fan_out_user(cache, reader, payload).await;
 }
 
 /// Fan a realtime frame out to a user. With Redis we PUBLISH, so whichever
@@ -108,6 +117,8 @@ pub struct ChatSession {
     pub sender_name: String,
     // Drives dead-client detection.
     pub last_seen: Instant,
+    // This connection's registry id, set on start. A user may hold several.
+    pub conn_id: ConnId,
 }
 
 #[instrument(target = "ws", skip(req, stream, pool, cache, query))]
@@ -156,6 +167,7 @@ pub async fn chat_ws(
             uses_standard_encryption,
             sender_name,
             last_seen: Instant::now(),
+            conn_id: 0,
         },
         &req,
         stream,
@@ -167,7 +179,7 @@ impl Actor for ChatSession {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         info!("Chat WS connected: user_id={}", self.user_id);
-        SESSIONS.register(self.user_id, ctx.address());
+        self.conn_id = SESSIONS.register(self.user_id, ctx.address());
         self.last_seen = Instant::now();
 
         let pool = self.pool.clone();
@@ -203,8 +215,9 @@ impl Actor for ChatSession {
     fn stopped(&mut self, _: &mut Self::Context) {
         info!("Chat WS disconnected: user_id={}", self.user_id);
         // Unregister first so presence sees the accurate remaining-tabs state
-        // before deciding whether to announce this user offline.
-        SESSIONS.unregister(self.user_id);
+        // before deciding whether to announce this user offline. Only this
+        // connection goes; the user's other tabs keep receiving.
+        SESSIONS.unregister(self.user_id, self.conn_id);
 
         let pool = self.pool.clone();
         let cache = self.cache.clone();
@@ -290,6 +303,9 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                 .to_string();
 
                                 fan_out_user(&cache, other, receipt).await;
+                            }
+                            if !read_ids.is_empty() {
+                                notify_conversation_read(&cache, reader, other).await;
                             }
                         });
 
@@ -486,8 +502,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                     })
                                     .to_string();
 
-                                    let recipients: Vec<i32> =
-                                        members.into_iter().filter(|&m| m != sender_id).collect();
+                                    // The sender is included so their other tabs and
+                                    // devices see the message too; the sending tab
+                                    // matches it to its optimistic copy by client_id.
+                                    let recipients: Vec<i32> = members;
                                     let payload = msg_json.clone();
                                     actix_web::rt::spawn(async move {
                                         futures::future::join_all(
@@ -605,7 +623,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                         // Persist `delivered` for a connected recipient so it
                         // survives a history refetch. The offline case is handled
                         // by mark_delivered_on_connect.
-                        if SESSIONS.addr(receiver_id).is_some() {
+                        if SESSIONS.is_connected(receiver_id) {
                             let _ = sqlx::query(
                                 "UPDATE messages SET status = 'delivered' \
                                  WHERE id = $1 AND status = 'sent'",
@@ -650,7 +668,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                 // server-assigned message_id: a separate
                                 // status_update can race the sender's optimistic
                                 // reconciliation and be dropped.
-                                let delivered = SESSIONS.addr(receiver_id).is_some();
+                                let delivered = SESSIONS.is_connected(receiver_id);
                                 let status = if delivered { "delivered" } else { "sent" };
 
                                 let msg_json = serde_json::json!({
@@ -667,7 +685,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                 let cache_for_fanout = cache.clone();
                                 let payload = msg_json.clone();
                                 actix_web::rt::spawn(async move {
-                                    fan_out_user(&cache_for_fanout, receiver_id, payload).await;
+                                    fan_out_user(&cache_for_fanout, receiver_id, payload.clone())
+                                        .await;
+                                    // The sender's other tabs and devices; the
+                                    // sending tab matches it by client_id.
+                                    fan_out_user(&cache_for_fanout, sender_id, payload).await;
                                 });
 
                                 ctx.text(msg_json);

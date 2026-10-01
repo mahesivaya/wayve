@@ -43,7 +43,13 @@ import {
   type PaneDragPayload,
   type PaneHalf,
 } from "./paneDnd";
-import { applyPaneDrop, type PaneArrangement } from "./paneLayout";
+import {
+  applyPaneDrop,
+  dedupeArrangement,
+  findOpenApp,
+  isSingleInstance,
+  type PaneArrangement,
+} from "./paneLayout";
 import { listTeams, createTeam, type Team } from "../api/workspace";
 // Display-only fallback for an org with no teams yet; shared with TeamPage so
 // the rows in this sidebar lead to a page that knows about them.
@@ -305,6 +311,31 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     []
   );
 
+  // A brief pulse on a pane asked to open an app it already shows, so the user
+  // sees where it is instead of getting a second copy. `n` restarts the pulse on
+  // a repeat click (the class alternates between two identical animations).
+  const [flash, setFlash] = useState<{
+    pane: PaneFocus;
+    half: "top" | "bottom";
+    n: number;
+  } | null>(null);
+  const highlightPane = useCallback(
+    (pane: PaneFocus, half: "top" | "bottom" = "top") => {
+      focusPane(pane, half);
+      setFlash((f) => ({ pane, half, n: (f?.n ?? 0) + 1 }));
+    },
+    [focusPane]
+  );
+  useEffect(() => {
+    if (!flash) return;
+    const t = window.setTimeout(() => setFlash(null), 1400);
+    return () => window.clearTimeout(t);
+  }, [flash]);
+  const flashClass = (pane: PaneFocus, half: "top" | "bottom") =>
+    flash && flash.pane === pane && flash.half === half
+      ? ` pane-flash pane-flash--${flash.n % 2}`
+      : "";
+
   // Non-null only while a pane drag is in flight. Gates the drop overlays, so
   // they exist exactly when a drop is possible and never intercept a click.
   const [paneDrag, setPaneDrag] = useState<PaneDragPayload | null>(null);
@@ -321,20 +352,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // One-shot focus hand-off for a programmatically-opened pane app (e.g. a chat
   // message's task link). Consumed by the pane on mount, so it is not persisted.
   const [paneTarget, setPaneTarget] = useState<SplitTarget | null>(null);
-
-  const openApp = useCallback((app: AppKey, opts?: { taskId?: number }) => {
-    setRightView(app);
-    setSplitTarget("right");
-    setFocusHalf("top");
-    setPaneTarget({ app, taskId: opts?.taskId });
-  }, []);
-
-  const closeApp = useCallback(() => {
-    setRightView(null);
-    setSplitTarget("left");
-    setFocusHalf("top");
-    setPaneTarget(null);
-  }, []);
 
   useEffect(() => {
     try {
@@ -656,6 +673,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         payload
       );
       if (!result) return;
+      if (result.alreadyOpen) {
+        highlightPane(result.focus.pane, result.focus.half);
+        return;
+      }
 
       setMiddleView(result.next.center);
       setRightView(result.next.right);
@@ -676,6 +697,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       subBottomView,
       navigate,
       focusPane,
+      highlightPane,
     ]
   );
 
@@ -811,6 +833,72 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // open": the left pane then renders its toolbar/halves instead of a plain page.
   const splitOpen = hasSecondPane || subSplit.left;
 
+  const arrangement = useMemo<PaneArrangement>(
+    () => ({
+      left: appKeyFromPath(location.pathname),
+      center: middleView,
+      right: rightView,
+      subSplit,
+      subBottomView,
+    }),
+    [location.pathname, middleView, rightView, subSplit, subBottomView]
+  );
+
+  // Each app is shown at most once (Home excepted). The open paths below focus
+  // an already-open pane instead of duplicating it; this catches what they
+  // can't: a navigation from elsewhere in the app (a dashboard card, a
+  // notification) that loads an already-open app into the routed left column,
+  // and a layout persisted with duplicates. The left column's copy wins and the
+  // other pane closes. Adjusted during render rather than in an effect, so the
+  // duplicate never paints; it converges in one pass.
+  const deduped = dedupeArrangement(arrangement);
+  if (deduped) {
+    setMiddleView(deduped.next.center);
+    setRightView(deduped.next.right);
+    setSubSplit(deduped.next.subSplit);
+    setSubBottomView(deduped.next.subBottomView);
+    setSplitTarget(deduped.kept.pane);
+    setFocusHalf(deduped.kept.half);
+  }
+
+  // Opening an app that is already showing in a pane focuses and pulses that
+  // pane instead of loading a second copy. Only while split: with one pane the
+  // app on screen is the one being navigated to, and a plain navigation keeps
+  // its behaviour (e.g. re-applying a deep link).
+  const focusIfOpen = useCallback(
+    (app: AppKey): boolean => {
+      if (!splitOpen || !isSingleInstance(app)) return false;
+      const open = findOpenApp(arrangement, app);
+      if (!open) return false;
+      highlightPane(open.pane, open.half);
+      return true;
+    },
+    [splitOpen, arrangement, highlightPane]
+  );
+
+  const openApp = useCallback(
+    (app: AppKey, opts?: { taskId?: number }) => {
+      setPaneTarget({ app, taskId: opts?.taskId });
+      // Already open anywhere (even the lone routed pane): focus it there.
+      const open = isSingleInstance(app) ? findOpenApp(arrangement, app) : null;
+      if (open) {
+        highlightPane(open.pane, open.half);
+        return;
+      }
+      setRightView(app);
+      setSplitTarget("right");
+      setFocusHalf("top");
+    },
+    [arrangement, highlightPane]
+  );
+
+  const closeApp = useCallback(() => {
+    setRightView(null);
+    setSplitTarget("left");
+    setFocusHalf("top");
+    setPaneTarget(null);
+  }, []);
+
   // Open an app in whichever pane/half currently has focus, mirroring a sidebar
   // item's click. Controls that aren't sidebar <Link>s (e.g. the Reminders bell)
   // call this so they honor the focused pane instead of always routing the left
@@ -818,6 +906,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // (route-driven) pane is focused.
   const openInFocusedPane = useCallback(
     (app: AppKey) => {
+      if (focusIfOpen(app)) return;
       const path = SPLIT_APPS.find((a) => a.key === app)?.path ?? "/";
       if (!splitOpen) {
         void navigate(path);
@@ -833,7 +922,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         void navigate(path); // left = the route-driven column
       }
     },
-    [splitOpen, focusHalf, subSplit, splitTarget, navigate]
+    [splitOpen, focusHalf, subSplit, splitTarget, navigate, focusIfOpen]
   );
 
   const splitControl = useMemo(
@@ -939,7 +1028,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         <div
           className={
             stacked
-              ? `pane-half ${focused ? "active-target" : ""}`.trim()
+              ? `pane-half ${focused ? "active-target" : ""}${flashClass(key, whichHalf)}`.trim()
               : "pane-half--flat"
           }
           style={stacked ? { flexGrow: grow } : undefined}
@@ -1038,6 +1127,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           onDragEnd={() => setPaneDrag(null)}
           onClick={(e) => {
             setNavOpen(false);
+            // Already open in a pane: highlight it instead of a second copy.
+            if (focusIfOpen(app)) {
+              e.preventDefault();
+              return;
+            }
             if (!splitOpen) return; // no split — navigate normally
             // Route the click to the focused pane / half only.
             if (focusHalf === "bottom" && subSplit[splitTarget]) {
@@ -1075,6 +1169,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       focusHalf,
       subSplit,
       beginPaneDrag,
+      focusIfOpen,
     ]
   );
 
@@ -1425,6 +1520,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               }`}
               onClick={(e) => {
                 setNavOpen(false);
+                if (focusIfOpen("github")) {
+                  e.preventDefault();
+                  return;
+                }
                 if (!splitOpen) return;
                 if (focusHalf === "bottom" && subSplit[splitTarget]) {
                   e.preventDefault();
@@ -1455,6 +1554,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             }`}
             onClick={(e) => {
               setNavOpen(false);
+              if (focusIfOpen("requests")) {
+                e.preventDefault();
+                return;
+              }
               if (!splitOpen) return;
               if (focusHalf === "bottom" && subSplit[splitTarget]) {
                 e.preventDefault();
@@ -1967,7 +2070,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
             <div className={`content`} ref={contentRef}>
               <div
-                className={`split-pane left ${splitOpen && splitTarget === "left" && !subSplit.left ? "active-target" : ""}`}
+                className={`split-pane left ${splitOpen && splitTarget === "left" && !subSplit.left ? "active-target" : ""}${subSplit.left ? "" : flashClass("left", "top")}`}
                 // Capture phase + focus so ANY interaction inside the pane
                 // (a child that stops mousedown propagation, or a keyboard
                 // focus) re-targets it — not just a bare click on the div.
@@ -2035,7 +2138,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
               {middleView && (
                 <div
-                  className={`split-pane center ${splitTarget === "center" && !subSplit.center ? "active-target" : ""}`}
+                  className={`split-pane center ${splitTarget === "center" && !subSplit.center ? "active-target" : ""}${subSplit.center ? "" : flashClass("center", "top")}`}
                   onMouseDownCapture={() => {
                     if (!subSplit.center) focusPane("center");
                   }}
@@ -2086,7 +2189,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
               {rightView && (
                 <div
-                  className={`split-pane right ${splitTarget === "right" && !subSplit.right ? "active-target" : ""}`}
+                  className={`split-pane right ${splitTarget === "right" && !subSplit.right ? "active-target" : ""}${subSplit.right ? "" : flashClass("right", "top")}`}
                   onMouseDownCapture={() => {
                     if (!subSplit.right) focusPane("right");
                   }}

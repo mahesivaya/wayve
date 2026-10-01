@@ -33,7 +33,7 @@ ringing.
 
 | File | Responsibility |
 | --- | --- |
-| [backend/.../call/handler.rs](../../backend/crates/wayve-server/src/call/handler.rs) | `/ws/call` actor: auth, per-user session registry, RBAC scope gate, signal relay. |
+| [backend/.../call/handler.rs](../../backend/crates/wayve-server/src/call/handler.rs) | `/ws/call` actor: auth, per-connection session registry, RBAC scope gate, multi-tab call routing, heartbeat, signal relay. |
 | [backend/.../models/callmodel.rs](../../backend/crates/wayve-server/src/models/callmodel.rs) | `SignalMessage` envelope + `IceCandidate` (camelCase rename is load-bearing). |
 | [backend/.../call/turn.rs](../../backend/crates/wayve-server/src/call/turn.rs) | Proxies Cloudflare to mint short-lived ICE/TURN credentials. |
 | [frontend/.../call/useCallSession.ts](../../frontend/src/call/useCallSession.ts) | The whole client side: WS, `RTCPeerConnection`, media, and the call state machine. |
@@ -102,6 +102,28 @@ for 8 minutes (under the 10-minute TTL).
   buttons.
 - **Chat DM** — `ChatHeader` shows the same Audio/Video buttons for a 1:1
   conversation; both entry points share the single `useCallSession` hook.
+
+## Multiple tabs and devices
+
+Each call socket registers separately (see [ws_registry.rs](../../backend/crates/wayve-server/src/ws_registry.rs)),
+and the relay pins each call to one connection per side:
+
+- `call-invite` rings **every** tab and device of the callee.
+- The first `call-accept` binds the call to that connection; the callee's other
+  connections get `call-cancel` and stop ringing. A late accept from another tab
+  is answered with `call-cancel`.
+- A `call-reject` while ringing stops all of the callee's tabs.
+- `offer` / `answer` / `ice-candidate` / `call-end` flow only between the two
+  bound connections; signals from a tab outside the call are dropped.
+- Closing an idle tab never touches a call. Closing the tab in a call ends its
+  audit record; closing the placing tab while ringing rings the callee down, and
+  a callee with nowhere left to ring sends the caller `call-reject`.
+- The caller-scope entry is dropped only when the user's last call socket closes.
+
+The routing rules are a pure function (`plan_signal` / `plan_disconnect` in
+[call/handler.rs](../../backend/crates/wayve-server/src/call/handler.rs)) with unit
+tests. The call socket has the chat socket's liveness too: a 25s server ping and
+60s client timeout, and client reconnect with backoff in `useCallSession`.
 
 ## Limitations
 

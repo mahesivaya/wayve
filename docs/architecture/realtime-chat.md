@@ -92,6 +92,27 @@ instances (it already is).
 
 ---
 
+## Multiple tabs and devices
+
+A user may hold any number of chat sockets at once (tabs, browsers, a phone
+and a laptop). [ws_registry.rs](../../backend/crates/wayve-server/src/ws_registry.rs)
+keys sessions by user **and** connection id: delivery goes to every one of the
+user's sockets, and a closing socket unregisters only itself. It used to hold
+one `Addr` per user, so a second tab silently took all delivery from the first,
+and any socket closing (including a stale one that outlived a reconnect) wiped
+the user's live one.
+
+- A user's own sends are fanned out to all their sockets too. The sending tab
+  recognises its `client_id` and patches its optimistic bubble; other tabs
+  append the message (deduped by `message_id`).
+- Reading a DM (read receipt, or opening the conversation) sends the reader's
+  own sockets `{"type":"conversation_read","user_id":<other>}`, so their other
+  tabs refresh unread counts.
+- Presence: the Redis connection counter already handled several sockets; the
+  no-Redis fallback now also stays online until the last socket closes.
+
+---
+
 ## Operational notes
 - **Env**: realtime fan-out across instances needs Redis (`REDIS_URL`). Without
   it, chat still works on a single instance (local fallback).
@@ -103,6 +124,10 @@ instances (it already is).
   correctness + latency and publish throughput against the `ws:user:{id}`
   channel contract. Gated on a reachable Redis (skips otherwise); CI provides a
   `redis` service + `REDIS_URL` so it runs there.
+- `backend/.../tests/chat_multi_session_test.rs` — real `/ws/chat` server and
+  WebSocket clients: every socket of a user receives; closing any one (including
+  the older socket after a reconnect) leaves the rest; own sends and reads reach
+  the user's other sockets; no-Redis presence goes offline only with the last.
 - `backend/.../tests/chat_logging_test.rs` — captures tracing output via a
   thread-local subscriber and asserts the chat WS handler logs its
   `target = "ws"` auth-rejection (and returns 401). No DB/Redis needed.

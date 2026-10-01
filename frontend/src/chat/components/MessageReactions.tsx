@@ -32,7 +32,11 @@ export default function MessageReactions({
   };
 
   return (
-    <div className="message-reactions">
+    // With no reactions yet the row would only hold the hidden "add" button, so
+    // it floats over the message instead of reserving a line under every one.
+    <div
+      className={`message-reactions${groups.length ? "" : " message-reactions--empty"}`}
+    >
       {groups.map((group) => {
         const count = group.user_ids.length;
         const mine =

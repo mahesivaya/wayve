@@ -123,6 +123,11 @@ export default function Chat() {
   const [addUserEmails, setAddUserEmails] = useState("");
 
   const selectedRef = useRef<Conversation | null>(null);
+  // client_ids this tab sent. The server now echoes a user's messages to all of
+  // their tabs and devices: an echo with one of these ids reconciles the local
+  // optimistic copy; an own message with any other id was sent from elsewhere and
+  // is appended like an inbound one.
+  const localClientIds = useRef<Set<string>>(new Set());
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const { width: sidebarWidth, startResize: startSidebarDrag } =
@@ -203,7 +208,11 @@ export default function Chat() {
       // Self-echo: the broadcast carries the client_id we sent, so patch the
       // optimistic bubble with the server-assigned message_id instead of appending
       // a duplicate. sendThreadReply already bumped the parent's reply_count.
-      if (decrypted.sender_id === user.id && decrypted.client_id) {
+      if (
+        decrypted.sender_id === user.id &&
+        decrypted.client_id &&
+        localClientIds.current.has(decrypted.client_id)
+      ) {
         // Status only ever upgrades, so a late 'delivered' cannot clobber a 'read'.
         const rank: Record<string, number> = { sent: 0, delivered: 1, read: 2 };
         const mergeStatus = (current: ChatMessage["status"]) =>
@@ -240,10 +249,16 @@ export default function Chat() {
         return;
       }
 
-      // Someone else's threaded reply stays out of the main feed.
+      // Our own message sent from another tab or device: the sidebar's recency
+      // may have changed.
+      if (decrypted.sender_id === user.id) void refreshSummary();
+
+      // Someone else's (or another tab's) threaded reply stays out of the main
+      // feed.
       if (decrypted.parent_message_id != null) {
         setThreadReplies((prev) =>
-          activeThread?.message_id === decrypted.parent_message_id
+          activeThread?.message_id === decrypted.parent_message_id &&
+          !prev.some((r) => r.message_id === decrypted.message_id)
             ? [...prev, decrypted]
             : prev
         );
@@ -257,9 +272,13 @@ export default function Chat() {
         return;
       }
 
-      setMessages((prev) => [...prev, decrypted]);
+      setMessages((prev) =>
+        prev.some((m) => m.message_id === decrypted.message_id)
+          ? prev
+          : [...prev, decrypted]
+      );
     },
-    [user, activeThread]
+    [user, activeThread, refreshSummary]
   );
 
   // Reconnect resync: on reopen, refetch everything newer than the highest
@@ -429,6 +448,7 @@ export default function Chat() {
       client_id: crypto.randomUUID(),
     };
 
+    if (message.client_id) localClientIds.current.add(message.client_id);
     wsRef.current.send(JSON.stringify(message));
     setThreadReplies((prev) => [...prev, { ...message, content: plaintext }]);
     setMessages((prev) =>
@@ -706,6 +726,7 @@ export default function Chat() {
       ...(attachmentIds.length ? { attachment_ids: attachmentIds } : {}),
     };
 
+    if (wire.client_id) localClientIds.current.add(wire.client_id);
     wsRef.current.send(JSON.stringify(wire));
     setMessages((prev) => [
       ...prev,

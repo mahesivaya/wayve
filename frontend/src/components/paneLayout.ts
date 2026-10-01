@@ -20,7 +20,40 @@ export type PaneDropResult = {
   focus: { pane: PaneKey; half: PaneHalf };
   /** Set when the routed column's app changed; the caller must navigate(). */
   navigateTo?: AppKey;
+  /**
+   * The app was already open, so nothing moved: `focus` is the pane already
+   * showing it, which the caller should highlight instead of duplicating.
+   */
+  alreadyOpen?: true;
 };
+
+export type PaneSlot = { pane: PaneKey; half: PaneHalf };
+
+/**
+ * Home is the placeholder every new split starts on, so several Home panes are
+ * fine. Every other app is shown at most once: opening one that is already
+ * open focuses that pane instead of adding a duplicate.
+ */
+export const isSingleInstance = (app: AppKey): boolean => app !== "home";
+
+// Visible slots in priority order. The routed left column comes first, so when
+// duplicates have to be resolved its copy is the one that stays.
+const SLOT_ORDER: PaneSlot[] = [
+  { pane: "left", half: "top" },
+  { pane: "left", half: "bottom" },
+  { pane: "center", half: "top" },
+  { pane: "center", half: "bottom" },
+  { pane: "right", half: "top" },
+  { pane: "right", half: "bottom" },
+];
+
+const visibleSlots = (a: PaneArrangement): PaneSlot[] =>
+  SLOT_ORDER.filter(({ pane, half }) => appAt(a, pane, half) !== null);
+
+/** The pane half already showing `app`, if any. */
+export function findOpenApp(a: PaneArrangement, app: AppKey): PaneSlot | null {
+  return visibleSlots(a).find((s) => appAt(a, s.pane, s.half) === app) ?? null;
+}
 
 const clone = (a: PaneArrangement): PaneArrangement => ({
   ...a,
@@ -167,10 +200,24 @@ export function applyPaneDrop(
       : appAt(current, payload.from, sourceHalf);
   if (!moving) return null;
 
+  // Dragging in an app that is already open focuses that pane instead.
+  if (payload.kind === "app" && isSingleInstance(moving)) {
+    const open = findOpenApp(current, moving);
+    if (open) return { next: clone(current), focus: open, alreadyOpen: true };
+  }
+
   const next = clone(current);
   const isPaneDrag = payload.kind === "pane";
-  // Swapping keeps `left` populated without a special "what fills the hole" rule.
-  const swapInsteadOfMove = isPaneDrag && wouldEmptyLeft(current, payload);
+  // Dragging the whole routed column away can't leave `left` empty. A centre
+  // drop swaps (the displaced app fills the hole); a split or new-column drop
+  // has nothing displaced, so `left` falls back to Home, the same placeholder a
+  // new split starts on. It used to keep its app, showing it twice.
+  const leftNeedsFiller = isPaneDrag && wouldEmptyLeft(current, payload);
+  const vacate = () => {
+    if (!isPaneDrag) return;
+    if (leftNeedsFiller) next.left = "home";
+    else clearSource(next, payload.from, sourceHalf);
+  };
 
   const finish = (pane: PaneKey, half: PaneHalf): PaneDropResult => {
     const navigateTo = next.left !== current.left ? next.left : undefined;
@@ -206,9 +253,7 @@ export function applyPaneDrop(
       setAppAt(next, target, effectiveZone, moving);
       next.subSplit[target] = true;
     }
-    if (isPaneDrag && !swapInsteadOfMove) {
-      clearSource(next, payload.from, sourceHalf);
-    }
+    vacate();
     return finish(target, effectiveZone);
   }
 
@@ -216,8 +261,40 @@ export function applyPaneDrop(
   // column is free (else normalised to "center"), so firstFreeColumn is set.
   const free = firstFreeColumn(current) ?? target;
   setAppAt(next, free, "top", moving);
-  if (isPaneDrag && !swapInsteadOfMove) {
-    clearSource(next, payload.from, sourceHalf);
-  }
+  vacate();
   return finish(free, "top");
+}
+
+/**
+ * Closes duplicate panes so every single-instance app is shown at most once,
+ * keeping the highest-priority copy (the routed left column first). Covers
+ * duplicates the open/drop paths can't prevent: a navigation from elsewhere in
+ * the app that loads an already-open app into the left column, and layouts
+ * persisted before this rule existed. Returns null when there is nothing to do;
+ * otherwise `kept` is where the duplicated app now lives.
+ */
+export function dedupeArrangement(
+  current: PaneArrangement
+): { next: PaneArrangement; kept: PaneSlot } | null {
+  const next = clone(current);
+  let kept: PaneSlot | null = null;
+  // Closing a top half promotes its bottom half, which can itself be a
+  // duplicate, so repeat until stable. At most one slot closes per pass, and
+  // there are six slots.
+  for (let pass = 0; pass < SLOT_ORDER.length; pass++) {
+    const seen = new Map<AppKey, PaneSlot>();
+    const dup = visibleSlots(next).find((slot) => {
+      const app = appAt(next, slot.pane, slot.half);
+      if (!app || !isSingleInstance(app)) return false;
+      if (seen.has(app)) {
+        kept = seen.get(app) ?? null;
+        return true;
+      }
+      seen.set(app, slot);
+      return false;
+    });
+    if (!dup) break;
+    clearSource(next, dup.pane, dup.half);
+  }
+  return kept ? { next, kept } : null;
 }
