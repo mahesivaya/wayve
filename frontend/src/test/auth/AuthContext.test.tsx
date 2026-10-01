@@ -202,11 +202,15 @@ describe("AuthContext.refresh", () => {
       </MemoryRouter>
     );
     expect(getAuthToken()).toBeNull();
-    await waitFor(() => expect(screen.getByTestId("lead").textContent).toBe("30"));
+    await waitFor(() =>
+      expect(screen.getByTestId("lead").textContent).toBe("30")
+    );
 
     lead = 15; // the server now has the saved value
     screen.getByText("refresh").click();
 
-    await waitFor(() => expect(screen.getByTestId("lead").textContent).toBe("15"));
+    await waitFor(() =>
+      expect(screen.getByTestId("lead").textContent).toBe("15")
+    );
   });
 });
