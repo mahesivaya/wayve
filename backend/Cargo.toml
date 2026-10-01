@@ -78,3 +78,10 @@ opt-level = 1
 codegen-units = 256
 lto = false
 incremental = false
+
+# Lint levels shared by every crate (each opts in with `[lints] workspace = true`).
+[workspace.lints.clippy]
+# `#[async_trait]` marks every generated method `#[must_use]` while it returns a
+# boxed future, which is already must-use. Clippy 1.99 began flagging that macro
+# output as `double_must_use`; it isn't code we write, so it's allowed here.
+double_must_use = "allow"

@@ -73,3 +73,6 @@ wiremock = "0.6"
 actix-test = "0.1"
 awc = { version = "3", default-features = false, features = ["rustls"] }
 tokio-stream = "0.1"
+
+[lints]
+workspace = true

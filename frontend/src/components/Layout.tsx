@@ -851,6 +851,28 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     [location.pathname, middleView, rightView, subSplit, subBottomView]
   );
 
+  // At 768px and below the extra columns are hidden by CSS (Layout.css) but kept
+  // in state, so they return when the window widens. Hidden panes must not take
+  // sidebar taps or count as "already open": on a phone either one read as a
+  // tap that did nothing. Only the left column (and its halves) is visible.
+  const visibleArrangement = useMemo<PaneArrangement>(
+    () =>
+      isNarrow
+        ? {
+            ...arrangement,
+            center: null,
+            right: null,
+            subSplit: { ...arrangement.subSplit, center: false, right: false },
+          }
+        : arrangement,
+    [isNarrow, arrangement]
+  );
+  // More than one pane on screen right now.
+  const multiPaneVisible = isNarrow ? subSplit.left : splitOpen;
+  // Whether a sidebar tap should load into the focused pane; otherwise it
+  // navigates the routed (visible) column as if there were no split.
+  const routeToFocusedPane = splitOpen && (!isNarrow || splitTarget === "left");
+
   // Each app is shown at most once (Home excepted). The open paths below focus
   // an already-open pane instead of duplicating it; this catches what they
   // can't: a navigation from elsewhere in the app (a dashboard card, a
@@ -858,7 +880,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // and a layout persisted with duplicates. The left column's copy wins and the
   // other pane closes. Adjusted during render rather than in an effect, so the
   // duplicate never paints; it converges in one pass.
-  const deduped = dedupeArrangement(arrangement);
+  // Skipped while narrow, so hidden desktop panes survive until it widens.
+  const deduped = isNarrow ? null : dedupeArrangement(arrangement);
   if (deduped) {
     setMiddleView(deduped.next.center);
     setRightView(deduped.next.right);
@@ -874,29 +897,36 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // its behaviour (e.g. re-applying a deep link).
   const focusIfOpen = useCallback(
     (app: AppKey): boolean => {
-      if (!splitOpen || !isSingleInstance(app)) return false;
-      const open = findOpenApp(arrangement, app);
+      if (!multiPaneVisible || !isSingleInstance(app)) return false;
+      const open = findOpenApp(visibleArrangement, app);
       if (!open) return false;
       highlightPane(open.pane, open.half);
       return true;
     },
-    [splitOpen, arrangement, highlightPane]
+    [multiPaneVisible, visibleArrangement, highlightPane]
   );
 
   const openApp = useCallback(
     (app: AppKey, opts?: { taskId?: number }) => {
       setPaneTarget({ app, taskId: opts?.taskId });
-      // Already open anywhere (even the lone routed pane): focus it there.
-      const open = isSingleInstance(app) ? findOpenApp(arrangement, app) : null;
+      // Already open anywhere visible (even the lone routed pane): focus it.
+      const open = isSingleInstance(app)
+        ? findOpenApp(visibleArrangement, app)
+        : null;
       if (open) {
         highlightPane(open.pane, open.half);
+        return;
+      }
+      // A second column would be hidden on a narrow screen: navigate instead.
+      if (isNarrow) {
+        void navigate(SPLIT_APPS.find((a) => a.key === app)?.path ?? "/");
         return;
       }
       setRightView(app);
       setSplitTarget("right");
       setFocusHalf("top");
     },
-    [arrangement, highlightPane]
+    [visibleArrangement, highlightPane, isNarrow, navigate]
   );
 
   const closeApp = useCallback(() => {
@@ -915,7 +945,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     (app: AppKey) => {
       if (focusIfOpen(app)) return;
       const path = SPLIT_APPS.find((a) => a.key === app)?.path ?? "/";
-      if (!splitOpen) {
+      if (!routeToFocusedPane) {
         void navigate(path);
         return;
       }
@@ -929,7 +959,14 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         void navigate(path); // left = the route-driven column
       }
     },
-    [splitOpen, focusHalf, subSplit, splitTarget, navigate, focusIfOpen]
+    [
+      routeToFocusedPane,
+      focusHalf,
+      subSplit,
+      splitTarget,
+      navigate,
+      focusIfOpen,
+    ]
   );
 
   const splitControl = useMemo(
@@ -1139,7 +1176,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               e.preventDefault();
               return;
             }
-            if (!splitOpen) return; // no split — navigate normally
+            // No split, or the focused pane is hidden on a narrow screen:
+            // navigate normally.
+            if (!routeToFocusedPane) return;
             // Route the click to the focused pane / half only.
             if (focusHalf === "bottom" && subSplit[splitTarget]) {
               e.preventDefault();
@@ -1172,7 +1211,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       middleView,
       rightView,
       splitTarget,
-      splitOpen,
+      routeToFocusedPane,
       focusHalf,
       subSplit,
       beginPaneDrag,
@@ -1531,7 +1570,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   e.preventDefault();
                   return;
                 }
-                if (!splitOpen) return;
+                if (!routeToFocusedPane) return;
                 if (focusHalf === "bottom" && subSplit[splitTarget]) {
                   e.preventDefault();
                   setSubBottomView((v) => ({ ...v, [splitTarget]: "github" }));
@@ -1565,7 +1604,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 e.preventDefault();
                 return;
               }
-              if (!splitOpen) return;
+              if (!routeToFocusedPane) return;
               if (focusHalf === "bottom" && subSplit[splitTarget]) {
                 e.preventDefault();
                 setSubBottomView((v) => ({ ...v, [splitTarget]: "requests" }));
