@@ -42,6 +42,11 @@ export default function Profile() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
+  // The password card must not guess: until /api/profile answers, the seeded
+  // profile can't say whether the account has a password, and guessing showed a
+  // "current password" field to Google signups who never had one.
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [profileError, setProfileError] = useState(false);
   const [showPwForm, setShowPwForm] = useState(false);
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -103,8 +108,10 @@ export default function Profile() {
         setProfile(data);
         setFirstName(data.first_name ?? "");
         setLastName(data.last_name ?? "");
+        setProfileLoaded(true);
       } catch (err) {
         logger.error(err);
+        setProfileError(true);
       }
     };
     void load();
@@ -130,8 +137,24 @@ export default function Profile() {
     return () => clearTimeout(t);
   }, [pwStatus]);
 
+  // What the password card offers. "create": a Google signup's first password
+  // (new + confirm). "change": an existing password (current + new + confirm).
+  // "sso": no password, and none can be added here (single sign-on accounts).
+  // "loading": not known until /api/profile answers. `has_password` is the
+  // source of truth; the provider is only a fallback for older backends, since a
+  // Google user who creates a password keeps the "google" provider.
+  const hasPassword =
+    profile?.has_password ?? profile?.auth_provider !== "google";
+  const passwordMode: "loading" | "create" | "change" | "sso" = !profileLoaded
+    ? "loading"
+    : hasPassword
+      ? "change"
+      : profile?.auth_provider === "google"
+        ? "create"
+        : "sso";
+
   const submitPasswordChange = async () => {
-    const isCreatingPassword = profile?.auth_provider === "google";
+    const isCreatingPassword = passwordMode === "create";
 
     if (newPw !== confirmPw) {
       setPwStatus("New passwords do not match");
@@ -165,7 +188,7 @@ export default function Profile() {
       setNewPw("");
       setConfirmPw("");
       setShowPwForm(false);
-      setProfile((prev) => (prev ? { ...prev, auth_provider: "local" } : prev));
+      setProfile((prev) => (prev ? { ...prev, has_password: true } : prev));
     } catch (err: unknown) {
       setPwStatus(err instanceof Error ? err.message : "Update failed");
     } finally {
@@ -415,22 +438,31 @@ export default function Profile() {
       <section className="settings-card">
         <h2 className="settings-card-title">Password</h2>
 
-        {!showPwForm ? (
+        {passwordMode === "sso" ? (
+          <p className="profile-hint">
+            You sign in with single sign-on, so this account has no password.
+          </p>
+        ) : !showPwForm ? (
           <div className="profile-actions">
             <button
               type="button"
               className="profile-save"
               onClick={() => setShowPwForm(true)}
+              disabled={passwordMode === "loading"}
             >
-              {profile.auth_provider === "google"
-                ? "Create Password"
-                : "Change Password"}
+              {passwordMode === "loading"
+                ? profileError
+                  ? "Couldn't load your account"
+                  : "Loading…"
+                : passwordMode === "create"
+                  ? "Create Password"
+                  : "Change Password"}
             </button>
             {pwStatus && <span className="profile-status">{pwStatus}</span>}
           </div>
         ) : (
           <>
-            {profile.auth_provider !== "google" && (
+            {passwordMode === "change" && (
               <div className="profile-row">
                 <label htmlFor="profile-current-pw">Current password</label>
                 <input
@@ -445,9 +477,7 @@ export default function Profile() {
 
             <div className="profile-row">
               <label htmlFor="profile-new-pw">
-                {profile.auth_provider === "google"
-                  ? "Password"
-                  : "New password"}
+                {passwordMode === "create" ? "Password" : "New password"}
               </label>
               <input
                 id="profile-new-pw"
@@ -460,7 +490,7 @@ export default function Profile() {
 
             <div className="profile-row">
               <label htmlFor="profile-confirm-pw">
-                {profile.auth_provider === "google"
+                {passwordMode === "create"
                   ? "Confirm password"
                   : "Confirm new password"}
               </label>
@@ -482,7 +512,7 @@ export default function Profile() {
               >
                 {pwSaving
                   ? "Saving…"
-                  : profile.auth_provider === "google"
+                  : passwordMode === "create"
                     ? "Create password"
                     : "Update password"}
               </button>

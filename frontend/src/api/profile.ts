@@ -8,6 +8,10 @@ export type ProfileData = {
   first_name: string | null;
   last_name: string | null;
   auth_provider: string;
+  // False until the account has a password. A Google signup has none until it
+  // creates one from the profile page (its provider stays "google" after that).
+  // Absent from older backends.
+  has_password?: boolean;
   // Null when the user has never uploaded an image, in which case clients fall
   // back to a generated initial.
   avatar_url?: string | null;

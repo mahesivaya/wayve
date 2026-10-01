@@ -110,6 +110,7 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
         r#"
         SELECT
             u.id, u.email, u.first_name, u.last_name, u.auth_provider, u.account_type, u.organization_id, u.username, u.recovery_mode, u.avatar_path,
+            (u.password IS NOT NULL) AS has_password,
             o.name as organization_name,
             (SELECT COUNT(*)::BIGINT FROM emails e JOIN email_accounts ea ON e.account_id = ea.id WHERE ea.user_id = u.id) as total_emails,
             (SELECT COALESCE(SUM(octet_length(body_encrypted)), 0)::BIGINT FROM emails e JOIN email_accounts ea ON e.account_id = ea.id WHERE ea.user_id = u.id) as email_storage_bytes,
@@ -138,6 +139,10 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
             let auth_provider: String = row
                 .try_get("auth_provider")
                 .unwrap_or_else(|_| "local".to_string());
+            // Whether the password form should ask for the current password. A
+            // Google signup has none until they create one, and creating one
+            // doesn't change `auth_provider`, so the provider can't answer this.
+            let has_password: bool = row.try_get("has_password").unwrap_or(true);
             let account_type: String = row
                 .try_get("account_type")
                 .unwrap_or_else(|_| "personal".to_string());
@@ -211,6 +216,7 @@ pub async fn get_profile(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
                 "first_name": first_name,
                 "last_name": last_name,
                 "auth_provider": auth_provider,
+                "has_password": has_password,
                 "account_type": account_type,
                 "effective_role": access.role,
                 "role_label": access.role_label,
@@ -438,6 +444,7 @@ pub async fn change_password(
         _ => return Ok(HttpResponse::Unauthorized().finish()),
     };
 
+    let had_password = stored.is_some();
     if let Some(stored) = stored {
         let current_password = data.current_password.as_deref().unwrap_or("");
         let valid = verify_password(current_password, &stored)
@@ -502,7 +509,12 @@ pub async fn change_password(
     }
     tx.commit().await?;
 
-    info!(target: "auth", user_id, had_password = data.current_password.is_some(), wrap_rotated = data.new_login_wrap.is_some(), "password updated");
+    // `has_password` is part of the cached profile; refresh it so the form
+    // switches to "change password" (with the current-password field) at once.
+    invalidate_me_cache(user_id).await;
+    invalidate_profile_cache(user_id).await;
+
+    info!(target: "auth", user_id, had_password, wrap_rotated = data.new_login_wrap.is_some(), "password updated");
     crate::audit::record_action(
         pool.get_ref(),
         &req,
@@ -511,11 +523,16 @@ pub async fn change_password(
             action: "password_change",
             resource_type: "user",
             resource_id: Some(user_id.to_string()),
-            metadata: None,
+            metadata: Some(serde_json::json!({ "created": !had_password })),
         },
     )
     .await;
-    Ok(HttpResponse::Ok().json(serde_json::json!({ "message": "Password updated" })))
+    let message = if had_password {
+        "Password updated"
+    } else {
+        "Password created"
+    };
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "message": message })))
 }
 
 #[put("/profile")]
