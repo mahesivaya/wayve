@@ -6,6 +6,8 @@ import { dropZoneFromPointer, EDGE_BAND } from "../../components/paneDnd";
 import {
   applyPaneDrop,
   canOpenNewColumn,
+  dedupeArrangement,
+  findOpenApp,
   type PaneArrangement,
 } from "../../components/paneLayout";
 
@@ -175,15 +177,17 @@ describe("applyPaneDrop — rearranging an open pane", () => {
     expect(r?.next.left).toBe("emails");
   });
 
-  it("never empties the routed column — it swaps instead of moving", () => {
-    // Dragging the left pane into the other column's bottom half would
-    // otherwise leave the routed column with nothing to render.
+  it("never empties the routed column — it falls back to Home", () => {
+    // Dragging the left pane into the other column's bottom half moves it
+    // there; the routed column can't be empty, so it shows Home rather than
+    // keeping a second copy of the app.
     const r = applyPaneDrop(twoColumns, "right", "top", "bottom", {
       kind: "pane",
       from: "left",
       half: "top",
     });
-    expect(r?.next.left).not.toBeNull();
+    expect(r?.next.left).toBe("home");
+    expect(r?.navigateTo).toBe("home");
     expect(r?.next.subBottomView.right).toBe("emails");
   });
 
@@ -219,5 +223,76 @@ describe("applyPaneDrop — rearranging an open pane", () => {
     expect(r?.next.subSplit.right).toBe(false);
     expect(r?.next.right).toBe("chat"); // top half keeps the column
     expect(r?.next.subBottomView.left).toBe("tasks");
+  });
+});
+
+describe("one pane per app", () => {
+  it("dragging in an app that's already open focuses its pane instead", () => {
+    const a = base({ right: "chat" });
+    const r = applyPaneDrop(a, "left", "top", "center", {
+      kind: "app",
+      app: "chat",
+    });
+    expect(r?.alreadyOpen).toBe(true);
+    expect(r?.focus).toEqual({ pane: "right", half: "top" });
+    expect(r?.next).toEqual(a);
+  });
+
+  it("still allows several Home panes", () => {
+    const r = applyPaneDrop(base({ right: "home" }), "left", "top", "bottom", {
+      kind: "app",
+      app: "home",
+    });
+    expect(r?.alreadyOpen).toBeUndefined();
+  });
+
+  it("finds an app in a bottom half, but not a stale hidden one", () => {
+    const split = base({
+      right: "notes",
+      subSplit: { left: false, center: false, right: true },
+      subBottomView: { left: "chat", center: "home", right: "chat" },
+    });
+    expect(findOpenApp(split, "chat")).toEqual({
+      pane: "right",
+      half: "bottom",
+    });
+    // left isn't split, so its remembered bottom app isn't on screen.
+    expect(
+      findOpenApp(
+        base({
+          subBottomView: { left: "chat", center: "home", right: "home" },
+        }),
+        "chat"
+      )
+    ).toBeNull();
+  });
+
+  it("navigating the left column to an open app closes the other copy", () => {
+    // e.g. a dashboard link opened Chat in the left while Chat was on the right.
+    const r = dedupeArrangement(base({ left: "chat", right: "chat" }));
+    expect(r?.next.left).toBe("chat");
+    expect(r?.next.right).toBeNull();
+    expect(r?.kept).toEqual({ pane: "left", half: "top" });
+  });
+
+  it("promotes a half and keeps going until no duplicate is left", () => {
+    // Right top duplicates left; closing it promotes the bottom half, which
+    // duplicates left's bottom half.
+    const r = dedupeArrangement(
+      base({
+        left: "chat",
+        right: "chat",
+        subSplit: { left: true, center: false, right: true },
+        subBottomView: { left: "notes", center: "home", right: "notes" },
+      })
+    );
+    expect(r?.next.right).toBeNull();
+    expect(r?.next.subSplit.left).toBe(true);
+    expect(r?.next.subBottomView.left).toBe("notes");
+  });
+
+  it("leaves a layout without duplicates alone", () => {
+    expect(dedupeArrangement(base({ right: "chat" }))).toBeNull();
+    expect(dedupeArrangement(base({ left: "home", right: "home" }))).toBeNull();
   });
 });
