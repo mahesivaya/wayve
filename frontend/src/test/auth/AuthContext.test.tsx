@@ -162,3 +162,51 @@ describe("AuthContext.resolveBootToken", () => {
     expect(window.location.pathname).toBe("/reset-password");
   });
 });
+
+describe("AuthContext.refresh", () => {
+  function RefreshProbe() {
+    const { user, refresh } = useAuth();
+    return (
+      <div>
+        <span data-testid="lead">{user?.meeting_alert_minutes ?? "none"}</span>
+        <button onClick={() => void refresh()}>refresh</button>
+      </div>
+    );
+  }
+
+  afterEach(() => {
+    clearAuthToken();
+    vi.unstubAllGlobals();
+  });
+
+  it("re-fetches /api/me on a cookie-only session (no in-memory token)", async () => {
+    // After a reload the token isn't in memory; the session rides on the
+    // cookie. refresh() used to bail here, so a saved setting looked reverted.
+    let lead = 30;
+    const fetchMock = vi.fn().mockImplementation(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: 99,
+        email: "alice@example.com",
+        meeting_alert_minutes: lead,
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    window.history.replaceState({}, "", "/settings");
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <RefreshProbe />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+    expect(getAuthToken()).toBeNull();
+    await waitFor(() => expect(screen.getByTestId("lead").textContent).toBe("30"));
+
+    lead = 15; // the server now has the saved value
+    screen.getByText("refresh").click();
+
+    await waitFor(() => expect(screen.getByTestId("lead").textContent).toBe("15"));
+  });
+});
