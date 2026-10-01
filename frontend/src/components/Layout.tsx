@@ -124,7 +124,14 @@ const ADDABLE_PERSONAL_APPS: {
   icon: ReactNode;
   path?: string;
 }[] = [
-  // Code Repo is a permanent sidebar item, so it is absent here by design.
+  // Code Repo is opt-in: hidden by default, added from here. Most personal
+  // accounts never link a repository, so it no longer takes a permanent slot.
+  {
+    key: "github",
+    label: "Code Repo",
+    icon: <GitLogoIcon size={22} />,
+    path: "/github",
+  },
   { key: "canvas", label: "Canvas", icon: <CanvasIcon size={22} /> },
   { key: "forms", label: "Forms", icon: <FormsIcon size={22} /> },
   {
@@ -1934,15 +1941,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   "Tasks",
                   <TasksIcon size={18} />
                 )}
-                {/* Code Repo is personal-only here; workspace users get it inside
-                the Workspace section, so listing it for both would duplicate. */}
-                {user.account_type === "personal" &&
-                  renderSidebarItem(
-                    "/github",
-                    "github",
-                    "Code Repo",
-                    <GitLogoIcon size={18} />
-                  )}
+                {/* Code Repo is no longer a permanent item here: personal
+                accounts add it from the "Add" list below (workspace users get
+                it inside the Workspace section). */}
                 {user.account_type === "personal" && (
                   <>
                     {ADDABLE_PERSONAL_APPS.filter((a) =>
