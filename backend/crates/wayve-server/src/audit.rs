@@ -28,10 +28,11 @@ pub(crate) fn resolve_geo(req: &HttpRequest, ip: Option<&str>) -> GeoLocation {
     }
 }
 
-/// The caller's IP, honoring `X-Forwarded-For` via Actix's `ConnectionInfo`.
-/// Returns `None` when the connection has no peer address (in-process tests).
+/// The caller's IP, trusting `X-Forwarded-For` only from a trusted proxy (see
+/// `crate::client_ip`). `None` when the connection has no peer address
+/// (in-process tests).
 pub fn client_ip(req: &HttpRequest) -> Option<String> {
-    req.connection_info().realip_remote_addr().map(String::from)
+    crate::client_ip::client_ip(req)
 }
 
 /// The caller's `User-Agent`, or `None` if absent / not UTF-8.

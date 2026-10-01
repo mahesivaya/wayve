@@ -95,7 +95,7 @@ pub struct AuditLogEntry {
 }
 
 fn client_ip(req: &HttpRequest) -> Option<String> {
-    req.connection_info().realip_remote_addr().map(String::from)
+    crate::client_ip::client_ip(req)
 }
 
 fn user_agent(req: &HttpRequest) -> Option<String> {

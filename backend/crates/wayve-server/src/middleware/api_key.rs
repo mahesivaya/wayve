@@ -113,10 +113,7 @@ where
 
             let method = req.method().as_str().to_string();
             let path = req.path().to_string();
-            let ip = req
-                .connection_info()
-                .realip_remote_addr()
-                .map(|value| value.to_string());
+            let ip = crate::client_ip::client_ip(req.request());
 
             let make_entry = |api_key_id: Option<i32>,
                               user_id: Option<i32>,

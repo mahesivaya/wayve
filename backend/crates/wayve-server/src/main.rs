@@ -6,6 +6,7 @@ mod billing;
 mod cache;
 mod call;
 mod chat;
+mod client_ip;
 mod config;
 mod db;
 mod demo;
