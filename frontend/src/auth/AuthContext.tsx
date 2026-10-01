@@ -665,9 +665,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Used after server-side mutations that change the caller's scope or
   // permissions, such as a personal user self-promoting to organization_admin.
   const refresh = async () => {
-    const token = getAuthToken();
-    if (!token) return;
-    const res = await getMe(token);
+    // No early return on a missing token: after a reload the token isn't in
+    // memory and the session rides on the cookie, same as the bootstrap fetch.
+    // Bailing here made every settings save look like it silently reverted.
+    const res = await getMe(getAuthToken());
     if (!res.ok) {
       log.warn("refresh /api/me failed", { status: res.status });
       return;
