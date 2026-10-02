@@ -2063,6 +2063,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                       location.pathname === "/settings" ? " active" : ""
                     }`}
                     data-tooltip={`${user.email} — open settings`}
+                    data-tooltip-pos="top"
+                    data-tooltip-align="left"
                     onClick={() => {
                       setNavOpen(false);
                       void navigate("/settings");
