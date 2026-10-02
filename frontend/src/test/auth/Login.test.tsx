@@ -12,7 +12,18 @@ vi.mock("../../api/Auth", () => ({
   logout: vi.fn(),
   saveUserPublicKey: vi.fn(),
 }));
-import { login as apiLogin } from "../../api/Auth";
+import { login as apiLogin, logout as apiLogout } from "../../api/Auth";
+
+vi.mock("../../orgKeys/memberLogin", () => ({
+  unwrapAndCacheMemberKeys: vi.fn(),
+}));
+import { unwrapAndCacheMemberKeys } from "../../orgKeys/memberLogin";
+
+// HS256 JWT so parseJwt yields claims: { "sub": 99, "email": "alice@example.com", "exp": 9999999999 }
+const VALID_JWT =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
+  "eyJzdWIiOjk5LCJlbWFpbCI6ImFsaWNlQGV4YW1wbGUuY29tIiwiZXhwIjo5OTk5OTk5OTk5fQ." +
+  "Yfk2GANHfoqcl3T1jbBhHptPj0xK_e3pGE9pq5VtZ8I";
 
 const renderAt = (initialEntries: string[]) =>
   render(
@@ -64,6 +75,34 @@ describe("Login page", () => {
     await userEvent.click(screen.getByRole("button", { name: /^login$/i }));
 
     expect(await screen.findByText(/login failed/i)).toBeInTheDocument();
+  });
+
+  it("signs out when the login key envelope can't be unwrapped", async () => {
+    // /api/login already set the session cookie; leaving it in place let a
+    // refresh land in the account with no keys and prompt for the recovery key.
+    vi.mocked(apiLogin).mockResolvedValue({
+      token: VALID_JWT,
+      email: "alice@example.com",
+      login_wrap: { iv: "iv", ct: "ct", salt: "salt", iterations: 1 },
+    });
+    vi.mocked(apiLogout).mockResolvedValue(undefined);
+    vi.mocked(unwrapAndCacheMemberKeys).mockRejectedValue(
+      new Error("unwrap failed")
+    );
+
+    renderAt(["/login"]);
+    await userEvent.type(
+      screen.getByPlaceholderText("Email or username"),
+      "alice@example.com"
+    );
+    await userEvent.type(screen.getByPlaceholderText("Password"), "pw");
+    await userEvent.click(screen.getByRole("button", { name: /^login$/i }));
+
+    expect(
+      await screen.findByText(/couldn't unlock your account keys/i)
+    ).toBeInTheDocument();
+    expect(apiLogout).toHaveBeenCalledTimes(1);
+    expect(getAuthToken()).toBeNull();
   });
 
   it("shows email_exists banner when redirected from OAuth", () => {

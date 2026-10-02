@@ -1,7 +1,7 @@
 import { logger } from "../utils/logger";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { login } from "../api/Auth";
+import { login, logout } from "../api/Auth";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { homePathForUser } from "../auth/accountHome";
@@ -111,6 +111,11 @@ export default function Login() {
           }
         } catch (err) {
           logger.error("org member key unwrap failed", err);
+          // /api/login already set the session cookie. Clear it, or a refresh
+          // lands in the account with no keys and asks for the recovery phrase.
+          await logout().catch((logoutErr: unknown) =>
+            logger.warn("logout after failed key unwrap failed", logoutErr)
+          );
           setError(
             "Couldn't unlock your account keys — please contact your administrator."
           );
