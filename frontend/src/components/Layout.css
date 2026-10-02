@@ -318,6 +318,13 @@
   font-size: var(--text-md);
 }
 
+/* The expanded row already shows the email, so its hover tooltip only repeats
+   it. Keep the tooltip in the collapsed rail, where just the avatar shows. */
+.sidebar:not(.collapsed) .profile-menu--sidebar .profile-trigger::after,
+.sidebar:not(.collapsed) .sidebar-profile-btn::after {
+  content: none;
+}
+
 /* Open upward from the bottom-left instead of down from the top-right. */
 .profile-menu--sidebar .profile-dropdown {
   top: auto;

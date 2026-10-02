@@ -64,6 +64,10 @@ export default function ProfileMenu({
         aria-haspopup="true"
         aria-expanded={menuOpen}
         data-tooltip={user.email}
+        // Pinned to the sidebar bottom, a below-tooltip lands past the scroll
+        // area's end and is only reachable by scrolling, so flip it above.
+        data-tooltip-pos={inSidebar ? "top" : undefined}
+        data-tooltip-align={inSidebar ? "left" : undefined}
         aria-label={user.email}
       >
         <Avatar
