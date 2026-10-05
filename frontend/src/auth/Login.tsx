@@ -11,6 +11,7 @@ import PublicHeader from "../components/PublicHeader";
 import { isDesktopApp } from "../utils/desktop";
 import { parseJwt } from "./bootToken";
 import { unwrapAndCacheMemberKeys } from "../orgKeys/memberLogin";
+import { AuthDowngradeError } from "./authKey";
 import "./login.css";
 
 // Error codes the backend SSO callback puts in the hash fragment, mapped so the
@@ -130,7 +131,12 @@ export default function Login() {
       // The org slug is not known yet; routing settles on /organization/<slug>
       // once AuthContext's post-login /api/me fetch resolves.
       void navigate(homePathForUser({ account_type: data.account_type }));
-    } catch {
+    } catch (err) {
+      if (err instanceof AuthDowngradeError) {
+        logger.error("login refused: auth scheme downgrade", err);
+        setError(err.message);
+        return;
+      }
       logger.warn("Login failed. Check your credentials.");
       setError("Login failed. Check your credentials.");
     }

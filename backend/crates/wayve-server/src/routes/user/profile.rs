@@ -10,6 +10,9 @@ use crate::email::profile::invalidate_me_cache;
 use crate::models::auth::ChangePasswordInput;
 use crate::models::email_request::UserResponse;
 use crate::prelude::*;
+use crate::routes::auth_scheme::{
+    SCHEME_AUTH_KEY, precheck_new_credential, set_user_credential, store_credential,
+};
 use actix_multipart::Multipart;
 use actix_web::http::header;
 use actix_web::{delete, put};
@@ -17,7 +20,7 @@ use futures_util::StreamExt;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 use wayve_security::jwt::{get_user_id_from_request, mode_from_request};
-use wayve_security::password::{hash_password, verify_password};
+use wayve_security::password::verify_password;
 use wayve_security::rbac;
 
 #[derive(Deserialize)]
@@ -425,29 +428,38 @@ pub async fn change_password(
         None => return Ok(HttpResponse::Unauthorized().finish()),
     };
 
-    if data.new_password.len() < 6 {
-        return Ok(HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "New password must be at least 6 characters" })));
+    if let Err(e) = precheck_new_credential(
+        data.new_credential.as_ref(),
+        data.new_password.as_deref(),
+        6,
+    ) {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({ "message": e.to_string() })));
     }
 
-    let row = sqlx::query("SELECT password, auth_provider FROM users WHERE id = $1")
+    let row = sqlx::query("SELECT password, auth_provider, auth_scheme FROM users WHERE id = $1")
         .bind(user_id)
         .fetch_optional(pool.get_ref())
         .await;
 
-    let (stored, auth_provider): (Option<String>, String) = match row {
+    let (stored, auth_provider, scheme): (Option<String>, String, i16) = match row {
         Ok(Some(r)) => (
             r.try_get("password").ok().flatten(),
             r.try_get("auth_provider")
                 .unwrap_or_else(|_| "local".to_string()),
+            r.try_get("auth_scheme").unwrap_or(1),
         ),
         _ => return Ok(HttpResponse::Unauthorized().finish()),
     };
 
     let had_password = stored.is_some();
     if let Some(stored) = stored {
-        let current_password = data.current_password.as_deref().unwrap_or("");
-        let valid = verify_password(current_password, &stored)
+        // The current-password proof takes the same form as login for this scheme.
+        let current_proof = if scheme == SCHEME_AUTH_KEY {
+            data.current_auth_key.as_deref()
+        } else {
+            data.current_password.as_deref()
+        };
+        let valid = verify_password(current_proof.unwrap_or(""), &stored)
             .await
             .unwrap_or(false);
         if !valid {
@@ -480,14 +492,15 @@ pub async fn change_password(
         })));
     }
 
-    let hashed = hash_password(&data.new_password).await?;
+    let cred = store_credential(
+        data.new_credential.as_ref(),
+        data.new_password.as_deref(),
+        6,
+    )
+    .await?;
 
     let mut tx = pool.get_ref().begin().await?;
-    sqlx::query("UPDATE users SET password = $1 WHERE id = $2")
-        .bind(&hashed)
-        .bind(user_id)
-        .execute(&mut *tx)
-        .await?;
+    set_user_credential(&mut *tx, user_id, &cred).await?;
     if let Some(wrap) = &data.new_login_wrap {
         sqlx::query(
             "INSERT INTO member_login_wrapped_keys (user_id, iv, ct, salt, iterations)

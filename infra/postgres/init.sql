@@ -492,6 +492,16 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS chat_encrypt_files BOOLEAN NOT NULL D
 -- desktop notification stays device-local (browser permission is per-device).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS meeting_alert_minutes SMALLINT NOT NULL DEFAULT 10
     CHECK (meeting_alert_minutes >= 0 AND meeting_alert_minutes <= 1440);
+-- Login credential scheme. 1 = legacy: `password` is bcrypt(raw password), so
+-- the server sees the password at login. 2 = `password` is bcrypt(auth_key),
+-- where the browser derives auth_key = PBKDF2-SHA256("wayve-auth-v1:" +
+-- password, auth_salt, 600k) and never sends the password itself. The password
+-- also derives the key that unlocks the user's private key (login wrap), so
+-- scheme 2 keeps that secret out of the server's reach. Scheme-1 users upgrade
+-- on their next login.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_scheme SMALLINT NOT NULL DEFAULT 1
+    CHECK (auth_scheme IN (1, 2));
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_salt TEXT;
 
 
 

@@ -1,10 +1,17 @@
+use crate::routes::auth_scheme::DerivedCredential;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize)]
 pub struct RegisterInput {
     pub email: String,
-    pub password: String,
-    pub confirm_password: String,
+    /// Legacy raw password (scheme 1). The web app sends `credential` instead.
+    #[serde(default)]
+    pub password: Option<String>,
+    #[serde(default)]
+    pub confirm_password: Option<String>,
+    /// Browser-derived credential (scheme 2); the password never reaches us.
+    #[serde(default)]
+    pub credential: Option<DerivedCredential>,
     /// Recovery mode chosen at signup. "full" escrows a wrapped private key so a
     /// new device can restore encrypted history; "password_only" stores only a
     /// credential blob for mnemonic password reset, and new devices start with
@@ -17,7 +24,16 @@ pub struct RegisterInput {
 #[derive(Deserialize)]
 pub struct LoginInput {
     pub email: String,
-    pub password: String,
+    /// Scheme-1 accounts only. Never accepted for a scheme-2 account.
+    #[serde(default)]
+    pub password: Option<String>,
+    /// Scheme-2 proof: PBKDF2 of the password under the account's `auth_salt`.
+    #[serde(default)]
+    pub auth_key: Option<String>,
+    /// Sent with a scheme-1 `password` to move the account to scheme 2 in the
+    /// same request — the last time the server sees that password.
+    #[serde(default)]
+    pub upgrade: Option<DerivedCredential>,
 }
 
 #[derive(Serialize)]
@@ -47,7 +63,10 @@ pub struct ForgotInput {
 #[derive(Deserialize)]
 pub struct ResetInput {
     pub token: String,
-    pub new_password: String,
+    #[serde(default)]
+    pub new_password: Option<String>,
+    #[serde(default)]
+    pub new_credential: Option<DerivedCredential>,
 }
 
 #[derive(Deserialize)]
@@ -63,8 +82,15 @@ pub struct ResendVerificationInput {
 
 #[derive(Deserialize)]
 pub struct ChangePasswordInput {
+    /// Current-password proof for a scheme-1 account.
     pub current_password: Option<String>,
-    pub new_password: String,
+    /// Current-password proof for a scheme-2 account.
+    #[serde(default)]
+    pub current_auth_key: Option<String>,
+    #[serde(default)]
+    pub new_password: Option<String>,
+    #[serde(default)]
+    pub new_credential: Option<DerivedCredential>,
     /// Org members must send this: their private key is wrapped under
     /// PBKDF2(password) in member_login_wrapped_keys, so changing the password
     /// without rotating the wrap locks them out at the next login. Personal

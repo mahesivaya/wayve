@@ -30,6 +30,12 @@ fn auth_limit_rule(method: &str, path: &str) -> Option<LimitRule> {
             max_requests: 10,
             window_secs: 60,
         }),
+        // Called once per login attempt, before /api/login; looser than login
+        // so a typo-and-retry doesn't trip it first.
+        "/api/auth/prelogin" => Some(LimitRule {
+            max_requests: 30,
+            window_secs: 60,
+        }),
         "/api/register" => Some(LimitRule {
             max_requests: 5,
             window_secs: 300,

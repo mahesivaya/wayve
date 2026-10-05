@@ -3,6 +3,7 @@
 // through the shared apiFetch() helper so cookie/JWT auth is consistent.
 
 import { apiFetch, apiFetchJson } from "../api/client";
+import { newCredential } from "../auth/authKey";
 
 export type MnemonicWrap = {
   iv: string;
@@ -101,6 +102,8 @@ export type ResetMemberPasswordRequest = {
   new_login_wrap: NewLoginWrap;
 };
 
+// `new_password` stays in this browser: the owner's browser derives the
+// member's login credential from it, exactly as the member's own would.
 export async function resetMemberPassword(
   orgId: number,
   memberUserId: number,
@@ -110,7 +113,10 @@ export async function resetMemberPassword(
     `/api/organizations/${orgId}/members/${memberUserId}/reset-password`,
     {
       method: "POST",
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        new_credential: await newCredential(body.new_password),
+        new_login_wrap: body.new_login_wrap,
+      }),
     }
   );
 }

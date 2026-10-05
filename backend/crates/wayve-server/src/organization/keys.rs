@@ -6,11 +6,13 @@
 //! an owner who skips recording it can never recover member data.
 
 use crate::prelude::*;
+use crate::routes::auth_scheme::{
+    DerivedCredential, precheck_new_credential, set_user_credential, store_credential,
+};
 use actix_web::{HttpRequest, HttpResponse, web};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use tracing::{info, instrument, warn};
-use wayve_security::password::hash_password;
 use wayve_security::rbac::{
     Permission, Role, Scope, require_org_access, require_permission, resolve_role_context,
 };
@@ -70,7 +72,12 @@ pub struct AddKeyHolderRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct ResetPasswordRequest {
-    pub new_password: String,
+    /// Legacy raw password (scheme 1). The web app sends `new_credential`.
+    #[serde(default)]
+    pub new_password: Option<String>,
+    /// Derived in the owner's browser from the new password (scheme 2).
+    #[serde(default)]
+    pub new_credential: Option<DerivedCredential>,
     pub new_login_wrap: NewLoginWrap,
 }
 
@@ -590,20 +597,20 @@ pub async fn reset_member_password(
         ));
     }
 
-    if body.new_password.len() < 8 {
-        return Err(AppError::BadRequest(
-            "New password must be at least 8 characters.".into(),
-        ));
-    }
-
-    let hashed = hash_password(&body.new_password).await?;
+    precheck_new_credential(
+        body.new_credential.as_ref(),
+        body.new_password.as_deref(),
+        8,
+    )?;
+    let cred = store_credential(
+        body.new_credential.as_ref(),
+        body.new_password.as_deref(),
+        8,
+    )
+    .await?;
 
     let mut tx = pool.get_ref().begin().await?;
-    sqlx::query("UPDATE users SET password = $1 WHERE id = $2")
-        .bind(&hashed)
-        .bind(target_user_id)
-        .execute(&mut *tx)
-        .await?;
+    set_user_credential(&mut *tx, target_user_id, &cred).await?;
     sqlx::query(
         "INSERT INTO member_login_wrapped_keys (user_id, iv, ct, salt, iterations)
          VALUES ($1, $2, $3, $4, $5)
