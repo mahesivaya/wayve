@@ -1,3 +1,8 @@
+// @vitest-environment node
+//
+// Node's environment, like the other WebCrypto tests (crypto.test.ts,
+// envelopeCodec.test.ts): under jsdom, typed arrays come from jsdom's realm and
+// Node's SubtleCrypto (Node 20, as in CI) rejects them as PBKDF2 salts.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changePassword, login } from "../../api/Auth";
 import { deriveAuthKey } from "../../auth/authKey";
