@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import Login from "../../auth/Login";
 import { AuthProvider } from "../../auth/AuthContext";
 import { clearAuthToken, getAuthToken } from "../../auth/token";
+import { AuthDowngradeError } from "../../auth/authKey";
 
 vi.mock("../../api/Auth", () => ({
   getMe: vi.fn().mockResolvedValue({ ok: false, status: 401 }),
@@ -103,6 +104,20 @@ describe("Login page", () => {
     ).toBeInTheDocument();
     expect(apiLogout).toHaveBeenCalledTimes(1);
     expect(getAuthToken()).toBeNull();
+  });
+
+  it("shows the downgrade warning instead of a generic failure", async () => {
+    vi.mocked(apiLogin).mockRejectedValue(new AuthDowngradeError());
+
+    renderAt(["/login"]);
+    await userEvent.type(
+      screen.getByPlaceholderText("Email or username"),
+      "a@b.c"
+    );
+    await userEvent.type(screen.getByPlaceholderText("Password"), "pw");
+    await userEvent.click(screen.getByRole("button", { name: /^login$/i }));
+
+    expect(await screen.findByText(/less secure form/i)).toBeInTheDocument();
   });
 
   it("shows email_exists banner when redirected from OAuth", () => {

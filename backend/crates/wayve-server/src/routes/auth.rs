@@ -8,13 +8,17 @@ use crate::models::auth::{
 use crate::models::message::MessageResponse;
 use crate::models::user::User;
 use crate::organization;
+use crate::routes::auth_scheme::{
+    DerivedCredential, SCHEME_AUTH_KEY, precheck_new_credential, set_user_credential,
+    store_credential, validate_derived,
+};
 use rand::RngCore;
 use tracing::{error, info, instrument, warn};
 use wayve_security::jwt::{
     SessionMode, auth_cookie, create_jwt_for_account_with_max_exp, create_jwt_with_mode,
     expired_auth_cookie, get_user_id_from_request,
 };
-use wayve_security::password::{hash_password, verify_password};
+use wayve_security::password::verify_password;
 use wayve_security::rbac;
 
 const RESET_TTL_MINUTES: i64 = 30;
@@ -78,7 +82,9 @@ pub async fn register(
 ) -> AppResult {
     info!(target: "auth", "register attempt");
 
-    if data.password != data.confirm_password {
+    // Only the legacy raw-password body can be checked here; with `credential`
+    // the browser compared the two fields before deriving.
+    if data.credential.is_none() && data.password != data.confirm_password {
         warn!(target: "auth", "register rejected: password mismatch");
         return Ok(HttpResponse::BadRequest()
             .json(serde_json::json!({ "message": "Passwords do not match" })));
@@ -107,14 +113,16 @@ pub async fn register(
         );
     }
 
-    let hashed = hash_password(&data.password).await?;
+    let cred = store_credential(data.credential.as_ref(), data.password.as_deref(), 1).await?;
 
     let result = sqlx::query(
-        "INSERT INTO users (email, password, recovery_mode, email_verified) \
-         VALUES ($1, $2, $3, false) RETURNING id",
+        "INSERT INTO users (email, password, auth_scheme, auth_salt, recovery_mode, email_verified) \
+         VALUES ($1, $2, $3, $4, $5, false) RETURNING id",
     )
     .bind(&email)
-    .bind(&hashed)
+    .bind(&cred.hash)
+    .bind(cred.scheme)
+    .bind(&cred.salt)
     .bind(recovery_mode)
     .fetch_one(pool.get_ref())
     .await;
@@ -194,7 +202,12 @@ pub(crate) async fn login(
             // Burn the same bcrypt cost as a real verify, so the unknown-email path
             // does not return faster than a wrong-password one and become a timing
             // oracle.
-            let _ = verify_password(&data.password, DUMMY_PASSWORD_HASH).await;
+            let presented = data
+                .auth_key
+                .as_deref()
+                .or(data.password.as_deref())
+                .unwrap_or("");
+            let _ = verify_password(presented, DUMMY_PASSWORD_HASH).await;
             warn!("Invalid login attempt: {}", data.email);
             crate::audit::record_login_failure(
                 pool.get_ref(),
@@ -228,7 +241,24 @@ pub(crate) async fn login(
         }
     };
 
-    let valid = verify_password(&data.password, stored_password).await?;
+    // A scheme-2 account is checked only against its derived auth key; a raw
+    // password is never accepted for it (and would just fail bcrypt anyway).
+    let scheme: i16 = sqlx::query_scalar("SELECT auth_scheme FROM users WHERE id = $1")
+        .bind(user.id)
+        .fetch_one(pool.get_ref())
+        .await?;
+    let presented = if scheme == SCHEME_AUTH_KEY {
+        data.auth_key.as_deref()
+    } else {
+        data.password.as_deref()
+    };
+    let valid = match presented {
+        Some(secret) => verify_password(secret, stored_password).await?,
+        None => {
+            let _ = verify_password("", DUMMY_PASSWORD_HASH).await;
+            false
+        }
+    };
 
     if !valid {
         warn!("Invalid login attempt: {}", data.email);
@@ -293,6 +323,15 @@ pub(crate) async fn login(
         })));
     }
 
+    // A scheme-1 login that brought an upgrade moves the account to scheme 2, so
+    // this is the last time the server sees the raw password. Best-effort: a
+    // failed upgrade is retried on the next login.
+    if scheme != SCHEME_AUTH_KEY
+        && let Some(upgrade) = &data.upgrade
+    {
+        upgrade_to_auth_key(pool.get_ref(), user.id, upgrade).await;
+    }
+
     info!("Login success: {}", data.email);
     crate::audit::record_action(
         pool.get_ref(),
@@ -338,6 +377,24 @@ pub(crate) async fn login(
             account_type: user.account_type,
             login_wrap,
         }))
+}
+
+async fn upgrade_to_auth_key(pool: &PgPool, user_id: i32, upgrade: &DerivedCredential) {
+    if let Err(e) = validate_derived(upgrade) {
+        warn!(target: "auth", user_id, error = %e, "auth-key upgrade rejected: malformed");
+        return;
+    }
+    let stored = match store_credential(Some(upgrade), None, 0).await {
+        Ok(stored) => stored,
+        Err(e) => {
+            warn!(target: "auth", user_id, error = %e, "auth-key upgrade: hashing failed");
+            return;
+        }
+    };
+    match set_user_credential(pool, user_id, &stored).await {
+        Ok(()) => info!(target: "auth", user_id, "login credential upgraded to auth-key scheme"),
+        Err(e) => warn!(target: "auth", user_id, error = %e, "auth-key upgrade: update failed"),
+    }
 }
 
 #[post("/logout")]
@@ -527,10 +584,11 @@ pub async fn forgot_password(
 pub async fn reset_password(pool: web::Data<PgPool>, data: web::Json<ResetInput>) -> AppResult {
     info!(target: "auth", "reset-password attempt");
 
-    if data.new_password.len() < 6 {
-        return Ok(HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "Password must be at least 6 characters" })));
-    }
+    precheck_new_credential(
+        data.new_credential.as_ref(),
+        data.new_password.as_deref(),
+        6,
+    )?;
 
     // A lookup failure is treated as an unknown token (400) rather than a 500,
     // so the caller learns nothing either way.
@@ -561,15 +619,16 @@ pub async fn reset_password(pool: web::Data<PgPool>, data: web::Json<ResetInput>
             .json(serde_json::json!({ "message": "Invalid or expired link" })));
     }
 
-    let hashed = hash_password(&data.new_password).await?;
+    let cred = store_credential(
+        data.new_credential.as_ref(),
+        data.new_password.as_deref(),
+        6,
+    )
+    .await?;
 
     let mut tx = pool.begin().await?;
 
-    sqlx::query("UPDATE users SET password = $1 WHERE id = $2")
-        .bind(&hashed)
-        .bind(user_id)
-        .execute(&mut *tx)
-        .await?;
+    set_user_credential(&mut *tx, user_id, &cred).await?;
 
     sqlx::query("UPDATE password_reset_tokens SET used_at = NOW() WHERE token = $1")
         .bind(&data.token)
@@ -594,7 +653,10 @@ pub struct RecoverWithMnemonicInput {
     /// Base64 of the 9-byte BIP-39 entropy the frontend derives from the phrase.
     /// The words themselves never cross the network.
     pub mnemonic_entropy: String,
-    pub new_password: String,
+    #[serde(default)]
+    pub new_password: Option<String>,
+    #[serde(default)]
+    pub new_credential: Option<DerivedCredential>,
 }
 
 const PBKDF2_ITERATIONS: u32 = 600_000;
@@ -614,10 +676,11 @@ pub async fn recover_with_mnemonic(
 
     info!(target: "auth", "recover-with-mnemonic attempt");
 
-    if data.new_password.len() < 6 {
-        return Ok(HttpResponse::BadRequest()
-            .json(serde_json::json!({ "message": "Password must be at least 6 characters" })));
-    }
+    precheck_new_credential(
+        data.new_credential.as_ref(),
+        data.new_password.as_deref(),
+        6,
+    )?;
 
     // A missing user and a missing envelope both yield the same generic 400, so
     // neither emails nor accounts-without-recovery can be probed for.
@@ -706,12 +769,13 @@ pub async fn recover_with_mnemonic(
 
     // The wrapped envelope is deliberately left untouched: the phrase keeps
     // wrapping the same private key, so existing E2E data stays unlockable.
-    let hashed = hash_password(&data.new_password).await?;
-    sqlx::query("UPDATE users SET password = $1 WHERE id = $2")
-        .bind(&hashed)
-        .bind(user_id)
-        .execute(pool.get_ref())
-        .await?;
+    let cred = store_credential(
+        data.new_credential.as_ref(),
+        data.new_password.as_deref(),
+        6,
+    )
+    .await?;
+    set_user_credential(pool.get_ref(), user_id, &cred).await?;
 
     info!(target: "auth", user_id, recovery_mode = %recovery_mode, "recover-with-mnemonic: password reset via recovery phrase");
 
@@ -734,8 +798,13 @@ pub struct RegisterBusinessInput {
     pub organization_name: String,
     pub username: String,
     pub email: String,
-    pub password: String,
-    pub confirm_password: String,
+    /// Legacy raw password (scheme 1). The web app sends `credential` instead.
+    #[serde(default)]
+    pub password: Option<String>,
+    #[serde(default)]
+    pub confirm_password: Option<String>,
+    #[serde(default)]
+    pub credential: Option<DerivedCredential>,
 }
 
 /// Direct business signup: mint the owner as `organization_admin` and create the
@@ -748,7 +817,7 @@ pub async fn register_business(
     pool: web::Data<PgPool>,
     data: web::Json<RegisterBusinessInput>,
 ) -> AppResult {
-    if data.password != data.confirm_password {
+    if data.credential.is_none() && data.password != data.confirm_password {
         return Ok(HttpResponse::BadRequest()
             .json(serde_json::json!({ "message": "Passwords do not match" })));
     }
@@ -769,19 +838,21 @@ pub async fn register_business(
             .json(serde_json::json!({ "message": "Enter a valid email address" })));
     }
 
-    let hashed = hash_password(&data.password).await?;
+    let cred = store_credential(data.credential.as_ref(), data.password.as_deref(), 1).await?;
 
     let mut tx = pool.begin().await?;
 
     // Created unverified: as in a personal signup, the owner must enter the emailed
     // code before login works.
     let user_row = sqlx::query(
-        "INSERT INTO users (username, email, password, auth_provider, account_type, recovery_mode, email_verified) \
-         VALUES ($1, $2, $3, 'local', 'personal', 'full', false) RETURNING id",
+        "INSERT INTO users (username, email, password, auth_scheme, auth_salt, auth_provider, account_type, recovery_mode, email_verified) \
+         VALUES ($1, $2, $3, $4, $5, 'local', 'personal', 'full', false) RETURNING id",
     )
     .bind(username)
     .bind(&email)
-    .bind(&hashed)
+    .bind(&cred.hash)
+    .bind(cred.scheme)
+    .bind(&cred.salt)
     .fetch_one(&mut *tx)
     .await;
 

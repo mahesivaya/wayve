@@ -66,7 +66,12 @@ describe("profile password card", () => {
     await user.click(screen.getByRole("button", { name: "Create password" }));
 
     await waitFor(() =>
-      expect(changePassword).toHaveBeenCalledWith(null, "brand-new-1", null)
+      expect(changePassword).toHaveBeenCalledWith(
+        "me@x.test",
+        null,
+        "brand-new-1",
+        null
+      )
     );
     // Afterwards it's a change, which needs the current password.
     expect(

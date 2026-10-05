@@ -296,6 +296,13 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "ALTER TABLE users DROP CONSTRAINT IF EXISTS users_meeting_alert_minutes_check",
         "ALTER TABLE users ADD CONSTRAINT users_meeting_alert_minutes_check \
          CHECK (meeting_alert_minutes >= 0 AND meeting_alert_minutes <= 1440)",
+        // Login credential scheme (see init.sql). `login` reads both columns, so
+        // an existing deployment needs them before the new binary serves a login.
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_scheme SMALLINT NOT NULL DEFAULT 1",
+        "ALTER TABLE users DROP CONSTRAINT IF EXISTS users_auth_scheme_check",
+        "ALTER TABLE users ADD CONSTRAINT users_auth_scheme_check \
+         CHECK (auth_scheme IN (1, 2))",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_salt TEXT",
         // Sprint length for the user-stories burnup. /api/me selects this via the
         // org join, so an existing deployment on the new binary needs the column
         // or every org member's /api/me 500s — same logout-on-refresh failure as

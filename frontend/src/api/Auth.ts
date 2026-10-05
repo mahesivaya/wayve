@@ -3,6 +3,30 @@ import { getApiBase } from "../config/env";
 
 const log = logger.scope("auth");
 import { apiFetch } from "./client";
+import {
+  AuthDowngradeError,
+  deriveAuthKey,
+  expectsAuthKeyScheme,
+  newCredential,
+  prelogin,
+  rememberAuthKeyScheme,
+} from "../auth/authKey";
+
+// What proves the *current* password, in the form this account accepts. A
+// scheme-2 account only ever gets the derived key. A legacy (scheme-1) account
+// gets the raw password one last time — the caller pairs it with a new derived
+// credential so the server moves the account to scheme 2.
+async function currentPasswordProof(
+  identifier: string,
+  password: string
+): Promise<{ auth_key: string } | { password: string }> {
+  const pre = await prelogin(identifier);
+  if (pre.scheme === 2 && pre.auth_salt) {
+    return { auth_key: await deriveAuthKey(password, pre.auth_salt) };
+  }
+  if (expectsAuthKeyScheme(identifier)) throw new AuthDowngradeError();
+  return { password };
+}
 
 const newReqId = (): string => {
   const c = (globalThis as { crypto?: Crypto }).crypto;
@@ -18,7 +42,7 @@ import type { RecoveryMode as _RecoveryMode } from "../auth/authContextValue";
 export async function register(
   email: string,
   password: string,
-  confirm: string,
+  _confirm: string,
   recoveryMode: _RecoveryMode = "full"
 ) {
   const reqId = newReqId();
@@ -32,10 +56,11 @@ export async function register(
       headers: {
         "X-Request-ID": reqId,
       },
+      // The password never leaves the browser; `confirm` was already compared
+      // by the form.
       body: JSON.stringify({
         email,
-        password,
-        confirm_password: confirm,
+        credential: await newCredential(password),
         recovery_mode: recoveryMode,
       }),
     });
@@ -61,10 +86,14 @@ export async function registerBusiness(input: {
   password: string;
   confirm_password: string;
 }) {
+  const { password, confirm_password: _confirm, ...rest } = input;
   const res = await apiFetch("/api/register-business", {
     auth: false,
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      ...rest,
+      credential: await newCredential(password),
+    }),
   });
   return res.json();
 }
@@ -75,6 +104,7 @@ export async function login(email: string, password: string) {
   const start = performance.now();
 
   try {
+    const proof = await currentPasswordProof(email, password);
     const res = await apiFetch(`/api/login`, {
       auth: false,
       preserve401: true,
@@ -85,12 +115,19 @@ export async function login(email: string, password: string) {
       headers: {
         "X-Request-ID": reqId,
       },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(
+        "auth_key" in proof
+          ? { email, auth_key: proof.auth_key }
+          : { email, ...proof, upgrade: await newCredential(password) }
+      ),
     });
 
     const ms = Math.round(performance.now() - start);
     const data = await res.json();
     log.info(`[${reqId}] login ok in ${ms}ms`, { email });
+    // Successful logins leave the account on scheme 2 (a legacy one was just
+    // upgraded), so arm the downgrade guard for this identifier.
+    if (data?.token) rememberAuthKeyScheme(email);
 
     return data;
   } catch (err) {
@@ -115,7 +152,10 @@ export async function resetPassword(token: string, newPassword: string) {
   const res = await apiFetch(`/api/reset-password`, {
     auth: false,
     method: "POST",
-    body: JSON.stringify({ token, new_password: newPassword }),
+    body: JSON.stringify({
+      token,
+      new_credential: await newCredential(newPassword),
+    }),
   });
   return res.json();
 }
@@ -175,13 +215,14 @@ export async function recoverWithMnemonic(
     body: JSON.stringify({
       email,
       mnemonic_entropy: entropyB64,
-      new_password: newPassword,
+      new_credential: await newCredential(newPassword),
     }),
   });
   return res.json();
 }
 
 export async function changePassword(
+  identifier: string,
   currentPassword: string | null,
   newPassword: string,
   // Re-wrapped login envelope, required by the backend for any account that
@@ -193,13 +234,14 @@ export async function changePassword(
     iterations: number;
   } | null
 ) {
-  const body: Record<string, unknown> =
-    currentPassword === null
-      ? { new_password: newPassword }
-      : {
-          current_password: currentPassword,
-          new_password: newPassword,
-        };
+  const body: Record<string, unknown> = {
+    new_credential: await newCredential(newPassword),
+  };
+  if (currentPassword !== null) {
+    const proof = await currentPasswordProof(identifier, currentPassword);
+    if ("auth_key" in proof) body.current_auth_key = proof.auth_key;
+    else body.current_password = proof.password;
+  }
   if (newLoginWrap) {
     body.new_login_wrap = newLoginWrap;
   }

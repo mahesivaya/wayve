@@ -177,6 +177,7 @@ export default function Profile() {
         newPw
       );
       await changePassword(
+        user?.email ?? "",
         isCreatingPassword ? null : currentPw,
         newPw,
         newLoginWrap
