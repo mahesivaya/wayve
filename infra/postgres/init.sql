@@ -263,6 +263,19 @@ CREATE TABLE IF NOT EXISTS teams (
     UNIQUE (organization_id, slug)
 );
 CREATE INDEX IF NOT EXISTS idx_teams_org ON teams (organization_id);
+-- A team's roster. Free-form rows (name / role / email), not linked to user
+-- accounts: a roster can list people who have no Fluxze login. Deleting the
+-- team deletes its roster.
+CREATE TABLE IF NOT EXISTS team_members (
+    id SERIAL PRIMARY KEY,
+    team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    role TEXT,
+    email TEXT,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_team_members_team ON team_members (team_id);
 -- Relax NOT NULL on long-lived DBs whose teams table predates platform teams
 -- (idempotent — a no-op if already nullable).
 ALTER TABLE teams ALTER COLUMN organization_id DROP NOT NULL;

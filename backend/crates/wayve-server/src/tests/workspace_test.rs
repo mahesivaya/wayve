@@ -132,6 +132,183 @@ mod tests {
         cleanup(&pool, &[owner_id, member_id], &[org_id]).await;
     }
 
+    async fn insert_org_team(pool: &PgPool, org_id: i32, slug: &str) -> i32 {
+        sqlx::query_scalar::<_, i32>(
+            "INSERT INTO teams (organization_id, name, slug) VALUES ($1, $2, $2) RETURNING id",
+        )
+        .bind(org_id)
+        .bind(slug)
+        .fetch_one(pool)
+        .await
+        .unwrap_or_else(|e| panic!("insert team: {e}"))
+    }
+
+    async fn team_exists(pool: &PgPool, id: i32) -> bool {
+        sqlx::query_scalar::<_, bool>("SELECT EXISTS (SELECT 1 FROM teams WHERE id = $1)")
+            .bind(id)
+            .fetch_one(pool)
+            .await
+            .unwrap_or_else(|e| panic!("team exists: {e}"))
+    }
+
+    /// Deleting a team is owner-only, and an owner can't reach another org's
+    /// team: it reads as not found, and the row survives.
+    #[actix_web::test]
+    async fn owner_deletes_team_member_and_other_org_cannot() {
+        let pool = test_pool().await;
+        let org_id = insert_org(&pool, &format!("WS Del Org {}", random_email())).await;
+        let other_org = insert_org(&pool, &format!("WS Del Other {}", random_email())).await;
+
+        let owner_email = random_email();
+        let owner_id = insert_local_user(&pool, &owner_email, "password123").await;
+        place_in_org(&pool, owner_id, org_id, "owner").await;
+
+        let member_email = random_email();
+        let member_id = insert_local_user(&pool, &member_email, "password123").await;
+        place_in_org(&pool, member_id, org_id, "member").await;
+
+        let team_id = insert_org_team(&pool, org_id, "doomed").await;
+        let foreign_team = insert_org_team(&pool, other_org, "theirs").await;
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(workspace::handler::delete_team),
+        )
+        .await;
+        let delete = |id: i32, uid: i32, email: &str| {
+            actix_test::TestRequest::delete()
+                .uri(&format!("/teams/{id}"))
+                .insert_header(("Authorization", format!("Bearer {}", jwt_for(uid, email))))
+                .to_request()
+        };
+
+        let resp = actix_test::call_service(&app, delete(team_id, member_id, &member_email)).await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        assert!(team_exists(&pool, team_id).await);
+
+        let resp =
+            actix_test::call_service(&app, delete(foreign_team, owner_id, &owner_email)).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        assert!(team_exists(&pool, foreign_team).await);
+
+        let resp = actix_test::call_service(&app, delete(team_id, owner_id, &owner_email)).await;
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        assert!(!team_exists(&pool, team_id).await);
+
+        let resp = actix_test::call_service(&app, delete(team_id, owner_id, &owner_email)).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+        cleanup(&pool, &[owner_id, member_id], &[org_id, other_org]).await;
+    }
+
+    /// A team's roster is saved: a member-manager adds and removes rows, the
+    /// team page reads them back, other orgs can't touch them, plain members
+    /// can't edit, and deleting the team deletes its roster.
+    #[actix_web::test]
+    async fn team_roster_is_persisted_and_scoped() {
+        let pool = test_pool().await;
+        let org_id = insert_org(&pool, &format!("WS Roster Org {}", random_email())).await;
+        let other_org = insert_org(&pool, &format!("WS Roster Other {}", random_email())).await;
+
+        let owner_email = random_email();
+        let owner_id = insert_local_user(&pool, &owner_email, "password123").await;
+        place_in_org(&pool, owner_id, org_id, "owner").await;
+
+        let member_email = random_email();
+        let member_id = insert_local_user(&pool, &member_email, "password123").await;
+        place_in_org(&pool, member_id, org_id, "member").await;
+
+        let other_email = random_email();
+        let other_id = insert_local_user(&pool, &other_email, "password123").await;
+        place_in_org(&pool, other_id, other_org, "owner").await;
+
+        let team_id = insert_org_team(&pool, org_id, "roster").await;
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(workspace::handler::get_team)
+                .service(workspace::handler::add_team_member)
+                .service(workspace::handler::remove_team_member)
+                .service(workspace::handler::delete_team),
+        )
+        .await;
+        let bearer = |uid: i32, email: &str| format!("Bearer {}", jwt_for(uid, email));
+        let add = |uid: i32, email: &str| {
+            actix_test::TestRequest::post()
+                .uri(&format!("/teams/{team_id}/members"))
+                .insert_header(("Authorization", bearer(uid, email)))
+                .set_json(serde_json::json!({
+                    "name": "  Ada Lovelace ", "role": "Engineer", "email": "ada@example.com"
+                }))
+                .to_request()
+        };
+        let roster = |uid: i32, email: &str| {
+            actix_test::TestRequest::get()
+                .uri("/teams/roster")
+                .insert_header(("Authorization", bearer(uid, email)))
+                .to_request()
+        };
+
+        // A plain member can't edit; another org's owner can't even see the team.
+        let resp = actix_test::call_service(&app, add(member_id, &member_email)).await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        let resp = actix_test::call_service(&app, add(other_id, &other_email)).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+        let created: serde_json::Value =
+            actix_test::call_and_read_body_json(&app, add(owner_id, &owner_email)).await;
+        assert_eq!(created["name"], "Ada Lovelace");
+        let member_row = created["id"].as_i64().unwrap_or_else(|| panic!("no id"));
+
+        // Persisted: any org member reading the team sees it.
+        let team: serde_json::Value =
+            actix_test::call_and_read_body_json(&app, roster(member_id, &member_email)).await;
+        assert_eq!(team["members"][0]["email"], "ada@example.com");
+
+        let remove = |uid: i32, email: &str| {
+            actix_test::TestRequest::delete()
+                .uri(&format!("/teams/{team_id}/members/{member_row}"))
+                .insert_header(("Authorization", bearer(uid, email)))
+                .to_request()
+        };
+        let resp = actix_test::call_service(&app, remove(member_id, &member_email)).await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        let resp = actix_test::call_service(&app, remove(owner_id, &owner_email)).await;
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        let resp = actix_test::call_service(&app, remove(owner_id, &owner_email)).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+        let team: serde_json::Value =
+            actix_test::call_and_read_body_json(&app, roster(owner_id, &owner_email)).await;
+        assert_eq!(team["members"].as_array().map(Vec::len), Some(0));
+
+        // Deleting the team takes its roster with it.
+        let _ = actix_test::call_service(&app, add(owner_id, &owner_email)).await;
+        let req = actix_test::TestRequest::delete()
+            .uri(&format!("/teams/{team_id}"))
+            .insert_header(("Authorization", bearer(owner_id, &owner_email)))
+            .to_request();
+        assert_eq!(
+            actix_test::call_service(&app, req).await.status(),
+            StatusCode::NO_CONTENT
+        );
+        let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM team_members WHERE team_id = $1")
+            .bind(team_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("count roster: {e}"));
+        assert_eq!(left, 0);
+
+        cleanup(
+            &pool,
+            &[owner_id, member_id, other_id],
+            &[org_id, other_org],
+        )
+        .await;
+    }
+
     async fn insert_org_project(pool: &PgPool, org_id: i32, name: &str) -> i32 {
         sqlx::query_scalar::<_, i32>(
             "INSERT INTO projects (organization_id, name) VALUES ($1, $2) RETURNING id",

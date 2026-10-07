@@ -14,7 +14,7 @@ use sqlx::Row;
 use std::time::Duration;
 use tracing::{instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
-use wayve_security::rbac::{self, Scope};
+use wayve_security::rbac::{self, Permission, RoleContext, Scope};
 
 #[derive(Deserialize)]
 pub struct CreateProjectInput {
@@ -43,6 +43,9 @@ pub struct CreateTeamInput {
 const NAME_MAX: usize = 120;
 const TAGLINE_MAX: usize = 200;
 const DESCRIPTION_MAX: usize = 2000;
+const MEMBER_NAME_MAX: usize = 120;
+const MEMBER_ROLE_MAX: usize = 120;
+const MEMBER_EMAIL_MAX: usize = 254;
 
 /// Lowercase, ASCII-alphanumeric slug — mirrors the org slug rule in init.sql.
 fn slugify(name: &str) -> String {
@@ -658,12 +661,27 @@ pub async fn get_team(
         TeamScope::None => None,
     };
 
-    match row {
-        Some(row) => Ok(HttpResponse::Ok().json(team_summary_json(row))),
-        None => {
-            Ok(HttpResponse::NotFound().json(serde_json::json!({ "message": "Team not found" })))
-        }
-    }
+    let Some(row) = row else {
+        return Ok(
+            HttpResponse::NotFound().json(serde_json::json!({ "message": "Team not found" }))
+        );
+    };
+    let team_id: i32 = row.get("id");
+    let members: Vec<serde_json::Value> = sqlx::query(
+        "SELECT id, name, role, email FROM team_members
+         WHERE team_id = $1
+         ORDER BY created_at, id",
+    )
+    .bind(team_id)
+    .fetch_all(pool.get_ref())
+    .await?
+    .iter()
+    .map(team_member_json)
+    .collect();
+
+    let mut team = team_summary_json(row);
+    team["members"] = serde_json::Value::Array(members);
+    Ok(HttpResponse::Ok().json(team))
 }
 
 #[post("/teams")]
@@ -734,6 +752,168 @@ pub async fn create_team(
     .await?;
 
     Ok(HttpResponse::Created().json(team_summary_json(row)))
+}
+
+/// Deletes a team outright. Same gate as `create_team`: an organization owner
+/// deletes their own org's teams, a platform owner deletes platform-level teams
+/// (organization_id = NULL). Its roster (`team_members`) cascades with it.
+/// Another scope's team id reads as not found, never forbidden, so ids can't be
+/// probed across orgs.
+#[delete("/teams/{id}")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn delete_team(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> AppResult {
+    let id = path.into_inner();
+    let ctx = match rbac::require_owner(&req, pool.get_ref()).await {
+        Ok(ctx) => ctx,
+        Err(response) => return Ok(response),
+    };
+    let org_id = match team_owner_org(&ctx) {
+        Ok(org_id) => org_id,
+        Err(response) => return Ok(response),
+    };
+
+    let deleted: Option<i32> = sqlx::query_scalar(
+        "DELETE FROM teams WHERE id = $1 AND organization_id IS NOT DISTINCT FROM $2 RETURNING id",
+    )
+    .bind(id)
+    .bind(org_id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+
+    match deleted {
+        Some(_) => Ok(HttpResponse::NoContent().finish()),
+        None => {
+            Ok(HttpResponse::NotFound().json(serde_json::json!({ "message": "Team not found" })))
+        }
+    }
+}
+
+/// Which teams a team-admin context may touch: its own org's (`Some(org)`), or
+/// platform-level ones (`None`). Personal accounts have no teams.
+fn team_owner_org(ctx: &RoleContext) -> Result<Option<i32>, HttpResponse> {
+    match ctx.scope {
+        Scope::Organization => ctx.organization_id.map(Some).ok_or_else(|| {
+            HttpResponse::BadRequest()
+                .json(serde_json::json!({ "message": "No organization in context" }))
+        }),
+        Scope::Platform => Ok(None),
+        Scope::Personal => Err(HttpResponse::Forbidden()
+            .json(serde_json::json!({ "message": "Personal accounts have no teams" }))),
+    }
+}
+
+/// Roster edits use the same gate the team page shows the controls on
+/// (`members:manage`, which follows admin mode), scoped to the caller's teams.
+/// Returns the team id once it's confirmed to be in scope.
+async fn team_for_roster_edit(
+    req: &HttpRequest,
+    pool: &PgPool,
+    team_id: i32,
+) -> Result<i32, HttpResponse> {
+    let ctx = rbac::require_permission(req, pool, Permission::MembersManage).await?;
+    let org_id = team_owner_org(&ctx)?;
+    let found: Option<i32> = sqlx::query_scalar(
+        "SELECT id FROM teams WHERE id = $1 AND organization_id IS NOT DISTINCT FROM $2",
+    )
+    .bind(team_id)
+    .bind(org_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| {
+        warn!(target: "db", error = %e, "team scope lookup failed");
+        HttpResponse::InternalServerError()
+            .json(serde_json::json!({ "message": "Internal server error" }))
+    })?;
+    found.ok_or_else(|| {
+        HttpResponse::NotFound().json(serde_json::json!({ "message": "Team not found" }))
+    })
+}
+
+#[derive(Deserialize)]
+pub struct AddTeamMemberInput {
+    pub name: String,
+    #[serde(default)]
+    pub role: Option<String>,
+    #[serde(default)]
+    pub email: Option<String>,
+}
+
+#[post("/teams/{id}/members")]
+#[instrument(target = "http", skip(req, pool, path, input))]
+pub async fn add_team_member(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+    input: web::Json<AddTeamMemberInput>,
+) -> AppResult {
+    let team_id = match team_for_roster_edit(&req, pool.get_ref(), path.into_inner()).await {
+        Ok(id) => id,
+        Err(response) => return Ok(response),
+    };
+    let name = input.name.trim();
+    if name.is_empty() {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Member name is required" })));
+    }
+    let name: String = name.chars().take(MEMBER_NAME_MAX).collect();
+    let role = clean_optional(input.role.as_deref(), MEMBER_ROLE_MAX);
+    let email = clean_optional(input.email.as_deref(), MEMBER_EMAIL_MAX);
+    let created_by = get_user_id_from_request(&req);
+
+    let row = sqlx::query(
+        "INSERT INTO team_members (team_id, name, role, email, created_by)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, name, role, email",
+    )
+    .bind(team_id)
+    .bind(&name)
+    .bind(role.as_deref())
+    .bind(email.as_deref())
+    .bind(created_by)
+    .fetch_one(pool.get_ref())
+    .await?;
+
+    Ok(HttpResponse::Created().json(team_member_json(&row)))
+}
+
+#[delete("/teams/{id}/members/{member_id}")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn remove_team_member(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<(i32, i32)>,
+) -> AppResult {
+    let (team_id, member_id) = path.into_inner();
+    let team_id = match team_for_roster_edit(&req, pool.get_ref(), team_id).await {
+        Ok(id) => id,
+        Err(response) => return Ok(response),
+    };
+    let deleted: Option<i32> =
+        sqlx::query_scalar("DELETE FROM team_members WHERE id = $1 AND team_id = $2 RETURNING id")
+            .bind(member_id)
+            .bind(team_id)
+            .fetch_optional(pool.get_ref())
+            .await?;
+
+    match deleted {
+        Some(_) => Ok(HttpResponse::NoContent().finish()),
+        None => {
+            Ok(HttpResponse::NotFound().json(serde_json::json!({ "message": "Member not found" })))
+        }
+    }
+}
+
+fn team_member_json(row: &sqlx::postgres::PgRow) -> serde_json::Value {
+    serde_json::json!({
+        "id": row.get::<i32, _>("id"),
+        "name": row.get::<String, _>("name"),
+        "role": row.get::<Option<String>, _>("role"),
+        "email": row.get::<Option<String>, _>("email"),
+    })
 }
 
 fn clean_optional(value: Option<&str>, max: usize) -> Option<String> {

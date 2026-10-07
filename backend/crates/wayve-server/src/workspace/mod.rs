@@ -10,5 +10,8 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(handler::delete_project)
         .service(handler::list_teams)
         .service(handler::get_team)
-        .service(handler::create_team);
+        .service(handler::create_team)
+        .service(handler::delete_team)
+        .service(handler::add_team_member)
+        .service(handler::remove_team_member);
 }
