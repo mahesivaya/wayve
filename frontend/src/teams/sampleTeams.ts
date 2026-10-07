@@ -21,7 +21,7 @@ export type SampleMember = {
   email: string;
 };
 
-export type SampleTeam = Team & { members: SampleMember[] };
+export type SampleTeam = Omit<Team, "members"> & { members: SampleMember[] };
 
 export const SAMPLE_TEAMS: SampleTeam[] = [
   {

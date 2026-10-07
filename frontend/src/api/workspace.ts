@@ -13,12 +13,21 @@ export type Project = {
   github_repo?: string | null;
 };
 
+export type TeamMember = {
+  id: number;
+  name: string;
+  role: string | null;
+  email: string | null;
+};
+
 export type Team = {
   id: number;
   name: string;
   slug: string;
   tagline: string | null;
   description: string | null;
+  // Present on GET /api/teams/{slug}; the list endpoint omits it.
+  members?: TeamMember[];
 };
 
 export const listProjects = async () =>
@@ -74,6 +83,44 @@ export const listTeams = async () => apiFetchJson<Team[]>("/api/teams");
 
 export const getTeam = async (slug: string) =>
   apiFetchJson<Team>(`/api/teams/${encodeURIComponent(slug)}`);
+
+// Fires `rwayve:team-deleted` so the sidebar's team list (owned by Layout)
+// drops the team without a refetch.
+export const deleteTeam = async (id: number) => {
+  const res = await apiFetch(`/api/teams/${id}`, { method: "DELETE" });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.message ?? "Failed to delete team");
+  }
+  window.dispatchEvent(
+    new CustomEvent("rwayve:team-deleted", { detail: { id } })
+  );
+};
+
+export const addTeamMember = async (
+  teamId: number,
+  input: { name: string; role?: string; email?: string }
+) => {
+  const res = await apiFetch(`/api/teams/${teamId}/members`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.message ?? "Failed to add member");
+  }
+  return res.json() as Promise<TeamMember>;
+};
+
+export const removeTeamMember = async (teamId: number, memberId: number) => {
+  const res = await apiFetch(`/api/teams/${teamId}/members/${memberId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.message ?? "Failed to remove member");
+  }
+};
 
 export const createTeam = async (input: {
   name: string;

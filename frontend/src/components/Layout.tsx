@@ -426,6 +426,16 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     };
   }, [userId]);
 
+  // The team page deletes through the api layer, which announces it here.
+  useEffect(() => {
+    const onDeleted = (e: Event) => {
+      const id = (e as CustomEvent<{ id: number }>).detail?.id;
+      setTeams((prev) => prev.filter((t) => t.id !== id));
+    };
+    window.addEventListener("rwayve:team-deleted", onDeleted);
+    return () => window.removeEventListener("rwayve:team-deleted", onDeleted);
+  }, []);
+
   const userScope = user?.scope;
   const userRole = user?.effective_role;
   useEffect(() => {
@@ -458,7 +468,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     setTeamCreateDraft("");
     if (!name) return;
     createTeam({ name })
-      .then((created) => setTeams((prev) => [created, ...prev]))
+      .then((created) => {
+        setTeams((prev) => [created, ...prev]);
+        // Land on the new team rather than leaving the creator on whatever
+        // page they were on.
+        void navigate(`/teams/${created.slug}`);
+      })
       .catch(() => {});
   };
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {

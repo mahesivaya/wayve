@@ -42,6 +42,45 @@
   cursor: not-allowed;
 }
 
+/* "Delete team" — owner-only, beside "Add member". Outlined in the danger
+   colour so it doesn't compete with the primary action. Pinned right on its
+   own; directly after "Add member" it just sits next to it. */
+.team-delete-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 7px 13px;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-danger);
+  font-size: var(--text-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.team-add-btn + .team-delete-btn {
+  margin-left: 0;
+}
+
+.team-delete-btn:hover:not(:disabled) {
+  background: var(--color-danger);
+  color: var(--color-on-primary);
+}
+
+.team-delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.team-delete-error {
+  margin: 0 0 10px;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
 .team-add-form {
   display: flex;
   flex-wrap: wrap;
@@ -171,6 +210,34 @@
 
 .team-member-email:hover {
   text-decoration: underline;
+}
+
+/* Per-member "Delete", for member managers. Same outlined danger style as
+   "Delete team", sized down to sit at the end of a member row. */
+.team-member-remove {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.team-member-remove:hover:not(:disabled),
+.team-member-remove:focus-visible {
+  background: var(--color-danger);
+  color: var(--color-on-primary);
+}
+
+.team-member-remove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .team-empty {
