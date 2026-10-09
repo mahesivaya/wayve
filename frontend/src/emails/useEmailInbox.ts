@@ -6,6 +6,7 @@ import {
   getEmailAttachments,
   getEmailBody,
   getAllEmailAttachments,
+  getEmailThread,
   deleteEmail as deleteEmailRequest,
   markEmailRead,
   markEmailUnread,
@@ -14,6 +15,11 @@ import {
 import { logger } from "../utils/logger";
 import { decryptWayveBodyIfNeeded, emailBodyErrorMessage } from "./bodyUtils";
 import { EmailAccount, EmailFolder, EmailItem, EmailAttachment } from "./types";
+import {
+  conversationKey,
+  conversationMessageIds,
+  isConversation,
+} from "./conversation";
 
 export function useEmailInbox(
   user_id: number | undefined,
@@ -25,6 +31,13 @@ export function useEmailInbox(
   const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [emails, setEmails] = useState<EmailItem[]>([]);
   const [selectedEmail, setSelectedEmail] = useState<EmailItem | null>(null);
+  // The open conversation's messages, oldest first (list rows, no bodies).
+  // Kept apart from `selectedEmail`, which openEmail replaces several times
+  // while the newest message's body loads.
+  const [conversation, setConversation] = useState<{
+    rowId: number;
+    messages: EmailItem[];
+  } | null>(null);
   const [activeAccount, setActiveAccount] = useState<number | null>(null);
   const [activeFolder, setActiveFolder] = useState<EmailFolder>("inbox");
   const [hasMore, setHasMore] = useState(true);
@@ -79,6 +92,7 @@ export function useEmailInbox(
           folder: activeFolder,
           accountId: activeAccount,
           query: normalizedSearchQuery,
+          threads: true,
         }
       );
 
@@ -96,7 +110,14 @@ export function useEmailInbox(
         // email genuinely left the list (account switch, folder change,
         // delete).
         setSelectedEmail((cur) =>
-          cur && data.some((email) => email.id === cur.id) ? cur : null
+          cur &&
+          data.some(
+            (email) =>
+              email.id === cur.id ||
+              conversationKey(email) === conversationKey(cur)
+          )
+            ? cur
+            : null
         );
         return;
       }
@@ -112,11 +133,31 @@ export function useEmailInbox(
       // already-loaded older pages and `hasMore` untouched. A row deleted on
       // another device lingers until the next real folder/account/search
       // switch — an acceptable staleness cost against a full list reset.
+      //
+      // Rows are matched by conversation, not id: a conversation's row is its
+      // newest message, so a new reply changes the id. Such a conversation
+      // moves to the top with the fresh row instead of appearing twice.
       setEmails((prev) => {
-        const fresh = new Map(data.map((email) => [email.id, email]));
-        const merged = prev.map((email) => fresh.get(email.id) ?? email);
-        const existingIds = new Set(prev.map((email) => email.id));
-        const newAtTop = data.filter((email) => !existingIds.has(email.id));
+        const fresh = new Map(
+          data.map((email) => [conversationKey(email), email])
+        );
+        const moved = new Set<string>();
+        const merged = prev.flatMap((email) => {
+          const key = conversationKey(email);
+          const next = fresh.get(key);
+          if (!next) return [email];
+          if (next.id !== email.id) {
+            moved.add(key);
+            return [];
+          }
+          return [next];
+        });
+        const existing = new Set(prev.map(conversationKey));
+        const newAtTop = data.filter(
+          (email) =>
+            !existing.has(conversationKey(email)) ||
+            moved.has(conversationKey(email))
+        );
         return newAtTop.length > 0 ? [...newAtTop, ...merged] : merged;
       });
     };
@@ -138,14 +179,15 @@ export function useEmailInbox(
         query: normalizedSearchQuery,
         before,
         beforeId: last.id,
+        threads: true,
       });
       // De-dup on append. Keyset pagination on `(created_at, id)` is usually
       // strict, but a background sync writing a row between the initial fetch
       // and this loadMore can still produce an id overlap, and React keys must
       // be unique.
       setEmails((prev) => {
-        const seen = new Set(prev.map((email) => email.id));
-        const fresh = data.filter((email) => !seen.has(email.id));
+        const seen = new Set(prev.map(conversationKey));
+        const fresh = data.filter((email) => !seen.has(conversationKey(email)));
         return fresh.length === data.length
           ? [...prev, ...data]
           : [...prev, ...fresh];
@@ -205,27 +247,82 @@ export function useEmailInbox(
     };
   }, [inboxStillScanning]);
 
+  // The rest of an opened conversation: its messages (oldest first) for the
+  // reading pane, and every other unread one marked read. Best-effort: on
+  // failure the newest message still shows on its own.
+  const loadConversation = async (row: EmailItem) => {
+    try {
+      const messages = await getEmailThread<EmailItem>(row.id);
+      setConversation((cur) =>
+        cur === null || cur.rowId === row.id ? { rowId: row.id, messages } : cur
+      );
+      const unread = messages
+        .filter((m) => m.is_read === false && m.id !== row.id)
+        .map((m) => m.id);
+      for (const id of unread) {
+        void markEmailRead(id).catch((err) => {
+          logger.warn("Failed to persist read state", { emailId: id, err });
+        });
+      }
+    } catch (err) {
+      logger.warn("Failed to load conversation", { emailId: row.id, err });
+    }
+  };
+
+  // One message with its decrypted body and attachments, for expanding an
+  // earlier message of a conversation. Same steps and cache as openEmail.
+  const fetchMessage = async (email: EmailItem): Promise<EmailItem> => {
+    const cached = emailCache.current[email.id];
+    if (cached?.body !== undefined && cached.body !== null) return cached;
+    const data = await getEmail<EmailItem>(email.id);
+    const base = { ...email, ...data };
+    const body = data.body ? data.body : (await getEmailBody(email.id)).body;
+    let attachments = await getEmailAttachments(email.id);
+    if (data.body && !data.attachments_checked) {
+      await getEmailBody(email.id);
+      attachments = await getEmailAttachments(email.id);
+    }
+    const full = {
+      ...base,
+      body: await decryptWayveBodyIfNeeded(body || "", user_id),
+      attachments,
+    };
+    emailCache.current[email.id] = full;
+    return full;
+  };
+
   const openEmail = async (email: EmailItem) => {
     setViewMode("email");
-    const openedEmail = { ...email, is_read: true };
+    const openedEmail = { ...email, is_read: true, unread_count: 0 };
     const wasUnread = email.is_read === false;
+    // A conversation row counts every unread message in it, not just the
+    // newest; opening it reads them all.
+    const unreadDrop = email.unread_count ?? (wasUnread ? 1 : 0);
     setEmails((prev) =>
       prev.map((item) =>
-        item.id === email.id ? { ...item, is_read: true } : item
+        item.id === email.id
+          ? { ...item, is_read: true, unread_count: 0 }
+          : item
       )
     );
 
     // Decrement the sidebar unread badge optimistically. The authoritative
     // count arrives with the next /api/accounts fetch.
-    if (wasUnread && email.account_id != null) {
+    if (unreadDrop > 0 && email.account_id != null) {
       setAccounts((prev) =>
         prev.map((acc) =>
           acc.id === email.account_id
-            ? { ...acc, unread_count: Math.max(0, (acc.unread_count ?? 0) - 1) }
+            ? {
+                ...acc,
+                unread_count: Math.max(0, (acc.unread_count ?? 0) - unreadDrop),
+              }
             : acc
         )
       );
     }
+
+    setConversation(null);
+    if (isConversation(email)) void loadConversation(email);
 
     // Fire-and-forget: a failed POST logs but does not roll back the optimistic
     // UI above, and the next provider sync reconciles.
@@ -287,11 +384,25 @@ export function useEmailInbox(
     }
   };
 
+  // Deleting from the reading pane removes the whole conversation, as in
+  // Gmail. A plain row covers just itself.
   const deleteEmail = async (emailId: number) => {
-    await deleteEmailRequest(emailId);
-    delete emailCache.current[emailId];
-    setEmails((prev) => prev.filter((email) => email.id !== emailId));
-    setSelectedEmail((cur) => (cur?.id === emailId ? null : cur));
+    const row = emails.find(
+      (email) => email.id === emailId || email.message_ids?.includes(emailId)
+    );
+    const ids = row ? conversationMessageIds(row) : [emailId];
+    await Promise.all(ids.map((id) => deleteEmailRequest(id)));
+    for (const id of ids) delete emailCache.current[id];
+    const gone = row ? conversationKey(row) : null;
+    setEmails((prev) =>
+      prev.filter(
+        (email) =>
+          email.id !== emailId &&
+          (gone === null || conversationKey(email) !== gone)
+      )
+    );
+    setSelectedEmail((cur) => (cur && ids.includes(cur.id) ? null : cur));
+    setConversation(null);
   };
 
   // Mark the email's sender as noise. The backend routes all of that address's
@@ -308,20 +419,26 @@ export function useEmailInbox(
 
   // Failed POSTs log but don't roll back, so a flaky network mid-batch doesn't
   // make rows pop back to unread; the next provider sync reconciles.
-  const bulkMarkRead = async (ids: number[]) => {
-    if (ids.length === 0) return;
-    const idSet = new Set(ids);
+  // `ids` are list rows; a conversation row covers every message in it.
+  const bulkMarkRead = async (rowIds: number[]) => {
+    if (rowIds.length === 0) return;
+    const idSet = new Set(rowIds);
+    const rows = emails.filter((email) => idSet.has(email.id));
+    const ids = Array.from(
+      new Set([...rowIds, ...rows.flatMap(conversationMessageIds)])
+    );
     const unreadByAccount = new Map<number, number>();
     setEmails((prev) =>
       prev.map((email) => {
         if (!idSet.has(email.id)) return email;
-        if (email.is_read === false && email.account_id != null) {
+        const drop = email.unread_count ?? (email.is_read === false ? 1 : 0);
+        if (drop > 0 && email.account_id != null) {
           unreadByAccount.set(
             email.account_id,
-            (unreadByAccount.get(email.account_id) ?? 0) + 1
+            (unreadByAccount.get(email.account_id) ?? 0) + drop
           );
         }
-        return { ...email, is_read: true };
+        return { ...email, is_read: true, unread_count: 0 };
       })
     );
     setAccounts((prev) =>
@@ -364,7 +481,11 @@ export function useEmailInbox(
       prev.map((email) => {
         if (email.id !== id) return email;
         if (email.is_read !== false) accountId = email.account_id ?? null;
-        return { ...email, is_read: false };
+        return {
+          ...email,
+          is_read: false,
+          unread_count: Math.max(1, email.unread_count ?? 0),
+        };
       })
     );
     if (accountId != null) {
@@ -388,10 +509,17 @@ export function useEmailInbox(
   // Optimistic removal, then parallel deletes. A failed delete leaves the row
   // gone from the UI until the next refresh pulls it back, which is acceptable
   // here because the user can simply re-delete.
-  const bulkDelete = async (ids: number[]) => {
-    if (ids.length === 0) return;
+  // `ids` are list rows; deleting a conversation row deletes every message in
+  // it, as in Gmail.
+  const bulkDelete = async (rowIds: number[]) => {
+    if (rowIds.length === 0) return;
+    const rowSet = new Set(rowIds);
+    const rows = emails.filter((email) => rowSet.has(email.id));
+    const ids = Array.from(
+      new Set([...rowIds, ...rows.flatMap(conversationMessageIds)])
+    );
     const idSet = new Set(ids);
-    setEmails((prev) => prev.filter((email) => !idSet.has(email.id)));
+    setEmails((prev) => prev.filter((email) => !rowSet.has(email.id)));
     setSelectedEmail((cur) => (cur && idSet.has(cur.id) ? null : cur));
     for (const id of ids) delete emailCache.current[id];
     await Promise.allSettled(ids.map((id) => deleteEmailRequest(id))).then(
@@ -429,6 +557,8 @@ export function useEmailInbox(
     loadMore,
     openFiles,
     openEmail,
+    conversation,
+    fetchMessage,
     deleteEmail,
     markSenderNoise,
     bulkMarkRead,

@@ -9,6 +9,7 @@ import {
 import { formatFileSize } from "./renderUtils";
 import { isGmailReconnectError } from "./bodyUtils";
 import EmailBody from "./EmailBody";
+import { ConversationView } from "./ConversationView";
 import { EmailItem } from "./types";
 import { updateEmailState, type InboxState } from "../api/sharedInboxes";
 import { APP_TIME_ZONE } from "../utils/datetime";
@@ -31,6 +32,11 @@ interface EmailDetailProps {
   // *all* of a sender's mail means leaving the current folder, which is the
   // host's state. Omit to hide the menu entry.
   onFilterBySender?: (address: string) => void;
+  // The open conversation's messages, oldest first, when the email is part of
+  // one; the earlier ones show above it. Absent for a single message.
+  conversation?: EmailItem[] | null;
+  // Loads an earlier message's body when it is expanded.
+  onLoadMessage?: (email: EmailItem) => Promise<EmailItem>;
 }
 
 export const EmailDetail: React.FC<EmailDetailProps> = ({
@@ -40,6 +46,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   onDeleteEmail,
   onMarkNoise,
   onFilterBySender,
+  conversation,
+  onLoadMessage,
 }) => {
   const { user } = useAuth();
   const [deleting, setDeleting] = useState(false);
@@ -701,6 +709,13 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         {selectedEmail.subject || "(No subject)"}
       </h2>
       {deleteError && <p className="email-body-error">{deleteError}</p>}
+
+      {conversation && onLoadMessage && conversation.length > 1 && (
+        <ConversationView
+          messages={conversation.filter((m) => m.id !== selectedEmail.id)}
+          loadMessage={onLoadMessage}
+        />
+      )}
 
       {(() => {
         const { name: senderName, email: senderEmail } = splitSender(
