@@ -102,6 +102,11 @@ pub struct EmailListRow {
     pub shared_label: Option<String>,
     pub inbox_status: Option<String>,
     pub inbox_assignee_id: Option<i32>,
+    /// Conversation fields, set only on a grouped list (`group_threads`).
+    pub thread_id: Option<i32>,
+    pub message_count: Option<i64>,
+    pub unread_count: Option<i64>,
+    pub message_ids: Option<Vec<i32>>,
 }
 
 #[derive(Clone)]
@@ -114,47 +119,64 @@ pub struct EmailListFilters {
     /// (timestamp_ms, id) keyset cursor. Both must be present to take effect.
     pub before: Option<(i64, i32)>,
     pub page_size: usize,
+    /// One row per conversation instead of per email (not for spam, drafts or
+    /// trash). Off by default, so existing callers keep per-email rows.
+    pub group_threads: bool,
 }
 
-pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<EmailListRow>> {
-    // Fetch page_size + 1 so the caller can compute `has_more` without a COUNT.
-    let query_limit = (filters.page_size + 1) as i64;
+/// Projection shared by the per-email list, the grouped (conversation) list and
+/// the conversation reader, so all three decrypt rows the same way
+/// (`map_list_row`).
+const LIST_COLUMNS: &str = r#"
+        e.id, e.gmail_id, e.subject, e.subject_iv, e.subject_encrypted,
+        e.sender, e.receiver,
+        e.sender_iv, e.sender_encrypted, e.receiver_iv, e.receiver_encrypted,
+        (e.body_encrypted <> '') AS has_body,
+        EXISTS (
+            SELECT 1 FROM email_attachments ea WHERE ea.email_id = e.id
+        ) AS has_attachments,
+        e.account_id, e.is_read, e.created_at,
+        COALESCE(a.is_shared, FALSE) AS is_shared,
+        a.shared_label,
+        s.status AS inbox_status, s.assignee_id AS inbox_assignee_id
+"#;
 
-    // The LEFT JOIN on `email_accounts` keeps Wayve-to-Wayve rows (NULL
-    // account_id) in the result. The tenant boundary is the WHERE clause: a row
-    // belongs to the caller via their email_account, via shared-inbox
-    // membership, or via being a Wayve-to-Wayve delivery addressed to them.
-    let mut qb = QueryBuilder::new(
+/// A conversation's grouping key: its thread, or the email itself while it has
+/// none (not yet backfilled, or threading failed), so it stays its own row.
+const CONV_KEY: &str = "COALESCE(e.thread_id, -e.id)";
+
+/// Folders listed one row per conversation when grouping is asked for. Spam,
+/// drafts and trash stay per email.
+fn folder_groups_threads(folder: Option<&str>) -> bool {
+    !matches!(folder, Some("spam" | "drafts" | "trash"))
+}
+
+/// `FROM … WHERE <tenant>`: the caller's own mailboxes, shared inboxes they're a
+/// member of, and Wayve-to-Wayve mail addressed to them. The LEFT JOIN on
+/// `email_accounts` keeps Wayve-to-Wayve rows (NULL account_id).
+fn push_scope(qb: &mut QueryBuilder<'_, sqlx::Postgres>, user_id: i32) {
+    qb.push(
         r#"
-        SELECT e.id, e.gmail_id, e.subject, e.subject_iv, e.subject_encrypted,
-               e.sender, e.receiver,
-               e.sender_iv, e.sender_encrypted, e.receiver_iv, e.receiver_encrypted,
-               (e.body_encrypted <> '') AS has_body,
-               EXISTS (
-                   SELECT 1 FROM email_attachments ea WHERE ea.email_id = e.id
-               ) AS has_attachments,
-               e.account_id, e.is_read, e.created_at,
-               COALESCE(a.is_shared, FALSE) AS is_shared,
-               a.shared_label,
-               s.status AS inbox_status, s.assignee_id AS inbox_assignee_id
         FROM emails e
         LEFT JOIN email_accounts a ON e.account_id = a.id
         LEFT JOIN shared_inbox_members sm
                ON sm.account_id = a.id AND sm.user_id =
         "#,
     );
-    qb.push_bind(filters.user_id);
+    qb.push_bind(user_id);
     qb.push(
         r#"
         LEFT JOIN shared_inbox_email_state s ON s.email_id = e.id
         WHERE (a.user_id =
         "#,
     );
-    qb.push_bind(filters.user_id);
+    qb.push_bind(user_id);
     qb.push(" OR sm.user_id IS NOT NULL OR (e.source = 'wayve' AND e.recipient_user_id = ");
-    qb.push_bind(filters.user_id);
+    qb.push_bind(user_id);
     qb.push("))");
+}
 
+fn push_account_and_status(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFilters) {
     if let Some(account_id) = filters.account_id {
         qb.push(" AND a.id = ");
         qb.push_bind(account_id);
@@ -176,7 +198,9 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
             _ => {}
         }
     }
+}
 
+fn push_folder(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFilters) {
     // Pull-request mail lives exclusively under the "Reviews" folder: the
     // `github` arm selects on this predicate and the inbox tabs (All / Signal /
     // Noise) subtract it, so the two sides stay disjoint and a PR email never
@@ -298,7 +322,9 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
             _ => {}
         }
     }
+}
 
+fn push_search(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFilters) {
     if let Some(search) = filters
         .search
         .as_deref()
@@ -320,17 +346,34 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
         qb.push_bind(pattern);
         qb.push(") ");
     }
+}
 
-    if let Some((before_ms, before_id)) = filters.before {
-        qb.push(" AND (e.created_at, e.id) < (to_timestamp(");
-        qb.push_bind(before_ms);
-        qb.push("::double precision / 1000.0), ");
-        qb.push_bind(before_id);
-        qb.push(")");
+pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<EmailListRow>> {
+    // Fetch page_size + 1 so the caller can compute `has_more` without a COUNT.
+    let query_limit = (filters.page_size + 1) as i64;
+
+    let mut qb = QueryBuilder::new("");
+    if filters.group_threads && folder_groups_threads(filters.folder.as_deref()) {
+        push_grouped_list(&mut qb, &filters, query_limit);
+    } else {
+        // One row per email: the tenant scope, then the filters, then the
+        // keyset cursor and page.
+        qb.push("SELECT ");
+        qb.push(LIST_COLUMNS);
+        push_scope(&mut qb, filters.user_id);
+        push_account_and_status(&mut qb, &filters);
+        push_folder(&mut qb, &filters);
+        push_search(&mut qb, &filters);
+        if let Some((before_ms, before_id)) = filters.before {
+            qb.push(" AND (e.created_at, e.id) < (to_timestamp(");
+            qb.push_bind(before_ms);
+            qb.push("::double precision / 1000.0), ");
+            qb.push_bind(before_id);
+            qb.push(")");
+        }
+        qb.push(" ORDER BY e.created_at DESC, e.id DESC LIMIT ");
+        qb.push_bind(query_limit);
     }
-
-    qb.push(" ORDER BY e.created_at DESC, e.id DESC LIMIT ");
-    qb.push_bind(query_limit);
 
     // `emails` is RLS-enabled, so the read runs under the restricted role with
     // the caller's GUC and the row policy engages as defense in depth behind the
@@ -347,6 +390,67 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
     let raw = qb.build().fetch_all(&mut *tx).await?;
     tx.commit().await?;
     Ok(raw.into_iter().map(map_list_row).collect())
+}
+
+/// One row per conversation, the way Gmail lists mail.
+///
+/// 1. `matched`: the conversations with at least one email in this view, using
+///    exactly the per-email filters. Signal and Noise instead judge each
+///    conversation by its newest *incoming* email, so a reply of yours can't
+///    pull a conversation into Signal and the two chips stay disjoint.
+/// 2. `conv`: every email of those conversations the caller can see (trash,
+///    spam and drafts aside), so your own sent reply counts as the newest
+///    message and the conversation sorts by it, as in Gmail.
+/// 3. The newest email of each conversation is its row, with the count, the
+///    unread count, any attachment, and every message id (for bulk actions).
+fn push_grouped_list(
+    qb: &mut QueryBuilder<'_, sqlx::Postgres>,
+    filters: &EmailListFilters,
+    query_limit: i64,
+) {
+    qb.push("WITH matched AS (");
+    if matches!(filters.folder.as_deref(), Some("signal" | "noise")) {
+        qb.push("SELECT e.conv_key FROM (SELECT DISTINCT ON (");
+        qb.push(CONV_KEY);
+        qb.push(") e.*, ");
+        qb.push(CONV_KEY);
+        qb.push(" AS conv_key");
+        push_scope(qb, filters.user_id);
+        push_account_and_status(qb, filters);
+        push_search(qb, filters);
+        qb.push(" AND NOT ('SENT' = ANY(e.labels)) ORDER BY ");
+        qb.push(CONV_KEY);
+        qb.push(", e.created_at DESC, e.id DESC) e WHERE TRUE ");
+        push_folder(qb, filters);
+    } else {
+        qb.push("SELECT DISTINCT ");
+        qb.push(CONV_KEY);
+        qb.push(" AS conv_key");
+        push_scope(qb, filters.user_id);
+        push_account_and_status(qb, filters);
+        push_folder(qb, filters);
+        push_search(qb, filters);
+    }
+    qb.push("), conv AS (SELECT ");
+    qb.push(LIST_COLUMNS);
+    qb.push(", ");
+    qb.push(CONV_KEY);
+    qb.push(" AS conv_key, e.thread_id");
+    push_scope(qb, filters.user_id);
+    qb.push(" AND ");
+    qb.push(CONV_KEY);
+    qb.push(
+        " IN (SELECT conv_key FROM matched)           AND NOT ('TRASH' = ANY(e.labels)) AND NOT ('SPAM' = ANY(e.labels))           AND NOT ('DRAFT' = ANY(e.labels))),         latest AS (SELECT DISTINCT ON (conv_key) * FROM conv                    ORDER BY conv_key, created_at DESC, id DESC),         agg AS (SELECT conv_key,                        COUNT(*)::BIGINT AS message_count,                        (COUNT(*) FILTER (WHERE is_read = FALSE))::BIGINT AS unread_count,                        BOOL_OR(has_attachments) AS any_attachments,                        (ARRAY_AGG(id ORDER BY created_at DESC, id DESC))[1:100] AS message_ids                 FROM conv GROUP BY conv_key)         SELECT l.id, l.gmail_id, l.subject, l.subject_iv, l.subject_encrypted,                l.sender, l.receiver, l.sender_iv, l.sender_encrypted,                l.receiver_iv, l.receiver_encrypted, l.has_body,                g.any_attachments AS has_attachments,                l.account_id, l.is_read, l.created_at, l.is_shared, l.shared_label,                l.inbox_status, l.inbox_assignee_id, l.thread_id,                g.message_count, g.unread_count, g.message_ids         FROM latest l JOIN agg g USING (conv_key) WHERE TRUE",
+    );
+    if let Some((before_ms, before_id)) = filters.before {
+        qb.push(" AND (l.created_at, l.id) < (to_timestamp(");
+        qb.push_bind(before_ms);
+        qb.push("::double precision / 1000.0), ");
+        qb.push_bind(before_id);
+        qb.push(")");
+    }
+    qb.push(" ORDER BY l.created_at DESC, l.id DESC LIMIT ");
+    qb.push_bind(query_limit);
 }
 
 fn map_list_row(row: PgRow) -> EmailListRow {
@@ -378,7 +482,56 @@ fn map_list_row(row: PgRow) -> EmailListRow {
             .try_get::<Option<i32>, _>("inbox_assignee_id")
             .ok()
             .flatten(),
+        thread_id: row.try_get::<Option<i32>, _>("thread_id").ok().flatten(),
+        message_count: row
+            .try_get::<Option<i64>, _>("message_count")
+            .ok()
+            .flatten(),
+        unread_count: row.try_get::<Option<i64>, _>("unread_count").ok().flatten(),
+        message_ids: row
+            .try_get::<Option<Vec<i32>>, _>("message_ids")
+            .ok()
+            .flatten(),
     }
+}
+
+/// Every message of `email_id`'s conversation that the caller can see, oldest
+/// first, as list rows (bodies load per message through the detail endpoints).
+/// The email itself is always included; the rest of its conversation is too,
+/// trash, spam and drafts aside. An email the caller can't see returns nothing:
+/// the thread lookup runs under the same tenant scope and row-level security,
+/// so another user's id never reveals a conversation.
+pub async fn thread_messages(
+    pool: &PgPool,
+    email_id: i32,
+    user_id: i32,
+) -> sqlx::Result<Vec<EmailListRow>> {
+    let mut qb = QueryBuilder::new("SELECT ");
+    qb.push(LIST_COLUMNS);
+    push_scope(&mut qb, user_id);
+    qb.push(" AND (e.id = ");
+    qb.push_bind(email_id);
+    qb.push(
+        " OR (e.thread_id IS NOT NULL \
+              AND e.thread_id = (SELECT t.thread_id FROM emails t WHERE t.id = ",
+    );
+    qb.push_bind(email_id);
+    qb.push(
+        ") \
+              AND NOT ('TRASH' = ANY(e.labels)) AND NOT ('SPAM' = ANY(e.labels)) \
+              AND NOT ('DRAFT' = ANY(e.labels)))) \
+         ORDER BY e.created_at ASC, e.id ASC LIMIT 500",
+    );
+
+    let mut tx = pool.begin().await?;
+    sqlx::raw_sql(&format!(
+        "SELECT set_config('app.user_id', '{user_id}', true); SET LOCAL ROLE wayve_app;"
+    ))
+    .execute(&mut *tx)
+    .await?;
+    let raw = qb.build().fetch_all(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(raw.into_iter().map(map_list_row).collect())
 }
 
 /// Single-row read for the `/emails/{id}` detail endpoint. The body stays as

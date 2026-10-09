@@ -190,6 +190,8 @@ async fn list_recent_emails(pool: &PgPool, user_id: i32) -> Value {
         search: None,
         before: None,
         page_size: READ_LIMIT,
+        // The assistant reasons about individual emails, not conversations.
+        group_threads: false,
     };
     match crate::email::repo::list(pool, filters).await {
         Ok(rows) => {

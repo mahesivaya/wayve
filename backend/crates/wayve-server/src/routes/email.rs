@@ -28,6 +28,9 @@ pub struct EmailQuery {
     ///   `mine` — assigned to the calling user
     /// Any other value is ignored.
     pub inbox_status: Option<String>,
+    /// `1` / `true`: one row per conversation (Gmail-style), positioned by its
+    /// newest message. Spam, drafts and trash stay per email.
+    pub threads: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -135,6 +138,7 @@ pub async fn get_emails(
         search: query.q.clone(),
         before,
         page_size,
+        group_threads: matches!(query.threads.as_deref(), Some("1" | "true")),
     };
 
     // DB-first: the provider is only blocked on when the local cache is exhausted,
@@ -201,6 +205,10 @@ pub async fn get_emails(
                 "shared_label": row.shared_label,
                 "inbox_status": row.inbox_status,
                 "inbox_assignee_id": row.inbox_assignee_id,
+                "thread_id": row.thread_id,
+                "message_count": row.message_count,
+                "unread_count": row.unread_count,
+                "message_ids": row.message_ids,
             })
         })
         .collect();
@@ -882,6 +890,52 @@ async fn push_read_state_to_provider(
             "mark-read provider push failed; Wayve DB state stands"
         );
     }
+}
+
+/// Every message of this email's conversation, oldest first, as list rows. The
+/// bodies still load per message through `/emails/{id}` and `/emails/{id}/body`,
+/// so encryption and provider fetching are unchanged. 404 when the caller can't
+/// see the email.
+#[get("/emails/{id}/thread")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn get_email_thread(
+    req: HttpRequest,
+    path: web::Path<i32>,
+    pool: web::Data<PgPool>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let rows = repo::thread_messages(pool.get_ref(), path.into_inner(), user_id).await?;
+    if rows.is_empty() {
+        return Ok(
+            HttpResponse::NotFound().json(serde_json::json!({ "message": "Email not found" }))
+        );
+    }
+    let messages: Vec<Value> = rows
+        .into_iter()
+        .map(|row| {
+            let created_at = row.created_at.map(|dt| {
+                chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(dt, chrono::Utc)
+                    .to_rfc3339()
+            });
+            serde_json::json!({
+                "id": row.id,
+                "gmail_id": row.gmail_id,
+                "subject": row.subject,
+                "sender": row.sender,
+                "receiver": row.receiver,
+                "has_body": row.has_body,
+                "has_attachments": row.has_attachments,
+                "account_id": row.account_id,
+                "is_read": row.is_read,
+                "created_at": created_at,
+                "is_shared": row.is_shared,
+                "shared_label": row.shared_label,
+                "inbox_status": row.inbox_status,
+                "inbox_assignee_id": row.inbox_assignee_id,
+            })
+        })
+        .collect();
+    Ok(HttpResponse::Ok().json(messages))
 }
 
 #[get("/emails/{id}/attachments")]
