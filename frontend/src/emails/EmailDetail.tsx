@@ -450,6 +450,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         subject,
         body,
         attachments,
+        reply_to_email_id: selectedEmail.id,
       });
       setReplyToList([]);
       setReplySubject("");

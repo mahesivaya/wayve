@@ -253,7 +253,35 @@ async fn store_message(pool: &PgPool, account_id: i32, msg: &FetchedMessage) -> 
         body: Some((&body_iv, &body_ct)),
         attachments_checked: true,
     };
-    upsert_one(pool, account_id, &row).await?;
+    let email_id = upsert_one(pool, account_id, &row).await?;
+
+    // The full message is in hand, so all three reply headers are available.
+    // IMAP has no conversation id of its own.
+    let threading = crate::email::threading::ThreadHeaders {
+        message_id: parsed.message_id().map(str::to_string),
+        in_reply_to: parsed
+            .in_reply_to()
+            .as_text_list()
+            .and_then(|ids| ids.last().map(|id| id.to_string())),
+        references: parsed
+            .references()
+            .as_text_list()
+            .map(|ids| ids.into_iter().map(str::to_string).collect())
+            .unwrap_or_default(),
+        provider_thread_id: None,
+    };
+    crate::email::threading::assign_best_effort(
+        pool,
+        account_id,
+        crate::email::threading::ThreadInput {
+            email_id,
+            headers: &threading,
+            subject: &subject,
+            sender: &sender,
+            created_at: Some(created_at),
+        },
+    )
+    .await;
     Ok(())
 }
 
@@ -310,9 +338,63 @@ fn build_message(from_email: &str, data: &SendEmailRequest) -> anyhow::Result<Me
     for addr in crate::email::send::normalized_bcc(data) {
         builder = builder.bcc(addr.parse().context("bcc address")?);
     }
+    // A reply joins its conversation. Validated `<id>` values only — see
+    // `reply_headers::load`.
+    if let Some(reply) = &data.reply_headers {
+        builder = builder
+            .in_reply_to(reply.in_reply_to.clone())
+            .references(reply.references.clone());
+    }
     builder
         .subject(&data.subject)
         .header(ContentType::TEXT_PLAIN)
         .body(data.body.clone())
         .context("build message")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::email::reply_headers::ReplyHeaders;
+
+    fn request(reply: Option<ReplyHeaders>) -> SendEmailRequest {
+        SendEmailRequest {
+            account_id: 1,
+            to: "bob@example.com".into(),
+            subject: "Re: hi".into(),
+            body: "reply".into(),
+            cc: vec![],
+            bcc: vec![],
+            attachments: vec![],
+            reply_to_email_id: None,
+            reply_headers: reply,
+        }
+    }
+
+    fn formatted(data: &SendEmailRequest) -> String {
+        let message =
+            build_message("me@example.com", data).unwrap_or_else(|e| panic!("build failed: {e}"));
+        String::from_utf8_lossy(&message.formatted()).into_owned()
+    }
+
+    #[test]
+    fn a_reply_over_smtp_carries_the_threading_headers() {
+        let raw = formatted(&request(Some(ReplyHeaders {
+            in_reply_to: "<orig@x.com>".into(),
+            references: "<root@x.com> <orig@x.com>".into(),
+            gmail_thread_id: None,
+        })));
+        assert!(raw.contains("In-Reply-To: <orig@x.com>\r\n"), "{raw}");
+        assert!(
+            raw.contains("References: <root@x.com> <orig@x.com>\r\n"),
+            "{raw}"
+        );
+    }
+
+    #[test]
+    fn a_new_message_over_smtp_has_no_threading_headers() {
+        let raw = formatted(&request(None));
+        assert!(!raw.contains("In-Reply-To:"), "{raw}");
+        assert!(!raw.contains("References:"), "{raw}");
+    }
 }

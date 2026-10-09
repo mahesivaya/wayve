@@ -55,6 +55,10 @@ export type SendEmailPayload = {
   bcc?: string[];
   // Standard-mailbox attachments only (Gmail/Outlook MIME, not E2E).
   attachments?: EmailComposeAttachment[];
+  // The email this one answers, so recipients' mail clients (and the sender's
+  // own Gmail) thread it under that conversation. The server reads the
+  // original's headers itself; set only by Reply, never by Forward.
+  reply_to_email_id?: number;
 };
 
 export type EmailAttachment = {

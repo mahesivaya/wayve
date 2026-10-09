@@ -1,3 +1,4 @@
+use crate::email::reply_headers::ReplyHeaders;
 use lettre::message::header::ContentType;
 use lettre::message::{Attachment, Mailbox, MultiPart, SinglePart};
 use lettre::transport::smtp::authentication::Credentials;
@@ -226,6 +227,7 @@ pub fn build_message(
     subject: &str,
     body: &str,
     attachments: &[OutgoingAttachment],
+    reply: Option<&ReplyHeaders>,
 ) -> Result<Message, MailError> {
     let from_parsed: Mailbox =
         clean_mailbox(from)
@@ -236,6 +238,12 @@ pub fn build_message(
             })?;
 
     let mut builder = Message::builder().from(from_parsed).subject(subject);
+    // Already validated plain `<id>` values (see `reply_headers::load`).
+    if let Some(reply) = reply {
+        builder = builder
+            .in_reply_to(reply.in_reply_to.clone())
+            .references(reply.references.clone());
+    }
     let mut has_recipient = false;
     for addr in to.split(',').map(str::trim).filter(|s| !s.is_empty()) {
         let mailbox: Mailbox =
@@ -313,6 +321,7 @@ pub async fn send_mail_with_attachments(
     subject: &str,
     body: &str,
     attachments: &[OutgoingAttachment],
+    reply: Option<&ReplyHeaders>,
 ) -> Result<(), MailError> {
     let crate::config::SmtpConfig {
         host,
@@ -333,6 +342,7 @@ pub async fn send_mail_with_attachments(
         subject,
         body,
         attachments,
+        reply,
     )?;
     let mailer = build_transport(&host, port, user, pass)?;
     match mailer.send(message).await {
@@ -362,6 +372,7 @@ mod tests {
             "Hi",
             "Body",
             attachments,
+            None,
         )
         .unwrap_or_else(|e| panic!("build failed: {e}"))
     }
@@ -424,6 +435,7 @@ mod tests {
             "Hi",
             "Body",
             &[],
+            None,
         )
         .unwrap_or_else(|e| panic!("build failed: {e}"));
 
@@ -456,6 +468,7 @@ mod tests {
                 "Hi",
                 "Body",
                 &[],
+                None,
             )
             .unwrap_or_else(|e| panic!("build failed: {e}")),
         );
@@ -477,6 +490,7 @@ mod tests {
                 "Hi",
                 "Body",
                 &[],
+                None,
             )
             .unwrap_or_else(|e| panic!("build failed: {e}")),
         );
@@ -494,6 +508,7 @@ mod tests {
             "Hi",
             "Body",
             &[],
+            None,
         );
         assert!(matches!(err, Err(MailError::NoRecipients)));
     }

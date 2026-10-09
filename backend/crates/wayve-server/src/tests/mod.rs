@@ -14,6 +14,8 @@ mod chat_multi_session_test;
 mod contacts_test;
 mod documents_rbac_test;
 mod email_provider_isp_test;
+mod email_reply_headers_test;
+mod email_threading_test;
 mod embed_tokens_test;
 mod gitlab_test;
 mod integrations_status_test;

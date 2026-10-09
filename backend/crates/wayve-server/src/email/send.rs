@@ -4,6 +4,7 @@ use crate::email::account::load_email_account_for_send;
 use crate::email::oauth::HTTP_CLIENT;
 use crate::email::outlook::send_outlook_mail;
 use crate::email::provider::refresh_and_persist_email_token;
+use crate::email::reply_headers::{self, ReplyHeaders, clean_header_value};
 use crate::models::email_request::{EmailAttachmentInput, SendEmailRequest};
 use actix_web::HttpResponse;
 use base64::Engine;
@@ -127,6 +128,18 @@ pub async fn send(
     data: web::Json<SendEmailRequest>,
     pool: web::Data<PgPool>,
 ) -> AppResult {
+    let mut data = data.into_inner();
+    // To/Cc/Bcc/Subject go into outgoing headers, and a reply's subject (and
+    // usually its To) is prefilled from the incoming email, which an attacker
+    // writes. A line break would end the header and start a forged one (a
+    // hidden Bcc, say), so every control character becomes a space here,
+    // before any transport sees them.
+    data.to = clean_header_value(&data.to);
+    data.subject = clean_header_value(&data.subject);
+    for addr in data.cc.iter_mut().chain(data.bcc.iter_mut()) {
+        *addr = clean_header_value(addr);
+    }
+
     if data.to.trim().is_empty() || data.subject.trim().is_empty() {
         return Ok(HttpResponse::BadRequest().body("Recipient and Subject are required"));
     }
@@ -147,6 +160,13 @@ pub async fn send(
             Some(account) => account,
             None => return Ok(HttpResponse::Unauthorized().body("Email account not found")),
         };
+
+    // A reply joins the conversation it answers. The original is looked up only
+    // in this (already authorized) mailbox; anything missing means unthreaded.
+    if let Some(original) = data.reply_to_email_id {
+        data.reply_headers =
+            reply_headers::load(pool.get_ref(), user_id, account.id, original).await;
+    }
 
     let refresh_token = match account.usable_refresh_token() {
         Some(value) => value,
@@ -179,13 +199,20 @@ pub async fn send(
                 subject,
                 &data.body,
                 &[],
+                data.reply_headers.as_ref(),
             )
             .await
         } else {
             match decode_attachments(&data.attachments) {
                 Ok(decoded) => {
                     crate::email::sender::send_mail_with_attachments(
-                        to, &cc, &bcc, subject, &data.body, &decoded,
+                        to,
+                        &cc,
+                        &bcc,
+                        subject,
+                        &data.body,
+                        &decoded,
+                        data.reply_headers.as_ref(),
                     )
                     .await
                 }
@@ -464,7 +491,7 @@ pub async fn send_internal(
     })))
 }
 
-pub(super) async fn send_via_gmail(
+pub(crate) async fn send_via_gmail(
     access_token: &str,
     from_email: &str,
     data: &SendEmailRequest,
@@ -486,9 +513,22 @@ pub(super) async fn send_via_gmail(
         } else {
             format!("Bcc: {}\r\n", bcc.join(", "))
         };
+        // In-Reply-To / References come only from `reply_headers::load`, which
+        // emits validated `<id>` values with no line breaks.
+        let reply_header = data
+            .reply_headers
+            .as_ref()
+            .map(|r| {
+                format!(
+                    "In-Reply-To: {}\r\nReferences: {}\r\n",
+                    r.in_reply_to, r.references
+                )
+            })
+            .unwrap_or_default();
         format!(
             "From: {}\r\n\
         To: {}\r\n\
+        {}\
         {}\
         {}\
         Subject: {}\r\n\
@@ -501,6 +541,7 @@ pub(super) async fn send_via_gmail(
             data.to.trim(),
             cc_header,
             bcc_header,
+            reply_header,
             data.subject.trim(),
             data.body.replace("\n", "\r\n")
         )
@@ -525,6 +566,7 @@ pub(super) async fn send_via_gmail(
             data.subject.trim(),
             &data.body,
             &decoded,
+            data.reply_headers.as_ref(),
         ) {
             Ok(message) => message.formatted(),
             Err(e) => {
@@ -536,13 +578,20 @@ pub(super) async fn send_via_gmail(
     };
 
     let encoded = base64::engine::general_purpose::URL_SAFE.encode(&raw_bytes);
+    let thread_id = data
+        .reply_headers
+        .as_ref()
+        .and_then(|r: &ReplyHeaders| r.gmail_thread_id.clone());
 
-    let res = HTTP_CLIENT
-        .post(crate::external::gmail_send_url())
-        .bearer_auth(access_token)
-        .json(&serde_json::json!({ "raw": encoded }))
-        .send()
-        .await;
+    let mut res = post_gmail_send(access_token, &encoded, thread_id.as_deref()).await;
+    // The threadId only files the reply under the sender's own Gmail
+    // conversation; the headers above already thread it for recipients. If Gmail
+    // rejects the id (the thread was deleted, say), send without it rather than
+    // failing a reply that would have gone out before threading existed.
+    if thread_id.is_some() && matches!(&res, Ok(resp) if resp.status().is_client_error()) {
+        warn!(target: "gmail", user_id, "gmail rejected the reply's threadId; resending without it");
+        res = post_gmail_send(access_token, &encoded, None).await;
+    }
 
     match res {
         Ok(resp) => {
@@ -566,6 +615,23 @@ pub(super) async fn send_via_gmail(
             HttpResponse::InternalServerError().body("Failed to reach Gmail")
         }
     }
+}
+
+async fn post_gmail_send(
+    access_token: &str,
+    raw: &str,
+    thread_id: Option<&str>,
+) -> reqwest::Result<reqwest::Response> {
+    let body = match thread_id {
+        Some(id) => serde_json::json!({ "raw": raw, "threadId": id }),
+        None => serde_json::json!({ "raw": raw }),
+    };
+    HTTP_CLIENT
+        .post(crate::external::gmail_send_url())
+        .bearer_auth(access_token)
+        .json(&body)
+        .send()
+        .await
 }
 
 pub(super) async fn send_via_outlook(
@@ -653,6 +719,8 @@ mod tests {
             cc: cc.iter().map(|s| s.to_string()).collect(),
             bcc: bcc.iter().map(|s| s.to_string()).collect(),
             attachments: vec![],
+            reply_to_email_id: None,
+            reply_headers: None,
         }
     }
 
