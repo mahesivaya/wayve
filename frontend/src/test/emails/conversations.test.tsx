@@ -17,6 +17,7 @@ const getEmails = vi.fn();
 const getEmailThread = vi.fn();
 const deleteEmail = vi.fn();
 const markEmailRead = vi.fn();
+const downloadEmailAttachment = vi.fn();
 
 vi.mock("../../api/email", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../api/email")>()),
@@ -28,6 +29,8 @@ vi.mock("../../api/email", async (importOriginal) => ({
   getEmailAttachments: vi.fn().mockResolvedValue([]),
   deleteEmail: (id: number) => deleteEmail(id),
   markEmailRead: (id: number) => markEmailRead(id),
+  downloadEmailAttachment: (a: unknown, userId: unknown) =>
+    downloadEmailAttachment(a, userId),
 }));
 
 import { EmailList } from "../../emails/EmailList";
@@ -135,8 +138,9 @@ describe("earlier messages of an open conversation", () => {
     }));
     render(
       <ConversationView
-        messages={thread.slice(0, 2)}
+        messages={[thread[0], thread[2]]}
         loadMessage={loadMessage}
+        userId={1}
       />
     );
 
@@ -148,6 +152,61 @@ describe("earlier messages of an open conversation", () => {
     fireEvent.click(heads[0]);
     expect(await screen.findByText("Hello from July")).toBeTruthy();
     expect(loadMessage).toHaveBeenCalledWith(thread[0]);
+  });
+});
+
+describe("earlier messages: unread and attachments", () => {
+  afterEach(() => {
+    cleanup();
+    downloadEmailAttachment.mockReset();
+  });
+
+  it("opens the unread ones with their body, and leaves read ones collapsed", async () => {
+    // thread[0] was read, thread[1] unread when the conversation opened.
+    const loadMessage = vi.fn(async (m: EmailItem) => ({
+      ...m,
+      body: `body of ${m.id}`,
+    }));
+    render(
+      <ConversationView
+        messages={thread.slice(0, 2)}
+        loadMessage={loadMessage}
+        userId={1}
+      />
+    );
+
+    expect(await screen.findByText("body of 11")).toBeTruthy();
+    const [read, unread] = screen.getAllByRole("button");
+    expect(read.getAttribute("aria-expanded")).toBe("false");
+    expect(unread.getAttribute("aria-expanded")).toBe("true");
+    expect(loadMessage).toHaveBeenCalledTimes(1);
+    expect(loadMessage).toHaveBeenCalledWith(thread[1]);
+  });
+
+  it("shows an expanded message's attachments and downloads them", async () => {
+    const attachment = {
+      id: 3,
+      email_id: 10,
+      filename: "invoice.pdf",
+      size: 2048,
+      mime_type: "application/pdf",
+    };
+    const loadMessage = vi.fn(async (m: EmailItem) => ({
+      ...m,
+      body: "see attached",
+      attachments: [attachment],
+    }));
+    render(
+      <ConversationView
+        messages={[thread[0]]}
+        loadMessage={loadMessage}
+        userId={1}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button"));
+    fireEvent.click(await screen.findByText("invoice.pdf"));
+    expect(downloadEmailAttachment).toHaveBeenCalledWith(attachment, 1);
   });
 });
 

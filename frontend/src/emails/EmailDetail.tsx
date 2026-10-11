@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-  downloadEmailAttachment,
   sendEmail,
   getGmailConnectUrl,
   filesToAttachments,
@@ -10,6 +9,7 @@ import { formatFileSize } from "./renderUtils";
 import { isGmailReconnectError } from "./bodyUtils";
 import EmailBody from "./EmailBody";
 import { ConversationView } from "./ConversationView";
+import { EmailAttachments } from "./EmailAttachments";
 import { replyRecipients } from "./replyRecipients";
 import { EmailItem } from "./types";
 import { updateEmailState, type InboxState } from "../api/sharedInboxes";
@@ -721,8 +721,12 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
 
       {conversation && onLoadMessage && conversation.length > 1 && (
         <ConversationView
+          // A fresh view per conversation, so which messages are open (and
+          // which start open because they were unread) never carries over.
+          key={selectedEmail.id}
           messages={conversation.filter((m) => m.id !== selectedEmail.id)}
           loadMessage={onLoadMessage}
+          userId={user?.id ?? null}
         />
       )}
 
@@ -1139,28 +1143,10 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         )}
       </div>
 
-      {(selectedEmail.attachments?.length ?? 0) > 0 && (
-        <div className="email-attachments">
-          <div className="email-attachments-title">Attachments</div>
-          {selectedEmail.attachments?.map((attachment) => (
-            <button
-              key={attachment.id}
-              className="email-attachment"
-              onClick={() =>
-                downloadEmailAttachment(attachment, user?.id ?? null)
-              }
-            >
-              <span className="email-attachment-icon">📎</span>
-              <span className="email-attachment-name">
-                {attachment.filename}
-              </span>
-              <span className="email-attachment-size">
-                {formatFileSize(attachment.size)}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
+      <EmailAttachments
+        attachments={selectedEmail.attachments}
+        userId={user?.id ?? null}
+      />
     </div>
   );
 };

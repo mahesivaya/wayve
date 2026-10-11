@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import EmailBody from "./EmailBody";
+import { EmailAttachments } from "./EmailAttachments";
 import { emailBodyErrorMessage } from "./bodyUtils";
 import type { EmailItem } from "./types";
 import { APP_TIME_ZONE } from "../utils/datetime";
 
 // The earlier messages of an open conversation, oldest first, above the newest
 // one (which the reading pane shows in full as before). Each starts collapsed
-// to one line — who, when — and loads its body on first expand.
+// to one line — who, when — and loads its body (and attachments) on first
+// expand. Messages that were unread when the conversation opened start
+// expanded instead, as in Gmail, since those are the ones you came to read.
 
 type Loaded =
   | { state: "loading" }
@@ -17,21 +20,64 @@ interface ConversationViewProps {
   // Earlier messages only, oldest first. The newest is rendered by the caller.
   messages: EmailItem[];
   loadMessage: (email: EmailItem) => Promise<EmailItem>;
+  // For downloading (and decrypting) attachments.
+  userId: number | null;
 }
 
 export function ConversationView({
   messages,
   loadMessage,
+  userId,
 }: ConversationViewProps) {
-  const [open, setOpen] = useState<Record<number, boolean>>({});
-  const [loaded, setLoaded] = useState<Record<number, Loaded>>({});
+  // Unread messages start open and loading; the effect below fetches them.
+  // The caller remounts this per conversation (key), so "unread" means unread
+  // when this conversation was opened.
+  const [startOpen] = useState(() =>
+    messages.filter((m) => m.is_read === false).map((m) => m.id)
+  );
+  const [open, setOpen] = useState<Record<number, boolean>>(() =>
+    Object.fromEntries(startOpen.map((id) => [id, true]))
+  );
+  const [loaded, setLoaded] = useState<Record<number, Loaded>>(() =>
+    Object.fromEntries(startOpen.map((id) => [id, { state: "loading" }]))
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    for (const message of messages) {
+      if (!startOpen.includes(message.id)) continue;
+      loadMessage(message).then(
+        (email) => {
+          if (cancelled) return;
+          setLoaded((cur) => ({
+            ...cur,
+            [message.id]: { state: "ready", email },
+          }));
+        },
+        (err: unknown) => {
+          if (cancelled) return;
+          setLoaded((cur) => ({
+            ...cur,
+            [message.id]: {
+              state: "error",
+              message: emailBodyErrorMessage(err),
+            },
+          }));
+        }
+      );
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [messages, loadMessage, startOpen]);
 
   if (messages.length === 0) return null;
 
   const toggle = async (message: EmailItem) => {
     const willOpen = !open[message.id];
     setOpen((cur) => ({ ...cur, [message.id]: willOpen }));
-    if (!willOpen || loaded[message.id]?.state === "ready") return;
+    const state = loaded[message.id]?.state;
+    if (!willOpen || state === "ready" || state === "loading") return;
     setLoaded((cur) => ({ ...cur, [message.id]: { state: "loading" } }));
     try {
       const email = await loadMessage(message);
@@ -70,7 +116,13 @@ export function ConversationView({
             {isOpen && (
               <div className="conversation-message-body">
                 {entry?.state === "ready" ? (
-                  <EmailBody body={entry.email.body || ""} />
+                  <>
+                    <EmailBody body={entry.email.body || ""} />
+                    <EmailAttachments
+                      attachments={entry.email.attachments}
+                      userId={userId}
+                    />
+                  </>
                 ) : entry?.state === "error" ? (
                   <p className="email-body-error">{entry.message}</p>
                 ) : (
