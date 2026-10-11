@@ -800,6 +800,7 @@ export default function Emails() {
                 : null
             }
             onLoadMessage={fetchMessage}
+            ownAddresses={accounts.map((account) => account.email)}
             onFilterBySender={(address) => {
               // Leave the current folder: the sender's mail is spread across
               // Sent, Reviews and the category folders, and the inbox query

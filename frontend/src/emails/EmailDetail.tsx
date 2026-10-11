@@ -10,6 +10,7 @@ import { formatFileSize } from "./renderUtils";
 import { isGmailReconnectError } from "./bodyUtils";
 import EmailBody from "./EmailBody";
 import { ConversationView } from "./ConversationView";
+import { replyRecipients } from "./replyRecipients";
 import { EmailItem } from "./types";
 import { updateEmailState, type InboxState } from "../api/sharedInboxes";
 import { APP_TIME_ZONE } from "../utils/datetime";
@@ -37,6 +38,9 @@ interface EmailDetailProps {
   conversation?: EmailItem[] | null;
   // Loads an earlier message's body when it is expanded.
   onLoadMessage?: (email: EmailItem) => Promise<EmailItem>;
+  // The user's connected mailbox addresses. Replying to one of your own
+  // messages goes to its recipients, not back to you.
+  ownAddresses?: string[];
 }
 
 export const EmailDetail: React.FC<EmailDetailProps> = ({
@@ -48,6 +52,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   onFilterBySender,
   conversation,
   onLoadMessage,
+  ownAddresses,
 }) => {
   const { user } = useAuth();
   const [deleting, setDeleting] = useState(false);
@@ -97,7 +102,15 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   // Reply-to address, used inside onPick to avoid Cc-ing the person already on
   // the To line. Recomputed each render, so the inline onPick always closes over
   // the current value (no ref needed).
-  const replyToAddr = selectedEmail ? emailAddress(selectedEmail.sender) : "";
+  // Who Reply addresses: the sender, or — for a message you sent yourself — its
+  // recipients (see replyRecipients). Recomputed each render, like the rest.
+  const replyRecipientList = selectedEmail
+    ? replyRecipients(selectedEmail, [
+        ...(ownAddresses ?? []),
+        ...(user?.email ? [user.email] : []),
+      ])
+    : [];
+  const replyToAddr = replyRecipientList[0] ?? "";
   const mention = useMentionSearch({
     value: replyBody,
     setValue: setReplyBody,
@@ -308,11 +321,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     // stray Escape keeps an edited recipient or subject — the same rule the
     // body follows.
     if (next) {
-      setReplyToList((prev) => {
-        if (prev.length > 0) return prev;
-        const sender = emailAddress(selectedEmail.sender);
-        return sender ? [sender] : [];
-      });
+      setReplyToList((prev) => (prev.length > 0 ? prev : replyRecipientList));
       setReplySubject((prev) => prev || replySubjectFor(selectedEmail));
     }
     setReplyError(null);
@@ -1155,12 +1164,6 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     </div>
   );
 };
-
-function emailAddress(value?: string | null) {
-  const text = value?.trim() || "";
-  const match = text.match(/<([^>]+)>/);
-  return (match?.[1] || text).trim();
-}
 
 function displaySubject(email: EmailItem): string {
   return email.subject?.trim() || "(No Subject)";

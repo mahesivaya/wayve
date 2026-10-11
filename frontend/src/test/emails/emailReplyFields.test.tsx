@@ -105,6 +105,15 @@ describe("reply composer recipients and subject", () => {
     expect(subject.value).toBe("Re: Request to schedule call");
   });
 
+  it("replies to the recipients of your own message, not to you", async () => {
+    // The newest message of a conversation is often your own reply.
+    const { to } = await openReply({
+      sender: "Me <me@test.local>",
+      receiver: '"Griffin, Peter" <peter@corp.test>, bo@corp.test',
+    });
+    expect(chips(to)).toEqual(["peter@corp.test", "bo@corp.test"]);
+  });
+
   it("turns each entered address into its own chip", async () => {
     const { to } = await openReply();
     addChip(to, "bo@corp.test");
