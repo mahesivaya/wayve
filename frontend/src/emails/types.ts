@@ -39,6 +39,8 @@ export interface EmailItem {
   message_count?: number | null;
   unread_count?: number | null;
   message_ids?: number[] | null;
+  // The unread ones, so marking the conversation read touches only those.
+  unread_ids?: number[] | null;
   _bodyLoading?: boolean;
   _bodyError?: unknown;
 }

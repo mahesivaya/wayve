@@ -49,6 +49,9 @@ export function useEmailInbox(
   const [filesError, setFilesError] = useState<string | null>(null);
 
   const emailCache = useRef<Record<number, EmailItem>>({});
+  // The row whose conversation is wanted now. A slower response for a row
+  // opened earlier must not take its place.
+  const conversationFor = useRef<number | null>(null);
 
   const fetchAccounts = useCallback(async () => {
     try {
@@ -137,26 +140,34 @@ export function useEmailInbox(
       // Rows are matched by conversation, not id: a conversation's row is its
       // newest message, so a new reply changes the id. Such a conversation
       // moves to the top with the fresh row instead of appearing twice.
+      //
+      // A row's key can also change under it: an email listed on its own
+      // (`e5`) is grouped by the backfill (`t9`), or two conversations merge.
+      // So a loaded row also matches the fresh row that now contains it. It is
+      // updated in place when it is still that conversation's newest message,
+      // and dropped otherwise (the fresh row then goes to the top), so no email
+      // is ever listed twice.
       setEmails((prev) => {
-        const fresh = new Map(
+        const byKey = new Map(
           data.map((email) => [conversationKey(email), email])
         );
-        const moved = new Set<string>();
+        const byMember = new Map<number, EmailItem>();
+        for (const email of data) {
+          for (const id of conversationMessageIds(email))
+            byMember.set(id, email);
+        }
+        const placed = new Set<string>();
         const merged = prev.flatMap((email) => {
-          const key = conversationKey(email);
-          const next = fresh.get(key);
+          const next =
+            byKey.get(conversationKey(email)) ?? byMember.get(email.id);
           if (!next) return [email];
-          if (next.id !== email.id) {
-            moved.add(key);
-            return [];
-          }
+          const key = conversationKey(next);
+          if (next.id !== email.id || placed.has(key)) return [];
+          placed.add(key);
           return [next];
         });
-        const existing = new Set(prev.map(conversationKey));
         const newAtTop = data.filter(
-          (email) =>
-            !existing.has(conversationKey(email)) ||
-            moved.has(conversationKey(email))
+          (email) => !placed.has(conversationKey(email))
         );
         return newAtTop.length > 0 ? [...newAtTop, ...merged] : merged;
       });
@@ -187,7 +198,11 @@ export function useEmailInbox(
       // be unique.
       setEmails((prev) => {
         const seen = new Set(prev.map(conversationKey));
-        const fresh = data.filter((email) => !seen.has(conversationKey(email)));
+        const shownIds = new Set(prev.map((email) => email.id));
+        const fresh = data.filter(
+          (email) =>
+            !seen.has(conversationKey(email)) && !shownIds.has(email.id)
+        );
         return fresh.length === data.length
           ? [...prev, ...data]
           : [...prev, ...fresh];
@@ -253,9 +268,8 @@ export function useEmailInbox(
   const loadConversation = async (row: EmailItem) => {
     try {
       const messages = await getEmailThread<EmailItem>(row.id);
-      setConversation((cur) =>
-        cur === null || cur.rowId === row.id ? { rowId: row.id, messages } : cur
-      );
+      if (conversationFor.current !== row.id) return;
+      setConversation({ rowId: row.id, messages });
       const unread = messages
         .filter((m) => m.is_read === false && m.id !== row.id)
         .map((m) => m.id);
@@ -322,6 +336,7 @@ export function useEmailInbox(
     }
 
     setConversation(null);
+    conversationFor.current = email.id;
     if (isConversation(email)) void loadConversation(email);
 
     // Fire-and-forget: a failed POST logs but does not roll back the optimistic
@@ -424,8 +439,18 @@ export function useEmailInbox(
     if (rowIds.length === 0) return;
     const idSet = new Set(rowIds);
     const rows = emails.filter((email) => idSet.has(email.id));
+    // A conversation sends only its unread messages: each read also goes to
+    // the provider, so posting every message would be wasted calls.
+    const listed = new Set(rows.map((email) => email.id));
     const ids = Array.from(
-      new Set([...rowIds, ...rows.flatMap(conversationMessageIds)])
+      new Set([
+        ...rowIds.filter((id) => !listed.has(id)),
+        ...rows.flatMap((row) =>
+          isConversation(row)
+            ? (row.unread_ids ?? conversationMessageIds(row))
+            : [row.id]
+        ),
+      ])
     );
     const unreadByAccount = new Map<number, number>();
     setEmails((prev) =>

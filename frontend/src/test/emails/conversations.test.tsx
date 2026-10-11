@@ -202,6 +202,136 @@ describe("useEmailInbox with conversations", () => {
     expect(result.current.emails).toHaveLength(0);
   });
 
+  it("marking a conversation read posts only its unread messages", async () => {
+    getEmails.mockResolvedValue({
+      emails: [{ ...row, unread_ids: [11] }],
+      hasMore: false,
+    });
+    const { result } = await loaded();
+    await act(async () => {
+      await result.current.bulkMarkRead([12]);
+    });
+    expect(markEmailRead.mock.calls.map((c) => c[0])).toEqual([11]);
+  });
+
+  it("an email grouped since it was listed is updated in place, not listed twice", async () => {
+    const lone: EmailItem = {
+      id: 5,
+      account_id: 7,
+      subject: "Hello",
+      sender: "Ann <ann@x.com>",
+      created_at: "2026-09-01T09:00:00Z",
+      is_read: true,
+    };
+    const later: EmailItem = {
+      ...lone,
+      id: 30,
+      created_at: "2026-10-01T09:00:00Z",
+      subject: "Later",
+    };
+    getEmails.mockResolvedValueOnce({ emails: [later, lone], hasMore: false });
+    const { result } = renderHook(() => useEmailInbox(1, ""));
+    await waitFor(() => expect(result.current.emails).toHaveLength(2));
+
+    // The backfill put email 5 into conversation 9 (key e5 → t9).
+    const grouped = {
+      ...lone,
+      thread_id: 9,
+      message_count: 1,
+      message_ids: [5],
+    };
+    getEmails.mockResolvedValueOnce({
+      emails: [later, grouped],
+      hasMore: false,
+    });
+    act(() => {
+      result.current.setRefreshTick((t) => t + 1);
+    });
+
+    await waitFor(() =>
+      expect(
+        result.current.emails.map((e) => [e.id, e.thread_id ?? null])
+      ).toEqual([
+        [30, null],
+        [5, 9],
+      ])
+    );
+  });
+
+  it("two conversations that merged collapse into one row", async () => {
+    const a = {
+      ...row,
+      id: 20,
+      thread_id: 3,
+      message_count: 1,
+      message_ids: [20],
+      created_at: "2026-09-01T09:00:00Z",
+    };
+    const b = {
+      ...row,
+      id: 21,
+      thread_id: 4,
+      message_count: 1,
+      message_ids: [21],
+      created_at: "2026-09-02T09:00:00Z",
+    };
+    getEmails.mockResolvedValueOnce({ emails: [b, a], hasMore: false });
+    const { result } = renderHook(() => useEmailInbox(1, ""));
+    await waitFor(() => expect(result.current.emails).toHaveLength(2));
+
+    const merged = {
+      ...b,
+      thread_id: 3,
+      message_count: 2,
+      message_ids: [21, 20],
+    };
+    getEmails.mockResolvedValueOnce({ emails: [merged], hasMore: false });
+    act(() => {
+      result.current.setRefreshTick((t) => t + 1);
+    });
+
+    await waitFor(() =>
+      expect(result.current.emails.map((e) => e.id)).toEqual([21])
+    );
+  });
+
+  it("a slow answer for an earlier conversation never replaces the open one", async () => {
+    const a = { ...row, id: 40, thread_id: 40, message_ids: [40, 41] };
+    const b = { ...row, id: 50, thread_id: 50, message_ids: [50, 51] };
+    getEmails.mockResolvedValue({ emails: [a, b], hasMore: false });
+    const release: Record<number, (value: EmailItem[]) => void> = {};
+    getEmailThread.mockImplementation(
+      (id: number) =>
+        new Promise<EmailItem[]>((resolve) => {
+          release[id] = resolve;
+        })
+    );
+    const { result } = renderHook(() => useEmailInbox(1, ""));
+    await waitFor(() => expect(result.current.emails).toHaveLength(2));
+
+    // Open A, then B before A's conversation has arrived.
+    act(() => {
+      void result.current.openEmail(a);
+    });
+    act(() => {
+      void result.current.openEmail(b);
+    });
+    await waitFor(() => expect(release[50]).toBeDefined());
+
+    // A's answer lands first, while B is the one open...
+    await act(async () => {
+      release[40]([{ ...a, id: 41 }, a]);
+    });
+    // ...then B's. B must be what the reading pane gets.
+    await act(async () => {
+      release[50]([{ ...b, id: 51 }, b]);
+    });
+    await waitFor(() => expect(result.current.conversation?.rowId).toBe(50));
+    expect(result.current.conversation?.messages.map((m) => m.id)).toEqual([
+      51, 50,
+    ]);
+  });
+
   it("a new reply moves the conversation to the top instead of listing it twice", async () => {
     const other: EmailItem = {
       id: 30,
