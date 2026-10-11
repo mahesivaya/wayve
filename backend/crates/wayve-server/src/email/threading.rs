@@ -131,6 +131,57 @@ pub fn normalize_subject(subject: &str) -> (String, bool) {
     (normalized, is_reply)
 }
 
+/// Keyed hashes of every address in these header values (`From`, `To`, …),
+/// bare and lower-cased, de-duplicated. `compute_address_hash` normalizes case
+/// and whitespace, so only the display name and list syntax are removed here.
+fn correspondent_hashes(headers: &[&str]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for value in headers {
+        for address in bare_addresses(value) {
+            if let Some(hash) = compute_address_hash(&address).ok().flatten()
+                && !out.contains(&hash)
+            {
+                out.push(hash);
+            }
+        }
+    }
+    out
+}
+
+/// The bare addresses in an address header: `"Griffin, Peter" <p@x.com>, b@y.com`
+/// → `p@x.com`, `b@y.com`. Commas inside quotes or angle brackets don't split.
+pub(crate) fn bare_addresses(value: &str) -> Vec<String> {
+    let mut parts: Vec<String> = Vec::new();
+    let mut current = String::new();
+    let (mut in_quotes, mut in_angle) = (false, false);
+    for ch in value.chars() {
+        match ch {
+            '"' if !in_angle => in_quotes = !in_quotes,
+            '<' if !in_quotes => in_angle = true,
+            '>' if !in_quotes => in_angle = false,
+            _ => {}
+        }
+        if ch == ',' && !in_quotes && !in_angle {
+            parts.push(std::mem::take(&mut current));
+        } else {
+            current.push(ch);
+        }
+    }
+    parts.push(current);
+    parts
+        .iter()
+        .filter_map(|part| {
+            let part = part.trim();
+            let address = match (part.rfind('<'), part.rfind('>')) {
+                (Some(open), Some(close)) if open < close => &part[open + 1..close],
+                _ => part,
+            };
+            let address = address.trim().to_lowercase();
+            address.contains('@').then_some(address)
+        })
+        .collect()
+}
+
 fn id_hash(id: &str) -> Option<String> {
     compute_thread_key_hash("message-id", &id.trim().to_lowercase())
         .ok()
@@ -144,6 +195,9 @@ pub struct ThreadInput<'a> {
     pub headers: &'a ThreadHeaders,
     pub subject: &'a str,
     pub sender: &'a str,
+    /// The To header (one or more addresses), for the subject fallback's
+    /// "same correspondent" test.
+    pub receiver: &'a str,
     pub created_at: Option<NaiveDateTime>,
 }
 
@@ -163,6 +217,7 @@ async fn assign(pool: &PgPool, account_id: i32, input: ThreadInput<'_>) -> sqlx:
         headers,
         subject,
         sender,
+        receiver,
         created_at,
     } = input;
     let own_hash = headers.message_id.as_deref().and_then(id_hash);
@@ -183,6 +238,9 @@ async fn assign(pool: &PgPool, account_id: i32, input: ThreadInput<'_>) -> sqlx:
         .ok()
         .flatten();
     let sender_hash = compute_address_hash(sender).ok().flatten();
+    // Everyone on the email as bare, lower-cased addresses, so the same person
+    // matches whatever display name or header form the provider stored.
+    let correspondents = correspondent_hashes(&[sender, receiver]);
     let (message_id_iv, message_id_encrypted) = match headers.message_id.as_deref() {
         Some(id) => encrypt(id)
             .map(|(iv, ct)| (Some(iv), Some(ct)))
@@ -209,8 +267,9 @@ async fn assign(pool: &PgPool, account_id: i32, input: ThreadInput<'_>) -> sqlx:
         INSERT INTO email_thread_meta
           (email_id, account_id, message_id_hash, in_reply_to_hash, reference_hashes,
            provider_thread_id, subject_key_hash, sender_hash, is_reply,
-           message_id_iv, message_id_encrypted, references_iv, references_encrypted)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+           message_id_iv, message_id_encrypted, references_iv, references_encrypted,
+           correspondent_hashes)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         ON CONFLICT (email_id) DO UPDATE SET
           message_id_hash = EXCLUDED.message_id_hash,
           in_reply_to_hash = EXCLUDED.in_reply_to_hash,
@@ -222,7 +281,8 @@ async fn assign(pool: &PgPool, account_id: i32, input: ThreadInput<'_>) -> sqlx:
           message_id_iv = EXCLUDED.message_id_iv,
           message_id_encrypted = EXCLUDED.message_id_encrypted,
           references_iv = EXCLUDED.references_iv,
-          references_encrypted = EXCLUDED.references_encrypted
+          references_encrypted = EXCLUDED.references_encrypted,
+          correspondent_hashes = EXCLUDED.correspondent_hashes
         "#,
     )
     .bind(email_id)
@@ -238,6 +298,7 @@ async fn assign(pool: &PgPool, account_id: i32, input: ThreadInput<'_>) -> sqlx:
     .bind(&message_id_encrypted)
     .bind(&references_iv)
     .bind(&references_encrypted)
+    .bind(&correspondents)
     .execute(&mut *tx)
     .await?;
 
@@ -266,7 +327,7 @@ async fn assign(pool: &PgPool, account_id: i32, input: ThreadInput<'_>) -> sqlx:
                    ($3::text IS NOT NULL AND m.provider_thread_id = $3)
                 OR m.message_id_hash = ANY($4::text[])
                 OR ($5::text IS NOT NULL
-                    AND (m.in_reply_to_hash = $5 OR $5 = ANY(m.reference_hashes)))
+                    AND (m.in_reply_to_hash = $5 OR m.reference_hashes @> ARRAY[$5]::text[]))
               )
             "#,
         )
@@ -279,34 +340,56 @@ async fn assign(pool: &PgPool, account_id: i32, input: ThreadInput<'_>) -> sqlx:
         .await?
     };
 
-    // Step 3: a reply with no link, matched by subject and correspondent.
+    // Step 3: a reply with no link, matched by subject and correspondent. Only
+    // for mail the provider doesn't group itself: an email carrying a Gmail or
+    // Outlook conversation id that matched nothing yet is simply the first of
+    // its conversation to be threaded (the backfill runs newest first), and
+    // guessing would override the provider's own, exact grouping.
     if found.is_empty()
         && is_reply
-        && let (Some(subject_hash), Some(sender_hash)) = (&subject_hash, &sender_hash)
+        && headers.provider_thread_id.is_none()
+        && let Some(subject_hash) = &subject_hash
     {
-        let since = created_at.unwrap_or_else(|| chrono::Utc::now().naive_utc())
-            - chrono::Duration::days(SUBJECT_FALLBACK_DAYS);
-        let by_subject: Option<i32> = sqlx::query_scalar(
-            r#"
-            SELECT e.thread_id
-            FROM email_thread_meta m
-            JOIN emails e ON e.id = m.email_id
-            WHERE m.account_id = $1 AND m.email_id <> $2 AND e.thread_id IS NOT NULL
-              AND m.subject_key_hash = $3
-              AND (m.sender_hash = $4 OR e.receiver_hash = $4)
-              AND e.created_at >= $5
-            ORDER BY e.created_at DESC
-            LIMIT 1
-            "#,
-        )
-        .bind(account_id)
-        .bind(email_id)
-        .bind(subject_hash)
-        .bind(sender_hash)
-        .bind(since)
-        .fetch_optional(&mut *tx)
-        .await?;
-        found.extend(by_subject);
+        // Someone other than the mailbox owner must be on both emails, or every
+        // same-subject email in the mailbox would match through the owner.
+        let own: Option<String> =
+            sqlx::query_scalar("SELECT email FROM email_accounts WHERE id = $1")
+                .bind(account_id)
+                .fetch_optional(&mut *tx)
+                .await?;
+        let own_hashes = correspondent_hashes(&[own.as_deref().unwrap_or("")]);
+        let others: Vec<String> = correspondents
+            .iter()
+            .filter(|h| !own_hashes.contains(h))
+            .cloned()
+            .collect();
+        if !others.is_empty() {
+            // A reply answers something earlier: look back, never forward.
+            let until = created_at.unwrap_or_else(|| chrono::Utc::now().naive_utc());
+            let since = until - chrono::Duration::days(SUBJECT_FALLBACK_DAYS);
+            let by_subject: Option<i32> = sqlx::query_scalar(
+                r#"
+                SELECT e.thread_id
+                FROM email_thread_meta m
+                JOIN emails e ON e.id = m.email_id
+                WHERE m.account_id = $1 AND m.email_id <> $2 AND e.thread_id IS NOT NULL
+                  AND m.subject_key_hash = $3
+                  AND m.correspondent_hashes && $4::text[]
+                  AND e.created_at >= $5 AND e.created_at <= $6
+                ORDER BY e.created_at DESC
+                LIMIT 1
+                "#,
+            )
+            .bind(account_id)
+            .bind(email_id)
+            .bind(subject_hash)
+            .bind(&others)
+            .bind(since)
+            .bind(until)
+            .fetch_optional(&mut *tx)
+            .await?;
+            found.extend(by_subject);
+        }
     }
 
     found.sort_unstable();
@@ -399,7 +482,7 @@ pub async fn backfill_batch(
                 _ => fetch_outlook_inputs(access_token, &provider_id).await,
             };
             match fetched {
-                Ok(Some((headers, subject, sender, created_at))) => {
+                Ok(Some((headers, subject, sender, receiver, created_at))) => {
                     assign_best_effort(
 pool,
 account_id,
@@ -408,6 +491,7 @@ email_id,
 headers: &headers,
 subject: &subject,
 sender: &sender,
+receiver: &receiver,
 created_at,
 },
 )
@@ -423,6 +507,7 @@ email_id,
 headers: &ThreadHeaders::default(),
 subject: "",
 sender: "",
+receiver: "",
 created_at: None,
 },
 )
@@ -437,12 +522,13 @@ created_at: None,
     Ok(count)
 }
 
-type Inputs = (ThreadHeaders, String, String, Option<NaiveDateTime>);
+/// (headers, subject, sender, receiver, created_at) re-read from the provider.
+type Inputs = (ThreadHeaders, String, String, String, Option<NaiveDateTime>);
 
 async fn fetch_gmail_inputs(token: &str, gmail_id: &str) -> anyhow::Result<Option<Inputs>> {
     match crate::email::sync::fetch_headers_only(token, gmail_id).await {
-        Ok((_, sender, _, subject, created_at, _, _, headers)) => {
-            Ok(Some((headers, subject, sender, Some(created_at))))
+        Ok((_, sender, receiver, subject, created_at, _, _, headers)) => {
+            Ok(Some((headers, subject, sender, receiver, Some(created_at))))
         }
         Err(e) if format!("{e}").contains("HTTP 404") => Ok(None),
         Err(e) => Err(e),
@@ -451,7 +537,7 @@ async fn fetch_gmail_inputs(token: &str, gmail_id: &str) -> anyhow::Result<Optio
 
 async fn fetch_outlook_inputs(token: &str, message_id: &str) -> anyhow::Result<Option<Inputs>> {
     let url = format!(
-        "{}/v1.0/me/messages/{}?$select=conversationId,internetMessageId,subject,from,receivedDateTime",
+        "{}/v1.0/me/messages/{}?$select=conversationId,internetMessageId,subject,from,toRecipients,receivedDateTime",
         crate::external::microsoft_graph_base(),
         message_id
     );
@@ -478,11 +564,20 @@ async fn fetch_outlook_inputs(token: &str, message_id: &str) -> anyhow::Result<O
         .as_str()
         .unwrap_or("")
         .to_string();
+    let receiver = m["toRecipients"]
+        .as_array()
+        .map(|list| {
+            list.iter()
+                .filter_map(|r| r["emailAddress"]["address"].as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
     let created_at = m["receivedDateTime"]
         .as_str()
         .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
         .map(|dt| dt.naive_utc());
-    Ok(Some((headers, subject, sender, created_at)))
+    Ok(Some((headers, subject, sender, receiver, created_at)))
 }
 
 #[cfg(test)]

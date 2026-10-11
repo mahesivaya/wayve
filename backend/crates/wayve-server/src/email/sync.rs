@@ -1134,7 +1134,7 @@ where
 
     // Place each email in its conversation. Re-synced emails keep theirs.
     for r in &returned {
-        if let Some((_, sender, _, subject, created_at, _, _, threading)) =
+        if let Some((_, sender, receiver, subject, created_at, _, _, threading)) =
             batch.iter().find(|h| h.0 == r.gmail_id)
         {
             crate::email::threading::assign_best_effort(
@@ -1145,6 +1145,7 @@ where
                     headers: threading,
                     subject,
                     sender,
+                    receiver,
                     created_at: Some(*created_at),
                 },
             )

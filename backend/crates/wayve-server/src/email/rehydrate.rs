@@ -240,6 +240,7 @@ async fn rehydrate_one(
                 headers: &threading,
                 subject: &subject,
                 sender: &sender,
+                receiver: &receiver,
                 created_at: Some(gmail_ts),
             },
         )

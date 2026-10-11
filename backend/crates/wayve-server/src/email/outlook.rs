@@ -345,6 +345,7 @@ async fn upsert_messages(
                 headers: &m.threading,
                 subject: &m.subject,
                 sender: &m.sender,
+                receiver: &m.receiver,
                 created_at: Some(m.received),
             },
         )

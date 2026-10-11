@@ -278,6 +278,7 @@ async fn store_message(pool: &PgPool, account_id: i32, msg: &FetchedMessage) -> 
             headers: &threading,
             subject: &subject,
             sender: &sender,
+            receiver: &receiver,
             created_at: Some(created_at),
         },
     )

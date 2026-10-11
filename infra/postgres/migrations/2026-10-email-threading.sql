@@ -68,6 +68,13 @@ CREATE INDEX IF NOT EXISTS idx_email_thread_meta_subject
     ON email_thread_meta(account_id, subject_key_hash);
 CREATE INDEX IF NOT EXISTS idx_email_thread_meta_refs
     ON email_thread_meta USING GIN (reference_hashes);
+-- Keyed hashes of every bare address on the email (From, To), for the subject
+-- fallback's "same correspondent" test. Bare and lower-cased, so the same
+-- person matches whatever display name or header form a provider stored.
+ALTER TABLE email_thread_meta
+    ADD COLUMN IF NOT EXISTS correspondent_hashes TEXT[] NOT NULL DEFAULT '{}';
+CREATE INDEX IF NOT EXISTS idx_email_thread_meta_correspondents
+    ON email_thread_meta USING GIN (correspondent_hashes);
 
 
 -- Threading tables follow their mail: a conversation is visible to whoever can

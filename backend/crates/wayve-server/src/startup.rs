@@ -281,6 +281,12 @@ pub async fn ensure_email_schema(pool: &PgPool) {
          ON email_thread_meta(account_id, subject_key_hash)",
         "CREATE INDEX IF NOT EXISTS idx_email_thread_meta_refs \
          ON email_thread_meta USING GIN (reference_hashes)",
+        // Bare-address hashes of everyone on the email, for the subject
+        // fallback's "same correspondent" test (email/threading.rs).
+        "ALTER TABLE email_thread_meta \
+         ADD COLUMN IF NOT EXISTS correspondent_hashes TEXT[] NOT NULL DEFAULT '{}'",
+        "CREATE INDEX IF NOT EXISTS idx_email_thread_meta_correspondents \
+         ON email_thread_meta USING GIN (correspondent_hashes)",
         // Request-scoped reads run as the restricted `wayve_app` role (the
         // reply-header lookup reads email_thread_meta). Default privileges only
         // cover tables created by the role that set them, so grant explicitly;

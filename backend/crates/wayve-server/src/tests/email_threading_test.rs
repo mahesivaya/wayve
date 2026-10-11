@@ -91,6 +91,7 @@ mod tests {
                 headers: &headers("<q1@cust.com>", None, None),
                 subject: "Help with login",
                 sender: "cust@x.com",
+                receiver: "",
                 created_at: Some(now()),
             },
         )
@@ -104,6 +105,7 @@ mod tests {
                 headers: &headers("<a1@us.com>", Some("<q1@cust.com>"), Some("<q1@cust.com>")),
                 subject: "Re: Help with login",
                 sender: "agent@us.com",
+                receiver: "",
                 created_at: Some(now()),
             },
         )
@@ -121,6 +123,7 @@ mod tests {
                 ),
                 subject: "Re: Help with login",
                 sender: "cust@x.com",
+                receiver: "",
                 created_at: Some(now()),
             },
         )
@@ -147,6 +150,7 @@ mod tests {
                 headers: &headers("<child@x>", Some("<parent@x>"), None),
                 subject: "Re: Order",
                 sender: "a@x.com",
+                receiver: "",
                 created_at: Some(now()),
             },
         )
@@ -160,6 +164,7 @@ mod tests {
                 headers: &headers("<other@x>", None, None),
                 subject: "Other",
                 sender: "b@x.com",
+                receiver: "",
                 created_at: Some(now()),
             },
         )
@@ -173,6 +178,7 @@ mod tests {
                 headers: &headers("<parent@x>", None, None),
                 subject: "Order",
                 sender: "c@x.com",
+                receiver: "",
                 created_at: Some(now()),
             },
         )
@@ -204,6 +210,7 @@ mod tests {
                 headers: &headers("<a@x>", Some("<root@x>"), None),
                 subject: "Re: X",
                 sender: "a@x.com",
+                receiver: "",
                 created_at: Some(now()),
             },
         )
@@ -217,6 +224,7 @@ mod tests {
                 headers: &headers("<b@x>", None, Some("<root@x>")),
                 subject: "X",
                 sender: "b@x.com",
+                receiver: "",
                 created_at: Some(now()),
             },
         )
@@ -231,6 +239,7 @@ mod tests {
                 headers: &headers("<root@x>", None, None),
                 subject: "X",
                 sender: "c@x.com",
+                receiver: "",
                 created_at: Some(now()),
             },
         )
@@ -264,6 +273,7 @@ mod tests {
                 headers: &gmail("18f00aa"),
                 subject: "Hello",
                 sender: "a@x.com",
+                receiver: "",
                 created_at: Some(now()),
             },
         )
@@ -277,6 +287,7 @@ mod tests {
                 headers: &gmail("18f00aa"),
                 subject: "Completely different",
                 sender: "b@x.com",
+                receiver: "",
                 created_at: Some(now()),
             },
         )
@@ -290,6 +301,7 @@ mod tests {
                 headers: &gmail("18f00bb"),
                 subject: "Hello",
                 sender: "a@x.com",
+                receiver: "",
                 created_at: Some(now()),
             },
         )
@@ -304,9 +316,112 @@ mod tests {
         ensure_aes_key();
         let pool = test_pool().await;
         let acct = mailbox(&pool).await;
+        // The mailbox owner is on every email, so it must not count as the
+        // shared correspondent.
+        sqlx::query("UPDATE email_accounts SET email = 'us@us.com' WHERE id = $1")
+            .bind(acct)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("owner address: {e}"));
+        let none = ThreadHeaders::default();
+        let input =
+            |email_id: i32,
+             subject: &'static str,
+             sender: &'static str,
+             receiver: &'static str,
+             at: NaiveDateTime| { (email_id, subject, sender, receiver, at) };
+        let assign =
+            |(email_id, subject, sender, receiver, at): (i32, &str, &str, &str, NaiveDateTime)| {
+                let pool = pool.clone();
+                let headers = none.clone();
+                let (subject, sender, receiver) = (
+                    subject.to_string(),
+                    sender.to_string(),
+                    receiver.to_string(),
+                );
+                async move {
+                    assign_best_effort(
+                        &pool,
+                        acct,
+                        ThreadInput {
+                            email_id,
+                            headers: &headers,
+                            subject: &subject,
+                            sender: &sender,
+                            receiver: &receiver,
+                            created_at: Some(at),
+                        },
+                    )
+                    .await;
+                }
+            };
+
+        // Our outgoing question, addressed to the customer's bare address.
+        let ours = email(&pool, acct, "o", "cust@x.com", now()).await;
+        assign(input(ours, "Invoice 42", "us@us.com", "cust@x.com", now())).await;
+        // Their reply lost its headers (a broken client), but says "Re:". The
+        // display name and case differ from what we wrote; still the same person.
+        let theirs = email(&pool, acct, "t", "", now()).await;
+        assign(input(
+            theirs,
+            "RE:  invoice 42",
+            "Customer Name <Cust@X.com>",
+            "us@us.com",
+            now(),
+        ))
+        .await;
+        // Someone else replying with the same subject is a different conversation,
+        // even though we (the owner) are on both.
+        let stranger = email(&pool, acct, "s", "", now()).await;
+        assign(input(
+            stranger,
+            "Re: Invoice 42",
+            "other@y.com",
+            "us@us.com",
+            now(),
+        ))
+        .await;
+        // A new (non-reply) email with the same subject from the same customer
+        // starts a new conversation.
+        let fresh = email(&pool, acct, "f", "", now()).await;
+        assign(input(fresh, "Invoice 42", "cust@x.com", "us@us.com", now())).await;
+        // A reply more than 30 days later doesn't reach back.
+        let late_at = now() + Duration::days(45);
+        let late = email(&pool, acct, "l", "", late_at).await;
+        assign(input(
+            late,
+            "Re: Invoice 42",
+            "cust@x.com",
+            "us@us.com",
+            late_at,
+        ))
+        .await;
+        // A reply answers something earlier: one dated before our question
+        // never joins it, however it's ordered in the sync.
+        let before_at = now() - Duration::days(1);
+        let before = email(&pool, acct, "b", "", before_at).await;
+        assign(input(
+            before,
+            "Re: Invoice 42",
+            "cust@x.com",
+            "us@us.com",
+            before_at,
+        ))
+        .await;
+
+        assert_eq!(thread_of(&pool, theirs).await, thread_of(&pool, ours).await);
+        for other in [stranger, fresh, late, before] {
+            assert_ne!(thread_of(&pool, other).await, thread_of(&pool, ours).await);
+        }
+    }
+
+    #[actix_web::test]
+    async fn the_subject_fallback_never_overrides_a_provider_conversation() {
+        ensure_aes_key();
+        let pool = test_pool().await;
+        let acct = mailbox(&pool).await;
         let none = ThreadHeaders::default();
 
-        // Our outgoing question to the customer.
         let ours = email(&pool, acct, "o", "cust@x.com", now()).await;
         assign_best_effort(
             &pool,
@@ -314,78 +429,33 @@ mod tests {
             ThreadInput {
                 email_id: ours,
                 headers: &none,
-                subject: "Invoice 42",
+                subject: "Status",
                 sender: "us@us.com",
+                receiver: "cust@x.com",
                 created_at: Some(now()),
             },
         )
         .await;
-        // Their reply lost its headers (a broken client), but says "Re:".
+        // The first message of its Gmail conversation to be threaded (the
+        // backfill runs newest first): it carries Gmail's own conversation id,
+        // so a same-subject guess must not pull it into ours.
+        let gmail = ThreadHeaders::from_raw(None, None, None, Some("gmail-thread-1"));
         let theirs = email(&pool, acct, "t", "", now()).await;
         assign_best_effort(
             &pool,
             acct,
             ThreadInput {
                 email_id: theirs,
-                headers: &none,
-                subject: "RE:  invoice 42",
+                headers: &gmail,
+                subject: "Re: Status",
                 sender: "cust@x.com",
+                receiver: "us@us.com",
                 created_at: Some(now()),
-            },
-        )
-        .await;
-        // Someone else replying with the same subject is a different conversation.
-        let stranger = email(&pool, acct, "s", "", now()).await;
-        assign_best_effort(
-            &pool,
-            acct,
-            ThreadInput {
-                email_id: stranger,
-                headers: &none,
-                subject: "Re: Invoice 42",
-                sender: "other@y.com",
-                created_at: Some(now()),
-            },
-        )
-        .await;
-        // A new (non-reply) email with the same subject from the same customer
-        // starts a new conversation.
-        let fresh = email(&pool, acct, "f", "", now()).await;
-        assign_best_effort(
-            &pool,
-            acct,
-            ThreadInput {
-                email_id: fresh,
-                headers: &none,
-                subject: "Invoice 42",
-                sender: "cust@x.com",
-                created_at: Some(now()),
-            },
-        )
-        .await;
-        // A reply more than 30 days later doesn't reach back.
-        let late_at = now() + Duration::days(45);
-        let late = email(&pool, acct, "l", "", late_at).await;
-        assign_best_effort(
-            &pool,
-            acct,
-            ThreadInput {
-                email_id: late,
-                headers: &none,
-                subject: "Re: Invoice 42",
-                sender: "cust@x.com",
-                created_at: Some(late_at),
             },
         )
         .await;
 
-        assert_eq!(thread_of(&pool, theirs).await, thread_of(&pool, ours).await);
-        assert_ne!(
-            thread_of(&pool, stranger).await,
-            thread_of(&pool, ours).await
-        );
-        assert_ne!(thread_of(&pool, fresh).await, thread_of(&pool, ours).await);
-        assert_ne!(thread_of(&pool, late).await, thread_of(&pool, ours).await);
+        assert_ne!(thread_of(&pool, theirs).await, thread_of(&pool, ours).await);
     }
 
     #[actix_web::test]
@@ -403,6 +473,7 @@ mod tests {
                 headers: &headers("<same@x>", None, None),
                 subject: "Hi",
                 sender: "a@x.com",
+                receiver: "",
                 created_at: Some(now()),
             },
         )
@@ -416,6 +487,7 @@ mod tests {
                 headers: &headers("<r@x>", Some("<same@x>"), None),
                 subject: "Re: Hi",
                 sender: "a@x.com",
+                receiver: "",
                 created_at: Some(now()),
             },
         )
@@ -439,6 +511,7 @@ mod tests {
                 headers: &h,
                 subject: "Hi",
                 sender: "a@x.com",
+                receiver: "",
                 created_at: Some(now()),
             },
         )
@@ -452,6 +525,7 @@ mod tests {
                 headers: &h,
                 subject: "Hi",
                 sender: "a@x.com",
+                receiver: "",
                 created_at: Some(now()),
             },
         )
