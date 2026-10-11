@@ -107,6 +107,9 @@ pub struct EmailListRow {
     pub message_count: Option<i64>,
     pub unread_count: Option<i64>,
     pub message_ids: Option<Vec<i32>>,
+    /// The conversation's unread messages, so marking it read touches only
+    /// those (each read also goes to the provider).
+    pub unread_ids: Option<Vec<i32>>,
 }
 
 #[derive(Clone)]
@@ -402,7 +405,8 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
 ///    spam and drafts aside), so your own sent reply counts as the newest
 ///    message and the conversation sorts by it, as in Gmail.
 /// 3. The newest email of each conversation is its row, with the count, the
-///    unread count, any attachment, and every message id (for bulk actions).
+///    unread count, any attachment, every message id (for bulk actions) and
+///    the unread ones (so marking read touches only those).
 fn push_grouped_list(
     qb: &mut QueryBuilder<'_, sqlx::Postgres>,
     filters: &EmailListFilters,
@@ -440,7 +444,30 @@ fn push_grouped_list(
     qb.push(" AND ");
     qb.push(CONV_KEY);
     qb.push(
-        " IN (SELECT conv_key FROM matched)           AND NOT ('TRASH' = ANY(e.labels)) AND NOT ('SPAM' = ANY(e.labels))           AND NOT ('DRAFT' = ANY(e.labels))),         latest AS (SELECT DISTINCT ON (conv_key) * FROM conv                    ORDER BY conv_key, created_at DESC, id DESC),         agg AS (SELECT conv_key,                        COUNT(*)::BIGINT AS message_count,                        (COUNT(*) FILTER (WHERE is_read = FALSE))::BIGINT AS unread_count,                        BOOL_OR(has_attachments) AS any_attachments,                        (ARRAY_AGG(id ORDER BY created_at DESC, id DESC))[1:100] AS message_ids                 FROM conv GROUP BY conv_key)         SELECT l.id, l.gmail_id, l.subject, l.subject_iv, l.subject_encrypted,                l.sender, l.receiver, l.sender_iv, l.sender_encrypted,                l.receiver_iv, l.receiver_encrypted, l.has_body,                g.any_attachments AS has_attachments,                l.account_id, l.is_read, l.created_at, l.is_shared, l.shared_label,                l.inbox_status, l.inbox_assignee_id, l.thread_id,                g.message_count, g.unread_count, g.message_ids         FROM latest l JOIN agg g USING (conv_key) WHERE TRUE",
+        r#" IN (SELECT conv_key FROM matched)
+              AND NOT ('TRASH' = ANY(e.labels))
+              AND NOT ('SPAM' = ANY(e.labels))
+              AND NOT ('DRAFT' = ANY(e.labels))),
+        latest AS (
+            SELECT DISTINCT ON (conv_key) * FROM conv
+            ORDER BY conv_key, created_at DESC, id DESC),
+        agg AS (
+            SELECT conv_key,
+                   COUNT(*)::BIGINT AS message_count,
+                   (COUNT(*) FILTER (WHERE is_read = FALSE))::BIGINT AS unread_count,
+                   BOOL_OR(has_attachments) AS any_attachments,
+                   ARRAY_AGG(id ORDER BY created_at DESC, id DESC) AS message_ids,
+                   COALESCE(ARRAY_AGG(id ORDER BY created_at DESC, id DESC)
+                            FILTER (WHERE is_read = FALSE), '{}') AS unread_ids
+            FROM conv GROUP BY conv_key)
+        SELECT l.id, l.gmail_id, l.subject, l.subject_iv, l.subject_encrypted,
+               l.sender, l.receiver, l.sender_iv, l.sender_encrypted,
+               l.receiver_iv, l.receiver_encrypted, l.has_body,
+               g.any_attachments AS has_attachments,
+               l.account_id, l.is_read, l.created_at, l.is_shared, l.shared_label,
+               l.inbox_status, l.inbox_assignee_id, l.thread_id,
+               g.message_count, g.unread_count, g.message_ids, g.unread_ids
+        FROM latest l JOIN agg g USING (conv_key) WHERE TRUE"#,
     );
     if let Some((before_ms, before_id)) = filters.before {
         qb.push(" AND (l.created_at, l.id) < (to_timestamp(");
@@ -490,6 +517,10 @@ fn map_list_row(row: PgRow) -> EmailListRow {
         unread_count: row.try_get::<Option<i64>, _>("unread_count").ok().flatten(),
         message_ids: row
             .try_get::<Option<Vec<i32>>, _>("message_ids")
+            .ok()
+            .flatten(),
+        unread_ids: row
+            .try_get::<Option<Vec<i32>>, _>("unread_ids")
             .ok()
             .flatten(),
     }

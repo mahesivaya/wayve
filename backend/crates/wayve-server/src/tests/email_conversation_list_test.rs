@@ -174,6 +174,45 @@ mod tests {
 
     #[actix_web::test]
     #[serial_test::serial]
+    async fn a_long_conversation_lists_every_message_and_only_its_unread_ones() {
+        let pool = test_pool().await;
+        let me = mailbox(&pool).await;
+        let t = thread(&pool, me.account).await;
+        let mut unread = Vec::new();
+        for i in 0..105 {
+            let id = email(
+                &pool,
+                me.account,
+                Some(t),
+                "Ann <ann@x.com>",
+                &["INBOX"],
+                &format!("2026-06-01 {:02}:{:02}", i / 60, i % 60),
+            )
+            .await;
+            if i % 50 == 0 {
+                sqlx::query("UPDATE emails SET is_read = FALSE WHERE id = $1")
+                    .bind(id)
+                    .execute(&pool)
+                    .await
+                    .unwrap_or_else(|e| panic!("unread: {e}"));
+                unread.push(id);
+            }
+        }
+
+        let rows = list(&pool, filters(me.user, me.account, "inbox", true)).await;
+        assert_eq!(rows.len(), 1);
+        // Every message, so deleting or reading the conversation covers it all.
+        assert_eq!(rows[0].message_ids.as_ref().map(Vec::len), Some(105));
+        assert_eq!(rows[0].unread_count, Some(3));
+        // Only the unread ones, newest first, for "mark read".
+        unread.reverse();
+        assert_eq!(rows[0].unread_ids.as_deref(), Some(&unread[..]));
+
+        cleanup(&pool, &[me.user]).await;
+    }
+
+    #[actix_web::test]
+    #[serial_test::serial]
     async fn signal_and_noise_judge_a_conversation_by_its_newest_incoming_email() {
         let pool = test_pool().await;
         let me = mailbox(&pool).await;

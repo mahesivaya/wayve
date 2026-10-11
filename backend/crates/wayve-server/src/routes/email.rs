@@ -115,6 +115,27 @@ pub async fn search_contacts(
     Ok(HttpResponse::Ok().json(contacts))
 }
 
+/// Extra provider round-trips a grouped "load more" may make when the synced
+/// mail collapsed into conversations already shown (see `get_emails`).
+const MAX_EXTRA_OLDER_SYNCS: usize = 3;
+
+/// Unix seconds of the oldest synced email in the caller's own mailboxes (or one
+/// of them), i.e. how far back the local copy reaches. `None` when empty.
+async fn oldest_synced_secs(pool: &PgPool, user_id: i32, account_id: Option<i32>) -> Option<i64> {
+    let oldest: Option<chrono::NaiveDateTime> = sqlx::query_scalar(
+        "SELECT MIN(e.created_at) FROM emails e \
+         JOIN email_accounts a ON a.id = e.account_id \
+         WHERE a.user_id = $1 AND ($2::int IS NULL OR a.id = $2)",
+    )
+    .bind(user_id)
+    .bind(account_id)
+    .fetch_one(pool)
+    .await
+    .ok()
+    .flatten();
+    oldest.map(|dt| dt.and_utc().timestamp())
+}
+
 #[get("/emails")]
 #[instrument(target = "http", skip(req, pool, _cache, query))]
 pub async fn get_emails(
@@ -177,7 +198,35 @@ pub async fn get_emails(
             {
                 warn!(target: "gmail", user_id, error = ?e, "older email page sync failed");
             }
-            rows = repo::list(pool.get_ref(), filters).await?;
+            rows = repo::list(pool.get_ref(), filters.clone()).await?;
+
+            // Conversation rows: the older mail just synced can all belong to
+            // conversations already shown higher up (their newest message is
+            // newer than the cursor), which leaves this page empty and would end
+            // the scroll with older mail still upstream. While the sync keeps
+            // reaching further back, keep going from the oldest email it brought.
+            if filters.group_threads {
+                let mut floor = oldest_synced_secs(pool.get_ref(), user_id, account_id).await;
+                for _ in 0..MAX_EXTRA_OLDER_SYNCS {
+                    let Some(oldest) = floor else { break };
+                    if !rows.is_empty() || oldest >= before_secs {
+                        break;
+                    }
+                    if let Err(e) =
+                        sync_older_page(pool.get_ref(), user_id, account_id, oldest, query_limit)
+                            .await
+                    {
+                        warn!(target: "gmail", user_id, error = ?e, "older email page sync failed");
+                        break;
+                    }
+                    rows = repo::list(pool.get_ref(), filters.clone()).await?;
+                    let next = oldest_synced_secs(pool.get_ref(), user_id, account_id).await;
+                    if next.is_none_or(|n| n >= oldest) {
+                        break; // the provider had nothing older
+                    }
+                    floor = next;
+                }
+            }
         }
     }
 
@@ -209,6 +258,7 @@ pub async fn get_emails(
                 "message_count": row.message_count,
                 "unread_count": row.unread_count,
                 "message_ids": row.message_ids,
+                "unread_ids": row.unread_ids,
             })
         })
         .collect();
