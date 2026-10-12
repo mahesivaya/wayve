@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS email_threads (
 );
 CREATE INDEX IF NOT EXISTS idx_email_threads_account
     ON email_threads(account_id, last_message_at DESC);
+-- Set once a conversation has been completed from the provider on open.
+ALTER TABLE email_threads ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
 
 ALTER TABLE emails ADD COLUMN IF NOT EXISTS thread_id INTEGER
     REFERENCES email_threads(id) ON DELETE SET NULL;
@@ -118,5 +120,13 @@ CREATE POLICY email_thread_meta_rls ON email_thread_meta
         current_setting('app.bypass', true) = 'on'
         OR EXISTS (SELECT 1 FROM emails e WHERE e.id = email_thread_meta.email_id)
     );
+
+-- One-time cleanup: deleting an email used to leave its conversation behind
+-- once empty (deleted mail comes back from Gmail's Trash as a new row, in a new
+-- conversation). Deletes now remove an emptied conversation themselves. Safe
+-- while sync runs: a conversation is created and given its email in one
+-- transaction, so a committed one is never empty on purpose.
+DELETE FROM email_threads t
+WHERE NOT EXISTS (SELECT 1 FROM emails e WHERE e.thread_id = t.id);
 
 COMMIT;

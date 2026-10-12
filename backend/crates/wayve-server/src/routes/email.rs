@@ -3,7 +3,7 @@ use crate::email::oauth::HTTP_CLIENT;
 use crate::email::outlook::{OutlookAttachmentRef, download_outlook_attachment};
 use crate::email::provider::{MailProvider, refresh_and_persist_email_token};
 use crate::email::repo::{self, EmailListFilters};
-use crate::email::sync_older::sync_older_page;
+use crate::email::sync_older::{OlderPage, sync_older_page};
 use crate::prelude::*;
 use wayve_security::jwt::get_user_id_from_request;
 
@@ -120,15 +120,24 @@ pub async fn search_contacts(
 const MAX_EXTRA_OLDER_SYNCS: usize = 3;
 
 /// Unix seconds of the oldest synced email in the caller's own mailboxes (or one
-/// of them), i.e. how far back the local copy reaches. `None` when empty.
-async fn oldest_synced_secs(pool: &PgPool, user_id: i32, account_id: Option<i32>) -> Option<i64> {
+/// of them), i.e. how far back the local copy reaches. `None` when empty. With
+/// `inbox_only`, Gmail mail counts only if it is in the inbox, matching what an
+/// inbox-only older sync fetches.
+async fn oldest_synced_secs(
+    pool: &PgPool,
+    user_id: i32,
+    account_id: Option<i32>,
+    inbox_only: bool,
+) -> Option<i64> {
     let oldest: Option<chrono::NaiveDateTime> = sqlx::query_scalar(
         "SELECT MIN(e.created_at) FROM emails e \
          JOIN email_accounts a ON a.id = e.account_id \
-         WHERE a.user_id = $1 AND ($2::int IS NULL OR a.id = $2)",
+         WHERE a.user_id = $1 AND ($2::int IS NULL OR a.id = $2) \
+           AND (NOT $3 OR a.provider <> 'google' OR 'INBOX' = ANY(e.labels))",
     )
     .bind(user_id)
     .bind(account_id)
+    .bind(inbox_only)
     .fetch_one(pool)
     .await
     .ok()
@@ -172,30 +181,29 @@ pub async fn get_emails(
         // sync_older_page expects Unix seconds; the wire format is milliseconds, for
         // sub-second precision on the DB keyset cursor.
         let before_secs = before_ms / 1000;
+        // These views list only inbox mail, so fetch only that from Gmail.
+        let inbox_only = matches!(
+            filters.folder.as_deref(),
+            Some("inbox" | "signal" | "noise")
+        );
+        let page = OlderPage {
+            before_timestamp: before_secs,
+            limit: query_limit,
+            inbox_only,
+        };
 
         if rows.len() > page_size {
             // A full page is available locally, so refill in the background.
             let pool_clone = pool.get_ref().clone();
             tokio::spawn(async move {
-                if let Err(e) =
-                    sync_older_page(&pool_clone, user_id, account_id, before_secs, query_limit)
-                        .await
-                {
+                if let Err(e) = sync_older_page(&pool_clone, user_id, account_id, page).await {
                     warn!(target: "gmail", user_id, error = ?e, "background older email sync failed");
                 }
             });
         } else {
             // Cache exhausted, so pay the provider round-trip inline rather than
             // return an empty page.
-            if let Err(e) = sync_older_page(
-                pool.get_ref(),
-                user_id,
-                account_id,
-                before_secs,
-                query_limit,
-            )
-            .await
-            {
+            if let Err(e) = sync_older_page(pool.get_ref(), user_id, account_id, page).await {
                 warn!(target: "gmail", user_id, error = ?e, "older email page sync failed");
             }
             rows = repo::list(pool.get_ref(), filters.clone()).await?;
@@ -206,21 +214,26 @@ pub async fn get_emails(
             // the scroll with older mail still upstream. While the sync keeps
             // reaching further back, keep going from the oldest email it brought.
             if filters.group_threads {
-                let mut floor = oldest_synced_secs(pool.get_ref(), user_id, account_id).await;
+                let mut floor =
+                    oldest_synced_secs(pool.get_ref(), user_id, account_id, inbox_only).await;
                 for _ in 0..MAX_EXTRA_OLDER_SYNCS {
                     let Some(oldest) = floor else { break };
                     if !rows.is_empty() || oldest >= before_secs {
                         break;
                     }
+                    let older = OlderPage {
+                        before_timestamp: oldest,
+                        ..page
+                    };
                     if let Err(e) =
-                        sync_older_page(pool.get_ref(), user_id, account_id, oldest, query_limit)
-                            .await
+                        sync_older_page(pool.get_ref(), user_id, account_id, older).await
                     {
                         warn!(target: "gmail", user_id, error = ?e, "older email page sync failed");
                         break;
                     }
                     rows = repo::list(pool.get_ref(), filters.clone()).await?;
-                    let next = oldest_synced_secs(pool.get_ref(), user_id, account_id).await;
+                    let next =
+                        oldest_synced_secs(pool.get_ref(), user_id, account_id, inbox_only).await;
                     if next.is_none_or(|n| n >= oldest) {
                         break; // the provider had nothing older
                     }
@@ -259,6 +272,7 @@ pub async fn get_emails(
                 "unread_count": row.unread_count,
                 "message_ids": row.message_ids,
                 "unread_ids": row.unread_ids,
+                "participants": row.participants,
             })
         })
         .collect();
@@ -426,10 +440,8 @@ pub async fn delete_email(
         }
     }
 
-    sqlx::query("DELETE FROM emails WHERE id = $1")
-        .bind(email_id)
-        .execute(pool.get_ref())
-        .await?;
+    // Its conversation goes too when this was the last message in it.
+    crate::email::threading::delete_email(pool.get_ref(), account_id, email_id).await?;
 
     crate::audit::record_action(
         pool.get_ref(),
@@ -482,7 +494,8 @@ pub async fn get_all_email_attachments(req: HttpRequest, pool: web::Data<PgPool>
 ///
 /// Must stay in sync with the per-account `unread_count` in `email::account`: prefer
 /// the provider's authoritative `provider_unread_count` (INBOX only), falling back to
-/// a local COUNT that excludes SPAM, DRAFT, and self-sent mail before the first sync.
+/// a local COUNT that excludes SPAM, DRAFT, and self-sent mail before the first sync
+/// (and, for Gmail, anything not labelled INBOX).
 /// Summing per account is what makes this badge equal the "All Accounts" badge.
 #[get("/emails/unread-count")]
 #[instrument(target = "http", skip(req, pool))]
@@ -500,6 +513,7 @@ pub async fn get_unread_count(req: HttpRequest, pool: web::Data<PgPool>) -> AppR
                 AND lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%'
                 AND NOT ('SPAM' = ANY(e.labels))
                 AND NOT ('DRAFT' = ANY(e.labels))
+                AND (a.provider <> 'google' OR 'INBOX' = ANY(e.labels))
             )::BIGINT
           ) AS unread
           FROM email_accounts a
@@ -942,6 +956,9 @@ async fn push_read_state_to_provider(
     }
 }
 
+/// How long opening a conversation waits for its missing messages.
+const COMPLETE_CONVERSATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
+
 /// Every message of this email's conversation, oldest first, as list rows. The
 /// bodies still load per message through `/emails/{id}` and `/emails/{id}/body`,
 /// so encryption and provider fetching are unchanged. 404 when the caller can't
@@ -954,11 +971,29 @@ pub async fn get_email_thread(
     pool: web::Data<PgPool>,
 ) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let rows = repo::thread_messages(pool.get_ref(), path.into_inner(), user_id).await?;
+    let email_id = path.into_inner();
+    let mut rows = repo::thread_messages(pool.get_ref(), email_id, user_id).await?;
     if rows.is_empty() {
         return Ok(
             HttpResponse::NotFound().json(serde_json::json!({ "message": "Email not found" }))
         );
+    }
+    // The first open of a Gmail conversation fetches the messages it is
+    // missing (your replies, archived ones). Bounded, so a slow provider costs
+    // at most a few seconds; on failure or timeout the conversation shows what
+    // is stored and the next open tries again.
+    match tokio::time::timeout(
+        COMPLETE_CONVERSATION_TIMEOUT,
+        crate::email::complete::complete_conversation(pool.get_ref(), user_id, email_id),
+    )
+    .await
+    {
+        Ok(Ok(true)) => rows = repo::thread_messages(pool.get_ref(), email_id, user_id).await?,
+        Ok(Ok(false)) => {}
+        Ok(Err(e)) => {
+            warn!(target: "gmail", user_id, email_id, error = ?e, "conversation completion failed")
+        }
+        Err(_) => warn!(target: "gmail", user_id, email_id, "conversation completion timed out"),
     }
     let messages: Vec<Value> = rows
         .into_iter()

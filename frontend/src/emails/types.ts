@@ -41,6 +41,9 @@ export interface EmailItem {
   message_ids?: number[] | null;
   // The unread ones, so marking the conversation read touches only those.
   unread_ids?: number[] | null;
+  // Everyone who wrote in the conversation, once each, oldest first, and
+  // whether they have an unread message in it.
+  participants?: { sender: string; unread: boolean }[] | null;
   _bodyLoading?: boolean;
   _bodyError?: unknown;
 }
@@ -87,13 +90,11 @@ export type EmailFolder =
   // of their mail.
   | "signal"
   | "noise"
-  // Every folder at once. The backend matches folder names explicitly and its
-  // fallback arm applies no folder clause, so this searches all mail. Used by
-  // "Messages from this sender": scoping that to the current folder would hide
-  // the sender's mail that lives in Sent, Reviews, Updates or Social — and the
-  // inbox arm additionally drops noise senders and PR notifications, so an
-  // in-folder search is exactly the wrong answer for "show me everything from
-  // this person". No sidebar row or chip selects it; it is search-only.
+  // All mail: everything except spam, drafts and trash, like Gmail's All Mail.
+  // The sidebar's "All mail" row, and what every search reads (see
+  // `listFolder`): the inbox leaves out archived and filter-skipped Gmail mail,
+  // noise senders and PR notifications, so an in-folder search would miss
+  // them — and "Messages from this sender" wants all of that sender's mail.
   | "all";
 
 export const STUB_EMAIL_FOLDERS: ReadonlyArray<EmailFolder> = [];

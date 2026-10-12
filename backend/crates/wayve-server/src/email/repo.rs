@@ -8,6 +8,7 @@
 //! `attachments_checked` columns for it.
 
 use chrono::NaiveDateTime;
+use serde::Serialize;
 use sqlx::postgres::PgRow;
 use sqlx::{PgPool, QueryBuilder, Row};
 use std::collections::HashMap;
@@ -110,6 +111,19 @@ pub struct EmailListRow {
     /// The conversation's unread messages, so marking it read touches only
     /// those (each read also goes to the provider).
     pub unread_ids: Option<Vec<i32>>,
+    /// Everyone who wrote in the conversation, once each, in order of their
+    /// first message. The client shows your own addresses as "me" and the
+    /// unread ones in bold.
+    pub participants: Option<Vec<Participant>>,
+}
+
+/// One person in a conversation row.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Participant {
+    /// Their sender header ("Ayana <a@x.com>").
+    pub sender: String,
+    /// Whether any of their messages in the conversation is unread.
+    pub unread: bool,
 }
 
 #[derive(Clone)]
@@ -147,6 +161,13 @@ const LIST_COLUMNS: &str = r#"
 /// A conversation's grouping key: its thread, or the email itself while it has
 /// none (not yet backfilled, or threading failed), so it stays its own row.
 const CONV_KEY: &str = "COALESCE(e.thread_id, -e.id)";
+
+/// A Gmail message is in the inbox only while Gmail labels it INBOX. Sync pulls
+/// all mail, archived and filter-skipped included, so "not sent by me" would
+/// let those in too. Other providers pass. Reads only `e`, so it also works
+/// where the account isn't joined (the grouped Signal/Noise subquery).
+const GMAIL_IN_INBOX: &str = "('INBOX' = ANY(e.labels) OR NOT EXISTS (\
+     SELECT 1 FROM email_accounts ga WHERE ga.id = e.account_id AND ga.provider = 'google'))";
 
 /// Folders listed one row per conversation when grouping is asked for. Spam,
 /// drafts and trash stay per email.
@@ -225,6 +246,8 @@ fn push_folder(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFil
             // "sender isn't me" heuristic can't apply; send_internal tags them
             // with explicit INBOX/SENT labels instead. Route those by label and
             // keep the heuristic as a fallback for label-less provider rows.
+            // Gmail rows always carry Gmail's own labels, so for them only INBOX
+            // counts — see GMAIL_IN_INBOX.
             "inbox" => {
                 qb.push(
                     " AND (\
@@ -234,7 +257,8 @@ fn push_folder(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFil
                            AND NOT ('SPAM' = ANY(e.labels)) AND NOT ('DRAFT' = ANY(e.labels)) \
                            AND NOT ('TRASH' = ANY(e.labels)) \
                            AND ('INBOX' = ANY(e.labels) \
-                                OR lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%'))) ",
+                                OR (a.provider <> 'google' \
+                                    AND lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%')))) ",
                 );
                 // Marked-noise senders are moved out of the inbox.
                 qb.push(
@@ -282,11 +306,21 @@ fn push_folder(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFil
             "github" => {
                 qb.push(format!(" AND {GITHUB_PR_MATCH} "));
             }
+            // Everything except spam, drafts and trash, like Gmail's All Mail:
+            // what a search covers, so archived and filter-skipped mail, which
+            // no other folder lists, can still be found.
+            "all" => {
+                qb.push(
+                    " AND NOT ('SPAM' = ANY(e.labels)) AND NOT ('DRAFT' = ANY(e.labels)) \
+                       AND NOT ('TRASH' = ANY(e.labels)) ",
+                );
+            }
             // Inbox sub-views (the "All / Signal / Noise" chips): "signal" is the
             // high-priority mail — anything Gmail tags Important OR Updates —
             // minus senders the user marked as Noise. "noise" bundles the
             // low-priority categories (social + promotions) plus marked senders.
             "signal" => {
+                qb.push(format!(" AND {GMAIL_IN_INBOX} "));
                 qb.push(
                     " AND ('IMPORTANT' = ANY(e.labels) \
                        OR 'CATEGORY_UPDATES' = ANY(e.labels)) \
@@ -307,6 +341,7 @@ fn push_folder(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFil
                 // (social + promotions) that Signal doesn't claim. The
                 // NOT IMPORTANT / NOT CATEGORY_UPDATES guards keep Signal and
                 // Noise disjoint for mail Gmail double-tags.
+                qb.push(format!(" AND {GMAIL_IN_INBOX} "));
                 qb.push(
                     " AND (EXISTS (SELECT 1 FROM noise_senders ns \
                           WHERE ns.user_id = ",
@@ -399,8 +434,9 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
 ///
 /// 1. `matched`: the conversations with at least one email in this view, using
 ///    exactly the per-email filters. Signal and Noise instead judge each
-///    conversation by its newest *incoming* email, so a reply of yours can't
-///    pull a conversation into Signal and the two chips stay disjoint.
+///    conversation by its newest *incoming* email still in the inbox, so a
+///    reply of yours can't pull a conversation into Signal and the two chips
+///    stay disjoint.
 /// 2. `conv`: every email of those conversations the caller can see (trash,
 ///    spam and drafts aside), so your own sent reply counts as the newest
 ///    message and the conversation sorts by it, as in Gmail.
@@ -422,7 +458,9 @@ fn push_grouped_list(
         push_scope(qb, filters.user_id);
         push_account_and_status(qb, filters);
         push_search(qb, filters);
-        qb.push(" AND NOT ('SENT' = ANY(e.labels)) ORDER BY ");
+        qb.push(" AND NOT ('SENT' = ANY(e.labels)) AND ");
+        qb.push(GMAIL_IN_INBOX);
+        qb.push(" ORDER BY ");
         qb.push(CONV_KEY);
         qb.push(", e.created_at DESC, e.id DESC) e WHERE TRUE ");
         push_folder(qb, filters);
@@ -439,7 +477,7 @@ fn push_grouped_list(
     qb.push(LIST_COLUMNS);
     qb.push(", ");
     qb.push(CONV_KEY);
-    qb.push(" AS conv_key, e.thread_id");
+    qb.push(" AS conv_key, e.thread_id, e.sender_hash");
     push_scope(qb, filters.user_id);
     qb.push(" AND ");
     qb.push(CONV_KEY);
@@ -459,15 +497,35 @@ fn push_grouped_list(
                    ARRAY_AGG(id ORDER BY created_at DESC, id DESC) AS message_ids,
                    COALESCE(ARRAY_AGG(id ORDER BY created_at DESC, id DESC)
                             FILTER (WHERE is_read = FALSE), '{}') AS unread_ids
-            FROM conv GROUP BY conv_key)
+            FROM conv GROUP BY conv_key),
+        -- Who wrote in each conversation, once each, in order of their first
+        -- message (capped), and whether any of their messages is unread, for
+        -- a Gmail-style "Ayana, me" row with the unread names in bold.
+        -- Senders are told apart by address hash, so nothing is decrypted to
+        -- group them.
+        senders AS (
+            SELECT conv_key,
+                   (ARRAY_AGG(COALESCE(sender_iv, '') ORDER BY first_at, id))[1:50] AS p_iv,
+                   (ARRAY_AGG(COALESCE(sender_encrypted, '') ORDER BY first_at, id))[1:50] AS p_enc,
+                   (ARRAY_AGG(COALESCE(sender, '') ORDER BY first_at, id))[1:50] AS p_plain,
+                   (ARRAY_AGG(unread ORDER BY first_at, id))[1:50] AS p_unread
+            FROM (SELECT DISTINCT ON (conv_key, sender_key)
+                         conv_key, id, sender, sender_iv, sender_encrypted, created_at AS first_at,
+                         BOOL_OR(NOT COALESCE(is_read, TRUE))
+                             OVER (PARTITION BY conv_key, sender_key) AS unread
+                  FROM (SELECT *, COALESCE(sender_hash, lower(sender)) AS sender_key FROM conv) c
+                  ORDER BY conv_key, sender_key, created_at, id) first
+            GROUP BY conv_key)
         SELECT l.id, l.gmail_id, l.subject, l.subject_iv, l.subject_encrypted,
                l.sender, l.receiver, l.sender_iv, l.sender_encrypted,
                l.receiver_iv, l.receiver_encrypted, l.has_body,
                g.any_attachments AS has_attachments,
                l.account_id, l.is_read, l.created_at, l.is_shared, l.shared_label,
                l.inbox_status, l.inbox_assignee_id, l.thread_id,
-               g.message_count, g.unread_count, g.message_ids, g.unread_ids
-        FROM latest l JOIN agg g USING (conv_key) WHERE TRUE"#,
+               g.message_count, g.unread_count, g.message_ids, g.unread_ids,
+               p.p_iv, p.p_enc, p.p_plain, p.p_unread
+        FROM latest l JOIN agg g USING (conv_key) JOIN senders p USING (conv_key)
+        WHERE TRUE"#,
     );
     if let Some((before_ms, before_id)) = filters.before {
         qb.push(" AND (l.created_at, l.id) < (to_timestamp(");
@@ -523,7 +581,32 @@ fn map_list_row(row: PgRow) -> EmailListRow {
             .try_get::<Option<Vec<i32>>, _>("unread_ids")
             .ok()
             .flatten(),
+        participants: read_participants(&row),
     }
+}
+
+/// The grouped list's senders, decrypted the way `read_sender` decrypts one.
+/// None outside the grouped list.
+fn read_participants(row: &PgRow) -> Option<Vec<Participant>> {
+    let ivs: Vec<String> = row.try_get("p_iv").ok()?;
+    let encs: Vec<String> = row.try_get("p_enc").ok()?;
+    let plains: Vec<String> = row.try_get("p_plain").ok()?;
+    let unread: Vec<bool> = row.try_get("p_unread").ok()?;
+    Some(
+        ivs.iter()
+            .zip(&encs)
+            .zip(&plains)
+            .zip(&unread)
+            .filter_map(|(((iv, enc), plain), &unread)| {
+                let sender = if iv.is_empty() || enc.is_empty() {
+                    plain.clone()
+                } else {
+                    wayve_security::encryption::decrypt(iv, enc).unwrap_or_else(|_| plain.clone())
+                };
+                (!sender.is_empty()).then_some(Participant { sender, unread })
+            })
+            .collect(),
+    )
 }
 
 /// Every message of `email_id`'s conversation that the caller can see, oldest
@@ -782,8 +865,8 @@ pub async fn upsert_batch(
     // ON CONFLICT nulls the legacy `subject` so re-syncing an already-backfilled
     // row can't re-leak plaintext. `is_read` is deliberately monotonic: sync
     // re-fetches the last hour every tick and the mark-read push to Gmail lags,
-    // so a plain assignment would flip just-opened mail back to unread. The
-    // trade-off is that mail re-marked unread in Gmail stays read here.
+    // so a plain assignment would flip just-opened mail back to unread. Mail
+    // re-marked unread in Gmail is caught up by email/label_history.rs instead.
     query.push_str(
         " ON CONFLICT (account_id, gmail_id) DO UPDATE SET \
          sender = EXCLUDED.sender, \

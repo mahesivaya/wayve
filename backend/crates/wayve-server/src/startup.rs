@@ -254,6 +254,9 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             last_message_at TIMESTAMP)",
         "CREATE INDEX IF NOT EXISTS idx_email_threads_account \
          ON email_threads(account_id, last_message_at DESC)",
+        // Set once a conversation has been completed from the provider on open
+        // (email/complete.rs).
+        "ALTER TABLE email_threads ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ",
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS thread_id INTEGER \
          REFERENCES email_threads(id) ON DELETE SET NULL",
         "CREATE INDEX IF NOT EXISTS idx_emails_thread ON emails(thread_id)",
@@ -343,6 +346,9 @@ pub async fn ensure_email_schema(pool: &PgPool) {
          REFERENCES organizations(id) ON DELETE CASCADE",
         "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS is_shared BOOLEAN NOT NULL DEFAULT FALSE",
         "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS shared_label TEXT",
+        // Where the Gmail label-change sync has read history up to
+        // (email/label_history.rs).
+        "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS label_history_id BIGINT",
         "CREATE TABLE IF NOT EXISTS shared_inbox_members (
             account_id INTEGER NOT NULL REFERENCES email_accounts(id) ON DELETE CASCADE,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

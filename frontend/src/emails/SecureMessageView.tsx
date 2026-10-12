@@ -25,17 +25,17 @@ const fmtDate = (iso: string): string => {
 
 export default function SecureMessageView() {
   const { token } = useParams<{ token: string }>();
-  const [state, setState] = useState<LoadState>({ kind: "loading" });
+  const [loaded, setState] = useState<LoadState>({ kind: "loading" });
+  // No token in the URL means nothing to fetch: derived here rather than set
+  // from the effect, which would cost an extra render.
+  const state: LoadState = token ? loaded : { kind: "missing" };
   const [passphrase, setPassphrase] = useState("");
   const [busy, setBusy] = useState(false);
   const [body, setBody] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!token) {
-      setState({ kind: "missing" });
-      return;
-    }
+    if (!token) return;
     let cancelled = false;
     fetchSecureMessage(token)
       .then((envelope) => {

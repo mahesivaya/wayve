@@ -206,7 +206,9 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   // or arrow-key scroll acts on this scroll container rather than the list row
   // that was just clicked. `preventScroll` keeps the pane pinned at the top.
   useEffect(() => {
-    if (viewMode !== "email" || !selectedEmail) return;
+    // Keyed on the id, not the email: focus moves when a different message
+    // opens, not each time this one's body or read state loads.
+    if (viewMode !== "email" || selectedEmail?.id == null) return;
     const el = detailRef.current;
     if (!el) return;
     const timer = window.setTimeout(() => el.focus({ preventScroll: true }), 0);
