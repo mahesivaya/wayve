@@ -32,6 +32,15 @@ export interface EmailItem {
   shared_label?: string | null;
   inbox_status?: "open" | "pending" | "closed" | null;
   inbox_assignee_id?: number | null;
+  // Conversation fields, present when the list is grouped (one row per
+  // conversation, represented by its newest message). `message_ids` lists every
+  // message in it, newest first, so bulk actions can cover the whole thread.
+  thread_id?: number | null;
+  message_count?: number | null;
+  unread_count?: number | null;
+  message_ids?: number[] | null;
+  // The unread ones, so marking the conversation read touches only those.
+  unread_ids?: number[] | null;
   _bodyLoading?: boolean;
   _bodyError?: unknown;
 }

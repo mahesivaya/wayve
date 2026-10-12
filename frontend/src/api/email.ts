@@ -29,6 +29,9 @@ export type EmailListParams = {
   query?: string;
   before?: number;
   beforeId?: number;
+  // One row per conversation (Gmail-style). The server ignores it for spam,
+  // drafts and trash, which stay per email.
+  threads?: boolean;
 };
 
 export type EmailListResult<T = unknown> = {
@@ -55,6 +58,10 @@ export type SendEmailPayload = {
   bcc?: string[];
   // Standard-mailbox attachments only (Gmail/Outlook MIME, not E2E).
   attachments?: EmailComposeAttachment[];
+  // The email this one answers, so recipients' mail clients (and the sender's
+  // own Gmail) thread it under that conversation. The server reads the
+  // original's headers itself; set only by Reply, never by Forward.
+  reply_to_email_id?: number;
 };
 
 export type EmailAttachment = {
@@ -75,8 +82,13 @@ const emailListPath = ({
   query,
   before,
   beforeId,
+  threads,
 }: EmailListParams) => {
   const params = new URLSearchParams({ folder });
+
+  if (threads) {
+    params.set("threads", "1");
+  }
 
   if (accountId !== null && accountId !== undefined) {
     params.set("account_id", String(accountId));
@@ -221,6 +233,11 @@ export const lookupEmailProvider = async (email: string): Promise<string> => {
   );
   return data.provider;
 };
+
+// Every message of an email's conversation, oldest first, as list rows. Bodies
+// still load per message (getEmail / getEmailBody).
+export const getEmailThread = async <T = unknown>(id: number): Promise<T[]> =>
+  apiFetchJson<T[]>(`/api/emails/${id}/thread`);
 
 export const getEmails = async <T = unknown>(
   params: EmailListParams

@@ -16,13 +16,15 @@ pub mod profile;
 pub mod provider;
 pub(crate) mod provider_lookup;
 mod rehydrate;
+pub mod reply_headers;
 pub mod repo;
 pub mod secure;
-mod send;
+pub(crate) mod send;
 pub mod sender;
 pub mod shared_inbox;
 pub mod sync;
 pub mod sync_older;
+pub mod threading;
 pub mod utils;
 mod wake;
 
@@ -38,6 +40,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(crate::routes::email::mark_email_noise)
         .service(crate::routes::email::get_all_email_attachments)
         .service(crate::routes::email::get_email_attachments)
+        .service(crate::routes::email::get_email_thread)
         .service(crate::routes::email::download_email_attachment)
         .service(handler::get_email_body)
         .service(handler::get_email_by_id)

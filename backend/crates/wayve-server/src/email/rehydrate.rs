@@ -161,7 +161,7 @@ async fn rehydrate_one(
         }
     };
 
-    let (_msg_id, sender, receiver, subject, _gmail_ts, is_read, labels) = header;
+    let (_msg_id, sender, receiver, subject, gmail_ts, is_read, labels, threading) = header;
 
     // An empty subject stores an empty envelope, which the read path treats as
     // NULL and the UI renders as "(No Subject)".
@@ -223,6 +223,29 @@ async fn rehydrate_one(
     .bind(gmail_id)
     .execute(pool)
     .await?;
+
+    // The fresh metadata carries the conversation inputs too.
+    let email_id: Option<i32> =
+        sqlx::query_scalar("SELECT id FROM emails WHERE account_id = $1 AND gmail_id = $2")
+            .bind(account_id)
+            .bind(gmail_id)
+            .fetch_optional(pool)
+            .await?;
+    if let Some(email_id) = email_id {
+        crate::email::threading::assign_best_effort(
+            pool,
+            account_id,
+            crate::email::threading::ThreadInput {
+                email_id,
+                headers: &threading,
+                subject: &subject,
+                sender: &sender,
+                receiver: &receiver,
+                created_at: Some(gmail_ts),
+            },
+        )
+        .await;
+    }
 
     Ok(true)
 }

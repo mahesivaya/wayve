@@ -19,6 +19,15 @@ pub struct SendEmailRequest {
     /// send.
     #[serde(default)]
     pub attachments: Vec<EmailAttachmentInput>,
+    /// The email this one replies to, so it joins that conversation. Honoured by
+    /// the Gmail and IMAP send paths; ignored when that email isn't in the
+    /// sending mailbox or has no stored message id (it then sends unthreaded).
+    #[serde(default)]
+    pub reply_to_email_id: Option<i32>,
+    /// Filled in by the send handler from `reply_to_email_id`, never from the
+    /// request body: a client must not be able to supply raw header values.
+    #[serde(skip)]
+    pub reply_headers: Option<crate::email::reply_headers::ReplyHeaders>,
 }
 
 /// One outgoing attachment from the browser, with the file bytes standard-base64

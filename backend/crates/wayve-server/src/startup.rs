@@ -241,6 +241,102 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )",
         "CREATE INDEX IF NOT EXISTS idx_team_members_team ON team_members (team_id)",
+        // Email conversations (email/threading.rs) — mirrors init.sql and
+        // infra/postgres/migrations/2026-10-email-threading.sql. The mail list
+        // asks for conversation rows, which read `emails.thread_id`, so an
+        // existing deployment on the new binary needs all of this before it
+        // serves a single inbox page; init.sql only runs on a fresh volume.
+        // Order matters: `emails.thread_id` references `email_threads`.
+        "CREATE TABLE IF NOT EXISTS email_threads ( \
+            id SERIAL PRIMARY KEY, \
+            account_id INTEGER NOT NULL REFERENCES email_accounts(id) ON DELETE CASCADE, \
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), \
+            last_message_at TIMESTAMP)",
+        "CREATE INDEX IF NOT EXISTS idx_email_threads_account \
+         ON email_threads(account_id, last_message_at DESC)",
+        "ALTER TABLE emails ADD COLUMN IF NOT EXISTS thread_id INTEGER \
+         REFERENCES email_threads(id) ON DELETE SET NULL",
+        "CREATE INDEX IF NOT EXISTS idx_emails_thread ON emails(thread_id)",
+        "CREATE TABLE IF NOT EXISTS email_thread_meta ( \
+            email_id INTEGER PRIMARY KEY REFERENCES emails(id) ON DELETE CASCADE, \
+            account_id INTEGER NOT NULL REFERENCES email_accounts(id) ON DELETE CASCADE, \
+            message_id_hash TEXT, \
+            in_reply_to_hash TEXT, \
+            reference_hashes TEXT[] NOT NULL DEFAULT '{}', \
+            provider_thread_id TEXT, \
+            subject_key_hash TEXT, \
+            sender_hash TEXT, \
+            is_reply BOOLEAN NOT NULL DEFAULT FALSE, \
+            message_id_iv TEXT, \
+            message_id_encrypted TEXT, \
+            references_iv TEXT, \
+            references_encrypted TEXT)",
+        "CREATE INDEX IF NOT EXISTS idx_email_thread_meta_msgid \
+         ON email_thread_meta(account_id, message_id_hash)",
+        "CREATE INDEX IF NOT EXISTS idx_email_thread_meta_irt \
+         ON email_thread_meta(account_id, in_reply_to_hash)",
+        "CREATE INDEX IF NOT EXISTS idx_email_thread_meta_provider \
+         ON email_thread_meta(account_id, provider_thread_id)",
+        "CREATE INDEX IF NOT EXISTS idx_email_thread_meta_subject \
+         ON email_thread_meta(account_id, subject_key_hash)",
+        "CREATE INDEX IF NOT EXISTS idx_email_thread_meta_refs \
+         ON email_thread_meta USING GIN (reference_hashes)",
+        // Bare-address hashes of everyone on the email, for the subject
+        // fallback's "same correspondent" test (email/threading.rs).
+        "ALTER TABLE email_thread_meta \
+         ADD COLUMN IF NOT EXISTS correspondent_hashes TEXT[] NOT NULL DEFAULT '{}'",
+        "CREATE INDEX IF NOT EXISTS idx_email_thread_meta_correspondents \
+         ON email_thread_meta USING GIN (correspondent_hashes)",
+        // Request-scoped reads run as the restricted `wayve_app` role (the
+        // reply-header lookup reads email_thread_meta). Default privileges only
+        // cover tables created by the role that set them, so grant explicitly;
+        // skipped where the role doesn't exist (it's created by init.sql).
+        "DO $$ BEGIN \
+            IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'wayve_app') THEN \
+                GRANT SELECT, INSERT, UPDATE, DELETE ON email_threads TO wayve_app; \
+                GRANT SELECT, INSERT, UPDATE, DELETE ON email_thread_meta TO wayve_app; \
+                GRANT USAGE ON SEQUENCE email_threads_id_seq TO wayve_app; \
+            END IF; \
+         END $$",
+        // Row-level security, as on `emails`. Policies are created only when
+        // missing — never dropped and recreated on boot — so there is no window
+        // without one; with FORCE on, a missing policy denies rather than allows.
+        "ALTER TABLE email_threads ENABLE ROW LEVEL SECURITY",
+        "ALTER TABLE email_threads FORCE ROW LEVEL SECURITY",
+        r#"DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_policies
+                           WHERE tablename = 'email_threads' AND policyname = 'email_threads_rls') THEN
+                CREATE POLICY email_threads_rls ON email_threads
+                USING (current_setting('app.bypass', true) = 'on'
+                  OR EXISTS (
+                      SELECT 1 FROM email_accounts ea
+                      WHERE ea.id = email_threads.account_id
+                        AND ( ea.user_id = nullif(current_setting('app.user_id', true), '')::int
+                           OR EXISTS (SELECT 1 FROM shared_inbox_members sm
+                                      WHERE sm.account_id = ea.id
+                                        AND sm.user_id = nullif(current_setting('app.user_id', true), '')::int))))
+                WITH CHECK (current_setting('app.bypass', true) = 'on'
+                  OR EXISTS (
+                      SELECT 1 FROM email_accounts ea
+                      WHERE ea.id = email_threads.account_id
+                        AND ( ea.user_id = nullif(current_setting('app.user_id', true), '')::int
+                           OR EXISTS (SELECT 1 FROM shared_inbox_members sm
+                                      WHERE sm.account_id = ea.id
+                                        AND sm.user_id = nullif(current_setting('app.user_id', true), '')::int))));
+            END IF;
+         END $$"#,
+        "ALTER TABLE email_thread_meta ENABLE ROW LEVEL SECURITY",
+        "ALTER TABLE email_thread_meta FORCE ROW LEVEL SECURITY",
+        r#"DO $$ BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_policies
+                           WHERE tablename = 'email_thread_meta' AND policyname = 'email_thread_meta_rls') THEN
+                CREATE POLICY email_thread_meta_rls ON email_thread_meta
+                USING (current_setting('app.bypass', true) = 'on'
+                  OR EXISTS (SELECT 1 FROM emails e WHERE e.id = email_thread_meta.email_id))
+                WITH CHECK (current_setting('app.bypass', true) = 'on'
+                  OR EXISTS (SELECT 1 FROM emails e WHERE e.id = email_thread_meta.email_id));
+            END IF;
+         END $$"#,
         // Shared inboxes: /api/emails and /api/accounts JOIN against these on every
         // call, so a DB without them 500s.
         "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS organization_id INTEGER \

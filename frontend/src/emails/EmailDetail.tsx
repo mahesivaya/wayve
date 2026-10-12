@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-  downloadEmailAttachment,
   sendEmail,
   getGmailConnectUrl,
   filesToAttachments,
@@ -9,6 +8,9 @@ import {
 import { formatFileSize } from "./renderUtils";
 import { isGmailReconnectError } from "./bodyUtils";
 import EmailBody from "./EmailBody";
+import { ConversationView } from "./ConversationView";
+import { EmailAttachments } from "./EmailAttachments";
+import { replyRecipients } from "./replyRecipients";
 import { EmailItem } from "./types";
 import { updateEmailState, type InboxState } from "../api/sharedInboxes";
 import { APP_TIME_ZONE } from "../utils/datetime";
@@ -31,6 +33,14 @@ interface EmailDetailProps {
   // *all* of a sender's mail means leaving the current folder, which is the
   // host's state. Omit to hide the menu entry.
   onFilterBySender?: (address: string) => void;
+  // The open conversation's messages, oldest first, when the email is part of
+  // one; the earlier ones show above it. Absent for a single message.
+  conversation?: EmailItem[] | null;
+  // Loads an earlier message's body when it is expanded.
+  onLoadMessage?: (email: EmailItem) => Promise<EmailItem>;
+  // The user's connected mailbox addresses. Replying to one of your own
+  // messages goes to its recipients, not back to you.
+  ownAddresses?: string[];
 }
 
 export const EmailDetail: React.FC<EmailDetailProps> = ({
@@ -40,6 +50,9 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   onDeleteEmail,
   onMarkNoise,
   onFilterBySender,
+  conversation,
+  onLoadMessage,
+  ownAddresses,
 }) => {
   const { user } = useAuth();
   const [deleting, setDeleting] = useState(false);
@@ -89,7 +102,15 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   // Reply-to address, used inside onPick to avoid Cc-ing the person already on
   // the To line. Recomputed each render, so the inline onPick always closes over
   // the current value (no ref needed).
-  const replyToAddr = selectedEmail ? emailAddress(selectedEmail.sender) : "";
+  // Who Reply addresses: the sender, or — for a message you sent yourself — its
+  // recipients (see replyRecipients). Recomputed each render, like the rest.
+  const replyRecipientList = selectedEmail
+    ? replyRecipients(selectedEmail, [
+        ...(ownAddresses ?? []),
+        ...(user?.email ? [user.email] : []),
+      ])
+    : [];
+  const replyToAddr = replyRecipientList[0] ?? "";
   const mention = useMentionSearch({
     value: replyBody,
     setValue: setReplyBody,
@@ -300,11 +321,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     // stray Escape keeps an edited recipient or subject — the same rule the
     // body follows.
     if (next) {
-      setReplyToList((prev) => {
-        if (prev.length > 0) return prev;
-        const sender = emailAddress(selectedEmail.sender);
-        return sender ? [sender] : [];
-      });
+      setReplyToList((prev) => (prev.length > 0 ? prev : replyRecipientList));
       setReplySubject((prev) => prev || replySubjectFor(selectedEmail));
     }
     setReplyError(null);
@@ -450,6 +467,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         subject,
         body,
         attachments,
+        reply_to_email_id: selectedEmail.id,
       });
       setReplyToList([]);
       setReplySubject("");
@@ -700,6 +718,17 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         {selectedEmail.subject || "(No subject)"}
       </h2>
       {deleteError && <p className="email-body-error">{deleteError}</p>}
+
+      {conversation && onLoadMessage && conversation.length > 1 && (
+        <ConversationView
+          // A fresh view per conversation, so which messages are open (and
+          // which start open because they were unread) never carries over.
+          key={selectedEmail.id}
+          messages={conversation.filter((m) => m.id !== selectedEmail.id)}
+          loadMessage={onLoadMessage}
+          userId={user?.id ?? null}
+        />
+      )}
 
       {(() => {
         const { name: senderName, email: senderEmail } = splitSender(
@@ -1114,37 +1143,13 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         )}
       </div>
 
-      {(selectedEmail.attachments?.length ?? 0) > 0 && (
-        <div className="email-attachments">
-          <div className="email-attachments-title">Attachments</div>
-          {selectedEmail.attachments?.map((attachment) => (
-            <button
-              key={attachment.id}
-              className="email-attachment"
-              onClick={() =>
-                downloadEmailAttachment(attachment, user?.id ?? null)
-              }
-            >
-              <span className="email-attachment-icon">📎</span>
-              <span className="email-attachment-name">
-                {attachment.filename}
-              </span>
-              <span className="email-attachment-size">
-                {formatFileSize(attachment.size)}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
+      <EmailAttachments
+        attachments={selectedEmail.attachments}
+        userId={user?.id ?? null}
+      />
     </div>
   );
 };
-
-function emailAddress(value?: string | null) {
-  const text = value?.trim() || "";
-  const match = text.match(/<([^>]+)>/);
-  return (match?.[1] || text).trim();
-}
 
 function displaySubject(email: EmailItem): string {
   return email.subject?.trim() || "(No Subject)";

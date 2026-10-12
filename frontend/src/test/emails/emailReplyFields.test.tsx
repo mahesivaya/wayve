@@ -105,6 +105,15 @@ describe("reply composer recipients and subject", () => {
     expect(subject.value).toBe("Re: Request to schedule call");
   });
 
+  it("replies to the recipients of your own message, not to you", async () => {
+    // The newest message of a conversation is often your own reply.
+    const { to } = await openReply({
+      sender: "Me <me@test.local>",
+      receiver: '"Griffin, Peter" <peter@corp.test>, bo@corp.test',
+    });
+    expect(chips(to)).toEqual(["peter@corp.test", "bo@corp.test"]);
+  });
+
   it("turns each entered address into its own chip", async () => {
     const { to } = await openReply();
     addChip(to, "bo@corp.test");
@@ -155,6 +164,41 @@ describe("reply composer recipients and subject", () => {
     expect(sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({ to: "ada@test.local, bo@corp.test" })
     );
+  });
+
+  it("names the email it answers, so the reply is threaded", async () => {
+    const { body } = await openReply();
+    fireEvent.change(body, { target: { value: "Sounds good." } });
+
+    send();
+
+    await waitFor(() => expect(sendEmail).toHaveBeenCalled());
+    expect(sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ reply_to_email_id: 42 })
+    );
+  });
+
+  it("does not thread a forward under the original", async () => {
+    render(
+      <EmailDetail
+        selectedEmail={email}
+        viewMode="email"
+        onBack={vi.fn()}
+        onDeleteEmail={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    fireEvent.keyDown(document, { key: "f" });
+    fireEvent.change(screen.getByLabelText("Forward recipient"), {
+      target: { value: "bo@corp.test" },
+    });
+
+    send();
+
+    await waitFor(() => expect(sendEmail).toHaveBeenCalled());
+    expect(sendEmail.mock.calls[0][0]).not.toHaveProperty("reply_to_email_id");
   });
 
   it("refuses to send with every recipient removed", async () => {

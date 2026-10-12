@@ -63,6 +63,8 @@ export default function Emails() {
     loadMore,
     openFiles,
     openEmail,
+    conversation,
+    fetchMessage,
     deleteEmail,
     markSenderNoise,
     bulkMarkRead,
@@ -792,6 +794,13 @@ export default function Emails() {
             }}
             onDeleteEmail={deleteEmail}
             onMarkNoise={markSenderNoise}
+            conversation={
+              conversation && conversation.rowId === selectedEmail?.id
+                ? conversation.messages
+                : null
+            }
+            onLoadMessage={fetchMessage}
+            ownAddresses={accounts.map((account) => account.email)}
             onFilterBySender={(address) => {
               // Leave the current folder: the sender's mail is spread across
               // Sent, Reviews and the category folders, and the inbox query

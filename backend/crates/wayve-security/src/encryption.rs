@@ -184,6 +184,26 @@ pub fn compute_address_hash(addr: &str) -> Result<Option<String>, String> {
     Ok(Some(hex_encode(&out)))
 }
 
+/// Hex HMAC-SHA256 used to match emails into conversations without storing the
+/// raw values: `kind` names what is hashed (`"message-id"`, `"subject"`) and is
+/// mixed in first, so a value hashed as one kind never equals the same value
+/// hashed as another, or as an address. Same key as [`compute_address_hash`],
+/// so the hashes are useless without `AES_KEY`. Values are expected already
+/// normalized by the caller; empty input returns `None`.
+pub fn compute_thread_key_hash(kind: &str, value: &str) -> Result<Option<String>, String> {
+    if value.is_empty() {
+        return Ok(None);
+    }
+    let key = derive_address_hmac_key()?;
+    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&key)
+        .map_err(|e| format!("hmac init failed: {e:?}"))?;
+    Mac::update(&mut mac, b"thread-key\0");
+    Mac::update(&mut mac, kind.as_bytes());
+    Mac::update(&mut mac, b"\0");
+    Mac::update(&mut mac, value.as_bytes());
+    Ok(Some(hex_encode(&mac.finalize().into_bytes())))
+}
+
 fn hex_encode(bytes: &[u8]) -> String {
     let mut s = String::with_capacity(bytes.len() * 2);
     for b in bytes {

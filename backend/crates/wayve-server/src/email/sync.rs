@@ -18,6 +18,7 @@ pub type EmailHeader = (
     NaiveDateTime,
     bool,
     Vec<String>,
+    crate::email::threading::ThreadHeaders,
 );
 
 /// Stamps Gmail's authoritative INBOX unread count onto
@@ -111,6 +112,7 @@ pub async fn fetch_headers_only(token: &str, msg_id: &str) -> Result<EmailHeader
     if let Some(label) = github_pr_label(&res) {
         label_ids.push(label.to_string());
     }
+    let threading = gmail_thread_headers(&res);
     Ok((
         msg_id.to_string(),
         sender,
@@ -119,7 +121,30 @@ pub async fn fetch_headers_only(token: &str, msg_id: &str) -> Result<EmailHeader
         gmail_timestamp,
         is_read,
         label_ids,
+        threading,
     ))
+}
+
+/// The conversation inputs of a Gmail metadata response: `threadId` and the
+/// Message-Id / In-Reply-To / References headers already requested above.
+fn gmail_thread_headers(res: &Value) -> crate::email::threading::ThreadHeaders {
+    let header = |name: &str| -> Option<String> {
+        res["payload"]["headers"].as_array().and_then(|headers| {
+            headers.iter().find_map(|h| {
+                h["name"]
+                    .as_str()
+                    .filter(|n| n.eq_ignore_ascii_case(name))
+                    .and_then(|_| h["value"].as_str())
+                    .map(str::to_string)
+            })
+        })
+    };
+    crate::email::threading::ThreadHeaders::from_raw(
+        header("Message-Id").as_deref(),
+        header("In-Reply-To").as_deref(),
+        header("References").as_deref(),
+        res["threadId"].as_str(),
+    )
 }
 
 fn extract_gmail_timestamp(res: &Value) -> NaiveDateTime {
@@ -168,6 +193,18 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
     if let Err(err) = backfill_older(pool, account.id, &account.provider, &token.access_token).await
     {
         warn!(target: "worker", account_id = account.id, error = ?err, "backfill batch failed");
+    }
+
+    // Thread a batch of mail that predates conversation threading.
+    if let Err(err) = crate::email::threading::backfill_batch(
+        pool,
+        account.id,
+        &account.provider,
+        &token.access_token,
+    )
+    .await
+    {
+        warn!(target: "worker", account_id = account.id, error = ?err, "threading backfill failed");
     }
 
     for label in [
@@ -1078,20 +1115,43 @@ where
     let insert_batch: Vec<InsertEmail<'_>> = batch
         .iter()
         .map(
-            |(gmail_id, sender, receiver, subject, gmail_timestamp, is_read, labels)| InsertEmail {
-                gmail_id,
-                sender,
-                receiver,
-                subject,
-                created_at: *gmail_timestamp,
-                is_read: *is_read,
-                labels: labels.as_slice(),
-                body: None,
-                attachments_checked: false,
+            |(gmail_id, sender, receiver, subject, gmail_timestamp, is_read, labels, _)| {
+                InsertEmail {
+                    gmail_id,
+                    sender,
+                    receiver,
+                    subject,
+                    created_at: *gmail_timestamp,
+                    is_read: *is_read,
+                    labels: labels.as_slice(),
+                    body: None,
+                    attachments_checked: false,
+                }
             },
         )
         .collect();
     let returned = upsert_batch(pool, account_id, &insert_batch).await?;
+
+    // Place each email in its conversation. Re-synced emails keep theirs.
+    for r in &returned {
+        if let Some((_, sender, receiver, subject, created_at, _, _, threading)) =
+            batch.iter().find(|h| h.0 == r.gmail_id)
+        {
+            crate::email::threading::assign_best_effort(
+                pool,
+                account_id,
+                crate::email::threading::ThreadInput {
+                    email_id: r.id,
+                    headers: threading,
+                    subject,
+                    sender,
+                    receiver,
+                    created_at: Some(*created_at),
+                },
+            )
+            .await;
+        }
+    }
 
     // The account's owner can't change mid-tick, so resolve it once per batch.
     let owner_row = sqlx::query(

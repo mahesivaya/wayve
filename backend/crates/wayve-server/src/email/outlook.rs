@@ -140,6 +140,10 @@ struct OutlookMessage {
     /// providers: user categories plus a synthetic `IMPORTANT` for
     /// `importance == "high"`.
     labels: Vec<String>,
+    /// `conversationId` + `internetMessageId`. Graph groups replies itself, so
+    /// its conversation id is enough to thread; In-Reply-To/References would
+    /// cost an extra request per message (`internetMessageHeaders`).
+    threading: crate::email::threading::ThreadHeaders,
 }
 
 fn parse_message(m: &Value) -> Option<OutlookMessage> {
@@ -191,6 +195,12 @@ fn parse_message(m: &Value) -> Option<OutlookMessage> {
         has_attachments: m["hasAttachments"].as_bool().unwrap_or(false),
         is_read: m["isRead"].as_bool().unwrap_or(false),
         labels,
+        threading: crate::email::threading::ThreadHeaders::from_raw(
+            m["internetMessageId"].as_str(),
+            None,
+            None,
+            m["conversationId"].as_str(),
+        ),
     })
 }
 
@@ -208,7 +218,7 @@ fn first_page_url(last_sync: Option<i64>) -> String {
         // which the sidebar category folders filter on.
         q.append_pair(
             "$select",
-            "id,subject,from,toRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance",
+            "id,subject,from,toRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance,conversationId,internetMessageId",
         );
         q.append_pair("$orderby", "receivedDateTime desc");
         q.append_pair("$top", &OUTLOOK_PAGE_SIZE.to_string());
@@ -237,7 +247,7 @@ fn first_before_page_url(before_timestamp: i64, limit: usize) -> String {
         let mut q = url.query_pairs_mut();
         q.append_pair(
             "$select",
-            "id,subject,from,toRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance",
+            "id,subject,from,toRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance,conversationId,internetMessageId",
         );
         q.append_pair("$orderby", "receivedDateTime desc");
         q.append_pair("$top", &limit.min(OUTLOOK_PAGE_SIZE).to_string());
@@ -327,6 +337,19 @@ async fn upsert_messages(
             },
         )
         .await?;
+        crate::email::threading::assign_best_effort(
+            pool,
+            account_id,
+            crate::email::threading::ThreadInput {
+                email_id,
+                headers: &m.threading,
+                subject: &m.subject,
+                sender: &m.sender,
+                receiver: &m.receiver,
+                created_at: Some(m.received),
+            },
+        )
+        .await;
 
         // Graph keeps attachments on a sub-resource, so their metadata needs a
         // separate fetch; the bytes are downloaded on demand later.
@@ -508,7 +531,7 @@ async fn sync_outlook_folder_recent(
 ) -> Result<()> {
     let (folder_id, synthetic_label, cap) = spec;
     let url = format!(
-        "{}/v1.0/me/mailFolders/{}/messages?$select=id,subject,from,toRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance&$orderby=receivedDateTime desc&$top={}",
+        "{}/v1.0/me/mailFolders/{}/messages?$select=id,subject,from,toRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance,conversationId,internetMessageId&$orderby=receivedDateTime desc&$top={}",
         crate::external::microsoft_graph_base(),
         folder_id,
         cap

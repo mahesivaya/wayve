@@ -5,6 +5,7 @@ import { AttachmentIcon, EmailsIcon, MailOpenIcon, TrashIcon } from "../icons";
 import { useGlobalSearch } from "../search/SearchContext";
 import { useListScrollMemory } from "./useListScrollMemory";
 import { fmtListTimestamp } from "../utils/datetime";
+import { isConversation, isUnread } from "./conversation";
 
 interface EmailListProps {
   emails: EmailItem[];
@@ -330,7 +331,7 @@ export const EmailList: React.FC<EmailListProps> = ({
                   type="button"
                   role="menuitem"
                   className="email-select-item"
-                  onClick={() => selectBy((e) => e.is_read === true)}
+                  onClick={() => selectBy((e) => !isUnread(e))}
                 >
                   Read
                 </button>
@@ -338,7 +339,7 @@ export const EmailList: React.FC<EmailListProps> = ({
                   type="button"
                   role="menuitem"
                   className="email-select-item"
-                  onClick={() => selectBy((e) => e.is_read === false)}
+                  onClick={() => selectBy((e) => isUnread(e))}
                 >
                   Unread
                 </button>
@@ -432,7 +433,7 @@ export const EmailList: React.FC<EmailListProps> = ({
               key={email.id}
               className={[
                 "email-item",
-                email.is_read === false ? "unread" : "read",
+                isUnread(email) ? "unread" : "read",
                 selectedEmailId === email.id ? "active" : "",
               ]
                 .filter(Boolean)
@@ -458,7 +459,7 @@ export const EmailList: React.FC<EmailListProps> = ({
                     <span className="email-row-icon" aria-hidden="true">
                       {/* Inline SVG rather than the unicode envelope, which renders
                       as a color emoji on macOS/Windows but a plain glyph on Linux. */}
-                      {email.is_read === false ? (
+                      {isUnread(email) ? (
                         <svg
                           viewBox="0 0 16 16"
                           width="14"
@@ -502,6 +503,7 @@ export const EmailList: React.FC<EmailListProps> = ({
                 {isListView && (
                   <span className="email-list-sender">
                     {displaySender(email.sender || email.receiver)}
+                    <ConversationCount email={email} />
                   </span>
                 )}
                 <span className="email-primary">
@@ -535,7 +537,7 @@ export const EmailList: React.FC<EmailListProps> = ({
                     className="email-row-actions"
                     onClick={(event) => event.stopPropagation()}
                   >
-                    {email.is_read === false
+                    {isUnread(email)
                       ? onMarkRead && (
                           <button
                             type="button"
@@ -590,6 +592,7 @@ export const EmailList: React.FC<EmailListProps> = ({
                 </div>
                 <span className="mobile-email-sender">
                   {displaySender(email.sender || email.receiver)}
+                  <ConversationCount email={email} />
                 </span>
                 <span className="mobile-email-subject-line">
                   <span className="mobile-email-subject">
@@ -641,3 +644,17 @@ export const EmailList: React.FC<EmailListProps> = ({
     </div>
   );
 };
+
+// The number of messages in a conversation row, as Gmail shows it beside the
+// sender. Nothing for a single message.
+function ConversationCount({ email }: { email: EmailItem }) {
+  if (!isConversation(email)) return null;
+  return (
+    <span
+      className="email-conversation-count"
+      aria-label={`${email.message_count} messages`}
+    >
+      {email.message_count}
+    </span>
+  );
+}
