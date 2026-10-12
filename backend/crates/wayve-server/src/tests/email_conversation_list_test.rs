@@ -162,6 +162,33 @@ mod tests {
         assert_eq!(rows[0].message_count, Some(2));
         assert_eq!(rows[0].thread_id, Some(t));
         assert_eq!(rows[0].message_ids.as_deref(), Some(&[reply, invite][..]));
+        // Who wrote in it, once each, oldest first (the trashed message left
+        // out), so the row can read "Alice, me" rather than just your reply.
+        let who: Option<Vec<String>> = rows[0]
+            .participants
+            .as_ref()
+            .map(|p| p.iter().map(|p| p.sender.clone()).collect());
+        assert_eq!(
+            who,
+            Some(vec!["Alice <alice@x.com>".to_string(), me.address.clone()])
+        );
+        // Each person is bold only while one of their messages is unread.
+        sqlx::query("UPDATE emails SET is_read = FALSE WHERE id = $1")
+            .bind(invite)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("unread: {e}"));
+        let rows = list(&pool, filters(me.user, me.account, "inbox", true)).await;
+        let unread: Option<Vec<bool>> = rows[0]
+            .participants
+            .as_ref()
+            .map(|p| p.iter().map(|p| p.unread).collect());
+        assert_eq!(unread, Some(vec![true, false]));
+        sqlx::query("UPDATE emails SET is_read = TRUE WHERE id = $1")
+            .bind(invite)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("read: {e}"));
         // An email with no conversation yet is its own row.
         assert_eq!(rows[1].message_count, Some(1));
         assert_eq!(rows[1].thread_id, None);
@@ -173,6 +200,13 @@ mod tests {
             .map(|r| r.id)
             .collect();
         assert_eq!(flat, vec![other, invite]);
+        assert!(
+            list(&pool, filters(me.user, me.account, "inbox", false))
+                .await
+                .iter()
+                .all(|r| r.participants.is_none()),
+            "only conversation rows carry participants"
+        );
 
         cleanup(&pool, &[me.user]).await;
     }

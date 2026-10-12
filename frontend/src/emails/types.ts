@@ -41,6 +41,9 @@ export interface EmailItem {
   message_ids?: number[] | null;
   // The unread ones, so marking the conversation read touches only those.
   unread_ids?: number[] | null;
+  // Everyone who wrote in the conversation, once each, oldest first, and
+  // whether they have an unread message in it.
+  participants?: { sender: string; unread: boolean }[] | null;
   _bodyLoading?: boolean;
   _bodyError?: unknown;
 }

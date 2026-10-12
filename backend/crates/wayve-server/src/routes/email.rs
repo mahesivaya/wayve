@@ -272,6 +272,7 @@ pub async fn get_emails(
                 "unread_count": row.unread_count,
                 "message_ids": row.message_ids,
                 "unread_ids": row.unread_ids,
+                "participants": row.participants,
             })
         })
         .collect();
