@@ -978,6 +978,11 @@ pub async fn sync_account(
     {
         warn!(target: "worker", account_id, error = ?err, "sent sync failed");
     }
+    // Archiving, labelling and read state changed in Gmail on older mail.
+    if let Err(err) = crate::email::label_history::sync_label_changes(pool, account_id, token).await
+    {
+        warn!(target: "worker", account_id, error = ?err, "label change sync failed");
+    }
 
     Ok(())
 }
@@ -1066,7 +1071,77 @@ pub async fn sync_account_before(
         before_timestamp,
         "fetched older gmail ids"
     );
+    sync_ids(pool, account_id, token, ids).await
+}
 
+/// `sync_account_before` for the inbox only: scrolling the Inbox wants older
+/// inbox mail, and all-mail pages of archived or filter-skipped messages would
+/// fill nothing there, so a run of them could end the scroll early.
+#[instrument(target = "worker", skip(pool, token), fields(account_id))]
+pub async fn sync_account_inbox_before(
+    pool: &PgPool,
+    account_id: i32,
+    token: &str,
+    before_timestamp: i64,
+    max_results: usize,
+) -> anyhow::Result<()> {
+    let ids = fetch_label_ids_before(token, "INBOX", before_timestamp, max_results).await?;
+    debug!(
+        target: "worker",
+        account_id,
+        count = ids.len(),
+        before_timestamp,
+        "fetched older gmail inbox ids"
+    );
+    sync_ids(pool, account_id, token, ids).await
+}
+
+/// Every message id in the Gmail conversation holding `msg_id`: the thread id
+/// from `messages.get`, then the thread's ids from `threads.get`. Empty when
+/// Gmail no longer has the message.
+pub async fn fetch_gmail_thread_message_ids(token: &str, msg_id: &str) -> Result<Vec<String>> {
+    let base = crate::external::gmail_api_base();
+    let resp = HTTP_CLIENT
+        .get(format!("{base}/gmail/v1/users/me/messages/{msg_id}"))
+        .query(&[("format", "minimal")])
+        .bearer_auth(token)
+        .send()
+        .await?;
+    if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(Vec::new());
+    }
+    let message: Value = resp.error_for_status()?.json().await?;
+    let Some(thread_id) = message["threadId"].as_str() else {
+        return Ok(Vec::new());
+    };
+
+    let thread: Value = HTTP_CLIENT
+        .get(format!("{base}/gmail/v1/users/me/threads/{thread_id}"))
+        .query(&[("format", "minimal")])
+        .bearer_auth(token)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    Ok(thread["messages"]
+        .as_array()
+        .map(|messages| {
+            messages
+                .iter()
+                .filter_map(|m| m["id"].as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
+/// Fetches and stores the headers of `ids`, MAX_EMAIL_CONCURRENCY at a time.
+pub(crate) async fn sync_ids(
+    pool: &PgPool,
+    account_id: i32,
+    token: &str,
+    ids: Vec<String>,
+) -> anyhow::Result<()> {
     let mut tasks = FuturesUnordered::new();
 
     for id in ids {

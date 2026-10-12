@@ -18,9 +18,8 @@ export type EmailFolder =
   // and never send them here (see `useEmailInbox`).
   | "signal"
   | "noise"
-  // Cross-folder search. Relies on the "unknown folder returns all" behaviour
-  // noted above — the backend has no `all` arm, and its fallback applies no
-  // folder clause at all, which is exactly what this needs.
+  // All mail (everything but spam, drafts and trash): the "All mail" folder
+  // and every search.
   | "all";
 
 export type EmailListParams = {

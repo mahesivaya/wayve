@@ -14,6 +14,7 @@ import {
 } from "../api/email";
 import { logger } from "../utils/logger";
 import { decryptWayveBodyIfNeeded, emailBodyErrorMessage } from "./bodyUtils";
+import { listFolder } from "./searchScope";
 import { EmailAccount, EmailFolder, EmailItem, EmailAttachment } from "./types";
 import {
   conversationKey,
@@ -92,7 +93,7 @@ export function useEmailInbox(
       // server-side in email/repo.rs, so the raw folder is sent as-is.
       const { emails: data, hasMore: hasMorePage } = await getEmails<EmailItem>(
         {
-          folder: activeFolder,
+          folder: listFolder(activeFolder, normalizedSearchQuery),
           accountId: activeAccount,
           query: normalizedSearchQuery,
           threads: true,
@@ -185,7 +186,7 @@ export function useEmailInbox(
       // return empty and the button vanish.
       const before = new Date(last.created_at).getTime();
       const { emails: data } = await getEmails<EmailItem>({
-        folder: activeFolder,
+        folder: listFolder(activeFolder, normalizedSearchQuery),
         accountId: activeAccount,
         query: normalizedSearchQuery,
         before,
@@ -269,13 +270,56 @@ export function useEmailInbox(
     try {
       const messages = await getEmailThread<EmailItem>(row.id);
       if (conversationFor.current !== row.id) return;
-      setConversation({ rowId: row.id, messages });
+      // The conversation can hold a message newer than the opened row: one
+      // that arrived after the list last refreshed, or that opening it just
+      // fetched from Gmail. As in Gmail, the newest is the message shown in
+      // full at the bottom, below the earlier ones in time order, and the one
+      // Reply answers, so the reading pane (and the row) switch to it.
+      // Messages come oldest first.
+      const newest = messages[messages.length - 1];
+      const shown = newest && newest.id !== row.id ? newest : row;
       const unread = messages
         .filter((m) => m.is_read === false && m.id !== row.id)
         .map((m) => m.id);
       for (const id of unread) {
         void markEmailRead(id).catch((err) => {
           logger.warn("Failed to persist read state", { emailId: id, err });
+        });
+      }
+      if (shown.id === row.id) {
+        setConversation({ rowId: row.id, messages });
+        return;
+      }
+
+      conversationFor.current = shown.id;
+      const opened = { ...shown, is_read: true };
+      setEmails((prev) =>
+        prev.map((item) =>
+          item.id === row.id
+            ? {
+                ...item,
+                ...opened,
+                message_count: messages.length,
+                message_ids: messages.map((m) => m.id).reverse(),
+                unread_count: 0,
+                unread_ids: [],
+              }
+            : item
+        )
+      );
+      setConversation({ rowId: shown.id, messages });
+      setSelectedEmail({ ...row, ...opened, _bodyLoading: true });
+      try {
+        const full = await fetchMessage(shown);
+        if (conversationFor.current !== shown.id) return;
+        setSelectedEmail({ ...row, ...full, is_read: true });
+      } catch (err) {
+        if (conversationFor.current !== shown.id) return;
+        setSelectedEmail({
+          ...row,
+          ...opened,
+          body: "",
+          _bodyError: emailBodyErrorMessage(err),
         });
       }
     } catch (err) {
@@ -353,8 +397,12 @@ export function useEmailInbox(
       return;
     }
 
+    // Another email opened since, or the conversation switched the pane to a
+    // newer message (loadConversation): this one must not take it back.
+    const stillShown = () => conversationFor.current === email.id;
     try {
       const data = await getEmail<EmailItem>(email.id);
+      if (!stillShown()) return;
       const emailWithListFields = { ...openedEmail, ...data, is_read: true };
       if (data.body) {
         const decryptedBody = await decryptWayveBodyIfNeeded(
@@ -372,7 +420,7 @@ export function useEmailInbox(
           attachments,
         };
         emailCache.current[email.id] = full;
-        setSelectedEmail(full);
+        if (stillShown()) setSelectedEmail(full);
       } else {
         setSelectedEmail({ ...emailWithListFields, _bodyLoading: true });
         const { body } = await getEmailBody(email.id);
@@ -391,6 +439,7 @@ export function useEmailInbox(
         setSelectedEmail((cur) => (cur?.id === email.id ? merged : cur));
       }
     } catch (err) {
+      if (!stillShown()) return;
       setSelectedEmail({
         ...openedEmail,
         body: "",

@@ -1306,6 +1306,14 @@
   color: var(--color-text-primary);
 }
 
+/* "Searching all mail": a search reads every folder, not just this one. */
+.email-search-scope {
+  padding: 6px 16px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border);
+}
+
 .email-bulk-clear {
   background: none;
   border: none;
@@ -1636,6 +1644,18 @@
 .email-item.read .email-list-sender {
   font-weight: 500;
   color: var(--color-text-muted);
+}
+
+/* Conversation rows: each name carries its own weight — bold only for people
+   with an unread message, as Gmail does — instead of the whole column. */
+.email-list-sender.by-person,
+.mobile-email-sender.by-person {
+  font-weight: 500;
+}
+
+.email-sender-name.is-unread {
+  font-weight: 700;
+  color: var(--color-text-primary);
 }
 
 .email-attachment-pin {

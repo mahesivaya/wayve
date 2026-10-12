@@ -21,3 +21,60 @@ export const isConversation = (email: EmailItem): boolean =>
 // newest message (often your own reply) has been read.
 export const isUnread = (email: EmailItem): boolean =>
   (email.unread_count ?? 0) > 0 || email.is_read === false;
+
+// Who a row names, Gmail-style: everyone who wrote in the conversation, your
+// own addresses as "me" ("Ayana, me"). Up to three names; a longer list keeps
+// the first and the two latest ("Ann … Bob, me"). Each name says whether that
+// person has an unread message, which is what Gmail bolds. `label` is the
+// plain text, `lead` the first name that isn't you (for the avatar). A row
+// without participants (a per-email list) names its sender, as before.
+export type SenderName = { name: string; unread: boolean };
+
+export function conversationSenders(
+  email: Pick<EmailItem, "sender" | "receiver" | "participants">,
+  ownAddresses: Iterable<string>,
+  displayName: (value: string | null | undefined) => string
+): { names: SenderName[]; gap: boolean; label: string; lead: string } {
+  const participants = (email.participants ?? []).filter((p) => p.sender);
+  if (participants.length === 0) {
+    const name = displayName(email.sender || email.receiver);
+    return {
+      names: [{ name, unread: false }],
+      gap: false,
+      label: name,
+      lead: name,
+    };
+  }
+  const own = new Set(
+    Array.from(ownAddresses, (a) => a.trim().toLowerCase()).filter(Boolean)
+  );
+  const all: SenderName[] = [];
+  for (const participant of participants) {
+    const name = own.has(addressOf(participant.sender).toLowerCase())
+      ? "me"
+      : displayName(participant.sender);
+    const seen = all.find((n) => n.name === name);
+    if (seen) seen.unread ||= participant.unread;
+    else all.push({ name, unread: participant.unread });
+  }
+  const gap = all.length > 3;
+  const names = gap ? [all[0], ...all.slice(-2)] : all;
+  const label = gap
+    ? `${names[0].name} … ${names
+        .slice(1)
+        .map((n) => n.name)
+        .join(", ")}`
+    : names.map((n) => n.name).join(", ");
+  return {
+    names,
+    gap,
+    label,
+    lead: all.find((n) => n.name !== "me")?.name ?? "me",
+  };
+}
+
+// "Ada <ada@x.com>" → "ada@x.com"; a bare address is returned trimmed.
+function addressOf(value: string): string {
+  const match = value.match(/<([^>]+)>/);
+  return (match?.[1] ?? value).trim();
+}
