@@ -14,6 +14,7 @@ mod chat_multi_session_test;
 mod contacts_test;
 mod documents_rbac_test;
 mod email_conversation_list_test;
+mod email_label_history_test;
 mod email_provider_isp_test;
 mod email_reply_headers_test;
 mod email_threading_test;

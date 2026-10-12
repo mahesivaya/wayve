@@ -574,6 +574,9 @@ ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS mail_security TEXT;
 -- `watch_expires_at` is when the current watch lapses (Gmail watches live
 -- ≤7 days) so the renewal worker can re-arm before then.
 ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS gmail_history_id BIGINT;
+-- Where the Gmail label-change sync (email/label_history.rs) has read history
+-- up to. Separate from gmail_history_id, which a watch renewal overwrites.
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS label_history_id BIGINT;
 ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS watch_expires_at TIMESTAMPTZ;
 
 -- =========================================================================

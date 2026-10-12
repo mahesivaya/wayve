@@ -806,8 +806,8 @@ pub async fn upsert_batch(
     // ON CONFLICT nulls the legacy `subject` so re-syncing an already-backfilled
     // row can't re-leak plaintext. `is_read` is deliberately monotonic: sync
     // re-fetches the last hour every tick and the mark-read push to Gmail lags,
-    // so a plain assignment would flip just-opened mail back to unread. The
-    // trade-off is that mail re-marked unread in Gmail stays read here.
+    // so a plain assignment would flip just-opened mail back to unread. Mail
+    // re-marked unread in Gmail is caught up by email/label_history.rs instead.
     query.push_str(
         " ON CONFLICT (account_id, gmail_id) DO UPDATE SET \
          sender = EXCLUDED.sender, \

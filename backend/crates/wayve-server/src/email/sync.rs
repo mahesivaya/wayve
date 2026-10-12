@@ -978,6 +978,11 @@ pub async fn sync_account(
     {
         warn!(target: "worker", account_id, error = ?err, "sent sync failed");
     }
+    // Archiving, labelling and read state changed in Gmail on older mail.
+    if let Err(err) = crate::email::label_history::sync_label_changes(pool, account_id, token).await
+    {
+        warn!(target: "worker", account_id, error = ?err, "label change sync failed");
+    }
 
     Ok(())
 }
