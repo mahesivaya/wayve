@@ -1,7 +1,7 @@
 // The user-stories timeline card. Its window is a sprint by default but is not
 // bound to sprint boundaries: the side arrows step a whole sprint, and dragging
 // the plot slides it a day at a time, so any date range is reachable.
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";
 
@@ -33,6 +33,13 @@ vi.mock("recharts", async () => {
 });
 
 const fx = vi.hoisted(() => {
+  // A fixed "now", mid-sprint (the sprint of 16–29 Mar 2026), so the story's
+  // events below are always in the past. Against the real clock they fell in
+  // the future on a sprint's first two days, and in UTC that came a day before
+  // local time, so the bar drew one block instead of two. Only Date is faked:
+  // findBy* still waits on real timers.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-03-23T12:00:00"));
   const STATUSES = [
     { id: 1, slug: "todo", name: "To Do", color: "#ec4899", category: "todo" },
     {
@@ -136,6 +143,7 @@ describe("user stories timeline", () => {
   // The theme lives on <html>, which outlives an individual render — put it
   // back so a test that flips it can't colour the ones after it.
   afterEach(() => document.documentElement.removeAttribute("data-theme"));
+  afterAll(() => vi.useRealTimers());
 
   it("opens on the sprint running now", async () => {
     await renderCard();
