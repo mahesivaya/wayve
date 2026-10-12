@@ -346,6 +346,9 @@ pub async fn ensure_email_schema(pool: &PgPool) {
          REFERENCES organizations(id) ON DELETE CASCADE",
         "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS is_shared BOOLEAN NOT NULL DEFAULT FALSE",
         "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS shared_label TEXT",
+        // Where the Gmail label-change sync has read history up to
+        // (email/label_history.rs).
+        "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS label_history_id BIGINT",
         "CREATE TABLE IF NOT EXISTS shared_inbox_members (
             account_id INTEGER NOT NULL REFERENCES email_accounts(id) ON DELETE CASCADE,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

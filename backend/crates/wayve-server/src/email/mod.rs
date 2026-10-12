@@ -8,6 +8,7 @@ pub mod gmail_push;
 pub mod handler;
 pub mod imap;
 mod imap_routes;
+pub mod label_history;
 pub mod oauth;
 mod oauth_flow;
 pub mod outlook;
