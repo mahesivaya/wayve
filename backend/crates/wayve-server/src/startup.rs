@@ -254,6 +254,9 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             last_message_at TIMESTAMP)",
         "CREATE INDEX IF NOT EXISTS idx_email_threads_account \
          ON email_threads(account_id, last_message_at DESC)",
+        // Set once a conversation has been completed from the provider on open
+        // (email/complete.rs).
+        "ALTER TABLE email_threads ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ",
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS thread_id INTEGER \
          REFERENCES email_threads(id) ON DELETE SET NULL",
         "CREATE INDEX IF NOT EXISTS idx_emails_thread ON emails(thread_id)",

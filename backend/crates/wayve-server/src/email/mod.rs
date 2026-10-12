@@ -2,6 +2,7 @@ pub mod account;
 pub mod attachments;
 mod body_handlers;
 pub mod body_worker;
+pub mod complete;
 pub mod contacts;
 pub mod gmail_push;
 pub mod handler;
