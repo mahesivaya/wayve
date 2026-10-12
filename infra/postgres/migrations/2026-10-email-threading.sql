@@ -121,4 +121,12 @@ CREATE POLICY email_thread_meta_rls ON email_thread_meta
         OR EXISTS (SELECT 1 FROM emails e WHERE e.id = email_thread_meta.email_id)
     );
 
+-- One-time cleanup: deleting an email used to leave its conversation behind
+-- once empty (deleted mail comes back from Gmail's Trash as a new row, in a new
+-- conversation). Deletes now remove an emptied conversation themselves. Safe
+-- while sync runs: a conversation is created and given its email in one
+-- transaction, so a committed one is never empty on purpose.
+DELETE FROM email_threads t
+WHERE NOT EXISTS (SELECT 1 FROM emails e WHERE e.thread_id = t.id);
+
 COMMIT;
