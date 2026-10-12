@@ -696,4 +696,121 @@ mod tests {
 
         cleanup(&pool, &[me.user]).await;
     }
+
+    // Opening an older Gmail conversation fetches the messages it is missing —
+    // your reply, an archived message — into the same conversation, once.
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn opening_a_conversation_completes_it_from_gmail_once() {
+        use wiremock::matchers::{method, path, query_param};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        // SAFETY: serialized via #[serial].
+        unsafe {
+            if std::env::var("AES_KEY").is_err() {
+                std::env::set_var(
+                    "AES_KEY",
+                    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                );
+            }
+        }
+        let pool = test_pool().await;
+        let me = mailbox(&pool).await;
+        let stranger = mailbox(&pool).await;
+
+        let mock = MockServer::start().await;
+        let metadata = |id: &str, from: &str, labels: &[&str], ms: &str| {
+            serde_json::json!({
+                "id": id, "threadId": "T9", "labelIds": labels, "internalDate": ms,
+                "payload": { "headers": [
+                    { "name": "From", "value": from },
+                    { "name": "To", "value": "ann@x.com" },
+                    { "name": "Subject", "value": "Plans" }
+                ]}
+            })
+        };
+        for (id, from, labels, ms) in [
+            ("known", "Ann <ann@x.com>", &["INBOX"][..], "1780000000000"),
+            (
+                "reply1",
+                me.address.as_str(),
+                &["SENT"][..],
+                "1780000100000",
+            ),
+            (
+                "arch1",
+                "Ann <ann@x.com>",
+                &["Label_1"][..],
+                "1780000200000",
+            ),
+        ] {
+            Mock::given(method("GET"))
+                .and(path(format!("/gmail/v1/users/me/messages/{id}")))
+                .and(query_param("format", "metadata"))
+                .respond_with(
+                    ResponseTemplate::new(200).set_body_json(metadata(id, from, labels, ms)),
+                )
+                .mount(&mock)
+                .await;
+        }
+        Mock::given(method("GET"))
+            .and(path("/gmail/v1/users/me/messages/known"))
+            .and(query_param("format", "minimal"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({ "id": "known", "threadId": "T9" })),
+            )
+            .expect(1)
+            .mount(&mock)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/gmail/v1/users/me/threads/T9"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": "T9",
+                "messages": [{ "id": "known" }, { "id": "reply1" }, { "id": "arch1" }]
+            })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+        // SAFETY: serialized via #[serial].
+        unsafe {
+            std::env::set_var("GMAIL_API_BASE", mock.uri());
+        }
+
+        // The inbox message is stored (and threaded) the way sync stores it.
+        let stored =
+            crate::email::sync::sync_ids(&pool, me.account, "tok", vec!["known".into()]).await;
+        let (known, thread): (i32, i32) = sqlx::query_as(
+            "SELECT id, thread_id FROM emails WHERE account_id = $1 AND gmail_id = 'known'",
+        )
+        .bind(me.account)
+        .fetch_one(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("known: {e}"));
+        // Someone else's conversation is never completed for them.
+        let other =
+            crate::email::complete::complete_conversation(&pool, stranger.user, known).await;
+        let fetched =
+            crate::email::complete::store_missing(&pool, me.account, thread, "known", "tok").await;
+        unsafe {
+            std::env::remove_var("GMAIL_API_BASE");
+        }
+        stored.unwrap_or_else(|e| panic!("sync: {e}"));
+        assert!(!other.unwrap_or_else(|e| panic!("other: {e}")));
+        assert!(fetched.unwrap_or_else(|e| panic!("complete: {e}")));
+        mock.verify().await;
+
+        let messages: Vec<String> = repo::thread_messages(&pool, known, me.user)
+            .await
+            .unwrap_or_else(|e| panic!("thread: {e}"))
+            .into_iter()
+            .map(|m| m.gmail_id)
+            .collect();
+        assert_eq!(messages, vec!["known", "reply1", "arch1"], "oldest first");
+
+        // Done once: a later open fetches nothing, without a provider call.
+        let again = crate::email::complete::complete_conversation(&pool, me.user, known).await;
+        assert!(!again.unwrap_or_else(|e| panic!("again: {e}")));
+
+        cleanup(&pool, &[me.user, stranger.user]).await;
+    }
 }

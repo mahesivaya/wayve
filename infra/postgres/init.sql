@@ -704,6 +704,9 @@ CREATE TABLE IF NOT EXISTS email_threads (
 );
 CREATE INDEX IF NOT EXISTS idx_email_threads_account
     ON email_threads(account_id, last_message_at DESC);
+-- Set once a conversation has been completed from the provider on open, so
+-- the missing messages (your replies, archived ones) are fetched only once.
+ALTER TABLE email_threads ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
 
 ALTER TABLE emails ADD COLUMN IF NOT EXISTS thread_id INTEGER
     REFERENCES email_threads(id) ON DELETE SET NULL;

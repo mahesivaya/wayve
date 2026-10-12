@@ -957,6 +957,9 @@ async fn push_read_state_to_provider(
     }
 }
 
+/// How long opening a conversation waits for its missing messages.
+const COMPLETE_CONVERSATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
+
 /// Every message of this email's conversation, oldest first, as list rows. The
 /// bodies still load per message through `/emails/{id}` and `/emails/{id}/body`,
 /// so encryption and provider fetching are unchanged. 404 when the caller can't
@@ -969,11 +972,29 @@ pub async fn get_email_thread(
     pool: web::Data<PgPool>,
 ) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let rows = repo::thread_messages(pool.get_ref(), path.into_inner(), user_id).await?;
+    let email_id = path.into_inner();
+    let mut rows = repo::thread_messages(pool.get_ref(), email_id, user_id).await?;
     if rows.is_empty() {
         return Ok(
             HttpResponse::NotFound().json(serde_json::json!({ "message": "Email not found" }))
         );
+    }
+    // The first open of a Gmail conversation fetches the messages it is
+    // missing (your replies, archived ones). Bounded, so a slow provider costs
+    // at most a few seconds; on failure or timeout the conversation shows what
+    // is stored and the next open tries again.
+    match tokio::time::timeout(
+        COMPLETE_CONVERSATION_TIMEOUT,
+        crate::email::complete::complete_conversation(pool.get_ref(), user_id, email_id),
+    )
+    .await
+    {
+        Ok(Ok(true)) => rows = repo::thread_messages(pool.get_ref(), email_id, user_id).await?,
+        Ok(Ok(false)) => {}
+        Ok(Err(e)) => {
+            warn!(target: "gmail", user_id, email_id, error = ?e, "conversation completion failed")
+        }
+        Err(_) => warn!(target: "gmail", user_id, email_id, "conversation completion timed out"),
     }
     let messages: Vec<Value> = rows
         .into_iter()

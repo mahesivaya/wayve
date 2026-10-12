@@ -1091,8 +1091,47 @@ pub async fn sync_account_inbox_before(
     sync_ids(pool, account_id, token, ids).await
 }
 
+/// Every message id in the Gmail conversation holding `msg_id`: the thread id
+/// from `messages.get`, then the thread's ids from `threads.get`. Empty when
+/// Gmail no longer has the message.
+pub async fn fetch_gmail_thread_message_ids(token: &str, msg_id: &str) -> Result<Vec<String>> {
+    let base = crate::external::gmail_api_base();
+    let resp = HTTP_CLIENT
+        .get(format!("{base}/gmail/v1/users/me/messages/{msg_id}"))
+        .query(&[("format", "minimal")])
+        .bearer_auth(token)
+        .send()
+        .await?;
+    if resp.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(Vec::new());
+    }
+    let message: Value = resp.error_for_status()?.json().await?;
+    let Some(thread_id) = message["threadId"].as_str() else {
+        return Ok(Vec::new());
+    };
+
+    let thread: Value = HTTP_CLIENT
+        .get(format!("{base}/gmail/v1/users/me/threads/{thread_id}"))
+        .query(&[("format", "minimal")])
+        .bearer_auth(token)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    Ok(thread["messages"]
+        .as_array()
+        .map(|messages| {
+            messages
+                .iter()
+                .filter_map(|m| m["id"].as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
 /// Fetches and stores the headers of `ids`, MAX_EMAIL_CONCURRENCY at a time.
-async fn sync_ids(
+pub(crate) async fn sync_ids(
     pool: &PgPool,
     account_id: i32,
     token: &str,
