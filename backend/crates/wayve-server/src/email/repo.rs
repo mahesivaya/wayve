@@ -148,6 +148,13 @@ const LIST_COLUMNS: &str = r#"
 /// none (not yet backfilled, or threading failed), so it stays its own row.
 const CONV_KEY: &str = "COALESCE(e.thread_id, -e.id)";
 
+/// A Gmail message is in the inbox only while Gmail labels it INBOX. Sync pulls
+/// all mail, archived and filter-skipped included, so "not sent by me" would
+/// let those in too. Other providers pass. Reads only `e`, so it also works
+/// where the account isn't joined (the grouped Signal/Noise subquery).
+const GMAIL_IN_INBOX: &str = "('INBOX' = ANY(e.labels) OR NOT EXISTS (\
+     SELECT 1 FROM email_accounts ga WHERE ga.id = e.account_id AND ga.provider = 'google'))";
+
 /// Folders listed one row per conversation when grouping is asked for. Spam,
 /// drafts and trash stay per email.
 fn folder_groups_threads(folder: Option<&str>) -> bool {
@@ -225,6 +232,8 @@ fn push_folder(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFil
             // "sender isn't me" heuristic can't apply; send_internal tags them
             // with explicit INBOX/SENT labels instead. Route those by label and
             // keep the heuristic as a fallback for label-less provider rows.
+            // Gmail rows always carry Gmail's own labels, so for them only INBOX
+            // counts — see GMAIL_IN_INBOX.
             "inbox" => {
                 qb.push(
                     " AND (\
@@ -234,7 +243,8 @@ fn push_folder(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFil
                            AND NOT ('SPAM' = ANY(e.labels)) AND NOT ('DRAFT' = ANY(e.labels)) \
                            AND NOT ('TRASH' = ANY(e.labels)) \
                            AND ('INBOX' = ANY(e.labels) \
-                                OR lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%'))) ",
+                                OR (a.provider <> 'google' \
+                                    AND lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%')))) ",
                 );
                 // Marked-noise senders are moved out of the inbox.
                 qb.push(
@@ -287,6 +297,7 @@ fn push_folder(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFil
             // minus senders the user marked as Noise. "noise" bundles the
             // low-priority categories (social + promotions) plus marked senders.
             "signal" => {
+                qb.push(format!(" AND {GMAIL_IN_INBOX} "));
                 qb.push(
                     " AND ('IMPORTANT' = ANY(e.labels) \
                        OR 'CATEGORY_UPDATES' = ANY(e.labels)) \
@@ -307,6 +318,7 @@ fn push_folder(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFil
                 // (social + promotions) that Signal doesn't claim. The
                 // NOT IMPORTANT / NOT CATEGORY_UPDATES guards keep Signal and
                 // Noise disjoint for mail Gmail double-tags.
+                qb.push(format!(" AND {GMAIL_IN_INBOX} "));
                 qb.push(
                     " AND (EXISTS (SELECT 1 FROM noise_senders ns \
                           WHERE ns.user_id = ",
@@ -399,8 +411,9 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
 ///
 /// 1. `matched`: the conversations with at least one email in this view, using
 ///    exactly the per-email filters. Signal and Noise instead judge each
-///    conversation by its newest *incoming* email, so a reply of yours can't
-///    pull a conversation into Signal and the two chips stay disjoint.
+///    conversation by its newest *incoming* email still in the inbox, so a
+///    reply of yours can't pull a conversation into Signal and the two chips
+///    stay disjoint.
 /// 2. `conv`: every email of those conversations the caller can see (trash,
 ///    spam and drafts aside), so your own sent reply counts as the newest
 ///    message and the conversation sorts by it, as in Gmail.
@@ -422,7 +435,9 @@ fn push_grouped_list(
         push_scope(qb, filters.user_id);
         push_account_and_status(qb, filters);
         push_search(qb, filters);
-        qb.push(" AND NOT ('SENT' = ANY(e.labels)) ORDER BY ");
+        qb.push(" AND NOT ('SENT' = ANY(e.labels)) AND ");
+        qb.push(GMAIL_IN_INBOX);
+        qb.push(" ORDER BY ");
         qb.push(CONV_KEY);
         qb.push(", e.created_at DESC, e.id DESC) e WHERE TRUE ");
         push_folder(qb, filters);

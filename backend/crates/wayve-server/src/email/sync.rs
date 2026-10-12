@@ -1066,7 +1066,38 @@ pub async fn sync_account_before(
         before_timestamp,
         "fetched older gmail ids"
     );
+    sync_ids(pool, account_id, token, ids).await
+}
 
+/// `sync_account_before` for the inbox only: scrolling the Inbox wants older
+/// inbox mail, and all-mail pages of archived or filter-skipped messages would
+/// fill nothing there, so a run of them could end the scroll early.
+#[instrument(target = "worker", skip(pool, token), fields(account_id))]
+pub async fn sync_account_inbox_before(
+    pool: &PgPool,
+    account_id: i32,
+    token: &str,
+    before_timestamp: i64,
+    max_results: usize,
+) -> anyhow::Result<()> {
+    let ids = fetch_label_ids_before(token, "INBOX", before_timestamp, max_results).await?;
+    debug!(
+        target: "worker",
+        account_id,
+        count = ids.len(),
+        before_timestamp,
+        "fetched older gmail inbox ids"
+    );
+    sync_ids(pool, account_id, token, ids).await
+}
+
+/// Fetches and stores the headers of `ids`, MAX_EMAIL_CONCURRENCY at a time.
+async fn sync_ids(
+    pool: &PgPool,
+    account_id: i32,
+    token: &str,
+    ids: Vec<String>,
+) -> anyhow::Result<()> {
     let mut tasks = FuturesUnordered::new();
 
     for id in ids {
