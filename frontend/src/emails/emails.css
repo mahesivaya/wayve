@@ -1306,6 +1306,14 @@
   color: var(--color-text-primary);
 }
 
+/* "Searching all mail": a search reads every folder, not just this one. */
+.email-search-scope {
+  padding: 6px 16px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border);
+}
+
 .email-bulk-clear {
   background: none;
   border: none;

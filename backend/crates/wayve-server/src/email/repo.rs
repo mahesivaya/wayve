@@ -292,6 +292,15 @@ fn push_folder(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFil
             "github" => {
                 qb.push(format!(" AND {GITHUB_PR_MATCH} "));
             }
+            // Everything except spam, drafts and trash, like Gmail's All Mail:
+            // what a search covers, so archived and filter-skipped mail, which
+            // no other folder lists, can still be found.
+            "all" => {
+                qb.push(
+                    " AND NOT ('SPAM' = ANY(e.labels)) AND NOT ('DRAFT' = ANY(e.labels)) \
+                       AND NOT ('TRASH' = ANY(e.labels)) ",
+                );
+            }
             // Inbox sub-views (the "All / Signal / Noise" chips): "signal" is the
             // high-priority mail — anything Gmail tags Important OR Updates —
             // minus senders the user marked as Noise. "noise" bundles the

@@ -14,6 +14,7 @@ import {
 } from "../api/email";
 import { logger } from "../utils/logger";
 import { decryptWayveBodyIfNeeded, emailBodyErrorMessage } from "./bodyUtils";
+import { listFolder } from "./searchScope";
 import { EmailAccount, EmailFolder, EmailItem, EmailAttachment } from "./types";
 import {
   conversationKey,
@@ -92,7 +93,7 @@ export function useEmailInbox(
       // server-side in email/repo.rs, so the raw folder is sent as-is.
       const { emails: data, hasMore: hasMorePage } = await getEmails<EmailItem>(
         {
-          folder: activeFolder,
+          folder: listFolder(activeFolder, normalizedSearchQuery),
           accountId: activeAccount,
           query: normalizedSearchQuery,
           threads: true,
@@ -185,7 +186,7 @@ export function useEmailInbox(
       // return empty and the button vanish.
       const before = new Date(last.created_at).getTime();
       const { emails: data } = await getEmails<EmailItem>({
-        folder: activeFolder,
+        folder: listFolder(activeFolder, normalizedSearchQuery),
         accountId: activeAccount,
         query: normalizedSearchQuery,
         before,

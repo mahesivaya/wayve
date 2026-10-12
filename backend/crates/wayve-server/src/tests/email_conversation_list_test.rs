@@ -627,4 +627,73 @@ mod tests {
 
         cleanup(&pool, &[me.user]).await;
     }
+
+    // All mail (what every search reads) lists the archived and filter-skipped
+    // Gmail mail the Inbox leaves out, but never spam, drafts or trash.
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn all_mail_lists_archived_gmail_mail_but_not_spam_drafts_or_trash() {
+        let pool = test_pool().await;
+        let me = mailbox(&pool).await;
+        let inbox = email(
+            &pool,
+            me.account,
+            None,
+            "Ann <ann@x.com>",
+            &["INBOX"],
+            "2026-09-01 09:00",
+        )
+        .await;
+        let archived = email(
+            &pool,
+            me.account,
+            None,
+            "Recruiter <jobs@x.com>",
+            &["Label_1"],
+            "2026-09-02 09:00",
+        )
+        .await;
+        let sent = email(
+            &pool,
+            me.account,
+            None,
+            &me.address,
+            &["SENT"],
+            "2026-09-03 09:00",
+        )
+        .await;
+        for label in ["SPAM", "DRAFT", "TRASH"] {
+            email(
+                &pool,
+                me.account,
+                None,
+                "Ann <ann@x.com>",
+                &[label],
+                "2026-09-04 09:00",
+            )
+            .await;
+        }
+
+        for grouped in [true, false] {
+            let ids: Vec<i32> = list(&pool, filters(me.user, me.account, "all", grouped))
+                .await
+                .iter()
+                .map(|r| r.id)
+                .collect();
+            assert_eq!(ids, vec![sent, archived, inbox], "grouped = {grouped}");
+        }
+        // A search finds the archived message there, not in the Inbox.
+        let mut search = filters(me.user, me.account, "all", true);
+        search.search = Some("jobs@x.com".to_string());
+        let found: Vec<i32> = list(&pool, search.clone())
+            .await
+            .iter()
+            .map(|r| r.id)
+            .collect();
+        assert_eq!(found, vec![archived]);
+        search.folder = Some("inbox".to_string());
+        assert!(list(&pool, search).await.is_empty());
+
+        cleanup(&pool, &[me.user]).await;
+    }
 }
