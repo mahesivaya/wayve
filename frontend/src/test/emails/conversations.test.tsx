@@ -250,6 +250,40 @@ describe("useEmailInbox with conversations", () => {
     expect(result.current.emails[0].unread_count).toBe(0);
   });
 
+  it("a reply newer than the opened row becomes the message shown, last in order", async () => {
+    // "Four" arrived after the list last refreshed, so the row still stands
+    // for "Three" (12). The conversation shows Four in full at the bottom, as
+    // Gmail does, and the row moves on to it.
+    const four: EmailItem = {
+      id: 13,
+      sender: "Alice <alice@x.com>",
+      created_at: "2026-10-07T09:05:00Z",
+      is_read: false,
+    };
+    getEmailThread.mockResolvedValue([...thread, four]);
+    const { result } = await loaded();
+    await act(async () => {
+      await result.current.openEmail(row);
+    });
+
+    await waitFor(() => expect(result.current.selectedEmail?.id).toBe(13));
+    await waitFor(() =>
+      expect(result.current.selectedEmail?.body).toBe("body 13")
+    );
+    expect(result.current.conversation?.rowId).toBe(13);
+    expect(result.current.conversation?.messages.map((m) => m.id)).toEqual([
+      10, 11, 12, 13,
+    ]);
+    expect(result.current.emails[0]).toMatchObject({
+      id: 13,
+      thread_id: 5,
+      message_count: 4,
+      message_ids: [13, 12, 11, 10],
+      unread_count: 0,
+    });
+    expect(markEmailRead).toHaveBeenCalledWith(13);
+  });
+
   it("bulk delete on a conversation row deletes every message in it", async () => {
     const { result } = await loaded();
     await act(async () => {
