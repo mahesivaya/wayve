@@ -213,6 +213,7 @@ pub async fn load_account_summaries_for_user(pool: &PgPool, user_id: i32) -> Res
     // first sync and for shared inboxes whose provider count isn't refreshed per
     // member. It excludes SPAM and DRAFT to match what Gmail's labels.get reports
     // for INBOX, and self-sent mail, which would otherwise inflate the badge.
+    // For Gmail it counts only INBOX-labelled mail, as the inbox list does.
     let accounts = sqlx::query_as::<_, Account>(
         r#"
         SELECT
@@ -226,6 +227,7 @@ pub async fn load_account_summaries_for_user(pool: &PgPool, user_id: i32) -> Res
                 AND lower(coalesce(e.sender, '')) NOT LIKE '%' || lower(a.email) || '%'
                 AND NOT ('SPAM' = ANY(e.labels))
                 AND NOT ('DRAFT' = ANY(e.labels))
+                AND (a.provider <> 'google' OR 'INBOX' = ANY(e.labels))
             )::BIGINT
           ) AS unread_count,
           a.is_shared,
