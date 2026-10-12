@@ -6,6 +6,7 @@ import { useGlobalSearch } from "../search/SearchContext";
 import { useListScrollMemory } from "./useListScrollMemory";
 import { fmtListTimestamp } from "../utils/datetime";
 import { isConversation, isUnread } from "./conversation";
+import { listFolder } from "./searchScope";
 
 interface EmailListProps {
   emails: EmailItem[];
@@ -107,6 +108,11 @@ export const EmailList: React.FC<EmailListProps> = ({
   // Read-only here: the query is set from the page toolbar's search box and is
   // only needed as part of the scroll-memory key below.
   const { searchQuery } = useGlobalSearch();
+  // A search reads all mail (see listFolder), so say so: the results include
+  // mail this folder doesn't list.
+  const searchingAllMail =
+    searchQuery.trim() !== "" &&
+    listFolder(activeFolder ?? "inbox", searchQuery) === "all";
 
   const [checkedIds, setCheckedIds] = useState<Set<number>>(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -387,6 +393,12 @@ export const EmailList: React.FC<EmailListProps> = ({
               {bulkHint}
             </span>
           )}
+        </div>
+      )}
+
+      {searchingAllMail && !showNoAccounts && (
+        <div className="email-search-scope" role="status">
+          Searching all mail
         </div>
       )}
 

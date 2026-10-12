@@ -292,6 +292,14 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
           >
             👥 Social
           </button>
+          {/* Everything but spam, drafts and trash — the one place archived
+            and filter-skipped mail is listed. */}
+          <button
+            className={`filter-btn ${activeFolder === "all" && viewMode === "email" ? "active" : ""}`}
+            onClick={() => setActiveFolder("all")}
+          >
+            🗂️ All mail
+          </button>
           <button
             className={`filter-btn ${activeFolder === "drafts" && viewMode === "email" ? "active" : ""}`}
             onClick={() => setActiveFolder("drafts")}
