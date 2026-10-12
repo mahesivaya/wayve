@@ -1646,6 +1646,18 @@
   color: var(--color-text-muted);
 }
 
+/* Conversation rows: each name carries its own weight — bold only for people
+   with an unread message, as Gmail does — instead of the whole column. */
+.email-list-sender.by-person,
+.mobile-email-sender.by-person {
+  font-weight: 500;
+}
+
+.email-sender-name.is-unread {
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
 .email-attachment-pin {
   flex: 0 0 auto;
   color: var(--color-text-ink);

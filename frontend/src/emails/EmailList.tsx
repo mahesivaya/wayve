@@ -1,11 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { EmailFolder, EmailItem, STUB_EMAIL_FOLDERS } from "./types";
 import { FolderChips } from "./FolderChips";
 import { AttachmentIcon, EmailsIcon, MailOpenIcon, TrashIcon } from "../icons";
 import { useGlobalSearch } from "../search/SearchContext";
 import { useListScrollMemory } from "./useListScrollMemory";
 import { fmtListTimestamp } from "../utils/datetime";
-import { isConversation, isUnread } from "./conversation";
+import { conversationSenders, isConversation, isUnread } from "./conversation";
 import { listFolder } from "./searchScope";
 
 interface EmailListProps {
@@ -48,6 +48,8 @@ interface EmailListProps {
   // restored on remount belongs to the rows being shown. Omitting it keeps the
   // memory per-search-term only, which is right for a lone embedded list.
   scrollKey?: string;
+  // Your mailbox addresses, shown as "me" among a conversation's senders.
+  ownAddresses?: string[];
 }
 
 // Folders with no backing query. Important / Updates / Social are not stubs: they
@@ -100,6 +102,7 @@ export const EmailList: React.FC<EmailListProps> = ({
   onSelectFolder,
   onShowAttachments,
   scrollKey = "emails",
+  ownAddresses = [],
 }) => {
   const isStubFolder = activeFolder
     ? (STUB_EMAIL_FOLDERS as ReadonlyArray<string>).includes(activeFolder)
@@ -513,8 +516,8 @@ export const EmailList: React.FC<EmailListProps> = ({
                     can occupy a grid track of its own and line up with the
                     senders above and below it. */}
                 {isListView && (
-                  <span className="email-list-sender">
-                    {displaySender(email.sender || email.receiver)}
+                  <span className={senderClass("email-list-sender", email)}>
+                    <SenderNames email={email} ownAddresses={ownAddresses} />
                     <ConversationCount email={email} />
                   </span>
                 )}
@@ -597,13 +600,13 @@ export const EmailList: React.FC<EmailListProps> = ({
               second line. */}
               <div className="mobile-email-row">
                 <div className="mobile-email-avatar" aria-hidden="true">
-                  {displaySender(email.sender || email.receiver)
-                    .trim()
+                  {conversationSenders(email, ownAddresses, displaySender)
+                    .lead.trim()
                     .charAt(0)
                     .toUpperCase()}
                 </div>
-                <span className="mobile-email-sender">
-                  {displaySender(email.sender || email.receiver)}
+                <span className={senderClass("mobile-email-sender", email)}>
+                  <SenderNames email={email} ownAddresses={ownAddresses} />
                   <ConversationCount email={email} />
                 </span>
                 <span className="mobile-email-subject-line">
@@ -659,6 +662,45 @@ export const EmailList: React.FC<EmailListProps> = ({
 
 // The number of messages in a conversation row, as Gmail shows it beside the
 // sender. Nothing for a single message.
+// A conversation row names each person on their own, bold only while they
+// have an unread message (as Gmail does), so the sender column drops the
+// whole-row weight. A per-email row keeps it.
+function senderClass(base: string, email: EmailItem): string {
+  return email.participants?.length ? `${base} by-person` : base;
+}
+
+function SenderNames({
+  email,
+  ownAddresses,
+}: {
+  email: EmailItem;
+  ownAddresses: string[];
+}) {
+  const { names, gap } = conversationSenders(
+    email,
+    ownAddresses,
+    displaySender
+  );
+  return (
+    <>
+      {names.map((sender, i) => (
+        <Fragment key={i}>
+          {i > 0 && (gap && i === 1 ? " … " : ", ")}
+          <span
+            className={
+              sender.unread
+                ? "email-sender-name is-unread"
+                : "email-sender-name"
+            }
+          >
+            {sender.name}
+          </span>
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
 function ConversationCount({ email }: { email: EmailItem }) {
   if (!isConversation(email)) return null;
   return (

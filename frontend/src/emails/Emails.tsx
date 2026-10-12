@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import "./emails.css";
 import "./loadMore.css";
@@ -72,6 +72,12 @@ export default function Emails() {
     markRead,
     markUnread,
   } = useEmailInbox(user?.id, normalizedSearchQuery);
+  // Your mailbox addresses: "me" among a conversation's senders, and who a
+  // reply to your own message goes to.
+  const ownAddresses = useMemo(
+    () => accounts.map((account) => account.email),
+    [accounts]
+  );
 
   // `accounts` starts empty on every refresh, so gating the toolbar on
   // `accounts.length` alone would flash it during the load window.
@@ -715,6 +721,7 @@ export default function Emails() {
             width={showEmailListResizer ? emailListWidth : undefined}
             isListView={effectiveLayout === "list"}
             scrollKey={`${activeAccount ?? "all"}:${activeFolder}`}
+            ownAddresses={ownAddresses}
             onBulkMarkRead={bulkMarkRead}
             onBulkDelete={bulkDelete}
             onMarkRead={markRead}
@@ -800,7 +807,7 @@ export default function Emails() {
                 : null
             }
             onLoadMessage={fetchMessage}
-            ownAddresses={accounts.map((account) => account.email)}
+            ownAddresses={ownAddresses}
             onFilterBySender={(address) => {
               // Leave the current folder: the sender's mail is spread across
               // Sent, Reviews and the category folders, and the inbox query

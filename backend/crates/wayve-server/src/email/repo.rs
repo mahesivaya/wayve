@@ -8,6 +8,7 @@
 //! `attachments_checked` columns for it.
 
 use chrono::NaiveDateTime;
+use serde::Serialize;
 use sqlx::postgres::PgRow;
 use sqlx::{PgPool, QueryBuilder, Row};
 use std::collections::HashMap;
@@ -110,6 +111,19 @@ pub struct EmailListRow {
     /// The conversation's unread messages, so marking it read touches only
     /// those (each read also goes to the provider).
     pub unread_ids: Option<Vec<i32>>,
+    /// Everyone who wrote in the conversation, once each, in order of their
+    /// first message. The client shows your own addresses as "me" and the
+    /// unread ones in bold.
+    pub participants: Option<Vec<Participant>>,
+}
+
+/// One person in a conversation row.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Participant {
+    /// Their sender header ("Ayana <a@x.com>").
+    pub sender: String,
+    /// Whether any of their messages in the conversation is unread.
+    pub unread: bool,
 }
 
 #[derive(Clone)]
@@ -463,7 +477,7 @@ fn push_grouped_list(
     qb.push(LIST_COLUMNS);
     qb.push(", ");
     qb.push(CONV_KEY);
-    qb.push(" AS conv_key, e.thread_id");
+    qb.push(" AS conv_key, e.thread_id, e.sender_hash");
     push_scope(qb, filters.user_id);
     qb.push(" AND ");
     qb.push(CONV_KEY);
@@ -483,15 +497,35 @@ fn push_grouped_list(
                    ARRAY_AGG(id ORDER BY created_at DESC, id DESC) AS message_ids,
                    COALESCE(ARRAY_AGG(id ORDER BY created_at DESC, id DESC)
                             FILTER (WHERE is_read = FALSE), '{}') AS unread_ids
-            FROM conv GROUP BY conv_key)
+            FROM conv GROUP BY conv_key),
+        -- Who wrote in each conversation, once each, in order of their first
+        -- message (capped), and whether any of their messages is unread, for
+        -- a Gmail-style "Ayana, me" row with the unread names in bold.
+        -- Senders are told apart by address hash, so nothing is decrypted to
+        -- group them.
+        senders AS (
+            SELECT conv_key,
+                   (ARRAY_AGG(COALESCE(sender_iv, '') ORDER BY first_at, id))[1:50] AS p_iv,
+                   (ARRAY_AGG(COALESCE(sender_encrypted, '') ORDER BY first_at, id))[1:50] AS p_enc,
+                   (ARRAY_AGG(COALESCE(sender, '') ORDER BY first_at, id))[1:50] AS p_plain,
+                   (ARRAY_AGG(unread ORDER BY first_at, id))[1:50] AS p_unread
+            FROM (SELECT DISTINCT ON (conv_key, sender_key)
+                         conv_key, id, sender, sender_iv, sender_encrypted, created_at AS first_at,
+                         BOOL_OR(NOT COALESCE(is_read, TRUE))
+                             OVER (PARTITION BY conv_key, sender_key) AS unread
+                  FROM (SELECT *, COALESCE(sender_hash, lower(sender)) AS sender_key FROM conv) c
+                  ORDER BY conv_key, sender_key, created_at, id) first
+            GROUP BY conv_key)
         SELECT l.id, l.gmail_id, l.subject, l.subject_iv, l.subject_encrypted,
                l.sender, l.receiver, l.sender_iv, l.sender_encrypted,
                l.receiver_iv, l.receiver_encrypted, l.has_body,
                g.any_attachments AS has_attachments,
                l.account_id, l.is_read, l.created_at, l.is_shared, l.shared_label,
                l.inbox_status, l.inbox_assignee_id, l.thread_id,
-               g.message_count, g.unread_count, g.message_ids, g.unread_ids
-        FROM latest l JOIN agg g USING (conv_key) WHERE TRUE"#,
+               g.message_count, g.unread_count, g.message_ids, g.unread_ids,
+               p.p_iv, p.p_enc, p.p_plain, p.p_unread
+        FROM latest l JOIN agg g USING (conv_key) JOIN senders p USING (conv_key)
+        WHERE TRUE"#,
     );
     if let Some((before_ms, before_id)) = filters.before {
         qb.push(" AND (l.created_at, l.id) < (to_timestamp(");
@@ -547,7 +581,32 @@ fn map_list_row(row: PgRow) -> EmailListRow {
             .try_get::<Option<Vec<i32>>, _>("unread_ids")
             .ok()
             .flatten(),
+        participants: read_participants(&row),
     }
+}
+
+/// The grouped list's senders, decrypted the way `read_sender` decrypts one.
+/// None outside the grouped list.
+fn read_participants(row: &PgRow) -> Option<Vec<Participant>> {
+    let ivs: Vec<String> = row.try_get("p_iv").ok()?;
+    let encs: Vec<String> = row.try_get("p_enc").ok()?;
+    let plains: Vec<String> = row.try_get("p_plain").ok()?;
+    let unread: Vec<bool> = row.try_get("p_unread").ok()?;
+    Some(
+        ivs.iter()
+            .zip(&encs)
+            .zip(&plains)
+            .zip(&unread)
+            .filter_map(|(((iv, enc), plain), &unread)| {
+                let sender = if iv.is_empty() || enc.is_empty() {
+                    plain.clone()
+                } else {
+                    wayve_security::encryption::decrypt(iv, enc).unwrap_or_else(|_| plain.clone())
+                };
+                (!sender.is_empty()).then_some(Participant { sender, unread })
+            })
+            .collect(),
+    )
 }
 
 /// Every message of `email_id`'s conversation that the caller can see, oldest
