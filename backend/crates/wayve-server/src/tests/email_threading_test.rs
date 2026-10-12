@@ -1,8 +1,9 @@
 // Conversation threading (email/threading.rs) against a real Postgres: replies
 // join their parent's conversation (also when they arrive first), a provider
 // conversation id groups on its own, the subject fallback links only replies
-// from the same correspondent, mailboxes never share a conversation, re-syncs
-// keep theirs, and the backfill threads existing Gmail mail via a mocked API.
+// from the same correspondent, mailboxes never share a conversation, deleting
+// the last message removes its conversation, re-syncs keep theirs, and the
+// backfill threads existing Gmail mail via a mocked API.
 #[cfg(test)]
 mod tests {
     use crate::email::threading::{ThreadHeaders, ThreadInput, assign_best_effort, backfill_batch};
@@ -494,6 +495,63 @@ mod tests {
         .await;
 
         assert_ne!(thread_of(&pool, a).await, thread_of(&pool, b).await);
+    }
+
+    #[actix_web::test]
+    async fn deleting_the_last_message_deletes_its_conversation() {
+        ensure_aes_key();
+        let pool = test_pool().await;
+        let acct = mailbox(&pool).await;
+        let thread_exists = |id: i32| {
+            let pool = pool.clone();
+            async move {
+                sqlx::query_scalar::<_, bool>(
+                    "SELECT EXISTS (SELECT 1 FROM email_threads WHERE id = $1)",
+                )
+                .bind(id)
+                .fetch_one(&pool)
+                .await
+                .unwrap_or_else(|e| panic!("thread_exists: {e}"))
+            }
+        };
+
+        let first = email(&pool, acct, "d1", "", now()).await;
+        let second = email(&pool, acct, "d2", "", now()).await;
+        for (id, own, parent) in [(first, "<d1@x>", None), (second, "<d2@x>", Some("<d1@x>"))] {
+            assign_best_effort(
+                &pool,
+                acct,
+                ThreadInput {
+                    email_id: id,
+                    headers: &headers(own, parent, None),
+                    subject: "Plans",
+                    sender: "a@x.com",
+                    receiver: "",
+                    created_at: Some(now()),
+                },
+            )
+            .await;
+        }
+        let thread = thread_of(&pool, first)
+            .await
+            .unwrap_or_else(|| panic!("first email has no conversation"));
+        assert_eq!(thread_of(&pool, second).await, Some(thread));
+
+        crate::email::threading::delete_email(&pool, acct, first)
+            .await
+            .unwrap_or_else(|e| panic!("delete first: {e}"));
+        assert!(
+            thread_exists(thread).await,
+            "a conversation with a message left is kept"
+        );
+
+        crate::email::threading::delete_email(&pool, acct, second)
+            .await
+            .unwrap_or_else(|e| panic!("delete second: {e}"));
+        assert!(
+            !thread_exists(thread).await,
+            "deleting the last message deletes the conversation"
+        );
     }
 
     #[actix_web::test]

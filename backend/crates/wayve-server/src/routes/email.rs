@@ -439,10 +439,8 @@ pub async fn delete_email(
         }
     }
 
-    sqlx::query("DELETE FROM emails WHERE id = $1")
-        .bind(email_id)
-        .execute(pool.get_ref())
-        .await?;
+    // Its conversation goes too when this was the last message in it.
+    crate::email::threading::delete_email(pool.get_ref(), account_id, email_id).await?;
 
     crate::audit::record_action(
         pool.get_ref(),
