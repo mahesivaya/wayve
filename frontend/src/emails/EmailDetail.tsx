@@ -10,7 +10,11 @@ import { isGmailReconnectError } from "./bodyUtils";
 import EmailBody from "./EmailBody";
 import { ConversationView } from "./ConversationView";
 import { EmailAttachments } from "./EmailAttachments";
-import { replyRecipients } from "./replyRecipients";
+import {
+  hasMultipleRecipients,
+  replyAllRecipients,
+  replyRecipients,
+} from "./replyRecipients";
 import { EmailItem } from "./types";
 import { updateEmailState, type InboxState } from "../api/sharedInboxes";
 import { APP_TIME_ZONE } from "../utils/datetime";
@@ -69,6 +73,13 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   // instead of the list row that was just clicked. See the focus effect below.
   const detailRef = useRef<HTMLDivElement | null>(null);
   const [replyOpen, setReplyOpen] = useState(false);
+  // Whether the open composer was seeded by Reply all rather than Reply, so the
+  // two buttons switch the recipients instead of closing it.
+  const [replyAll, setReplyAll] = useState(false);
+  // The id of the message whose Reply all opened before it finished loading,
+  // while its Cc wasn't known yet; the effect after showReplyAll adds that Cc
+  // when the same message arrives. Null when nothing is waiting.
+  const ccPendingRef = useRef<number | null>(null);
   // To and Subject are seeded from the message when the composer opens (see
   // showReply) and are editable from there — the reply need not go back to the
   // sender, or keep the thread's subject.
@@ -104,12 +115,16 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   // the current value (no ref needed).
   // Who Reply addresses: the sender, or — for a message you sent yourself — its
   // recipients (see replyRecipients). Recomputed each render, like the rest.
+  const ownAddressList = [
+    ...(ownAddresses ?? []),
+    ...(user?.email ? [user.email] : []),
+  ];
   const replyRecipientList = selectedEmail
-    ? replyRecipients(selectedEmail, [
-        ...(ownAddresses ?? []),
-        ...(user?.email ? [user.email] : []),
-      ])
+    ? replyRecipients(selectedEmail, ownAddressList)
     : [];
+  // Reply all is offered only when the message went to more than one person
+  // (To and Cc together).
+  const canReplyAll = !!selectedEmail && hasMultipleRecipients(selectedEmail);
   const replyToAddr = replyRecipientList[0] ?? "";
   const mention = useMentionSearch({
     value: replyBody,
@@ -182,6 +197,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setReplyOpen(false);
+      setReplyAll(false);
+      ccPendingRef.current = null;
       setReplyToList([]);
       setReplyCc([]);
       setReplyBcc([]);
@@ -321,15 +338,84 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     setReplyOpen(next);
     // Seed only what the user hasn't already filled in, so reopening after a
     // stray Escape keeps an edited recipient or subject — the same rule the
-    // body follows.
+    // body follows. Coming from Reply all, the recipients switch back to the
+    // sender's and the Cc that Reply all added goes.
     if (next) {
-      setReplyToList((prev) => (prev.length > 0 ? prev : replyRecipientList));
+      if (replyAll) {
+        const seeded = replyAllRecipients(selectedEmail, ownAddressList).cc.map(
+          (a) => a.toLowerCase()
+        );
+        setReplyToList(replyRecipientList);
+        setReplyCc((prev) =>
+          prev.filter((a) => !seeded.includes(a.toLowerCase()))
+        );
+        setReplyAll(false);
+        ccPendingRef.current = null;
+      } else {
+        setReplyToList((prev) => (prev.length > 0 ? prev : replyRecipientList));
+      }
       setReplySubject((prev) => prev || replySubjectFor(selectedEmail));
     }
     setReplyError(null);
     setForwardOpen(false);
     setForwardError(null);
   };
+
+  // Reply all: the sender and every To recipient on To, the Cc recipients on
+  // Cc (shown, so nobody is added unseen), yourself left out. Reopening keeps
+  // an edited To, as Reply does, but switching over from Reply re-seeds it.
+  // The Cc recipients are merged back in every time: Cancel clears the Cc
+  // row, and a reopened Reply all must not quietly leave them off.
+  const showReplyAll = (next: boolean) => {
+    if (!selectedEmail || !canReplyAll) return;
+    setReplyOpen(next);
+    if (next) {
+      const { to, cc } = replyAllRecipients(selectedEmail, ownAddressList);
+      if (!replyAll || replyToList.length === 0) {
+        setReplyToList(to);
+      }
+      setReplyCc((prev) => mergeCc(prev, cc));
+      if (cc.length > 0) setCcOpen(true);
+      // The Cc comes with the full message; the list row has none.
+      ccPendingRef.current =
+        selectedEmail.cc === undefined ? selectedEmail.id : null;
+      setReplyAll(true);
+      setReplySubject((prev) => prev || replySubjectFor(selectedEmail));
+    }
+    setReplyError(null);
+    setForwardOpen(false);
+    setForwardError(null);
+  };
+
+  // Reply all opened before the message finished loading had no Cc to add (the
+  // list row carries none). Add it when that same message arrives, so the
+  // reply can't go out without them; never another message's Cc, should a
+  // different one be opened first. Once only, so a Cc removed afterwards stays
+  // removed; the flag clears when the add actually runs.
+  const selectedId = selectedEmail?.id ?? null;
+  const ccKnown = selectedEmail?.cc !== undefined;
+  const lateCc =
+    ccKnown && selectedEmail
+      ? replyAllRecipients(selectedEmail, ownAddressList).cc.join("\n")
+      : "";
+  useEffect(() => {
+    const pending = ccPendingRef.current;
+    if (pending === null || !ccKnown) return;
+    if (pending !== selectedId || !replyOpen || !replyAll) {
+      ccPendingRef.current = null;
+      return;
+    }
+    const add = lateCc ? lateCc.split("\n") : [];
+    const timer = window.setTimeout(() => {
+      // Opening another message resets the composer on the same tick.
+      if (ccPendingRef.current !== pending) return;
+      ccPendingRef.current = null;
+      if (add.length === 0) return;
+      setReplyCc((prev) => mergeCc(prev, add));
+      setCcOpen(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [selectedId, ccKnown, lateCc, replyOpen, replyAll]);
 
   const showForward = (next: boolean) => {
     if (!selectedEmail) return;
@@ -367,6 +453,11 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       r: () => {
         if (overlayOpen()) return;
         showReply(true);
+      },
+      // Gmail's key for Reply all; a no-op on a message with one recipient.
+      a: () => {
+        if (overlayOpen()) return;
+        showReplyAll(true);
       },
       f: () => {
         if (overlayOpen()) return;
@@ -480,6 +571,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       setCcOpen(false);
       setBccOpen(false);
       setReplyOpen(false);
+      setReplyAll(false);
+      ccPendingRef.current = null;
     } catch (err) {
       setReplyError(
         err instanceof Error ? err.message : "Failed to send reply"
@@ -613,7 +706,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         <div className="email-detail-actions">
           <button
             className="email-detail-reply"
-            onClick={() => showReply(!replyOpen)}
+            onClick={() => showReply(!(replyOpen && !replyAll))}
             data-tooltip="Reply (R)"
             aria-label="Reply"
           >
@@ -627,6 +720,25 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             </svg>
             <span>Reply</span>
           </button>
+          {canReplyAll && (
+            <button
+              className="email-detail-reply-all"
+              onClick={() => showReplyAll(!(replyOpen && replyAll))}
+              data-tooltip="Reply all (A)"
+              aria-label="Reply all"
+            >
+              <svg
+                className="email-detail-reply-all-icon"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path d="M7 8 2 13l5 5" />
+                <path d="M12 8 7 13l5 5" />
+                <path d="M7 13h9a5 5 0 0 1 5 5v1" />
+              </svg>
+              <span>Reply all</span>
+            </button>
+          )}
           <button
             className="email-detail-forward"
             onClick={() => showForward(!forwardOpen)}
@@ -1155,6 +1267,16 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
 
 function displaySubject(email: EmailItem): string {
   return email.subject?.trim() || "(No Subject)";
+}
+
+// `prev` plus whichever of `add` it doesn't already hold, ignoring case.
+function mergeCc(prev: string[], add: string[]): string[] {
+  return [
+    ...prev,
+    ...add.filter(
+      (a) => !prev.some((p) => p.toLowerCase() === a.toLowerCase())
+    ),
+  ];
 }
 
 // The subject a reply is pre-filled with. Module-level for the same reason as

@@ -69,6 +69,8 @@ pub async fn get_email_by_id(
         "subject": detail.subject.unwrap_or_default(),
         "sender": detail.sender.unwrap_or_default(),
         "receiver": detail.receiver.unwrap_or_default(),
+        // null until known (mail synced before Cc was stored), "" for none.
+        "cc": detail.cc,
         "body": body,
         "attachments_checked": detail.attachments_checked,
     })))

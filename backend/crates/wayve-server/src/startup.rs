@@ -73,6 +73,11 @@ pub async fn ensure_email_schema(pool: &PgPool) {
          WHERE sender_hash IS NOT NULL",
         "CREATE INDEX IF NOT EXISTS idx_emails_receiver_hash ON emails(receiver_hash) \
          WHERE receiver_hash IS NOT NULL",
+        // The Cc header for Reply all; NULL until known (email/cc_backfill.rs).
+        "ALTER TABLE emails ADD COLUMN IF NOT EXISTS cc_iv TEXT",
+        "ALTER TABLE emails ADD COLUMN IF NOT EXISTS cc_encrypted TEXT",
+        "CREATE INDEX IF NOT EXISTS idx_emails_cc_unknown ON emails(account_id, created_at DESC) \
+         WHERE cc_encrypted IS NULL",
         // The GIN index keeps `<label> = ANY(labels)` index-scanned.
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS labels TEXT[] NOT NULL DEFAULT '{}'",
         "CREATE INDEX IF NOT EXISTS idx_emails_labels ON emails USING GIN (labels)",

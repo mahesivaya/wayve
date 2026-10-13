@@ -18,6 +18,9 @@ export interface EmailItem {
   subject?: string | null;
   sender?: string | null;
   receiver?: string | null;
+  // The Cc header, from the detail endpoint. null while not yet known (mail
+  // synced before Cc was stored), "" when the message had none.
+  cc?: string | null;
   preview?: string | null;
   body?: string | null;
   created_at: string;

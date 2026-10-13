@@ -668,6 +668,13 @@ CREATE INDEX IF NOT EXISTS idx_emails_sender_hash ON emails(sender_hash)
     WHERE sender_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_emails_receiver_hash ON emails(receiver_hash)
     WHERE receiver_hash IS NOT NULL;
+-- The Cc header, same envelope, for Reply all. NULL means not yet known (mail
+-- synced before Cc was stored, which `email::cc_backfill` fills in); an empty
+-- pair means the message had no Cc.
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS cc_iv TEXT;
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS cc_encrypted TEXT;
+CREATE INDEX IF NOT EXISTS idx_emails_cc_unknown ON emails(account_id, created_at DESC)
+    WHERE cc_encrypted IS NULL;
 
 -- Provider labels attached to the message (Gmail labelIds, Outlook
 -- categories, plus a synthetic IMPORTANT for Outlook importance=high).

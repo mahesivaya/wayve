@@ -557,7 +557,7 @@ type Inputs = (ThreadHeaders, String, String, String, Option<NaiveDateTime>);
 
 async fn fetch_gmail_inputs(token: &str, gmail_id: &str) -> anyhow::Result<Option<Inputs>> {
     match crate::email::sync::fetch_headers_only(token, gmail_id).await {
-        Ok((_, sender, receiver, subject, created_at, _, _, headers)) => {
+        Ok((_, sender, receiver, subject, created_at, _, _, headers, _)) => {
             Ok(Some((headers, subject, sender, receiver, Some(created_at))))
         }
         Err(e) if format!("{e}").contains("HTTP 404") => Ok(None),
