@@ -58,6 +58,54 @@ fn encrypt_address_for_storage(addr: &str) -> (String, String, String) {
     (iv, ciphertext, hash)
 }
 
+/// `(cc_iv, cc_encrypted)` for storage: both NULL when the Cc isn't known (so an
+/// upsert keeps the stored value), both empty when there is none.
+fn encrypt_cc_for_storage(cc: Option<&str>) -> (Option<String>, Option<String>) {
+    match cc.map(str::trim) {
+        None => (None, None),
+        Some("") => (Some(String::new()), Some(String::new())),
+        Some(value) => match wayve_security::encryption::encrypt(value) {
+            Ok((iv, ciphertext)) => (Some(iv), Some(ciphertext)),
+            // Unknown rather than empty, so a later sync or the backfill retries.
+            Err(_) => (None, None),
+        },
+    }
+}
+
+/// Records the Cc header of an already-stored message (`""` for none), for the
+/// paths that re-read a message's headers after it was stored.
+pub(crate) async fn set_cc(
+    pool: &PgPool,
+    account_id: i32,
+    gmail_id: &str,
+    cc: &str,
+) -> sqlx::Result<()> {
+    let (cc_iv, cc_encrypted) = encrypt_cc_for_storage(Some(cc));
+    sqlx::query(
+        "UPDATE emails SET cc_iv = $1, cc_encrypted = $2 \
+         WHERE account_id = $3 AND gmail_id = $4",
+    )
+    .bind(cc_iv)
+    .bind(cc_encrypted)
+    .bind(account_id)
+    .bind(gmail_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Decodes the Cc envelope. `None` while it isn't known yet; `Some("")` when the
+/// message had no Cc.
+fn read_cc(row: &PgRow) -> Option<String> {
+    let enc: Option<String> = row.try_get("cc_encrypted").ok().flatten();
+    let iv: Option<String> = row.try_get("cc_iv").ok().flatten();
+    match (enc.as_deref(), iv.as_deref()) {
+        (Some(""), _) | (_, Some("")) => Some(String::new()),
+        (Some(e), Some(i)) => wayve_security::encryption::decrypt(i, e).ok(),
+        _ => None,
+    }
+}
+
 /// Decodes `sender_encrypted` + `sender_iv`, falling back to the legacy
 /// plaintext `sender` column for rows that haven't been backfilled yet.
 fn read_sender(row: &PgRow) -> Option<String> {
@@ -656,6 +704,8 @@ pub struct EmailDetailRow {
     pub subject: Option<String>,
     pub sender: Option<String>,
     pub receiver: Option<String>,
+    /// `None` while unknown, `Some("")` when the message had no Cc.
+    pub cc: Option<String>,
     pub body_iv: String,
     pub body_encrypted: String,
     pub attachments_checked: bool,
@@ -681,6 +731,7 @@ pub async fn get_detail(
         SELECT e.id, e.account_id, e.subject, e.subject_iv, e.subject_encrypted,
                e.sender, e.receiver,
                e.sender_iv, e.sender_encrypted, e.receiver_iv, e.receiver_encrypted,
+               e.cc_iv, e.cc_encrypted,
                e.body_encrypted, e.body_iv, e.attachments_checked
           FROM emails e
           LEFT JOIN email_accounts a ON e.account_id = a.id
@@ -704,6 +755,7 @@ pub async fn get_detail(
         subject: read_subject(&r),
         sender: read_sender(&r),
         receiver: read_receiver(&r),
+        cc: read_cc(&r),
         body_iv: r
             .try_get::<Option<String>, _>("body_iv")
             .ok()
@@ -805,6 +857,9 @@ pub struct InsertEmail<'a> {
     pub gmail_id: &'a str,
     pub sender: &'a str,
     pub receiver: &'a str,
+    /// The Cc header. `None` when the provider response didn't say, which keeps
+    /// whatever is stored; `Some("")` records that the message had no Cc.
+    pub cc: Option<&'a str>,
     pub subject: &'a str,
     pub created_at: NaiveDateTime,
     pub is_read: bool,
@@ -842,12 +897,12 @@ pub async fn upsert_batch(
     // Must equal the column count in the INSERT list below. The legacy
     // plaintext sender/receiver are still written so readers that fall back to
     // them on pre-backfill rows keep working.
-    let placeholders_per_row = 18;
+    let placeholders_per_row = 20;
     let mut query = String::from(
         "INSERT INTO emails(gmail_id, sender, receiver, subject_iv, subject_encrypted, \
          created_at, body_encrypted, body_iv, account_id, is_read, labels, \
          attachments_checked, sender_iv, sender_encrypted, sender_hash, \
-         receiver_iv, receiver_encrypted, receiver_hash) VALUES ",
+         receiver_iv, receiver_encrypted, receiver_hash, cc_iv, cc_encrypted) VALUES ",
     );
     for (i, _) in batch.iter().enumerate() {
         let base = i * placeholders_per_row;
@@ -867,6 +922,7 @@ pub async fn upsert_batch(
     // re-fetches the last hour every tick and the mark-read push to Gmail lags,
     // so a plain assignment would flip just-opened mail back to unread. Mail
     // re-marked unread in Gmail is caught up by email/label_history.rs instead.
+    // An unknown (NULL) Cc keeps the stored one.
     query.push_str(
         " ON CONFLICT (account_id, gmail_id) DO UPDATE SET \
          sender = EXCLUDED.sender, \
@@ -880,6 +936,8 @@ pub async fn upsert_batch(
          receiver_iv = EXCLUDED.receiver_iv, \
          receiver_encrypted = EXCLUDED.receiver_encrypted, \
          receiver_hash = EXCLUDED.receiver_hash, \
+         cc_iv = COALESCE(EXCLUDED.cc_iv, emails.cc_iv), \
+         cc_encrypted = COALESCE(EXCLUDED.cc_encrypted, emails.cc_encrypted), \
          created_at = EXCLUDED.created_at, \
          is_read = emails.is_read OR EXCLUDED.is_read, \
          labels = EXCLUDED.labels \
@@ -892,16 +950,21 @@ pub async fn upsert_batch(
     let mut subject_envelopes: Vec<(String, String)> = Vec::with_capacity(batch.len());
     let mut sender_envelopes: Vec<(String, String, String)> = Vec::with_capacity(batch.len());
     let mut receiver_envelopes: Vec<(String, String, String)> = Vec::with_capacity(batch.len());
+    let mut cc_envelopes: Vec<(Option<String>, Option<String>)> = Vec::with_capacity(batch.len());
     for row in batch {
         subject_envelopes.push(encrypt_subject_for_storage(row.subject));
         sender_envelopes.push(encrypt_address_for_storage(row.sender));
         receiver_envelopes.push(encrypt_address_for_storage(row.receiver));
+        cc_envelopes.push(encrypt_cc_for_storage(row.cc));
     }
-    for ((row, (subject_iv, subject_encrypted)), ((s_iv, s_ct, s_hash), (r_iv, r_ct, r_hash))) in
-        batch
-            .iter()
-            .zip(subject_envelopes.iter())
-            .zip(sender_envelopes.iter().zip(receiver_envelopes.iter()))
+    for (
+        ((row, (subject_iv, subject_encrypted)), ((s_iv, s_ct, s_hash), (r_iv, r_ct, r_hash))),
+        (cc_iv, cc_ct),
+    ) in batch
+        .iter()
+        .zip(subject_envelopes.iter())
+        .zip(sender_envelopes.iter().zip(receiver_envelopes.iter()))
+        .zip(cc_envelopes.iter())
     {
         let (body_iv, body_encrypted) = row.body.unwrap_or(("", ""));
         q = q
@@ -922,7 +985,9 @@ pub async fn upsert_batch(
             .bind(s_hash.as_str())
             .bind(r_iv.as_str())
             .bind(r_ct.as_str())
-            .bind(r_hash.as_str());
+            .bind(r_hash.as_str())
+            .bind(cc_iv.as_deref())
+            .bind(cc_ct.as_deref());
     }
     let returned = q.fetch_all(pool).await?;
     let results: Vec<InsertResult> = returned
@@ -1007,6 +1072,7 @@ pub async fn upsert_one(
     let (sender_iv, sender_encrypted, sender_hash) = encrypt_address_for_storage(row.sender);
     let (receiver_iv, receiver_encrypted, receiver_hash) =
         encrypt_address_for_storage(row.receiver);
+    let (cc_iv, cc_encrypted) = encrypt_cc_for_storage(row.cc);
     // `(xmax = 0) AS is_new` distinguishes a genuinely new row from an
     // ON CONFLICT re-sync, so only the former stamps last_message_at.
     let returned = sqlx::query(
@@ -1015,9 +1081,9 @@ pub async fn upsert_one(
           (gmail_id, sender, receiver, subject_iv, subject_encrypted, created_at,
            body_encrypted, body_iv, account_id, attachments_checked, is_read, labels,
            sender_iv, sender_encrypted, sender_hash,
-           receiver_iv, receiver_encrypted, receiver_hash)
+           receiver_iv, receiver_encrypted, receiver_hash, cc_iv, cc_encrypted)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-                $13, $14, $15, $16, $17, $18)
+                $13, $14, $15, $16, $17, $18, $19, $20)
         ON CONFLICT (account_id, gmail_id) DO UPDATE SET
           sender = EXCLUDED.sender,
           receiver = EXCLUDED.receiver,
@@ -1030,6 +1096,8 @@ pub async fn upsert_one(
           receiver_iv = EXCLUDED.receiver_iv,
           receiver_encrypted = EXCLUDED.receiver_encrypted,
           receiver_hash = EXCLUDED.receiver_hash,
+          cc_iv = COALESCE(EXCLUDED.cc_iv, emails.cc_iv),
+          cc_encrypted = COALESCE(EXCLUDED.cc_encrypted, emails.cc_encrypted),
           created_at = EXCLUDED.created_at,
           body_encrypted = EXCLUDED.body_encrypted,
           body_iv = EXCLUDED.body_iv,
@@ -1056,6 +1124,8 @@ pub async fn upsert_one(
     .bind(&receiver_iv)
     .bind(&receiver_encrypted)
     .bind(&receiver_hash)
+    .bind(&cc_iv)
+    .bind(&cc_encrypted)
     .fetch_one(pool)
     .await?;
 

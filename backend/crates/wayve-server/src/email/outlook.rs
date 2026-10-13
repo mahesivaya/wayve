@@ -130,7 +130,10 @@ pub async fn refresh_outlook_token(
 struct OutlookMessage {
     id: String,
     sender: String,
+    /// Every To address, comma-separated, as Gmail stores its To header.
     receiver: String,
+    /// Every Cc address, comma-separated; empty when there is none.
+    cc: String,
     subject: String,
     received: NaiveDateTime,
     body: String,
@@ -146,6 +149,20 @@ struct OutlookMessage {
     threading: crate::email::threading::ThreadHeaders,
 }
 
+/// The bare addresses of a Graph recipient list, comma-separated.
+fn graph_addresses(list: &Value) -> String {
+    list.as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|r| r["emailAddress"]["address"].as_str())
+                .map(str::trim)
+                .filter(|a| !a.is_empty())
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default()
+}
+
 fn parse_message(m: &Value) -> Option<OutlookMessage> {
     let id = m["id"].as_str()?.to_string();
     let subject = m["subject"]
@@ -159,13 +176,10 @@ fn parse_message(m: &Value) -> Option<OutlookMessage> {
         .filter(|s| !s.is_empty())
         .unwrap_or("Unknown")
         .to_string();
-    let receiver = m["toRecipients"]
-        .as_array()
-        .and_then(|arr| arr.first())
-        .and_then(|r| r["emailAddress"]["address"].as_str())
+    let receiver = Some(graph_addresses(&m["toRecipients"]))
         .filter(|s| !s.is_empty())
-        .unwrap_or("Unknown")
-        .to_string();
+        .unwrap_or_else(|| "Unknown".to_string());
+    let cc = graph_addresses(&m["ccRecipients"]);
     let received = m["receivedDateTime"]
         .as_str()
         .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
@@ -189,6 +203,7 @@ fn parse_message(m: &Value) -> Option<OutlookMessage> {
         id,
         sender,
         receiver,
+        cc,
         subject,
         received,
         body,
@@ -218,7 +233,7 @@ fn first_page_url(last_sync: Option<i64>) -> String {
         // which the sidebar category folders filter on.
         q.append_pair(
             "$select",
-            "id,subject,from,toRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance,conversationId,internetMessageId",
+            "id,subject,from,toRecipients,ccRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance,conversationId,internetMessageId",
         );
         q.append_pair("$orderby", "receivedDateTime desc");
         q.append_pair("$top", &OUTLOOK_PAGE_SIZE.to_string());
@@ -247,7 +262,7 @@ fn first_before_page_url(before_timestamp: i64, limit: usize) -> String {
         let mut q = url.query_pairs_mut();
         q.append_pair(
             "$select",
-            "id,subject,from,toRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance,conversationId,internetMessageId",
+            "id,subject,from,toRecipients,ccRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance,conversationId,internetMessageId",
         );
         q.append_pair("$orderby", "receivedDateTime desc");
         q.append_pair("$top", &limit.min(OUTLOOK_PAGE_SIZE).to_string());
@@ -328,6 +343,7 @@ async fn upsert_messages(
                 gmail_id: &m.id,
                 sender: &m.sender,
                 receiver: &m.receiver,
+                cc: Some(&m.cc),
                 subject: &m.subject,
                 created_at: m.received,
                 is_read: m.is_read,
@@ -531,7 +547,7 @@ async fn sync_outlook_folder_recent(
 ) -> Result<()> {
     let (folder_id, synthetic_label, cap) = spec;
     let url = format!(
-        "{}/v1.0/me/mailFolders/{}/messages?$select=id,subject,from,toRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance,conversationId,internetMessageId&$orderby=receivedDateTime desc&$top={}",
+        "{}/v1.0/me/mailFolders/{}/messages?$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance,conversationId,internetMessageId&$orderby=receivedDateTime desc&$top={}",
         crate::external::microsoft_graph_base(),
         folder_id,
         cap
@@ -813,4 +829,39 @@ pub async fn download_outlook_attachment(
             format!("attachment; filename=\"{}\"", att.filename.replace('"', "")),
         ))
         .body(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn recipient(address: &str) -> Value {
+        serde_json::json!({ "emailAddress": { "name": "Someone", "address": address } })
+    }
+
+    #[test]
+    fn keeps_every_to_and_cc_address() {
+        let m = serde_json::json!({
+            "id": "AAMk1",
+            "subject": "Plans",
+            "from": { "emailAddress": { "address": "ada@x.com" } },
+            "toRecipients": [recipient("me@x.com"), recipient("dan@x.com")],
+            "ccRecipients": [recipient("carol@x.com"), recipient(" "), recipient("bo@x.com")],
+            "receivedDateTime": "2026-10-01T14:57:40Z",
+        });
+        let parsed = parse_message(&m).unwrap_or_else(|| panic!("parse"));
+        assert_eq!(parsed.receiver, "me@x.com, dan@x.com");
+        assert_eq!(parsed.cc, "carol@x.com, bo@x.com");
+    }
+
+    #[test]
+    fn no_cc_is_empty_and_no_to_stays_unknown() {
+        let m = serde_json::json!({
+            "id": "AAMk2",
+            "from": { "emailAddress": { "address": "ada@x.com" } },
+        });
+        let parsed = parse_message(&m).unwrap_or_else(|| panic!("parse"));
+        assert_eq!(parsed.cc, "");
+        assert_eq!(parsed.receiver, "Unknown");
+    }
 }

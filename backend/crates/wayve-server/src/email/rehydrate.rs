@@ -161,7 +161,7 @@ async fn rehydrate_one(
         }
     };
 
-    let (_msg_id, sender, receiver, subject, gmail_ts, is_read, labels, threading) = header;
+    let (_msg_id, sender, receiver, subject, gmail_ts, is_read, labels, threading, cc) = header;
 
     // An empty subject stores an empty envelope, which the read path treats as
     // NULL and the UI renders as "(No Subject)".
@@ -223,6 +223,7 @@ async fn rehydrate_one(
     .bind(gmail_id)
     .execute(pool)
     .await?;
+    crate::email::repo::set_cc(pool, account_id, gmail_id, &cc).await?;
 
     // The fresh metadata carries the conversation inputs too.
     let email_id: Option<i32> =

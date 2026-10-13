@@ -191,6 +191,20 @@ pub async fn sync_imap_account(
     Ok(())
 }
 
+/// Every address in a To or Cc header, comma-separated, as Gmail stores its
+/// headers. Group syntax is flattened; entries without an address are skipped.
+fn address_list(list: Option<&mail_parser::Address<'_>>) -> String {
+    list.map(|a| {
+        a.iter()
+            .filter_map(|addr| addr.address())
+            .map(str::trim)
+            .filter(|addr| !addr.is_empty())
+            .collect::<Vec<_>>()
+            .join(", ")
+    })
+    .unwrap_or_default()
+}
+
 async fn store_message(pool: &PgPool, account_id: i32, msg: &FetchedMessage) -> anyhow::Result<()> {
     let parsed = MessageParser::default()
         .parse(&msg.raw)
@@ -202,12 +216,8 @@ async fn store_message(pool: &PgPool, account_id: i32, msg: &FetchedMessage) -> 
         .and_then(|addr| addr.address())
         .unwrap_or("")
         .to_string();
-    let receiver = parsed
-        .to()
-        .and_then(|a| a.first())
-        .and_then(|addr| addr.address())
-        .unwrap_or("")
-        .to_string();
+    let receiver = address_list(parsed.to());
+    let cc = address_list(parsed.cc());
     let subject = parsed.subject().unwrap_or("").to_string();
 
     let body_text = parsed
@@ -244,6 +254,7 @@ async fn store_message(pool: &PgPool, account_id: i32, msg: &FetchedMessage) -> 
         gmail_id: &gmail_id,
         sender: &sender,
         receiver: &receiver,
+        cc: Some(&cc),
         subject: &subject,
         created_at,
         is_read: msg.seen,
@@ -390,6 +401,23 @@ mod tests {
             raw.contains("References: <root@x.com> <orig@x.com>\r\n"),
             "{raw}"
         );
+    }
+
+    #[test]
+    fn every_to_and_cc_address_is_kept() {
+        let raw = b"From: Ada <ada@x.com>\r\n\
+To: me@x.com, \"Lee, Dan\" <dan@x.com>\r\n\
+Cc: Team: carol@x.com, eve@x.com;, bo@x.com\r\n\
+Subject: Plans\r\n\r\nHi\r\n";
+        let parsed = MessageParser::default()
+            .parse(&raw[..])
+            .unwrap_or_else(|| panic!("parse"));
+        assert_eq!(address_list(parsed.to()), "me@x.com, dan@x.com");
+        assert_eq!(
+            address_list(parsed.cc()),
+            "carol@x.com, eve@x.com, bo@x.com"
+        );
+        assert_eq!(address_list(parsed.bcc()), "", "a missing header is empty");
     }
 
     #[test]

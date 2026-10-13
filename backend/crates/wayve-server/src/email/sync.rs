@@ -7,9 +7,10 @@ use crate::email::provider::refresh_and_persist_email_token;
 use serde_json::Value;
 use tracing::{debug, error, info, instrument, warn};
 
-/// `(msg_id, sender, receiver, subject, gmail_timestamp, is_read, labels)`. The
-/// body is fetched later by body_worker. `labels` carries the message's full
-/// Gmail `labelIds` so the sidebar category folders can filter locally.
+/// `(msg_id, sender, receiver, subject, gmail_timestamp, is_read, labels,
+/// threading, cc)`. The body is fetched later by body_worker. `labels` carries
+/// the message's full Gmail `labelIds` so the sidebar category folders can
+/// filter locally. `cc` is the Cc header, empty when there is none.
 pub type EmailHeader = (
     String,
     String,
@@ -19,6 +20,7 @@ pub type EmailHeader = (
     bool,
     Vec<String>,
     crate::email::threading::ThreadHeaders,
+    String,
 );
 
 /// Stamps Gmail's authoritative INBOX unread count onto
@@ -69,7 +71,7 @@ pub async fn fetch_headers_only(token: &str, msg_id: &str) -> Result<EmailHeader
     // same request, no extra round trip.
     let url = format!(
         "{}/gmail/v1/users/me/messages/{}?format=metadata\
-         &metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject\
+         &metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject\
          &metadataHeaders=Message-Id&metadataHeaders=References&metadataHeaders=In-Reply-To",
         crate::external::gmail_api_base(),
         msg_id
@@ -113,6 +115,7 @@ pub async fn fetch_headers_only(token: &str, msg_id: &str) -> Result<EmailHeader
         label_ids.push(label.to_string());
     }
     let threading = gmail_thread_headers(&res);
+    let cc = extract_cc(&res);
     Ok((
         msg_id.to_string(),
         sender,
@@ -122,6 +125,7 @@ pub async fn fetch_headers_only(token: &str, msg_id: &str) -> Result<EmailHeader
         is_read,
         label_ids,
         threading,
+        cc,
     ))
 }
 
@@ -205,6 +209,17 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
     .await
     {
         warn!(target: "worker", account_id = account.id, error = ?err, "threading backfill failed");
+    }
+    // Fill in the Cc of a batch of mail synced before Cc was stored (Reply all).
+    if let Err(err) = crate::email::cc_backfill::backfill_batch(
+        pool,
+        account.id,
+        &account.provider,
+        &token.access_token,
+    )
+    .await
+    {
+        warn!(target: "worker", account_id = account.id, error = ?err, "cc backfill failed");
     }
 
     for label in [
@@ -835,6 +850,27 @@ fn github_pr_label(res: &Value) -> Option<&'static str> {
     found
 }
 
+/// The Cc header of a Gmail metadata response, empty when there is none. Gmail
+/// returns a header once per occurrence, so repeated Cc lines are joined.
+pub fn extract_cc(res: &Value) -> String {
+    res["payload"]["headers"]
+        .as_array()
+        .map(|headers| {
+            headers
+                .iter()
+                .filter(|h| {
+                    h["name"]
+                        .as_str()
+                        .is_some_and(|n| n.eq_ignore_ascii_case("Cc"))
+                })
+                .filter_map(|h| h["value"].as_str().map(str::trim))
+                .filter(|v| !v.is_empty())
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default()
+}
+
 pub fn extract_headers(res: &Value) -> (String, String, String) {
     let mut sender: Option<String> = None;
     let mut receiver: Option<String> = None;
@@ -1190,11 +1226,12 @@ where
     let insert_batch: Vec<InsertEmail<'_>> = batch
         .iter()
         .map(
-            |(gmail_id, sender, receiver, subject, gmail_timestamp, is_read, labels, _)| {
+            |(gmail_id, sender, receiver, subject, gmail_timestamp, is_read, labels, _, cc)| {
                 InsertEmail {
                     gmail_id,
                     sender,
                     receiver,
+                    cc: Some(cc),
                     subject,
                     created_at: *gmail_timestamp,
                     is_read: *is_read,
@@ -1209,7 +1246,7 @@ where
 
     // Place each email in its conversation. Re-synced emails keep theirs.
     for r in &returned {
-        if let Some((_, sender, receiver, subject, created_at, _, _, threading)) =
+        if let Some((_, sender, receiver, subject, created_at, _, _, threading, _)) =
             batch.iter().find(|h| h.0 == r.gmail_id)
         {
             crate::email::threading::assign_best_effort(
