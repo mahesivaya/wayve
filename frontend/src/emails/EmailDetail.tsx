@@ -144,6 +144,10 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     },
   });
   const [forwardAttachments, setForwardAttachments] = useState<File[]>([]);
+  // The original's attachments go with a forward unless removed here. Tracking
+  // the removed ones (not the kept ones) keeps attachments that finish loading
+  // after the forward box opens.
+  const [forwardDropped, setForwardDropped] = useState<number[]>([]);
   const forwardFileRef = useRef<HTMLInputElement>(null);
   const [reconnecting, setReconnecting] = useState(false);
   const [reconnectError, setReconnectError] = useState<string | null>(null);
@@ -211,6 +215,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       setForwardTo("");
       setForwardBody("");
       setForwardError(null);
+      setForwardDropped([]);
       // Otherwise the menu lingers over the next message, showing the previous
       // sender's address.
       setSenderMenuOpen(false);
@@ -582,6 +587,10 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     }
   };
 
+  const forwardOriginals = (selectedEmail.attachments ?? []).filter(
+    (attachment) => !forwardDropped.includes(attachment.id)
+  );
+
   const handleForward = async () => {
     const to = forwardTo.trim();
     const body = forwardBody.trim();
@@ -601,6 +610,14 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       return;
     }
 
+    const totalBytes =
+      forwardAttachments.reduce((n, f) => n + f.size, 0) +
+      forwardOriginals.reduce((n, a) => n + (a.size ?? 0), 0);
+    if (totalBytes > MAX_ATTACHMENTS_BYTES) {
+      setForwardError("Attachments exceed the 25 MB limit");
+      return;
+    }
+
     setForwardSending(true);
     setForwardError(null);
     try {
@@ -614,10 +631,15 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         subject: forwardSubject,
         body,
         attachments,
+        forward_attachment_ids:
+          forwardOriginals.length > 0
+            ? forwardOriginals.map((attachment) => attachment.id)
+            : undefined,
       });
       setForwardTo("");
       setForwardBody("");
       setForwardAttachments([]);
+      setForwardDropped([]);
       setForwardOpen(false);
     } catch (err) {
       setForwardError(
@@ -1195,6 +1217,34 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             aria-label="Forward body"
           />
           {forwardError && <p className="email-body-error">{forwardError}</p>}
+          {forwardOriginals.length > 0 && (
+            <div
+              className="email-compose-attachments"
+              aria-label="Attachments from the original email"
+            >
+              {forwardOriginals.map((attachment) => (
+                <span key={attachment.id} className="email-compose-attachment">
+                  📎 {attachment.filename}
+                  {attachment.size
+                    ? ` · ${formatFileSize(attachment.size)}`
+                    : ""}
+                  <button
+                    type="button"
+                    className="email-compose-attachment-remove"
+                    aria-label={`Don't forward ${attachment.filename}`}
+                    onClick={() =>
+                      setForwardDropped((dropped) => [
+                        ...dropped,
+                        attachment.id,
+                      ])
+                    }
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           {renderAttachField(
             forwardAttachments,
             setForwardAttachments,

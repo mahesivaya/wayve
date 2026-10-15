@@ -378,6 +378,7 @@ mod tests {
             cc: vec![],
             bcc: vec![],
             attachments: vec![],
+            forward_attachment_ids: vec![],
             reply_to_email_id: None,
             reply_headers: reply,
         }

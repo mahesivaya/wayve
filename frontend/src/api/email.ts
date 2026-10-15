@@ -61,6 +61,9 @@ export type SendEmailPayload = {
   // own Gmail) thread it under that conversation. The server reads the
   // original's headers itself; set only by Reply, never by Forward.
   reply_to_email_id?: number;
+  // Stored attachments of the email being forwarded; the server fetches each
+  // file from the mail provider and sends it with `attachments`.
+  forward_attachment_ids?: number[];
 };
 
 export type EmailAttachment = {

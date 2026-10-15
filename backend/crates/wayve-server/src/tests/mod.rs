@@ -15,6 +15,7 @@ mod contacts_test;
 mod documents_rbac_test;
 mod email_cc_test;
 mod email_conversation_list_test;
+mod email_forward_attachments_test;
 mod email_label_history_test;
 mod email_provider_isp_test;
 mod email_reply_headers_test;
