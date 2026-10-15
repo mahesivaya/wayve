@@ -1,5 +1,5 @@
 import { useAuth } from "../auth/useAuth";
-import { BRAND_NAME } from "../config/brand";
+import { BRAND_NAME, HEADER_NAME } from "../config/brand";
 import BrandLogo from "../components/BrandLogo";
 import { BrandIcon } from "../integrations/BrandIcon";
 import { useNavigate } from "react-router-dom";
@@ -59,7 +59,7 @@ export default function Home() {
               size={40}
               gradientId="fluxze-home-mark"
             />
-            <span>{BRAND_NAME}</span>
+            <span>{HEADER_NAME}</span>
           </button>
 
           <nav className="public-home-links" aria-label="Main navigation">
