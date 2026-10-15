@@ -657,6 +657,14 @@ pub async fn mark_email_read(
         return Ok(HttpResponse::Ok().json(serde_json::json!({ "is_read": true })));
     }
 
+    // A Fluxze-to-Fluxze email has no mailbox for the update above to join.
+    if set_native_read_state(pool.get_ref(), &req, user_id, email_id, true)
+        .await?
+        .is_some()
+    {
+        return Ok(HttpResponse::Ok().json(serde_json::json!({ "is_read": true })));
+    }
+
     // No row from RETURNING means the email is either not owned by this user (404)
     // or already read, in which case no provider push is needed.
     let owns: Option<i32> = sqlx::query_scalar(
@@ -672,6 +680,63 @@ pub async fn mark_email_read(
     }
 
     Ok(HttpResponse::Ok().json(serde_json::json!({ "is_read": true })))
+}
+
+/// Sets the read state of a Fluxze-to-Fluxze email (`source = 'wayve'`). It
+/// belongs to its recipient (`recipient_user_id`), not to a connected mailbox, so
+/// the mailbox-joined updates in `mark_email_read`/`mark_email_unread` never
+/// match it — which left such mail unread however often it was opened. There
+/// is no provider copy to push to. `Some(changed)` when the caller is the
+/// email's recipient, `None` when it isn't theirs (or isn't Fluxze mail).
+async fn set_native_read_state(
+    pool: &PgPool,
+    req: &HttpRequest,
+    user_id: i32,
+    email_id: i32,
+    read: bool,
+) -> Result<Option<bool>, AppError> {
+    let changed = sqlx::query(
+        "UPDATE emails SET is_read = $3 \
+         WHERE id = $1 AND source = 'wayve' AND recipient_user_id = $2 AND is_read <> $3 \
+         RETURNING subject, sender, receiver",
+    )
+    .bind(email_id)
+    .bind(user_id)
+    .bind(read)
+    .fetch_optional(pool)
+    .await?;
+
+    let Some(row) = changed else {
+        let owns: Option<i32> = sqlx::query_scalar(
+            "SELECT id FROM emails WHERE id = $1 AND source = 'wayve' AND recipient_user_id = $2",
+        )
+        .bind(email_id)
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?;
+        return Ok(owns.map(|_| false));
+    };
+
+    let direction = if read { "read" } else { "unread" };
+    crate::audit::record_action(
+        pool,
+        req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: if read { "email_read" } else { "email_unread" },
+            resource_type: "email",
+            resource_id: Some(email_id.to_string()),
+            metadata: Some(serde_json::json!({
+                "direction": direction,
+                "from": row.try_get::<Option<String>, _>("sender").ok().flatten(),
+                "to": row.try_get::<Option<String>, _>("receiver").ok().flatten(),
+                "subject": row.try_get::<Option<String>, _>("subject").ok().flatten(),
+                "provider": "wayve",
+            })),
+        },
+    )
+    .await;
+    Ok(Some(true))
 }
 
 #[actix_web::post("/emails/{id}/unread")]
@@ -776,6 +841,14 @@ pub async fn mark_email_unread(
             );
         }
 
+        return Ok(HttpResponse::Ok().json(serde_json::json!({ "is_read": false })));
+    }
+
+    // A Fluxze-to-Fluxze email has no mailbox for the update above to join.
+    if set_native_read_state(pool.get_ref(), &req, user_id, email_id, false)
+        .await?
+        .is_some()
+    {
         return Ok(HttpResponse::Ok().json(serde_json::json!({ "is_read": false })));
     }
 
