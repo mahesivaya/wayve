@@ -1,5 +1,5 @@
 import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
-import { BRAND_NAME } from "../config/brand";
+import { HEADER_NAME } from "../config/brand";
 import BrandLogo from "./BrandLogo";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission, canViewIntegrationsNav } from "../auth/permissions";
@@ -1859,7 +1859,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 The narrow overlay has no collapsed rail, so it always shows. */}
                 <BrandLogo className="logo-mark" size={desktop ? 24 : 26} />
                 {!(sidebarCollapsed && !isNarrow) && (
-                  <span className="logo-word">{BRAND_NAME}</span>
+                  <span className="logo-word">{HEADER_NAME}</span>
                 )}
               </div>
               {/* Desktop expand/collapse toggle, docked next to the brand mark so
