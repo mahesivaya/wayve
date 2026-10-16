@@ -1960,7 +1960,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 {renderSidebarItem(
                   "/chat",
                   "chat",
-                  "Messages",
+                  "Chat",
                   <ChatIcon size={18} />,
                   chatUnreadCount
                 )}
@@ -1973,7 +1973,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   "Calendar",
                   <SchedulerIcon size={18} />
                 )}
-                {/* Splits the communication apps (Inbox / Messages / Calendar)
+                {/* Splits the communication apps (Inbox / Chat / Calendar)
                     from the content ones below, so the list reads as two short
                     groups rather than one long run. Presentational only. */}
                 <hr className="sidebar-divider" aria-hidden="true" />
