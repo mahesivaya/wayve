@@ -11,7 +11,7 @@ import { EmailDetail } from "./EmailDetail";
 import { EmailFilesList, EmailFileDetail } from "./EmailFilesPane";
 import { useVisibleFiles } from "./useVisibleFiles";
 import ProviderPicker from "./ProviderPicker";
-import { useEmailInbox } from "./useEmailInbox";
+import { useEmailInbox, type TrashedBatch } from "./useEmailInbox";
 import type { EmailAttachment } from "../api/email";
 import {
   getEmail,
@@ -66,12 +66,61 @@ export default function Emails() {
     conversation,
     fetchMessage,
     deleteEmail,
+    undoTrash,
+    restoreEmail,
     markSenderNoise,
     bulkMarkRead,
     bulkDelete,
     markRead,
     markUnread,
   } = useEmailInbox(user?.id, normalizedSearchQuery);
+
+  // After a delete: "Moved to Trash" with Undo, until it times out. Undo puts
+  // the rows back into the list on screen, so it is offered only in the view
+  // (account + folder) they were deleted from.
+  const [trashNotice, setTrashNotice] = useState<{
+    text: string;
+    view: string;
+    batch?: TrashedBatch;
+  } | null>(null);
+  const currentView = `${activeAccount ?? "all"}|${activeFolder}`;
+  useEffect(() => {
+    if (!trashNotice) return;
+    const timer = window.setTimeout(() => setTrashNotice(null), 8000);
+    return () => window.clearTimeout(timer);
+  }, [trashNotice]);
+  const offerUndo = (batch: TrashedBatch) => {
+    if (batch.ids.length === 0) return;
+    const n = batch.rows.length;
+    setTrashNotice({
+      text: n > 1 ? `${n} conversations moved to Trash.` : "Moved to Trash.",
+      view: currentView,
+      batch,
+    });
+  };
+  // Reject on failure, so the row / reading pane shows the error. In Trash a
+  // delete would do nothing at the server yet drop the row here, and its Undo
+  // would send the mail to the inbox; Trash rows offer Restore instead.
+  const inTrash = activeFolder === "trash";
+  const deleteWithUndo = async (emailId: number) => {
+    if (inTrash) throw new Error("This email is already in Trash.");
+    offerUndo(await deleteEmail(emailId));
+  };
+  const bulkDeleteWithUndo = async (rowIds: number[]) => {
+    offerUndo(await bulkDelete(rowIds));
+  };
+  const undoLastTrash = async () => {
+    const batch = trashNotice?.batch;
+    if (!batch) return;
+    setTrashNotice(null);
+    const failed = await undoTrash(batch);
+    if (failed > 0) {
+      setTrashNotice({
+        text: `Couldn't restore ${failed} email${failed === 1 ? "" : "s"}. Try again from Trash.`,
+        view: currentView,
+      });
+    }
+  };
   // Your mailbox addresses: "me" among a conversation's senders, and who a
   // reply to your own message goes to.
   const ownAddresses = useMemo(
@@ -723,9 +772,11 @@ export default function Emails() {
             scrollKey={`${activeAccount ?? "all"}:${activeFolder}`}
             ownAddresses={ownAddresses}
             onBulkMarkRead={bulkMarkRead}
-            onBulkDelete={bulkDelete}
+            onBulkDelete={inTrash ? undefined : bulkDeleteWithUndo}
             onMarkRead={markRead}
             onMarkUnread={markUnread}
+            onDelete={deleteWithUndo}
+            onRestore={restoreEmail}
             activeFolder={activeFolder}
             hasAccounts={accounts.length > 0}
             accountsLoaded={accountsLoaded}
@@ -799,7 +850,7 @@ export default function Emails() {
               setViewMode("email");
               setSelectedEmail(null);
             }}
-            onDeleteEmail={deleteEmail}
+            onDeleteEmail={deleteWithUndo}
             onMarkNoise={markSenderNoise}
             conversation={
               conversation && conversation.rowId === selectedEmail?.id
@@ -825,6 +876,20 @@ export default function Emails() {
           />
         )}
       </div>
+      {trashNotice && trashNotice.view === currentView && (
+        <div className="email-trash-notice" role="status">
+          <span>{trashNotice.text}</span>
+          {trashNotice.batch && (
+            <button
+              type="button"
+              className="email-trash-notice-undo"
+              onClick={() => void undoLastTrash()}
+            >
+              Undo
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

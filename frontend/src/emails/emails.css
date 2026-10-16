@@ -1106,6 +1106,64 @@
   background: color-mix(in srgb, var(--color-primary) 16%, transparent);
 }
 
+.email-row-action--danger:hover {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
+}
+
+.email-row-action:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+/* A failed Delete / Restore on a row. Above the rows, not in the bulk bar,
+   which split view doesn't show. */
+.email-row-error {
+  margin: 6px 10px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-danger-soft);
+  border: 1px solid var(--color-danger-border);
+  color: var(--color-danger-strong);
+  font-size: var(--text-sm);
+}
+
+/* "Moved to Trash · Undo", pinned above everything at the bottom of the page. */
+.email-trash-notice {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-text-primary);
+  color: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-sm);
+  animation: email-bulk-toast-in 0.15s ease-out;
+}
+
+.email-trash-notice-undo {
+  padding: 2px 6px;
+  border: none;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.email-trash-notice-undo:hover {
+  background: color-mix(in srgb, var(--color-surface) 18%, transparent);
+}
+
 /* Tooltips are provided globally (see the `[data-tooltip]` utility in
    index.css). Row actions hug the list's right edge, so they opt into the
    right-anchored variant via `data-tooltip-align="right"`. */
@@ -1604,6 +1662,36 @@
   /* The flex layout pinned these right with an auto margin; the track does it
      now, and leaving it would fight `justify-self`. */
   margin-left: 0;
+}
+
+/* Up to three hover actions (Delete, Read/Unread, Attachments) don't fit the
+   64px date track, and widening it would cost every row subject width. So on
+   hover they float over the row's right end instead, as in Gmail, on the
+   row's own hover colour so the subject they cover doesn't show through. */
+.main.email-list-view .email-item {
+  position: relative;
+}
+
+.main.email-list-view .email-item:hover .email-row-actions {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  padding-left: 12px;
+  background: var(--email-row-hover-bg);
+}
+
+.email-item:hover {
+  --email-row-hover-bg: var(--color-surface-cool-blue);
+}
+
+.email-item.unread:hover {
+  --email-row-hover-bg: var(--color-surface-tint-cool);
+}
+
+.email-item.active:hover,
+.email-item.unread.active:hover {
+  --email-row-hover-bg: var(--color-surface-cool-blue-light);
 }
 
 .main.email-list-view .email-primary {

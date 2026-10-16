@@ -1,7 +1,13 @@
 import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { EmailFolder, EmailItem, STUB_EMAIL_FOLDERS } from "./types";
 import { FolderChips } from "./FolderChips";
-import { AttachmentIcon, EmailsIcon, MailOpenIcon, TrashIcon } from "../icons";
+import {
+  AttachmentIcon,
+  EmailsIcon,
+  MailOpenIcon,
+  RestoreIcon,
+  TrashIcon,
+} from "../icons";
 import { useGlobalSearch } from "../search/SearchContext";
 import { useListScrollMemory } from "./useListScrollMemory";
 import { fmtListTimestamp } from "../utils/datetime";
@@ -27,6 +33,10 @@ interface EmailListProps {
   // Per-row hover actions: toggle a single email's read state.
   onMarkRead?: (id: number) => Promise<void> | void;
   onMarkUnread?: (id: number) => Promise<void> | void;
+  // Per-row hover actions: move a row to Trash, or (in the Trash folder) back.
+  // Both reject on failure, which the list shows.
+  onDelete?: (id: number) => Promise<unknown>;
+  onRestore?: (id: number) => Promise<unknown>;
   activeFolder?: EmailFolder;
   // `accountsLoaded` distinguishes "no accounts" from "not fetched yet", so the
   // connect-an-account empty state never flashes at users who do have mailboxes.
@@ -92,6 +102,8 @@ export const EmailList: React.FC<EmailListProps> = ({
   onBulkDelete,
   onMarkRead,
   onMarkUnread,
+  onDelete,
+  onRestore,
   activeFolder,
   hasAccounts = true,
   accountsLoaded = true,
@@ -130,6 +142,53 @@ export const EmailList: React.FC<EmailListProps> = ({
     const timer = window.setTimeout(() => setBulkHint(null), 2200);
     return () => window.clearTimeout(timer);
   }, [bulkHint]);
+
+  // Rows with a delete/restore in flight, so a double-click sends one request.
+  const [busyIds, setBusyIds] = useState<Set<number>>(() => new Set());
+  // Shown above the rows rather than in the bulk bar, which split view hides.
+  const [rowError, setRowError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!rowError) return;
+    const timer = window.setTimeout(() => setRowError(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [rowError]);
+
+  // Trash / Restore on one row. The row then leaves this list, so it leaves
+  // the selection too — otherwise "1 selected" would count a row no longer
+  // shown, and a bulk delete would send it again.
+  const runRowAction = async (
+    id: number,
+    action: (id: number) => Promise<unknown>,
+    failure: string
+  ) => {
+    if (busyIds.has(id)) return;
+    setBusyIds((prev) => new Set(prev).add(id));
+    setRowError(null);
+    try {
+      await action(id);
+      setCheckedIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    } catch (err) {
+      setRowError(err instanceof Error ? err.message : failure);
+    } finally {
+      setBusyIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+
+  // Trash rows offer Restore instead of Delete: deleting them again would do
+  // nothing, and there is no permanent delete (see routes/email.rs).
+  const inTrash = activeFolder === "trash";
+  const rowDelete = inTrash ? undefined : onDelete;
+  const rowRestore = inTrash ? onRestore : undefined;
 
   const toggleChecked = (id: number) => {
     setCheckedIds((prev) => {
@@ -196,7 +255,7 @@ export const EmailList: React.FC<EmailListProps> = ({
       return;
     }
     const ok = window.confirm(
-      `Delete ${checkedIds.size} email${checkedIds.size === 1 ? "" : "s"}? This cannot be undone.`
+      `Move ${checkedIds.size} conversation${checkedIds.size === 1 ? "" : "s"} to Trash?`
     );
     if (!ok) return;
     setBulkBusy(true);
@@ -399,6 +458,12 @@ export const EmailList: React.FC<EmailListProps> = ({
         </div>
       )}
 
+      {rowError && (
+        <div className="email-row-error" role="alert">
+          {rowError}
+        </div>
+      )}
+
       {searchingAllMail && !showNoAccounts && (
         <div className="email-search-scope" role="status">
           Searching all mail
@@ -547,11 +612,49 @@ export const EmailList: React.FC<EmailListProps> = ({
                     {fmtListTimestamp(email.created_at)}
                   </span>
                 </span>
-                {(onMarkRead || onMarkUnread) && (
+                {(onMarkRead || onMarkUnread || rowDelete || rowRestore) && (
                   <span
                     className="email-row-actions"
                     onClick={(event) => event.stopPropagation()}
                   >
+                    {rowDelete && (
+                      <button
+                        type="button"
+                        className="email-row-action email-row-action--danger"
+                        data-tooltip="Delete"
+                        data-tooltip-align="right"
+                        aria-label="Delete"
+                        disabled={busyIds.has(email.id)}
+                        onClick={() =>
+                          void runRowAction(
+                            email.id,
+                            rowDelete,
+                            "Failed to delete email"
+                          )
+                        }
+                      >
+                        <TrashIcon size={16} />
+                      </button>
+                    )}
+                    {rowRestore && (
+                      <button
+                        type="button"
+                        className="email-row-action"
+                        data-tooltip="Restore to inbox"
+                        data-tooltip-align="right"
+                        aria-label="Restore to inbox"
+                        disabled={busyIds.has(email.id)}
+                        onClick={() =>
+                          void runRowAction(
+                            email.id,
+                            rowRestore,
+                            "Failed to restore email"
+                          )
+                        }
+                      >
+                        <RestoreIcon size={16} />
+                      </button>
+                    )}
                     {isUnread(email)
                       ? onMarkRead && (
                           <button

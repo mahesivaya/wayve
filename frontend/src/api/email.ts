@@ -256,9 +256,17 @@ export const getEmails = async <T = unknown>(
 export const getEmail = async <T = unknown>(id: number) =>
   apiFetchJson<T>(`/api/emails/${id}`);
 
+// Moves the email to Trash, here and at the mail provider; restoreEmail
+// brings it back.
 export const deleteEmail = async (id: number) => {
   await apiFetch(`/api/emails/${id}`, {
     method: "DELETE",
+  });
+};
+
+export const restoreEmail = async (id: number) => {
+  await apiFetch(`/api/emails/${id}/restore`, {
+    method: "POST",
   });
 };
 

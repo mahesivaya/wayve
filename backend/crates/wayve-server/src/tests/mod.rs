@@ -22,6 +22,7 @@ mod email_no_false_logout_test;
 mod email_provider_isp_test;
 mod email_reply_headers_test;
 mod email_threading_test;
+mod email_trash_test;
 mod embed_tokens_test;
 mod gitlab_test;
 mod integrations_status_test;
