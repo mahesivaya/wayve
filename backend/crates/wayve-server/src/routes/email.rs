@@ -368,7 +368,10 @@ pub async fn delete_email(
         .map(str::trim)
         .filter(|value| !value.is_empty())
     else {
-        return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
+        // 409, not 401: the user's session is fine, only the mailbox needs
+        // reconnecting. The client treats any 401 as an expired session and
+        // logs the user out, as for the body fetch (email/body_handlers.rs).
+        return Ok(HttpResponse::Conflict().json(serde_json::json!({
             "error": "Reconnect your email account to delete this email"
         })));
     };

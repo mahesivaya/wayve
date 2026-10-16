@@ -207,7 +207,10 @@ pub async fn send(
     let account =
         match load_email_account_for_send(pool.get_ref(), data.account_id, user_id).await? {
             Some(account) => account,
-            None => return Ok(HttpResponse::Unauthorized().body("Email account not found")),
+            // 404, not 401: the session is valid, the mailbox just isn't one
+            // this user can send from (disconnected, or shared without reply
+            // rights). The client logs the user out on any 401.
+            None => return Ok(HttpResponse::NotFound().body("Email account not found")),
         };
 
     // A forward carries the original's attachments: fetched from the provider
