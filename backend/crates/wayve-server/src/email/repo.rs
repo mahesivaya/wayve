@@ -146,6 +146,9 @@ pub struct EmailListRow {
     pub has_body: bool,
     pub has_attachments: bool,
     pub is_read: bool,
+    /// Starred (Gmail's STARRED label). A conversation row is starred while
+    /// any of its messages is, as in Gmail.
+    pub is_starred: bool,
     pub created_at: Option<NaiveDateTime>,
     pub is_shared: bool,
     pub shared_label: Option<String>,
@@ -159,6 +162,8 @@ pub struct EmailListRow {
     /// The conversation's unread messages, so marking it read touches only
     /// those (each read also goes to the provider).
     pub unread_ids: Option<Vec<i32>>,
+    /// The conversation's starred messages, so unstarring it clears them all.
+    pub starred_ids: Option<Vec<i32>>,
     /// Everyone who wrote in the conversation, once each, in order of their
     /// first message. The client shows your own addresses as "me" and the
     /// unread ones in bold.
@@ -201,6 +206,7 @@ const LIST_COLUMNS: &str = r#"
             SELECT 1 FROM email_attachments ea WHERE ea.email_id = e.id
         ) AS has_attachments,
         e.account_id, e.is_read, e.created_at,
+        ('STARRED' = ANY(e.labels)) AS is_starred,
         COALESCE(a.is_shared, FALSE) AS is_shared,
         a.shared_label,
         s.status AS inbox_status, s.assignee_id AS inbox_assignee_id
@@ -338,6 +344,9 @@ fn push_folder(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFil
             }
             "important" => {
                 qb.push(" AND 'IMPORTANT' = ANY(e.labels) ");
+            }
+            "starred" => {
+                qb.push(" AND 'STARRED' = ANY(e.labels) ");
             }
             "updates" => {
                 qb.push(" AND 'CATEGORY_UPDATES' = ANY(e.labels) ");
@@ -550,7 +559,9 @@ fn push_grouped_list(
                    BOOL_OR(has_attachments) AS any_attachments,
                    ARRAY_AGG(id ORDER BY created_at DESC, id DESC) AS message_ids,
                    COALESCE(ARRAY_AGG(id ORDER BY created_at DESC, id DESC)
-                            FILTER (WHERE is_read = FALSE), '{}') AS unread_ids
+                            FILTER (WHERE is_read = FALSE), '{}') AS unread_ids,
+                   COALESCE(ARRAY_AGG(id ORDER BY created_at DESC, id DESC)
+                            FILTER (WHERE is_starred), '{}') AS starred_ids
             FROM conv GROUP BY conv_key),
         -- Who wrote in each conversation, once each, in order of their first
         -- message (capped), and whether any of their messages is unread, for
@@ -577,6 +588,7 @@ fn push_grouped_list(
                l.account_id, l.is_read, l.created_at, l.is_shared, l.shared_label,
                l.inbox_status, l.inbox_assignee_id, l.thread_id,
                g.message_count, g.unread_count, g.message_ids, g.unread_ids,
+               g.starred_ids, (cardinality(g.starred_ids) > 0) AS is_starred,
                p.p_iv, p.p_enc, p.p_plain, p.p_unread
         FROM latest l JOIN agg g USING (conv_key) JOIN senders p USING (conv_key)
         WHERE TRUE"#,
@@ -633,6 +645,11 @@ fn map_list_row(row: PgRow) -> EmailListRow {
             .flatten(),
         unread_ids: row
             .try_get::<Option<Vec<i32>>, _>("unread_ids")
+            .ok()
+            .flatten(),
+        is_starred: row.try_get::<bool, _>("is_starred").unwrap_or(false),
+        starred_ids: row
+            .try_get::<Option<Vec<i32>>, _>("starred_ids")
             .ok()
             .flatten(),
         participants: read_participants(&row),
@@ -1065,6 +1082,22 @@ async fn stamp_last_message_at(pool: &PgPool, account_id: i32, results: &[Insert
     }
 }
 
+/// Stars or unstars an email: the STARRED label, as Gmail stores it.
+pub async fn set_starred(pool: &PgPool, email_id: i32, starred: bool) -> sqlx::Result<()> {
+    sqlx::query(
+        "UPDATE emails SET labels = CASE \
+           WHEN $2 THEN array_append(array_remove(labels, 'STARRED'), 'STARRED') \
+           ELSE array_remove(labels, 'STARRED') \
+         END \
+         WHERE id = $1",
+    )
+    .bind(email_id)
+    .bind(starred)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Labels an email as deleted (TRASH) or takes the label off again, keeping its
 /// other labels so a restore puts it back where it was. `moved` is what the
 /// provider reported: a new provider id is stored (a moved Outlook message gets
@@ -1138,13 +1171,19 @@ pub async fn upsert_one(
           body_encrypted = EXCLUDED.body_encrypted,
           body_iv = EXCLUDED.body_iv,
           is_read = emails.is_read OR EXCLUDED.is_read,
-          -- IMAP mail is trashed in Fluxze only (the server copy stays in
-          -- INBOX), so its sync must not clear the TRASH label. Outlook's
-          -- labels come from the provider, which knows what is in Deleted Items.
+          -- IMAP mail is trashed and starred in Fluxze only (the server copy
+          -- stays in INBOX, unflagged), so its sync must not clear the TRASH
+          -- or STARRED label. Outlook's labels come from the provider, which
+          -- knows what is in Deleted Items and what is flagged.
           labels = CASE
-            WHEN 'TRASH' = ANY(emails.labels)
+            WHEN emails.labels && ARRAY['TRASH', 'STARRED']
              AND (SELECT provider FROM email_accounts WHERE id = emails.account_id) = 'imap'
-            THEN array_append(array_remove(EXCLUDED.labels, 'TRASH'), 'TRASH')
+            THEN ARRAY(
+              SELECT l FROM unnest(EXCLUDED.labels) AS l
+               WHERE l NOT IN ('TRASH', 'STARRED')
+              UNION ALL
+              SELECT l FROM unnest(emails.labels) AS l
+               WHERE l IN ('TRASH', 'STARRED'))
             ELSE EXCLUDED.labels
           END
         RETURNING id, (xmax = 0) AS is_new, created_at

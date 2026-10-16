@@ -16,6 +16,7 @@ import {
   replyRecipients,
 } from "./replyRecipients";
 import { EmailItem } from "./types";
+import { StarIcon } from "../icons";
 import { updateEmailState, type InboxState } from "../api/sharedInboxes";
 import { APP_TIME_ZONE } from "../utils/datetime";
 import { useAuth } from "../auth/useAuth";
@@ -31,6 +32,9 @@ interface EmailDetailProps {
   viewMode: "email" | "files";
   onBack: () => void;
   onDeleteEmail: (emailId: number) => Promise<void>;
+  // The open conversation's star, as on its list row. Omit to hide it.
+  starred?: boolean;
+  onToggleStar?: () => Promise<void>;
   // Marks the email's sender as noise (routes their mail to the Noise folder).
   onMarkNoise?: (emailId: number) => Promise<void>;
   // Narrows the mail list to one sender. The host owns this because showing
@@ -52,6 +56,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   viewMode,
   onBack,
   onDeleteEmail,
+  starred = false,
+  onToggleStar,
   onMarkNoise,
   onFilterBySender,
   conversation,
@@ -775,6 +781,24 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             </svg>
             <span>Forward</span>
           </button>
+          {onToggleStar && (
+            <button
+              className={`email-detail-star${starred ? " is-starred" : ""}`}
+              onClick={() => {
+                setDeleteError(null);
+                onToggleStar().catch((err: unknown) =>
+                  setDeleteError(
+                    err instanceof Error ? err.message : "Failed to star email"
+                  )
+                );
+              }}
+              data-tooltip={starred ? "Starred" : "Not starred"}
+              aria-label={starred ? "Starred" : "Not starred"}
+              aria-pressed={starred}
+            >
+              <StarIcon size={15} fill={starred ? "currentColor" : "none"} />
+            </button>
+          )}
           <button
             className="email-detail-delete"
             onClick={() => void handleDelete()}

@@ -22,6 +22,10 @@ export const isConversation = (email: EmailItem): boolean =>
 export const isUnread = (email: EmailItem): boolean =>
   (email.unread_count ?? 0) > 0 || email.is_read === false;
 
+// A conversation row is starred while any message in it is, as in Gmail.
+export const isStarred = (email: EmailItem): boolean =>
+  email.is_starred === true || (email.starred_ids?.length ?? 0) > 0;
+
 // Who a row names, Gmail-style: everyone who wrote in the conversation, your
 // own addresses as "me" ("Ayana, me"). Up to three names; a longer list keeps
 // the first and the two latest ("Ann … Bob, me"). Each name says whether that

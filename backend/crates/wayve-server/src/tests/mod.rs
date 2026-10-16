@@ -21,6 +21,7 @@ mod email_native_read_test;
 mod email_no_false_logout_test;
 mod email_provider_isp_test;
 mod email_reply_headers_test;
+mod email_star_test;
 mod email_threading_test;
 mod email_trash_test;
 mod embed_tokens_test;

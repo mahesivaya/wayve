@@ -141,7 +141,7 @@ struct OutlookMessage {
     is_read: bool,
     /// Mirrors Gmail's labelIds shape so `emails.labels` is uniform across
     /// providers: user categories plus a synthetic `IMPORTANT` for
-    /// `importance == "high"`.
+    /// `importance == "high"` and `STARRED` for a flagged message.
     labels: Vec<String>,
     /// `conversationId` + `internetMessageId`. Graph groups replies itself, so
     /// its conversation id is enough to thread; In-Reply-To/References would
@@ -198,6 +198,10 @@ fn parse_message(m: &Value) -> Option<OutlookMessage> {
     if m["importance"].as_str() == Some("high") {
         labels.push("IMPORTANT".to_string());
     }
+    // Outlook's follow-up flag is its star (see provider::MailStar).
+    if m["flag"]["flagStatus"].as_str() == Some("flagged") {
+        labels.push("STARRED".to_string());
+    }
 
     Some(OutlookMessage {
         id,
@@ -229,11 +233,11 @@ fn first_page_url(last_sync: Option<i64>) -> String {
     let mut url = reqwest::Url::parse(&base).unwrap_or_else(|e| panic!("valid Graph URL: {e}"));
     {
         let mut q = url.query_pairs_mut();
-        // `categories` and `importance` are what feed `OutlookMessage.labels`,
+        // `categories`, `importance` and `flag` are what feed `OutlookMessage.labels`,
         // which the sidebar category folders filter on.
         q.append_pair(
             "$select",
-            "id,subject,from,toRecipients,ccRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance,conversationId,internetMessageId",
+            "id,subject,from,toRecipients,ccRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance,flag,conversationId,internetMessageId",
         );
         q.append_pair("$orderby", "receivedDateTime desc");
         q.append_pair("$top", &OUTLOOK_PAGE_SIZE.to_string());
@@ -262,7 +266,7 @@ fn first_before_page_url(before_timestamp: i64, limit: usize) -> String {
         let mut q = url.query_pairs_mut();
         q.append_pair(
             "$select",
-            "id,subject,from,toRecipients,ccRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance,conversationId,internetMessageId",
+            "id,subject,from,toRecipients,ccRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance,flag,conversationId,internetMessageId",
         );
         q.append_pair("$orderby", "receivedDateTime desc");
         q.append_pair("$top", &limit.min(OUTLOOK_PAGE_SIZE).to_string());
@@ -560,7 +564,7 @@ async fn sync_outlook_folder_recent(
 ) -> Result<()> {
     let (folder_id, synthetic_label, cap) = spec;
     let url = format!(
-        "{}/v1.0/me/mailFolders/{}/messages?$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance,conversationId,internetMessageId&$orderby=receivedDateTime desc&$top={}",
+        "{}/v1.0/me/mailFolders/{}/messages?$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,hasAttachments,body,isRead,categories,importance,flag,conversationId,internetMessageId&$orderby=receivedDateTime desc&$top={}",
         crate::external::microsoft_graph_base(),
         folder_id,
         cap
@@ -876,5 +880,28 @@ mod tests {
         let parsed = parse_message(&m).unwrap_or_else(|| panic!("parse"));
         assert_eq!(parsed.cc, "");
         assert_eq!(parsed.receiver, "Unknown");
+    }
+
+    #[test]
+    fn a_flagged_message_is_starred() {
+        let message = |status: &str| {
+            serde_json::json!({
+                "id": "AAMk3",
+                "from": { "emailAddress": { "address": "ada@x.com" } },
+                "flag": { "flagStatus": status },
+            })
+        };
+        for (status, starred) in [
+            ("flagged", true),
+            ("notFlagged", false),
+            ("complete", false),
+        ] {
+            let parsed = parse_message(&message(status)).unwrap_or_else(|| panic!("parse"));
+            assert_eq!(
+                parsed.labels.iter().any(|l| l == "STARRED"),
+                starred,
+                "flagStatus {status}"
+            );
+        }
     }
 }

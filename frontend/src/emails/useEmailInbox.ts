@@ -9,6 +9,8 @@ import {
   getEmailThread,
   deleteEmail as deleteEmailRequest,
   restoreEmail as restoreEmailRequest,
+  starEmail as starEmailRequest,
+  unstarEmail as unstarEmailRequest,
   markEmailRead,
   markEmailUnread,
   markEmailSenderNoise,
@@ -21,6 +23,7 @@ import {
   conversationKey,
   conversationMessageIds,
   isConversation,
+  isStarred,
 } from "./conversation";
 
 // What a delete moved to Trash: the list rows it took out, and every message
@@ -632,6 +635,34 @@ export function useEmailInbox(
     }
   };
 
+  // Star or unstar a list row, as in Gmail: starring stars the row's own
+  // (newest) message; unstarring clears every starred message in it. The star
+  // flips at once and flips back if the server refuses, and the error reaches
+  // the caller.
+  const toggleStar = async (rowId: number) => {
+    const row = emails.find((email) => email.id === rowId);
+    if (!row) return;
+    const starred = isStarred(row);
+    const ids = starred ? (row.starred_ids ?? [row.id]) : [row.id];
+    const patch = (email: EmailItem, next: Partial<EmailItem>) =>
+      email.id === rowId ? { ...email, ...next } : email;
+    const flipped = starred
+      ? { is_starred: false, starred_ids: [] }
+      : { is_starred: true, starred_ids: [row.id, ...(row.starred_ids ?? [])] };
+    const before = { is_starred: row.is_starred, starred_ids: row.starred_ids };
+    setEmails((prev) => prev.map((email) => patch(email, flipped)));
+    try {
+      await Promise.all(
+        ids.map((id) =>
+          starred ? unstarEmailRequest(id) : starEmailRequest(id)
+        )
+      );
+    } catch (err) {
+      setEmails((prev) => prev.map((email) => patch(email, before)));
+      throw err;
+    }
+  };
+
   // Optimistic removal, then parallel deletes. A failed delete leaves the row
   // gone from the UI until the next refresh pulls it back, which is acceptable
   // here because the user can simply re-delete.
@@ -687,6 +718,7 @@ export function useEmailInbox(
     conversation,
     fetchMessage,
     deleteEmail,
+    toggleStar,
     undoTrash,
     restoreEmail,
     markSenderNoise,

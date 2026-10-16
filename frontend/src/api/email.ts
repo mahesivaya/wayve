@@ -8,6 +8,7 @@ export type EmailFolder =
   | "inbox"
   | "sent"
   | "important"
+  | "starred"
   | "updates"
   | "spam"
   | "drafts"
@@ -262,6 +263,15 @@ export const deleteEmail = async (id: number) => {
   await apiFetch(`/api/emails/${id}`, {
     method: "DELETE",
   });
+};
+
+// Star or unstar one message (Gmail's star, Outlook's flag).
+export const starEmail = async (id: number) => {
+  await apiFetch(`/api/emails/${id}/star`, { method: "POST" });
+};
+
+export const unstarEmail = async (id: number) => {
+  await apiFetch(`/api/emails/${id}/unstar`, { method: "POST" });
 };
 
 export const restoreEmail = async (id: number) => {
