@@ -19,6 +19,13 @@ pub struct SendEmailRequest {
     /// send.
     #[serde(default)]
     pub attachments: Vec<EmailAttachmentInput>,
+    /// Stored attachments (`email_attachments.id`) of an email being forwarded.
+    /// The server fetches each file from the provider and sends it with
+    /// `attachments`, so a forward keeps the original's files without the
+    /// browser downloading and re-uploading them. Only the caller's own
+    /// mailboxes' attachments; same paths as `attachments`.
+    #[serde(default)]
+    pub forward_attachment_ids: Vec<i32>,
     /// The email this one replies to, so it joins that conversation. Honoured by
     /// the Gmail and IMAP send paths; ignored when that email isn't in the
     /// sending mailbox or has no stored message id (it then sends unthreaded).

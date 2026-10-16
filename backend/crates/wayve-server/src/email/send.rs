@@ -122,6 +122,55 @@ fn decode_attachments(
         .collect()
 }
 
+/// Appends the forwarded attachments' files to `data.attachments`, or returns
+/// the response to send instead when they can't all be had or are over the
+/// limits. The count is checked before anything is fetched.
+async fn add_forwarded_attachments(
+    pool: &PgPool,
+    user_id: i32,
+    data: &mut SendEmailRequest,
+) -> Option<HttpResponse> {
+    use crate::email::attachments::{ForwardAttachmentError, fetch_for_forward};
+
+    let mut ids = data.forward_attachment_ids.clone();
+    ids.dedup();
+    if ids.len() + data.attachments.len() > MAX_OUTGOING_ATTACHMENTS {
+        return Some(HttpResponse::PayloadTooLarge().json(serde_json::json!({
+            "error": format!("Too many attachments (max {MAX_OUTGOING_ATTACHMENTS}).")
+        })));
+    }
+    let files = match fetch_for_forward(pool, user_id, &ids).await {
+        Ok(files) => files,
+        Err(ForwardAttachmentError::NotFound) => {
+            return Some(HttpResponse::NotFound().json(serde_json::json!({
+                "error": "An attachment to forward was not found."
+            })));
+        }
+        Err(ForwardAttachmentError::Reconnect) => {
+            return Some(HttpResponse::Conflict().json(serde_json::json!({
+                "error": "Reconnect the email account to forward its attachments."
+            })));
+        }
+        Err(ForwardAttachmentError::Provider(e)) => {
+            warn!(target: "gmail", user_id, error = ?e, "fetching attachments to forward failed");
+            return Some(HttpResponse::BadGateway().json(serde_json::json!({
+                "error": "Couldn't fetch the attachments to forward from your mail provider."
+            })));
+        }
+    };
+    data.attachments
+        .extend(files.into_iter().map(|file| EmailAttachmentInput {
+            filename: file.filename,
+            mime_type: file.mime_type,
+            content_base64: base64::engine::general_purpose::STANDARD.encode(&file.bytes),
+        }));
+    validate_attachment_limits(&data.attachments)
+        .err()
+        .map(|message| {
+            HttpResponse::PayloadTooLarge().json(serde_json::json!({ "error": message }))
+        })
+}
+
 #[instrument(target = "gmail", skip(req, data, pool), fields(to = %data.to))]
 pub async fn send(
     req: HttpRequest,
@@ -160,6 +209,14 @@ pub async fn send(
             Some(account) => account,
             None => return Ok(HttpResponse::Unauthorized().body("Email account not found")),
         };
+
+    // A forward carries the original's attachments: fetched from the provider
+    // here and sent like uploaded ones, so the limits below cover them too.
+    if !data.forward_attachment_ids.is_empty()
+        && let Some(response) = add_forwarded_attachments(pool.get_ref(), user_id, &mut data).await
+    {
+        return Ok(response);
+    }
 
     // A reply joins the conversation it answers. The original is looked up only
     // in this (already authorized) mailbox; anything missing means unthreaded.
@@ -719,6 +776,7 @@ mod tests {
             cc: cc.iter().map(|s| s.to_string()).collect(),
             bcc: bcc.iter().map(|s| s.to_string()).collect(),
             attachments: vec![],
+            forward_attachment_ids: vec![],
             reply_to_email_id: None,
             reply_headers: None,
         }

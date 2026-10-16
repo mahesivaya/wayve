@@ -9,8 +9,6 @@ use wayve_security::jwt::get_user_id_from_request;
 
 use actix_web::http::header;
 use actix_web::{HttpRequest, HttpResponse, delete, get, web};
-use base64::Engine;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::Value;
 use sqlx::{PgPool, Row};
 use tracing::{error, info, instrument, warn};
@@ -1222,37 +1220,16 @@ pub async fn download_email_attachment(
         .await);
     }
 
-    let url = format!(
-        "{}/gmail/v1/users/me/messages/{}/attachments/{}",
-        crate::external::gmail_api_base(),
-        gmail_id,
-        gmail_attachment_id
-    );
-
-    let res: Value = match HTTP_CLIENT
-        .get(&url)
-        .bearer_auth(&token.access_token)
-        .send()
-        .await
+    let bytes = match crate::email::attachments::fetch_gmail_attachment_bytes(
+        &token.access_token,
+        &gmail_id,
+        &gmail_attachment_id,
+    )
+    .await
     {
-        Ok(resp) => match resp.json().await {
-            Ok(json) => json,
-            Err(e) => {
-                error!(target: "gmail", error = %e, "attachment json parse failed");
-                return Ok(HttpResponse::BadGateway().finish());
-            }
-        },
-        Err(e) => {
-            error!(target: "gmail", error = %e, "attachment request failed");
-            return Ok(HttpResponse::BadGateway().finish());
-        }
-    };
-
-    let data = res["data"].as_str().unwrap_or("");
-    let bytes = match URL_SAFE_NO_PAD.decode(data) {
         Ok(bytes) => bytes,
         Err(e) => {
-            error!(target: "gmail", error = ?e, "attachment base64 decode failed");
+            error!(target: "gmail", error = ?e, "attachment download failed");
             return Ok(HttpResponse::BadGateway().finish());
         }
     };
