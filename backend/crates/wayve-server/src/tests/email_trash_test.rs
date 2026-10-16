@@ -288,7 +288,7 @@ mod tests {
 
     #[actix_web::test]
     #[serial_test::serial]
-    async fn gmail_trashes_and_untrashes_and_reports_the_inbox() {
+    async fn gmail_trashes_and_a_restore_puts_it_back_in_the_inbox() {
         let mock = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/gmail/v1/users/me/messages/m1/trash"))
@@ -298,13 +298,25 @@ mod tests {
             )
             .mount(&mock)
             .await;
+        // As Gmail answers: untrash takes TRASH off but leaves INBOX off too.
         Mock::given(method("POST"))
             .and(path("/gmail/v1/users/me/messages/m1/untrash"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(
-                    serde_json::json!({ "id": "m1", "labelIds": ["INBOX", "UNREAD"] }),
+                    serde_json::json!({ "id": "m1", "labelIds": ["CATEGORY_UPDATES"] }),
                 ),
             )
+            .expect(1)
+            .mount(&mock)
+            .await;
+        // So restore must add INBOX back itself.
+        Mock::given(method("POST"))
+            .and(path("/gmail/v1/users/me/messages/m1/modify"))
+            .and(body_json(serde_json::json!({ "addLabelIds": ["INBOX"] })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({ "id": "m1", "labelIds": ["INBOX", "CATEGORY_UPDATES"] }),
+            ))
+            .expect(1)
             .mount(&mock)
             .await;
         Mock::given(method("POST"))
@@ -315,6 +327,13 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/gmail/v1/users/me/messages/gone/untrash"))
             .respond_with(ResponseTemplate::new(404))
+            .mount(&mock)
+            .await;
+        // A restore that fails never relabels anything.
+        Mock::given(method("POST"))
+            .and(path("/gmail/v1/users/me/messages/gone/modify"))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(0)
             .mount(&mock)
             .await;
         // SAFETY: serialized via #[serial].

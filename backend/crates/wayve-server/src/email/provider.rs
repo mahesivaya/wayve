@@ -265,57 +265,78 @@ impl MailRead for GoogleMailClient {
     }
 }
 
-/// `messages.trash` / `messages.untrash`. Both work under `gmail.modify`; a
-/// permanent `messages.delete` would need the full `https://mail.google.com/`
-/// scope, which we do not request. Both answer with the message, whose labels
-/// say whether a restore put it back in the inbox.
-async fn gmail_trash_call(
+/// A bodyless Gmail message POST: `trash`, `untrash`, or `modify` with `body`.
+/// Trash and untrash work under `gmail.modify`; a permanent `messages.delete`
+/// would need the full `https://mail.google.com/` scope, which we do not request.
+async fn gmail_message_post(
     access_token: &str,
     provider_message_id: &str,
     action: &str,
-) -> Result<TrashMoved> {
+    body: Value,
+) -> Result<reqwest::StatusCode> {
     let url = format!(
         "{}/gmail/v1/users/me/messages/{}/{}",
         crate::external::gmail_api_base(),
         provider_message_id,
         action
     );
-    // The empty JSON object is load-bearing: both are bodyless POSTs, reqwest
-    // omits Content-Length for an empty body, and Google's frontend 411s
-    // without one. The endpoints ignore the body.
+    // For trash/untrash the empty JSON object is load-bearing: they are
+    // bodyless POSTs, reqwest omits Content-Length for an empty body, and
+    // Google's frontend 411s without one. Those endpoints ignore the body.
     let resp = HTTP_CLIENT
         .post(url)
         .bearer_auth(access_token)
-        .json(&serde_json::json!({}))
+        .json(&body)
         .send()
         .await?;
     let status = resp.status();
     // Already gone from Gmail: there is nothing left to trash.
     if action == "trash" && status.as_u16() == 404 {
-        return Ok(TrashMoved::default());
+        return Ok(status);
     }
     if !status.is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("Gmail {action} failed: {status} {body}");
+        let detail = resp.text().await.unwrap_or_default();
+        anyhow::bail!("Gmail {action} failed: {status} {detail}");
     }
-    let message: Value = resp.json().await.unwrap_or_default();
-    let in_inbox = message["labelIds"]
-        .as_array()
-        .is_some_and(|labels| labels.iter().any(|l| l.as_str() == Some("INBOX")));
-    Ok(TrashMoved {
-        new_id: None,
-        in_inbox,
-    })
+    Ok(status)
 }
 
 #[async_trait]
 impl MailTrash for GoogleMailClient {
     async fn trash(&self, access_token: &str, provider_message_id: &str) -> Result<TrashMoved> {
-        gmail_trash_call(access_token, provider_message_id, "trash").await
+        gmail_message_post(
+            access_token,
+            provider_message_id,
+            "trash",
+            serde_json::json!({}),
+        )
+        .await?;
+        Ok(TrashMoved::default())
     }
 
     async fn restore(&self, access_token: &str, provider_message_id: &str) -> Result<TrashMoved> {
-        gmail_trash_call(access_token, provider_message_id, "untrash").await
+        gmail_message_post(
+            access_token,
+            provider_message_id,
+            "untrash",
+            serde_json::json!({}),
+        )
+        .await?;
+        // `untrash` only takes the TRASH label off: mail trashed out of the
+        // inbox comes back without INBOX, so it would land in All Mail rather
+        // than the inbox Restore promises. Put it back, as Gmail's own "Move to
+        // Inbox" does.
+        gmail_message_post(
+            access_token,
+            provider_message_id,
+            "modify",
+            serde_json::json!({ "addLabelIds": ["INBOX"] }),
+        )
+        .await?;
+        Ok(TrashMoved {
+            new_id: None,
+            in_inbox: true,
+        })
     }
 }
 
