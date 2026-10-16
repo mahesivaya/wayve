@@ -10,13 +10,7 @@ import { BrandIcon } from "./BrandIcon";
 import { hasPermission } from "../auth/permissions";
 
 export type IntegrationKey =
-  | "gmail"
-  | "jira"
-  | "github"
-  | "slack"
-  | "gitlab"
-  | "figma"
-  | "mcp";
+  "gmail" | "jira" | "github" | "slack" | "gitlab" | "figma" | "mcp";
 
 // The slice of the signed-in user these rules read. Kept structural so both
 // call sites can pass their own user object.

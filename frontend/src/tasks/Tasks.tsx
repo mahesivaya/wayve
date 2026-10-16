@@ -2115,10 +2115,7 @@ export default function Tasks({
                           onChange={(e) =>
                             setDateMode(
                               e.target.value as
-                                | "any"
-                                | "after"
-                                | "before"
-                                | "between"
+                                "any" | "after" | "before" | "between"
                             )
                           }
                           aria-label="Filter by date created"

@@ -300,9 +300,7 @@ const API_KEY_ADMIN_ROLES: Role[] = ["owner", "super_admin", "admin"];
  */
 export function canAccessApiKeyAdmin(
   user:
-    | { effective_role?: string | null; scope?: string | null }
-    | null
-    | undefined
+    { effective_role?: string | null; scope?: string | null } | null | undefined
 ): boolean {
   if (!user) return false;
   if (user.scope === "personal") return false;

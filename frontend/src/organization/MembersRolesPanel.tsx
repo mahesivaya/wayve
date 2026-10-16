@@ -32,8 +32,7 @@ const CREATE_ROLES: Role[] = ["guest", "developer", "member", "support"];
 // `members:read`, the role <select> requires the viewer to pass canModifyMember,
 // and the "Create new user" form requires `members:manage`.
 type Props =
-  | { scope: "platform" }
-  | { scope: "organization"; organizationId: number };
+  { scope: "platform" } | { scope: "organization"; organizationId: number };
 
 export default function MembersRolesPanel(props: Props) {
   const { user } = useAuth();
