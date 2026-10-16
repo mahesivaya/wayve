@@ -27,6 +27,7 @@ import { FolderChips } from "./FolderChips";
 import SearchBar from "../search/SearchBar";
 import { logger } from "../utils/logger";
 import type { EmailItem } from "./types";
+import { conversationKey, isStarred } from "./conversation";
 
 const ACCOUNT_NAME_STORAGE_KEY = "rwayve.emailAccountNames";
 const EMAIL_LIST_WIDTH_STORAGE_KEY = "rwayve.emailList.width";
@@ -66,6 +67,7 @@ export default function Emails() {
     conversation,
     fetchMessage,
     deleteEmail,
+    toggleStar,
     undoTrash,
     restoreEmail,
     markSenderNoise,
@@ -109,6 +111,15 @@ export default function Emails() {
   const bulkDeleteWithUndo = async (rowIds: number[]) => {
     offerUndo(await bulkDelete(rowIds));
   };
+  // The open email's list row, whose star the reading pane shows: the row is
+  // the conversation's newest message, which needn't be the one opened.
+  const selectedRow = selectedEmail
+    ? emails.find(
+        (email) =>
+          email.id === selectedEmail.id ||
+          conversationKey(email) === conversationKey(selectedEmail)
+      )
+    : undefined;
   const undoLastTrash = async () => {
     const batch = trashNotice?.batch;
     if (!batch) return;
@@ -777,6 +788,7 @@ export default function Emails() {
             onMarkUnread={markUnread}
             onDelete={deleteWithUndo}
             onRestore={restoreEmail}
+            onToggleStar={toggleStar}
             activeFolder={activeFolder}
             hasAccounts={accounts.length > 0}
             accountsLoaded={accountsLoaded}
@@ -851,6 +863,10 @@ export default function Emails() {
               setSelectedEmail(null);
             }}
             onDeleteEmail={deleteWithUndo}
+            starred={selectedRow ? isStarred(selectedRow) : false}
+            onToggleStar={
+              selectedRow ? () => toggleStar(selectedRow.id) : undefined
+            }
             onMarkNoise={markSenderNoise}
             conversation={
               conversation && conversation.rowId === selectedEmail?.id

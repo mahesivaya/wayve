@@ -6,12 +6,18 @@ import {
   EmailsIcon,
   MailOpenIcon,
   RestoreIcon,
+  StarIcon,
   TrashIcon,
 } from "../icons";
 import { useGlobalSearch } from "../search/SearchContext";
 import { useListScrollMemory } from "./useListScrollMemory";
 import { fmtListTimestamp } from "../utils/datetime";
-import { conversationSenders, isConversation, isUnread } from "./conversation";
+import {
+  conversationSenders,
+  isConversation,
+  isStarred,
+  isUnread,
+} from "./conversation";
 import { listFolder } from "./searchScope";
 
 interface EmailListProps {
@@ -37,6 +43,9 @@ interface EmailListProps {
   // Both reject on failure, which the list shows.
   onDelete?: (id: number) => Promise<unknown>;
   onRestore?: (id: number) => Promise<unknown>;
+  // The star on every row, as in Gmail. Rejects on failure, which the list
+  // shows (the star itself flips back in useEmailInbox).
+  onToggleStar?: (id: number) => Promise<unknown>;
   activeFolder?: EmailFolder;
   // `accountsLoaded` distinguishes "no accounts" from "not fetched yet", so the
   // connect-an-account empty state never flashes at users who do have mailboxes.
@@ -104,6 +113,7 @@ export const EmailList: React.FC<EmailListProps> = ({
   onMarkUnread,
   onDelete,
   onRestore,
+  onToggleStar,
   activeFolder,
   hasAccounts = true,
   accountsLoaded = true,
@@ -184,6 +194,44 @@ export const EmailList: React.FC<EmailListProps> = ({
     }
   };
 
+  // Rows whose star click is in flight: a second click before the first
+  // settles would race its rollback.
+  const [starBusy, setStarBusy] = useState<Set<number>>(() => new Set());
+  const toggleStar = async (id: number) => {
+    if (!onToggleStar || starBusy.has(id)) return;
+    setStarBusy((prev) => new Set(prev).add(id));
+    try {
+      await onToggleStar(id);
+    } catch (err) {
+      setRowError(err instanceof Error ? err.message : "Failed to star email");
+    } finally {
+      setStarBusy((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+  const star = (email: EmailItem, className: string) => {
+    const starred = isStarred(email);
+    return (
+      <button
+        type="button"
+        className={`${className}${starred ? " is-starred" : ""}`}
+        aria-label={starred ? "Starred" : "Not starred"}
+        aria-pressed={starred}
+        data-tooltip={starred ? "Starred" : "Not starred"}
+        onClick={(event) => {
+          // A star click must not open the email.
+          event.stopPropagation();
+          void toggleStar(email.id);
+        }}
+      >
+        <StarIcon size={16} fill={starred ? "currentColor" : "none"} />
+      </button>
+    );
+  };
+
   // Trash rows offer Restore instead of Delete: deleting them again would do
   // nothing, and there is no permanent delete (see routes/email.rs).
   const inTrash = activeFolder === "trash";
@@ -216,8 +264,7 @@ export const EmailList: React.FC<EmailListProps> = ({
   const someChecked = checkedIds.size > 0 && !allChecked;
 
   // Gmail-style select dropdown (checkbox + caret): pick a subset of the
-  // currently-visible rows. `Starred`/`Unstarred` are omitted — emails aren't
-  // starrable in this app.
+  // currently-visible rows.
   const [selectMenuOpen, setSelectMenuOpen] = useState(false);
   const selectMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -411,6 +458,26 @@ export const EmailList: React.FC<EmailListProps> = ({
                 >
                   Unread
                 </button>
+                {onToggleStar && (
+                  <>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="email-select-item"
+                      onClick={() => selectBy((e) => isStarred(e))}
+                    >
+                      Starred
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="email-select-item"
+                      onClick={() => selectBy((e) => !isStarred(e))}
+                    >
+                      Unstarred
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -577,6 +644,16 @@ export const EmailList: React.FC<EmailListProps> = ({
                     </span>
                   </span>
                 )}
+                {/* Its own grid track in list view, after the checkbox, as in
+                    Gmail. The slot stays when there is no star, so the
+                    columns after it still line up. */}
+                {isListView ? (
+                  <span className="email-row-star-slot">
+                    {onToggleStar && star(email, "email-row-star")}
+                  </span>
+                ) : (
+                  onToggleStar && star(email, "email-row-star")
+                )}
                 {/* A direct child of .email-top, not of .email-primary, so it
                     can occupy a grid track of its own and line up with the
                     senders above and below it. */}
@@ -734,6 +811,7 @@ export const EmailList: React.FC<EmailListProps> = ({
                 <span className="mobile-email-time">
                   {formatMobileTime(email.created_at)}
                 </span>
+                {onToggleStar && star(email, "mobile-email-star")}
               </div>
             </div>
           ))}

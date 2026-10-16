@@ -54,6 +54,7 @@ export {
   Smile as EmojiIcon,
   Trash2 as TrashIcon,
   ArchiveRestore as RestoreIcon,
+  Star as StarIcon,
   List as ListViewIcon,
   LayoutGrid as GridViewIcon,
   Save as SaveIcon,

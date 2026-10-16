@@ -51,6 +51,8 @@
   --color-success-soft: #dcfce7;
   --color-success-border: #bbf7d0;
   --color-warning: #92400e;
+  /* A starred email's star: Gmail's yellow. */
+  --color-star: #f4b400;
   --color-warning-soft: #fef3c7;
 
   /* Extended slate scale for elements that need a step between
@@ -511,6 +513,7 @@
   --color-success-soft: rgba(16, 185, 129, 0.12);
   --color-success-border: rgba(16, 185, 129, 0.3);
   --color-warning: #fcd34d;
+  --color-star: #fbbc04;
   --color-warning-soft: rgba(234, 179, 8, 0.14);
 
   /* Slate scale — keeps the same conceptual order (light→soft) but tuned

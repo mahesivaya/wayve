@@ -7,8 +7,8 @@ mod tests {
 
     use crate::email::outlook::OutlookCredentials;
     use crate::email::provider::{
-        GoogleMailClient, GoogleOAuthClient, MailProviderClient, MailRead, MailSender, MailSync,
-        MailTrash, OutlookMailClient, RefreshedEmailToken, TokenRefresher, TrashMoved,
+        GoogleMailClient, GoogleOAuthClient, MailProviderClient, MailRead, MailSender, MailStar,
+        MailSync, MailTrash, OutlookMailClient, RefreshedEmailToken, TokenRefresher, TrashMoved,
     };
     use crate::models::email_request::SendEmailRequest;
 
@@ -36,6 +36,7 @@ mod tests {
     fn takes_sync(_s: &dyn MailSync) {}
     fn takes_read(_s: &dyn MailRead) {}
     fn takes_trash(_s: &dyn MailTrash) {}
+    fn takes_star(_s: &dyn MailStar) {}
 
     #[test]
     fn isp_send_only_stub_is_a_mail_sender() {
@@ -59,6 +60,7 @@ mod tests {
         takes_sender(&g);
         takes_read(&g);
         takes_trash(&g);
+        takes_star(&g);
     }
 
     #[test]
@@ -75,6 +77,7 @@ mod tests {
         takes_sender(&o);
         takes_read(&o);
         takes_trash(&o);
+        takes_star(&o);
     }
 
     // `Arc<dyn MailProviderClient>` must stay callable through each narrow trait
@@ -165,6 +168,18 @@ mod tests {
                 _provider_message_id: &str,
             ) -> Result<TrashMoved> {
                 Ok(TrashMoved::default())
+            }
+        }
+
+        #[async_trait]
+        impl MailStar for FullStub {
+            async fn set_starred(
+                &self,
+                _access_token: &str,
+                _provider_message_id: &str,
+                _starred: bool,
+            ) -> Result<()> {
+                Ok(())
             }
         }
 

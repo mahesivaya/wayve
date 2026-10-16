@@ -26,6 +26,10 @@ export interface EmailItem {
   created_at: string;
   has_attachments?: boolean;
   is_read?: boolean;
+  // Starred, as in Gmail. A conversation row is starred while any of its
+  // messages is; `starred_ids` names them, so unstarring clears every one.
+  is_starred?: boolean;
+  starred_ids?: number[];
   attachments_checked?: boolean;
   attachments?: EmailAttachment[];
   zoom_join_url?: string | null;
@@ -70,6 +74,8 @@ export type EmailFolder =
   | "inbox"
   | "sent"
   | "important"
+  // Starred mail (the STARRED label: Gmail's star, Outlook's flag).
+  | "starred"
   | "updates"
   | "spam"
   | "drafts"

@@ -269,6 +269,8 @@ pub async fn get_emails(
                 "unread_count": row.unread_count,
                 "message_ids": row.message_ids,
                 "unread_ids": row.unread_ids,
+                "is_starred": row.is_starred,
+                "starred_ids": row.starred_ids,
                 "participants": row.participants,
             })
         })
@@ -332,40 +334,10 @@ async fn move_email(
     direction: TrashDirection,
 ) -> AppResult {
     let user_id = get_user_id_from_request(req).ok_or(AppError::Unauthorized)?;
-
-    // LEFT JOIN so account-less Fluxze-native rows still match; they are
-    // authorized instead via the source/recipient clause, as in repo::get_detail.
-    let row = match sqlx::query(
-        r#"
-        SELECT e.gmail_id, e.source, e.account_id, a.refresh_token, a.provider,
-               e.subject, e.sender, e.receiver
-        FROM emails e
-        LEFT JOIN email_accounts a ON e.account_id = a.id
-        WHERE e.id = $1
-          AND (a.user_id = $2
-               OR (e.source = 'wayve' AND e.recipient_user_id = $2))
-        "#,
-    )
-    .bind(email_id)
-    .bind(user_id)
-    .fetch_optional(pool)
-    .await?
-    {
-        Some(row) => row,
-        None => {
-            return Ok(HttpResponse::NotFound().json(serde_json::json!({
-                "error": "Email not found"
-            })));
-        }
+    let email = match load_owned_email(pool, user_id, email_id, direction.verb()).await? {
+        Ok(email) => email,
+        Err(response) => return Ok(response),
     };
-
-    let provider = row
-        .try_get::<Option<String>, _>("provider")
-        .ok()
-        .flatten()
-        .map(|value| MailProvider::from_db(&value));
-    let source: Option<String> = row.try_get("source").ok().flatten();
-    let account_id: Option<i32> = row.try_get("account_id").ok().flatten();
 
     let mut moved = TrashMoved {
         new_id: None,
@@ -373,47 +345,25 @@ async fn move_email(
         // wherever it was, the inbox included.
         in_inbox: false,
     };
-    // Fluxze-to-Fluxze mail has no provider copy: its synthetic gmail_id is not
-    // a real Gmail or Graph id. IMAP is Fluxze-only for now (see above).
-    if let (Some(account_id), Some(provider)) = (account_id, provider)
-        && source.as_deref() != Some("wayve")
-        && provider != MailProvider::Imap
-    {
-        let gmail_id: String = row.get("gmail_id");
-        let refresh_token: Option<String> = row.get("refresh_token");
-        let Some(refresh_token) = refresh_token
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        else {
-            // 409, not 401: the user's session is fine, only the mailbox needs
-            // reconnecting. The client treats any 401 as an expired session and
-            // logs the user out, as for the body fetch (email/body_handlers.rs).
-            return Ok(HttpResponse::Conflict().json(serde_json::json!({
-                "error": format!("Reconnect your email account to {} this email", direction.verb())
-            })));
-        };
-
-        let token = match refresh_and_persist_email_token(pool, account_id, provider, refresh_token)
-            .await
-        {
-            Ok(token) => token.access_token,
-            Err(e) => {
-                error!(target: "gmail", user_id, account_id, provider = provider.as_db(), ?direction, error = ?e, "trash move token refresh failed");
-                return Ok(HttpResponse::BadGateway().json(serde_json::json!({
-                    "error": "Failed to refresh email account credentials"
-                })));
-            }
-        };
-
+    if let Some(remote) = &email.remote {
         let result = match direction {
-            TrashDirection::Trash => provider.trash(&token, &gmail_id).await,
-            TrashDirection::Restore => provider.restore(&token, &gmail_id).await,
+            TrashDirection::Trash => {
+                remote
+                    .provider
+                    .trash(&remote.token, &remote.message_id)
+                    .await
+            }
+            TrashDirection::Restore => {
+                remote
+                    .provider
+                    .restore(&remote.token, &remote.message_id)
+                    .await
+            }
         };
         moved = match result {
             Ok(moved) => moved,
             Err(e) => {
-                error!(target: "gmail", user_id, account_id, provider = provider.as_db(), email_id, ?direction, error = ?e, "provider trash move failed");
+                error!(target: "gmail", user_id, provider = remote.provider.as_db(), email_id, ?direction, error = ?e, "provider trash move failed");
                 return Ok(HttpResponse::BadGateway().json(serde_json::json!({
                     "error": format!("Email provider rejected the {} request", direction.verb())
                 })));
@@ -423,6 +373,7 @@ async fn move_email(
 
     repo::set_trashed(pool, email_id, direction == TrashDirection::Trash, &moved).await?;
 
+    let row = &email.row;
     crate::audit::record_action(
         pool,
         req,
@@ -442,7 +393,7 @@ async fn move_email(
                 "from": row.try_get::<Option<String>, _>("sender").ok().flatten(),
                 "to": row.try_get::<Option<String>, _>("receiver").ok().flatten(),
                 "subject": row.try_get::<Option<String>, _>("subject").ok().flatten(),
-                "provider": provider.map(MailProvider::as_db),
+                "provider": email.provider.map(MailProvider::as_db),
             })),
         },
     )
@@ -451,6 +402,171 @@ async fn move_email(
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "trashed": direction == TrashDirection::Trash
     })))
+}
+
+#[actix_web::post("/emails/{id}/star")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn star_email(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<EmailDeletePath>,
+) -> AppResult {
+    set_star(&req, pool.get_ref(), path.id, true).await
+}
+
+#[actix_web::post("/emails/{id}/unstar")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn unstar_email(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<EmailDeletePath>,
+) -> AppResult {
+    set_star(&req, pool.get_ref(), path.id, false).await
+}
+
+/// Stars or unstars one message, as in Gmail: the STARRED label here and at the
+/// provider (Gmail's label, Outlook's flag). Waits for the provider, so a
+/// failure reaches the client, which puts the star back. Fluxze-to-Fluxze and
+/// IMAP stars are kept in Fluxze only (see `load_owned_email`).
+async fn set_star(req: &HttpRequest, pool: &PgPool, email_id: i32, starred: bool) -> AppResult {
+    let user_id = get_user_id_from_request(req).ok_or(AppError::Unauthorized)?;
+    let verb = if starred { "star" } else { "unstar" };
+    let email = match load_owned_email(pool, user_id, email_id, verb).await? {
+        Ok(email) => email,
+        Err(response) => return Ok(response),
+    };
+
+    if let Some(remote) = &email.remote
+        && let Err(e) = remote
+            .provider
+            .set_starred(&remote.token, &remote.message_id, starred)
+            .await
+    {
+        error!(target: "gmail", user_id, provider = remote.provider.as_db(), email_id, starred, error = ?e, "provider star failed");
+        return Ok(HttpResponse::BadGateway().json(serde_json::json!({
+            "error": format!("Email provider rejected the {verb} request")
+        })));
+    }
+
+    repo::set_starred(pool, email_id, starred).await?;
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "is_starred": starred })))
+}
+
+/// An email the caller may change (trash, restore, star).
+struct OwnedEmail {
+    /// subject / sender / receiver, for the audit record.
+    row: sqlx::postgres::PgRow,
+    provider: Option<MailProvider>,
+    /// The provider copy to change too. None for Fluxze-to-Fluxze mail, whose
+    /// synthetic gmail_id is not a real Gmail or Graph id, and for IMAP, which
+    /// is changed in Fluxze only for now.
+    remote: Option<RemoteEmail>,
+}
+
+struct RemoteEmail {
+    provider: MailProvider,
+    message_id: String,
+    token: String,
+}
+
+/// Loads an email the caller owns and, when it has a provider copy, a fresh
+/// access token for it. The inner `Err` is a response to return as is: 404 for
+/// mail that isn't theirs, 409 when the mailbox needs reconnecting, 502 when
+/// the token refresh fails. `verb` completes "Reconnect your email account to
+/// … this email".
+async fn load_owned_email(
+    pool: &PgPool,
+    user_id: i32,
+    email_id: i32,
+    verb: &str,
+) -> Result<Result<OwnedEmail, HttpResponse>, AppError> {
+    // LEFT JOIN so account-less Fluxze-native rows still match; they are
+    // authorized instead via the source/recipient clause, as in repo::get_detail.
+    let Some(row) = sqlx::query(
+        r#"
+        SELECT e.gmail_id, e.source, e.account_id, a.refresh_token, a.provider,
+               e.subject, e.sender, e.receiver
+        FROM emails e
+        LEFT JOIN email_accounts a ON e.account_id = a.id
+        WHERE e.id = $1
+          AND (a.user_id = $2
+               OR (e.source = 'wayve' AND e.recipient_user_id = $2))
+        "#,
+    )
+    .bind(email_id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await?
+    else {
+        return Ok(Err(HttpResponse::NotFound().json(serde_json::json!({
+            "error": "Email not found"
+        }))));
+    };
+
+    let provider = row
+        .try_get::<Option<String>, _>("provider")
+        .ok()
+        .flatten()
+        .map(|value| MailProvider::from_db(&value));
+    let source: Option<String> = row.try_get("source").ok().flatten();
+    let account_id: Option<i32> = row.try_get("account_id").ok().flatten();
+
+    let (Some(account_id), Some(remote_provider)) = (account_id, provider) else {
+        return Ok(Ok(OwnedEmail {
+            row,
+            provider,
+            remote: None,
+        }));
+    };
+    if source.as_deref() == Some("wayve") || remote_provider == MailProvider::Imap {
+        return Ok(Ok(OwnedEmail {
+            row,
+            provider,
+            remote: None,
+        }));
+    }
+
+    let message_id: String = row.get("gmail_id");
+    let refresh_token: Option<String> = row.get("refresh_token");
+    let Some(refresh_token) = refresh_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        // 409, not 401: the user's session is fine, only the mailbox needs
+        // reconnecting. The client treats any 401 as an expired session and
+        // logs the user out, as for the body fetch (email/body_handlers.rs).
+        return Ok(Err(HttpResponse::Conflict().json(serde_json::json!({
+            "error": format!("Reconnect your email account to {verb} this email")
+        }))));
+    };
+
+    let token = match refresh_and_persist_email_token(
+        pool,
+        account_id,
+        remote_provider,
+        refresh_token,
+    )
+    .await
+    {
+        Ok(token) => token.access_token,
+        Err(e) => {
+            error!(target: "gmail", user_id, account_id, provider = remote_provider.as_db(), verb, error = ?e, "email token refresh failed");
+            return Ok(Err(HttpResponse::BadGateway().json(serde_json::json!({
+                "error": "Failed to refresh email account credentials"
+            }))));
+        }
+    };
+
+    Ok(Ok(OwnedEmail {
+        row,
+        provider,
+        remote: Some(RemoteEmail {
+            provider: remote_provider,
+            message_id,
+            token,
+        }),
+    }))
 }
 
 #[get("/emails/attachments")]
@@ -1079,6 +1195,7 @@ pub async fn get_email_thread(
                 "has_attachments": row.has_attachments,
                 "account_id": row.account_id,
                 "is_read": row.is_read,
+                "is_starred": row.is_starred,
                 "created_at": created_at,
                 "is_shared": row.is_shared,
                 "shared_label": row.shared_label,

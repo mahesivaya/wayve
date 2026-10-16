@@ -4,7 +4,7 @@
 //!
 //! Adding a provider means a `MailProvider` variant with its
 //! `from_db`/`as_db`/`display_name` arms, a `<Provider>MailClient` implementing
-//! all six traits, and one arm in `mail_provider_client`. Handlers call through
+//! all seven traits, and one arm in `mail_provider_client`. Handlers call through
 //! the enum shims at the bottom of this file and need no edits.
 
 use crate::email::account::invalidate_email_account_cache;
@@ -130,9 +130,20 @@ pub trait MailTrash: Send + Sync {
     async fn restore(&self, access_token: &str, provider_message_id: &str) -> Result<TrashMoved>;
 }
 
+/// The star, as Gmail has it: the STARRED label (Outlook: the message flag).
+#[async_trait]
+pub trait MailStar: Send + Sync {
+    async fn set_starred(
+        &self,
+        access_token: &str,
+        provider_message_id: &str,
+        starred: bool,
+    ) -> Result<()>;
+}
+
 /// Umbrella trait the registry returns.
 pub trait MailProviderClient:
-    TokenRefresher + MailSync + MailSender + MailRead + MailTrash
+    TokenRefresher + MailSync + MailSender + MailRead + MailTrash + MailStar
 {
     /// Exposed so callers can branch or log on the underlying provider, for
     /// metrics or a per-provider retry policy. Nothing reads it yet.
@@ -340,6 +351,24 @@ impl MailTrash for GoogleMailClient {
     }
 }
 
+#[async_trait]
+impl MailStar for GoogleMailClient {
+    async fn set_starred(
+        &self,
+        access_token: &str,
+        provider_message_id: &str,
+        starred: bool,
+    ) -> Result<()> {
+        let change = if starred {
+            serde_json::json!({ "addLabelIds": ["STARRED"] })
+        } else {
+            serde_json::json!({ "removeLabelIds": ["STARRED"] })
+        };
+        gmail_message_post(access_token, provider_message_id, "modify", change).await?;
+        Ok(())
+    }
+}
+
 impl MailProviderClient for GoogleMailClient {
     fn provider(&self) -> MailProvider {
         MailProvider::Google
@@ -504,6 +533,39 @@ impl MailTrash for OutlookMailClient {
     }
 }
 
+#[async_trait]
+impl MailStar for OutlookMailClient {
+    /// Outlook has no star; its follow-up flag is the equivalent, and is what
+    /// sync reads back as STARRED (see outlook::parse_message).
+    async fn set_starred(
+        &self,
+        access_token: &str,
+        provider_message_id: &str,
+        starred: bool,
+    ) -> Result<()> {
+        let mut url = reqwest::Url::parse(&format!(
+            "{}/v1.0/me/messages",
+            crate::external::microsoft_graph_base()
+        ))?;
+        url.path_segments_mut()
+            .map_err(|_| anyhow::anyhow!("Graph base must be a base URL"))?
+            .push(provider_message_id);
+        let status = if starred { "flagged" } else { "notFlagged" };
+        let resp = HTTP_CLIENT
+            .patch(url)
+            .bearer_auth(access_token)
+            .json(&serde_json::json!({ "flag": { "flagStatus": status } }))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            let code = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Outlook flag {status} failed: {code} {body}");
+        }
+        Ok(())
+    }
+}
+
 impl MailProviderClient for OutlookMailClient {
     fn provider(&self) -> MailProvider {
         MailProvider::Microsoft
@@ -654,6 +716,20 @@ impl MailTrash for ImapMailClient {
     }
 }
 
+#[async_trait]
+impl MailStar for ImapMailClient {
+    // No-op: IMAP stars are kept in Fluxze only for now (setting \Flagged on
+    // the server is not built); sync keeps the label (see repo::upsert_one).
+    async fn set_starred(
+        &self,
+        _access_token: &str,
+        _provider_message_id: &str,
+        _starred: bool,
+    ) -> Result<()> {
+        Ok(())
+    }
+}
+
 impl MailProviderClient for ImapMailClient {
     fn provider(&self) -> MailProvider {
         MailProvider::Imap
@@ -725,6 +801,17 @@ impl MailProvider {
     pub async fn trash(self, access_token: &str, provider_message_id: &str) -> Result<TrashMoved> {
         require_client(self)?
             .trash(access_token, provider_message_id)
+            .await
+    }
+
+    pub async fn set_starred(
+        self,
+        access_token: &str,
+        provider_message_id: &str,
+        starred: bool,
+    ) -> Result<()> {
+        require_client(self)?
+            .set_starred(access_token, provider_message_id, starred)
             .await
     }
 
