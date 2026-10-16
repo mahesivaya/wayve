@@ -722,6 +722,18 @@ ALTER TABLE emails ADD COLUMN IF NOT EXISTS thread_id INTEGER
     REFERENCES email_threads(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_emails_thread ON emails(thread_id);
 
+-- Snooze: hide a message from the active views until `snoozed_until` passes.
+-- Deliberately a timestamp rather than a flag plus a job: every folder query
+-- compares it against NOW(), so mail resurfaces on its own and there is no
+-- worker that can fall behind or double-fire. NULL means "never snoozed",
+-- which is why the folder predicates test IS NULL as well.
+ALTER TABLE emails ADD COLUMN IF NOT EXISTS snoozed_until TIMESTAMP;
+-- Partial: only snoozed rows are ever looked up by this, and they are a tiny
+-- minority, so the index stays small even on a large mailbox.
+CREATE INDEX IF NOT EXISTS idx_emails_snoozed
+    ON emails(account_id, snoozed_until)
+    WHERE snoozed_until IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS email_thread_meta (
     email_id INTEGER PRIMARY KEY REFERENCES emails(id) ON DELETE CASCADE,
     account_id INTEGER NOT NULL REFERENCES email_accounts(id) ON DELETE CASCADE,

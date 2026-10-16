@@ -1087,6 +1087,19 @@
   display: inline-flex;
 }
 
+/* The snooze menu is portalled out of the row, so pointing at it drops the
+   row's :hover and the actions would vanish underneath it. The row that owns
+   the open menu keeps them shown. */
+.email-row-actions--pinned {
+  display: inline-flex;
+}
+
+/* ...and the timestamp it replaces has to stay hidden while that is true,
+   otherwise both render and the row shows two right-hand clusters. */
+.email-item:has(.email-row-actions--pinned) .email-row-meta {
+  display: none;
+}
+
 .email-row-action {
   display: inline-flex;
   align-items: center;
@@ -1104,6 +1117,49 @@
 .email-row-action:hover {
   color: var(--color-primary);
   background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+}
+
+/* Delete reads as destructive only on hover: tinting it red at rest would make
+   every row in the list look like a warning. */
+.email-row-action--danger:hover {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 16%, transparent);
+}
+
+/* The snooze menu is rendered into <body> through a portal and positioned with
+   viewport coordinates taken from its button (see EmailList.tsx). It cannot be
+   a child of the row: every `.email-item` sets `overflow: hidden` for the
+   single-line truncation, which clips an absolutely-positioned descendant
+   regardless of z-index. `fixed` also keeps it clear of the list's own
+   stacking context. */
+.email-snooze-menu {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-surface);
+  box-shadow: 0 8px 20px rgb(15, 23, 42, 0.16);
+}
+
+.email-snooze-item {
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm, 5px);
+  font: inherit;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.email-snooze-item:hover {
+  background: var(--color-surface-hover);
 }
 
 /* Tooltips are provided globally (see the `[data-tooltip]` utility in

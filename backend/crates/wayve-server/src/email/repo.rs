@@ -288,6 +288,18 @@ fn push_folder(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFil
     // previously the sender match swallowed all of it into Reviews.
     const GITHUB_PR_MATCH: &str = "'WAYVE_GITHUB_PR' = ANY(e.labels)";
 
+    // Snoozed mail is hidden from the active views until its time passes.
+    // Comparing against NOW() per query is what makes snooze self-healing:
+    // nothing has to run to bring a message back, so there is no worker to
+    // fall behind, double-fire, or lose mail if it dies. NULL means "never
+    // snoozed", hence the IS NULL arm.
+    //
+    // Only the *active* folders apply this. Sent/Trash/Spam/Drafts are not
+    // places you snooze from, and "all" deliberately still shows snoozed mail
+    // so search can always find it — a snoozed message must never be
+    // unreachable, only out of the way.
+    const NOT_SNOOZED: &str = "(e.snoozed_until IS NULL OR e.snoozed_until <= NOW())";
+
     if let Some(folder) = filters.folder.as_deref() {
         match folder {
             // Wayve-source rows have a NULL account_id, so the legacy
@@ -319,6 +331,7 @@ fn push_folder(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFil
                 );
                 // PR/review mail belongs to Reviews, not the inbox.
                 qb.push(format!(" AND NOT {GITHUB_PR_MATCH} "));
+                qb.push(format!(" AND {NOT_SNOOZED} "));
             }
             "sent" => {
                 qb.push(
@@ -353,6 +366,12 @@ fn push_folder(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFil
             // pull-request notifications — see GITHUB_PR_MATCH above.
             "github" => {
                 qb.push(format!(" AND {GITHUB_PR_MATCH} "));
+                qb.push(format!(" AND {NOT_SNOOZED} "));
+            }
+            // The one view that shows snoozed mail, so a snooze is always
+            // visible and reversible rather than a message vanishing.
+            "snoozed" => {
+                qb.push(" AND e.snoozed_until > NOW() ");
             }
             // Everything except spam, drafts and trash, like Gmail's All Mail:
             // what a search covers, so archived and filter-skipped mail, which
@@ -381,6 +400,7 @@ fn push_folder(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFil
                 );
                 // PR/review mail belongs to Reviews, not Signal.
                 qb.push(format!(" AND NOT {GITHUB_PR_MATCH} "));
+                qb.push(format!(" AND {NOT_SNOOZED} "));
             }
             "noise" => {
                 // A sender the user marked as Noise ALWAYS lands here — even if
@@ -404,6 +424,7 @@ fn push_folder(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFil
                 );
                 // PR/review mail belongs to Reviews, not Noise.
                 qb.push(format!(" AND NOT {GITHUB_PR_MATCH} "));
+                qb.push(format!(" AND {NOT_SNOOZED} "));
             }
             _ => {}
         }

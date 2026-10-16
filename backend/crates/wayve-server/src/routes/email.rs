@@ -890,6 +890,92 @@ fn extract_sender_address(sender: &str) -> Option<String> {
         })
 }
 
+#[derive(Deserialize)]
+pub struct SnoozeInput {
+    /// When the message should return to the inbox. `None` un-snoozes it,
+    /// which is how the Snoozed folder's "Unsnooze" works — one endpoint
+    /// rather than a second route that only clears the column.
+    pub until: Option<chrono::NaiveDateTime>,
+}
+
+/// Snooze email {id} until `until`, or un-snooze it when that is null.
+///
+/// Only `emails.snoozed_until` moves: the folder queries in email/repo.rs
+/// compare it against NOW(), so the message leaves and re-enters the active
+/// views on its own. Nothing is scheduled and no provider state changes —
+/// snooze is private to Wayve and never touches Gmail.
+#[actix_web::post("/emails/{id}/snooze")]
+#[instrument(target = "http", skip(req, pool, path, body))]
+pub async fn snooze_email(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<EmailDeletePath>,
+    body: web::Json<SnoozeInput>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let email_id = path.id;
+
+    // A snooze in the past would be invisible — it is already elapsed, so the
+    // message never leaves the inbox and the user is told nothing happened.
+    // Reject it rather than silently writing a no-op.
+    if let Some(until) = body.until
+        && until <= chrono::Utc::now().naive_utc()
+    {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "Snooze time must be in the future" })));
+    }
+
+    // Same ownership gate as delete_email: LEFT JOIN so account-less
+    // Fluxze-native rows still match, authorized via source/recipient instead.
+    let updated = sqlx::query(
+        r#"
+        UPDATE emails AS e
+           SET snoozed_until = $3
+          FROM (SELECT e2.id
+                  FROM emails e2
+                  LEFT JOIN email_accounts a ON e2.account_id = a.id
+                 WHERE e2.id = $1
+                   AND (a.user_id = $2
+                        OR (e2.source = 'wayve' AND e2.recipient_user_id = $2))) AS owned
+         WHERE e.id = owned.id
+        RETURNING e.id
+        "#,
+    )
+    .bind(email_id)
+    .bind(user_id)
+    .bind(body.until)
+    .fetch_optional(pool.get_ref())
+    .await?;
+
+    if updated.is_none() {
+        return Ok(
+            HttpResponse::NotFound().json(serde_json::json!({ "message": "Email not found" }))
+        );
+    }
+
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: if body.until.is_some() {
+                "email_snoozed"
+            } else {
+                "email_unsnoozed"
+            },
+            resource_type: "email",
+            resource_id: Some(email_id.to_string()),
+            metadata: Some(serde_json::json!({ "until": body.until })),
+        },
+    )
+    .await;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "id": email_id,
+        "snoozed_until": body.until,
+    })))
+}
+
 // Mark the sender of email {id} as "noise": all of that address's mail (current
 // and future) then routes into the Noise folder and out of the inbox — the
 // filtering lives in email/repo.rs, so no rows are rewritten here.

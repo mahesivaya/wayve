@@ -19,6 +19,7 @@ mod email_label_history_test;
 mod email_native_read_test;
 mod email_provider_isp_test;
 mod email_reply_headers_test;
+mod email_snooze_test;
 mod email_threading_test;
 mod embed_tokens_test;
 mod gitlab_test;

@@ -10,6 +10,7 @@ import {
   deleteEmail as deleteEmailRequest,
   markEmailRead,
   markEmailUnread,
+  snoozeEmail,
   markEmailSenderNoise,
 } from "../api/email";
 import { logger } from "../utils/logger";
@@ -580,6 +581,21 @@ export function useEmailInbox(
     }
   };
 
+  // Snooze/unsnooze. The row is dropped from the current list optimistically:
+  // snoozing removes it from an active folder, and unsnoozing removes it from
+  // the Snoozed folder — either way it no longer belongs where it is shown. A
+  // failed POST leaves it missing until the next refresh pulls it back, the
+  // same trade-off `bulkDelete` already makes.
+  const snooze = async (id: number, until: Date | null) => {
+    setEmails((prev) => prev.filter((email) => email.id !== id));
+    delete emailCache.current[id];
+    try {
+      await snoozeEmail(id, until);
+    } catch (err) {
+      logger.warn("snooze failed", { id, until, err });
+    }
+  };
+
   // Optimistic removal, then parallel deletes. A failed delete leaves the row
   // gone from the UI until the next refresh pulls it back, which is acceptable
   // here because the user can simply re-delete.
@@ -639,5 +655,6 @@ export function useEmailInbox(
     bulkDelete,
     markRead,
     markUnread,
+    snooze,
   };
 }

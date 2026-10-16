@@ -53,6 +53,7 @@ export {
   Paperclip as AttachmentIcon,
   Smile as EmojiIcon,
   Trash2 as TrashIcon,
+  Clock as SnoozeIcon,
   List as ListViewIcon,
   LayoutGrid as GridViewIcon,
   Save as SaveIcon,

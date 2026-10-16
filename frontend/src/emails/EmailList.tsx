@@ -1,12 +1,48 @@
 import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { EmailFolder, EmailItem, STUB_EMAIL_FOLDERS } from "./types";
 import { FolderChips } from "./FolderChips";
-import { AttachmentIcon, EmailsIcon, MailOpenIcon, TrashIcon } from "../icons";
+import {
+  AttachmentIcon,
+  EmailsIcon,
+  MailOpenIcon,
+  SnoozeIcon,
+  TrashIcon,
+} from "../icons";
 import { useGlobalSearch } from "../search/SearchContext";
 import { useListScrollMemory } from "./useListScrollMemory";
 import { fmtListTimestamp } from "../utils/datetime";
 import { conversationSenders, isConversation, isUnread } from "./conversation";
 import { listFolder } from "./searchScope";
+
+// Snooze durations, resolved at click time rather than render time so a list
+// left open overnight still schedules from "now", not from when it mounted.
+const SNOOZE_PRESETS: ReadonlyArray<{ label: string; at: () => Date }> = [
+  {
+    label: "Later today",
+    at: () => new Date(Date.now() + 3 * 60 * 60 * 1000),
+  },
+  {
+    label: "Tomorrow",
+    at: () => {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      d.setHours(8, 0, 0, 0);
+      return d;
+    },
+  },
+  {
+    label: "Next week",
+    at: () => {
+      const d = new Date();
+      // Days until the next Monday; 7 rather than 0 when today is Monday, so
+      // "next week" is never "in a few minutes".
+      d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7));
+      d.setHours(8, 0, 0, 0);
+      return d;
+    },
+  },
+];
 
 interface EmailListProps {
   emails: EmailItem[];
@@ -27,6 +63,9 @@ interface EmailListProps {
   // Per-row hover actions: toggle a single email's read state.
   onMarkRead?: (id: number) => Promise<void> | void;
   onMarkUnread?: (id: number) => Promise<void> | void;
+  // Hide a message until the given time; `null` un-snoozes it. Omitted by
+  // embeddings that don't own a mailbox, which hides the control entirely.
+  onSnooze?: (id: number, until: Date | null) => Promise<void> | void;
   activeFolder?: EmailFolder;
   // `accountsLoaded` distinguishes "no accounts" from "not fetched yet", so the
   // connect-an-account empty state never flashes at users who do have mailboxes.
@@ -92,6 +131,7 @@ export const EmailList: React.FC<EmailListProps> = ({
   onBulkDelete,
   onMarkRead,
   onMarkUnread,
+  onSnooze,
   activeFolder,
   hasAccounts = true,
   accountsLoaded = true,
@@ -161,6 +201,55 @@ export const EmailList: React.FC<EmailListProps> = ({
   // starrable in this app.
   const [selectMenuOpen, setSelectMenuOpen] = useState(false);
   const selectMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // Row whose snooze menu is open, with the viewport coordinates to anchor it
+  // at. One piece of state rather than per-row, so opening a second menu closes
+  // the first.
+  //
+  // The menu renders in a portal on <body> rather than inside the row: every
+  // `.email-item` sets `overflow: hidden` (for the single-line truncation), and
+  // an absolutely-positioned child is clipped by that no matter its z-index.
+  // Fixed coordinates captured from the button are what let it escape.
+  const [snoozeFor, setSnoozeFor] = useState<{
+    id: number;
+    top: number;
+    right: number;
+    flip: boolean;
+  } | null>(null);
+
+  const openSnooze = (id: number, button: HTMLElement) => {
+    const r = button.getBoundingClientRect();
+    // Near the viewport bottom the menu would hang off-screen, so flip it above
+    // the button instead. 160px covers the three presets plus padding.
+    const flip = window.innerHeight - r.bottom < 160;
+    setSnoozeFor({
+      id,
+      top: flip ? r.top : r.bottom + 4,
+      right: window.innerWidth - r.right,
+      flip,
+    });
+  };
+  // The menu sits inside a row that navigates on click, so it has to close on
+  // any outside click and on Escape — otherwise it survives scrolling away.
+  useEffect(() => {
+    if (snoozeFor === null) return;
+    const close = (event: Event) => {
+      if (event instanceof KeyboardEvent && event.key !== "Escape") return;
+      setSnoozeFor(null);
+    };
+    // The menu is anchored to viewport coordinates, so any scroll or resize
+    // leaves it detached from its button — close rather than chase it.
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", close);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", close);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [snoozeFor]);
 
   const selectBy = (pred: (email: EmailItem) => boolean) => {
     setCheckedIds(new Set(visibleEmails.filter(pred).map((e) => e.id)));
@@ -547,11 +636,63 @@ export const EmailList: React.FC<EmailListProps> = ({
                     {fmtListTimestamp(email.created_at)}
                   </span>
                 </span>
-                {(onMarkRead || onMarkUnread) && (
+                {(onMarkRead || onMarkUnread || onBulkDelete || onSnooze) && (
                   <span
-                    className="email-row-actions"
+                    className={`email-row-actions${
+                      // The menu lives in a portal, so moving the pointer onto
+                      // it leaves the row and drops `:hover`. Pin the actions
+                      // open while this row owns the menu.
+                      snoozeFor?.id === email.id
+                        ? " email-row-actions--pinned"
+                        : ""
+                    }`}
                     onClick={(event) => event.stopPropagation()}
                   >
+                    {/* Delete and Snooze come first: they act on the message,
+                        while read/unread only re-labels it, and the destructive
+                        and defer actions are the ones reached for most. */}
+                    {onBulkDelete && (
+                      <button
+                        type="button"
+                        className="email-row-action email-row-action--danger"
+                        data-tooltip="Delete"
+                        data-tooltip-align="right"
+                        aria-label="Delete"
+                        onClick={() => void onBulkDelete([email.id])}
+                      >
+                        <TrashIcon size={16} />
+                      </button>
+                    )}
+                    {onSnooze &&
+                      (activeFolder === "snoozed" ? (
+                        <button
+                          type="button"
+                          className="email-row-action"
+                          data-tooltip="Unsnooze"
+                          data-tooltip-align="right"
+                          aria-label="Unsnooze"
+                          onClick={() => void onSnooze(email.id, null)}
+                        >
+                          <SnoozeIcon size={16} />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="email-row-action"
+                          data-tooltip="Snooze"
+                          data-tooltip-align="right"
+                          aria-label="Snooze"
+                          aria-haspopup="menu"
+                          aria-expanded={snoozeFor?.id === email.id}
+                          onClick={(event) =>
+                            snoozeFor?.id === email.id
+                              ? setSnoozeFor(null)
+                              : openSnooze(email.id, event.currentTarget)
+                          }
+                        >
+                          <SnoozeIcon size={16} />
+                        </button>
+                      ))}
                     {isUnread(email)
                       ? onMarkRead && (
                           <button
@@ -656,6 +797,39 @@ export const EmailList: React.FC<EmailListProps> = ({
           <span className="load-more-status is-end">No more emails.</span>
         </div>
       )}
+      {/* Portalled to <body> so the row's `overflow: hidden` can't clip it.
+          Rendered once for whichever row is open, not per row. */}
+      {snoozeFor !== null &&
+        onSnooze &&
+        createPortal(
+          <div
+            className="email-snooze-menu"
+            role="menu"
+            style={{
+              top: snoozeFor.top,
+              right: snoozeFor.right,
+              transform: snoozeFor.flip ? "translateY(-100%)" : undefined,
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {SNOOZE_PRESETS.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                role="menuitem"
+                className="email-snooze-item"
+                onClick={() => {
+                  const id = snoozeFor.id;
+                  setSnoozeFor(null);
+                  void onSnooze(id, preset.at());
+                }}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>,
+          document.body
+        )}
     </div>
   );
 };

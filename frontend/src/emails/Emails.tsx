@@ -71,6 +71,7 @@ export default function Emails() {
     bulkDelete,
     markRead,
     markUnread,
+    snooze,
   } = useEmailInbox(user?.id, normalizedSearchQuery);
   // Your mailbox addresses: "me" among a conversation's senders, and who a
   // reply to your own message goes to.
@@ -726,6 +727,7 @@ export default function Emails() {
             onBulkDelete={bulkDelete}
             onMarkRead={markRead}
             onMarkUnread={markUnread}
+            onSnooze={snooze}
             activeFolder={activeFolder}
             hasAccounts={accounts.length > 0}
             accountsLoaded={accountsLoaded}

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { EmailAccount, EmailFolder } from "./types";
-import { DocsIcon, PullRequestIcon } from "../icons";
+import { DocsIcon, PullRequestIcon, SnoozeIcon } from "../icons";
 
 interface EmailSidebarProps {
   accounts: EmailAccount[];
@@ -271,6 +271,17 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
           >
             <span className="email-chip-label">
               <PullRequestIcon size={14} /> Reviews
+            </span>
+          </button>
+          {/* Virtual like Reviews: filtered on `emails.snoozed_until > NOW()`
+            rather than a label. The only view that shows snoozed mail, so a
+            snooze stays visible and can be undone before it elapses. */}
+          <button
+            className={`filter-btn ${activeFolder === "snoozed" && viewMode === "email" ? "active" : ""}`}
+            onClick={() => setActiveFolder("snoozed")}
+          >
+            <span className="email-chip-label">
+              <SnoozeIcon size={14} /> Snoozed
             </span>
           </button>
           {/* Category folders, all filtered on `emails.labels`. */}

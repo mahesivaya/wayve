@@ -78,6 +78,11 @@ export type EmailFolder =
   // Virtual folder matched by sender (`notifications@github.com`) on the
   // backend, not a Gmail label.
   | "github"
+  // Mail hidden from the active views until `emails.snoozed_until` passes.
+  // Virtual like `github`: the backend compares the column against NOW(), so
+  // a message leaves and returns on its own. This folder is the only place it
+  // stays visible meanwhile, which is what makes a snooze reversible.
+  | "snoozed"
   // Client-only inbox sub-views shown as chips beside "All" (= inbox). No
   // backend query yet: `useEmailInbox` short-circuits them to an empty list and
   // EmailList renders a "coming soon" placeholder.

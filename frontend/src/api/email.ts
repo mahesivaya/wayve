@@ -14,6 +14,7 @@ export type EmailFolder =
   | "social"
   | "trash"
   | "github"
+  | "snoozed"
   // Client-only inbox sub-views; callers short-circuit these to an empty list
   // and never send them here (see `useEmailInbox`).
   | "signal"
@@ -202,6 +203,31 @@ export const markEmailRead = async (emailId: number): Promise<void> => {
     window.dispatchEvent(new CustomEvent("rwayve:emails-unread-changed"));
   }
 };
+
+// Hides the email from the active views until `until` passes; `null` un-snoozes
+// it. The backend only writes `emails.snoozed_until` — the folder queries
+// compare it against NOW(), so nothing is scheduled and the message comes back
+// on its own. Send a naive local-time string: the column is a bare TIMESTAMP,
+// so an ISO string with a `Z` would be read as UTC and land at the wrong hour.
+export const snoozeEmail = async (
+  emailId: number,
+  until: Date | null
+): Promise<void> => {
+  await apiFetchJson(`/api/emails/${emailId}/snooze`, {
+    method: "POST",
+    body: JSON.stringify({ until: until ? toNaiveLocal(until) : null }),
+  });
+};
+
+// `2026-10-17T08:00:00` — local wall-clock with no zone, matching the backend's
+// NaiveDateTime. `toISOString()` would convert to UTC and shift the hour.
+function toNaiveLocal(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` +
+    `T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+  );
+}
 
 // Marks the email's sender as "noise": the backend routes all of that address's
 // mail (current + future) into Noise and out of the inbox. Returns the address
