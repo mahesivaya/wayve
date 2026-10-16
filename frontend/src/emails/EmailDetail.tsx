@@ -316,11 +316,9 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   const handleDelete = async () => {
     // The button carries disabled={deleting}; the keyboard path needs its own
     // guard so a second `D` can't fire a concurrent delete.
+    // No confirm: delete moves the conversation to Trash, and the page offers
+    // Undo (Emails.tsx).
     if (!selectedEmail || deleting) return;
-    const ok = window.confirm(
-      "Delete this email permanently from Fluxze and your mail provider?"
-    );
-    if (!ok) return;
 
     setDeleting(true);
     setDeleteError(null);

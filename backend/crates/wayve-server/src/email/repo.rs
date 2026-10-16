@@ -288,6 +288,12 @@ fn push_folder(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFil
     // previously the sender match swallowed all of it into Reviews.
     const GITHUB_PR_MATCH: &str = "'WAYVE_GITHUB_PR' = ANY(e.labels)";
 
+    // Deleted mail keeps its other labels (so a restore puts it back where it
+    // was), which would leave it listed under them: only Trash lists it.
+    if filters.folder.as_deref() != Some("trash") {
+        qb.push(" AND NOT ('TRASH' = ANY(e.labels)) ");
+    }
+
     if let Some(folder) = filters.folder.as_deref() {
         match folder {
             // Wayve-source rows have a NULL account_id, so the legacy
@@ -1059,6 +1065,36 @@ async fn stamp_last_message_at(pool: &PgPool, account_id: i32, results: &[Insert
     }
 }
 
+/// Labels an email as deleted (TRASH) or takes the label off again, keeping its
+/// other labels so a restore puts it back where it was. `moved` is what the
+/// provider reported: a new provider id is stored (a moved Outlook message gets
+/// one), and a restore the provider says landed in the inbox gets INBOX back
+/// (Gmail drops it from trashed mail, and sync may have mirrored that).
+pub async fn set_trashed(
+    pool: &PgPool,
+    email_id: i32,
+    trashed: bool,
+    moved: &crate::email::provider::TrashMoved,
+) -> sqlx::Result<()> {
+    sqlx::query(
+        "UPDATE emails SET \
+           labels = CASE \
+             WHEN $2 THEN array_append(array_remove(labels, 'TRASH'), 'TRASH') \
+             WHEN $3 THEN array_append(array_remove(array_remove(labels, 'TRASH'), 'INBOX'), 'INBOX') \
+             ELSE array_remove(labels, 'TRASH') \
+           END, \
+           gmail_id = COALESCE($4, gmail_id) \
+         WHERE id = $1",
+    )
+    .bind(email_id)
+    .bind(trashed)
+    .bind(moved.in_inbox)
+    .bind(moved.new_id.as_deref())
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Single-row upsert for the Outlook path, which supplies the body inline, sets
 /// `attachments_checked = true`, and needs only the id back to attach the
 /// attachments sub-resource.
@@ -1102,7 +1138,15 @@ pub async fn upsert_one(
           body_encrypted = EXCLUDED.body_encrypted,
           body_iv = EXCLUDED.body_iv,
           is_read = emails.is_read OR EXCLUDED.is_read,
-          labels = EXCLUDED.labels
+          -- IMAP mail is trashed in Fluxze only (the server copy stays in
+          -- INBOX), so its sync must not clear the TRASH label. Outlook's
+          -- labels come from the provider, which knows what is in Deleted Items.
+          labels = CASE
+            WHEN 'TRASH' = ANY(emails.labels)
+             AND (SELECT provider FROM email_accounts WHERE id = emails.account_id) = 'imap'
+            THEN array_append(array_remove(EXCLUDED.labels, 'TRASH'), 'TRASH')
+            ELSE EXCLUDED.labels
+          END
         RETURNING id, (xmax = 0) AS is_new, created_at
         "#,
     )

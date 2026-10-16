@@ -1,7 +1,6 @@
 use crate::cache::Cache;
-use crate::email::oauth::HTTP_CLIENT;
 use crate::email::outlook::{OutlookAttachmentRef, download_outlook_attachment};
-use crate::email::provider::{MailProvider, refresh_and_persist_email_token};
+use crate::email::provider::{MailProvider, TrashMoved, refresh_and_persist_email_token};
 use crate::email::repo::{self, EmailListFilters};
 use crate::email::sync_older::{OlderPage, sync_older_page};
 use crate::prelude::*;
@@ -281,6 +280,24 @@ pub async fn get_emails(
         .json(emails))
 }
 
+/// Which way `move_email` moves an email: into Trash, which is what Delete
+/// does, or back out of it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum TrashDirection {
+    Trash,
+    Restore,
+}
+
+impl TrashDirection {
+    /// For messages: "Reconnect your email account to delete this email".
+    fn verb(self) -> &'static str {
+        match self {
+            Self::Trash => "delete",
+            Self::Restore => "restore",
+        }
+    }
+}
+
 #[delete("/emails/{id}")]
 #[instrument(target = "http", skip(req, pool, path))]
 pub async fn delete_email(
@@ -288,9 +305,34 @@ pub async fn delete_email(
     pool: web::Data<PgPool>,
     path: web::Path<EmailDeletePath>,
 ) -> AppResult {
-    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    move_email(&req, pool.get_ref(), path.id, TrashDirection::Trash).await
+}
 
-    let email_id = path.id;
+#[actix_web::post("/emails/{id}/restore")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn restore_email(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<EmailDeletePath>,
+) -> AppResult {
+    move_email(&req, pool.get_ref(), path.id, TrashDirection::Restore).await
+}
+
+/// Delete moves an email to Trash instead of dropping it, so it can be restored.
+/// The provider's copy goes to the provider's trash (Gmail Trash, Outlook
+/// Deleted Items) and the stored row gets the TRASH label, which the Trash
+/// folder lists and every other folder hides (see repo::push_folder). Restore
+/// reverses both. Fluxze-to-Fluxze and IMAP mail are trashed in Fluxze only:
+/// the former has no provider copy, and moving IMAP mail on the server isn't
+/// built yet, so sync keeps the label instead (see repo::upsert_one).
+async fn move_email(
+    req: &HttpRequest,
+    pool: &PgPool,
+    email_id: i32,
+    direction: TrashDirection,
+) -> AppResult {
+    let user_id = get_user_id_from_request(req).ok_or(AppError::Unauthorized)?;
+
     // LEFT JOIN so account-less Fluxze-native rows still match; they are
     // authorized instead via the source/recipient clause, as in repo::get_detail.
     let row = match sqlx::query(
@@ -306,7 +348,7 @@ pub async fn delete_email(
     )
     .bind(email_id)
     .bind(user_id)
-    .fetch_optional(pool.get_ref())
+    .fetch_optional(pool)
     .await?
     {
         Some(row) => row,
@@ -317,144 +359,98 @@ pub async fn delete_email(
         }
     };
 
-    // Captured before the row is gone, for the audit record on each success path.
-    let del_subject: Option<String> = row.try_get("subject").ok().flatten();
-    let del_sender: Option<String> = row.try_get("sender").ok().flatten();
-    let del_receiver: Option<String> = row.try_get("receiver").ok().flatten();
-    let del_provider: Option<String> = row.try_get("provider").ok().flatten();
-    let delete_metadata = serde_json::json!({
-        "direction": "deleted",
-        "from": del_sender,
-        "to": del_receiver,
-        "subject": del_subject,
-        "provider": del_provider,
-    });
-
-    // Fluxze-native messages have no provider copy to delete: their synthetic
-    // gmail_id is not a real Gmail or Graph id. Only this user's local row is
-    // dropped, since each recipient and the sender's Sent copy is its own row.
-    let source: Option<String> = row.try_get("source").ok().flatten();
-    let account_id_opt: Option<i32> = row.try_get("account_id").ok().flatten();
-    if account_id_opt.is_none() || source.as_deref() == Some("wayve") {
-        sqlx::query("DELETE FROM emails WHERE id = $1")
-            .bind(email_id)
-            .execute(pool.get_ref())
-            .await?;
-        crate::audit::record_action(
-            pool.get_ref(),
-            &req,
-            crate::audit::AuditEvent {
-                actor_user_id: user_id,
-                action: "email_deleted",
-                resource_type: "email",
-                resource_id: Some(email_id.to_string()),
-                metadata: Some(delete_metadata),
-            },
-        )
-        .await;
-        return Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })));
-    }
-
-    let gmail_id: String = row.get("gmail_id");
-    let account_id: i32 = row.get("account_id");
     let provider = row
-        .try_get::<String, _>("provider")
-        .map(|value| MailProvider::from_db(&value))
-        .unwrap_or(MailProvider::Google);
-    let refresh_token: Option<String> = row.get("refresh_token");
+        .try_get::<Option<String>, _>("provider")
+        .ok()
+        .flatten()
+        .map(|value| MailProvider::from_db(&value));
+    let source: Option<String> = row.try_get("source").ok().flatten();
+    let account_id: Option<i32> = row.try_get("account_id").ok().flatten();
 
-    let Some(refresh_token) = refresh_token
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
-        return Ok(HttpResponse::Unauthorized().json(serde_json::json!({
-            "error": "Reconnect your email account to delete this email"
-        })));
+    let mut moved = TrashMoved {
+        new_id: None,
+        // Fluxze-only moves keep the row's labels, so a restore puts it back
+        // wherever it was, the inbox included.
+        in_inbox: false,
     };
-
-    let token = match refresh_and_persist_email_token(
-        pool.get_ref(),
-        account_id,
-        provider,
-        refresh_token,
-    )
-    .await
+    // Fluxze-to-Fluxze mail has no provider copy: its synthetic gmail_id is not
+    // a real Gmail or Graph id. IMAP is Fluxze-only for now (see above).
+    if let (Some(account_id), Some(provider)) = (account_id, provider)
+        && source.as_deref() != Some("wayve")
+        && provider != MailProvider::Imap
     {
-        Ok(token) => token.access_token,
-        Err(e) => {
-            error!(target: "gmail", user_id, account_id, provider = provider.as_db(), error = ?e, "delete email token refresh failed");
-            return Ok(HttpResponse::BadGateway().json(serde_json::json!({
-                "error": "Failed to refresh email account credentials"
+        let gmail_id: String = row.get("gmail_id");
+        let refresh_token: Option<String> = row.get("refresh_token");
+        let Some(refresh_token) = refresh_token
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            // 409, not 401: the user's session is fine, only the mailbox needs
+            // reconnecting. The client treats any 401 as an expired session and
+            // logs the user out, as for the body fetch (email/body_handlers.rs).
+            return Ok(HttpResponse::Conflict().json(serde_json::json!({
+                "error": format!("Reconnect your email account to {} this email", direction.verb())
             })));
-        }
-    };
+        };
 
-    let remote_delete = if provider.is_microsoft() {
-        let mut url = reqwest::Url::parse(&format!(
-            "{}/v1.0/me/messages",
-            crate::external::microsoft_graph_base()
-        ))
-        .unwrap_or_else(|e| panic!("valid Graph URL: {e}"));
-        url.path_segments_mut()
-            .unwrap_or_else(|_| panic!("Graph base must be a base URL"))
-            .push(&gmail_id);
-        HTTP_CLIENT.delete(url).bearer_auth(&token).send().await
-    } else {
-        // Trash, not permanent delete: `messages.delete` needs the full
-        // `https://mail.google.com/` scope, which we do not request, so it 403s and the
-        // row resurrects on the next sync. `messages.trash` works under `gmail.modify`.
-        let url = format!(
-            "{}/gmail/v1/users/me/messages/{}/trash",
-            crate::external::gmail_api_base(),
-            gmail_id
-        );
-        // The empty JSON object is load-bearing: `messages.trash` is a bodyless POST,
-        // reqwest omits Content-Length for an empty body, and Google's frontend 411s
-        // without one. The endpoint itself ignores the body.
-        HTTP_CLIENT
-            .post(url)
-            .bearer_auth(&token)
-            .json(&serde_json::json!({}))
-            .send()
+        let token = match refresh_and_persist_email_token(pool, account_id, provider, refresh_token)
             .await
-    };
+        {
+            Ok(token) => token.access_token,
+            Err(e) => {
+                error!(target: "gmail", user_id, account_id, provider = provider.as_db(), ?direction, error = ?e, "trash move token refresh failed");
+                return Ok(HttpResponse::BadGateway().json(serde_json::json!({
+                    "error": "Failed to refresh email account credentials"
+                })));
+            }
+        };
 
-    match remote_delete {
-        Ok(resp) if resp.status().is_success() || resp.status().as_u16() == 404 => {}
-        Ok(resp) => {
-            let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
-            error!(target: "gmail", user_id, account_id, provider = provider.as_db(), email_id, %status, body = %body, "remote email delete failed");
-            return Ok(HttpResponse::BadGateway().json(serde_json::json!({
-                "error": "Email provider rejected the delete request"
-            })));
-        }
-        Err(e) => {
-            error!(target: "gmail", user_id, account_id, provider = provider.as_db(), email_id, error = ?e, "remote email delete request failed");
-            return Ok(HttpResponse::BadGateway().json(serde_json::json!({
-                "error": "Failed to reach email provider"
-            })));
-        }
+        let result = match direction {
+            TrashDirection::Trash => provider.trash(&token, &gmail_id).await,
+            TrashDirection::Restore => provider.restore(&token, &gmail_id).await,
+        };
+        moved = match result {
+            Ok(moved) => moved,
+            Err(e) => {
+                error!(target: "gmail", user_id, account_id, provider = provider.as_db(), email_id, ?direction, error = ?e, "provider trash move failed");
+                return Ok(HttpResponse::BadGateway().json(serde_json::json!({
+                    "error": format!("Email provider rejected the {} request", direction.verb())
+                })));
+            }
+        };
     }
 
-    // Its conversation goes too when this was the last message in it.
-    crate::email::threading::delete_email(pool.get_ref(), account_id, email_id).await?;
+    repo::set_trashed(pool, email_id, direction == TrashDirection::Trash, &moved).await?;
 
     crate::audit::record_action(
-        pool.get_ref(),
-        &req,
+        pool,
+        req,
         crate::audit::AuditEvent {
             actor_user_id: user_id,
-            action: "email_deleted",
+            action: match direction {
+                TrashDirection::Trash => "email_deleted",
+                TrashDirection::Restore => "email_restored",
+            },
             resource_type: "email",
             resource_id: Some(email_id.to_string()),
-            metadata: Some(delete_metadata),
+            metadata: Some(serde_json::json!({
+                "direction": match direction {
+                    TrashDirection::Trash => "deleted",
+                    TrashDirection::Restore => "restored",
+                },
+                "from": row.try_get::<Option<String>, _>("sender").ok().flatten(),
+                "to": row.try_get::<Option<String>, _>("receiver").ok().flatten(),
+                "subject": row.try_get::<Option<String>, _>("subject").ok().flatten(),
+                "provider": provider.map(MailProvider::as_db),
+            })),
         },
     )
     .await;
 
-    Ok(HttpResponse::Ok().json(serde_json::json!({ "deleted": true })))
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "trashed": direction == TrashDirection::Trash
+    })))
 }
 
 #[get("/emails/attachments")]

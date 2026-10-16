@@ -526,16 +526,29 @@ pub async fn sync_outlook_account(
     {
         warn!(target: "worker", account_id, error = ?err, "outlook draft sync failed");
     }
+    // Last, so its TRASH label wins over the pass above, whose /me/messages
+    // covers every folder but can't say which one a message is in.
+    if let Err(err) = sync_outlook_folder_recent(
+        pool,
+        account_id,
+        access_token,
+        ("deleteditems", "TRASH", OUTLOOK_TRASH_RECENT_CAP),
+    )
+    .await
+    {
+        warn!(target: "worker", account_id, error = ?err, "outlook trash sync failed");
+    }
 
     debug!(target: "worker", account_id, synced = total, "outlook sync done");
     Ok(())
 }
 
-// Caps on the spam/drafts side-pulls, which run on every tick without paging.
+// Caps on the spam/drafts/trash side-pulls, which run on every tick without paging.
 const OUTLOOK_SPAM_RECENT_CAP: usize = 50;
 const OUTLOOK_DRAFT_RECENT_CAP: usize = 25;
+const OUTLOOK_TRASH_RECENT_CAP: usize = 50;
 
-/// Side-pull for the non-inbox folders (Junk Email, Drafts). Each row is stamped
+/// Side-pull for the non-inbox folders (Junk Email, Drafts, Deleted Items). Each row is stamped
 /// with `synthetic_label`, so the same `'SPAM' = ANY(e.labels)` filter as Gmail
 /// works for Outlook rows. The `(folder_id, synthetic_label, cap)` tuple is one
 /// folder spec, keeping the signature under the project-wide 5-argument cap.

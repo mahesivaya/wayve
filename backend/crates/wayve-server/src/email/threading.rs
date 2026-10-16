@@ -437,36 +437,6 @@ async fn assign(pool: &PgPool, account_id: i32, input: ThreadInput<'_>) -> sqlx:
     Ok(thread_id)
 }
 
-/// Delete one of `account_id`'s emails, and its conversation too when that was
-/// the conversation's last message, so deleting mail never leaves an empty
-/// conversation behind. Takes the threading lock, so a sync can't place a new
-/// email in the conversation between the check and the delete.
-pub async fn delete_email(pool: &PgPool, account_id: i32, email_id: i32) -> sqlx::Result<()> {
-    let mut tx = pool.begin().await?;
-    sqlx::query("SELECT pg_advisory_xact_lock($1, $2)")
-        .bind(THREAD_LOCK_CLASS)
-        .bind(account_id)
-        .execute(&mut *tx)
-        .await?;
-    let thread_id: Option<i32> =
-        sqlx::query_scalar("DELETE FROM emails WHERE id = $1 RETURNING thread_id")
-            .bind(email_id)
-            .fetch_optional(&mut *tx)
-            .await?
-            .flatten();
-    if let Some(thread_id) = thread_id {
-        sqlx::query(
-            "DELETE FROM email_threads t WHERE t.id = $1 \
-               AND NOT EXISTS (SELECT 1 FROM emails e WHERE e.thread_id = t.id)",
-        )
-        .bind(thread_id)
-        .execute(&mut *tx)
-        .await?;
-    }
-    tx.commit().await?;
-    Ok(())
-}
-
 /// Existing emails threaded per account per sync tick: ~100 a minute at the
 /// 30s cadence, gentle on provider quotas.
 const BACKFILL_BATCH: i64 = 50;

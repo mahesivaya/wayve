@@ -4,7 +4,7 @@
 //!
 //! Adding a provider means a `MailProvider` variant with its
 //! `from_db`/`as_db`/`display_name` arms, a `<Provider>MailClient` implementing
-//! all five traits, and one arm in `mail_provider_client`. Handlers call through
+//! all six traits, and one arm in `mail_provider_client`. Handlers call through
 //! the enum shims at the bottom of this file and need no edits.
 
 use crate::email::account::invalidate_email_account_cache;
@@ -113,8 +113,27 @@ pub trait MailRead: Send + Sync {
     async fn mark_unread(&self, access_token: &str, provider_message_id: &str) -> Result<()>;
 }
 
+/// What a provider reports after moving a message into or out of its trash.
+#[derive(Debug, Default, PartialEq)]
+pub struct TrashMoved {
+    /// The message's id after the move, when moving changed it: Graph gives a
+    /// moved message a new id, Gmail keeps it.
+    pub new_id: Option<String>,
+    /// The message is back in the provider's inbox (a restore).
+    pub in_inbox: bool,
+}
+
+/// Delete in Fluxze moves mail to the provider's trash, so it can be restored.
+#[async_trait]
+pub trait MailTrash: Send + Sync {
+    async fn trash(&self, access_token: &str, provider_message_id: &str) -> Result<TrashMoved>;
+    async fn restore(&self, access_token: &str, provider_message_id: &str) -> Result<TrashMoved>;
+}
+
 /// Umbrella trait the registry returns.
-pub trait MailProviderClient: TokenRefresher + MailSync + MailSender + MailRead {
+pub trait MailProviderClient:
+    TokenRefresher + MailSync + MailSender + MailRead + MailTrash
+{
     /// Exposed so callers can branch or log on the underlying provider, for
     /// metrics or a per-provider retry policy. Nothing reads it yet.
     #[allow(dead_code)]
@@ -246,6 +265,81 @@ impl MailRead for GoogleMailClient {
     }
 }
 
+/// A bodyless Gmail message POST: `trash`, `untrash`, or `modify` with `body`.
+/// Trash and untrash work under `gmail.modify`; a permanent `messages.delete`
+/// would need the full `https://mail.google.com/` scope, which we do not request.
+async fn gmail_message_post(
+    access_token: &str,
+    provider_message_id: &str,
+    action: &str,
+    body: Value,
+) -> Result<reqwest::StatusCode> {
+    let url = format!(
+        "{}/gmail/v1/users/me/messages/{}/{}",
+        crate::external::gmail_api_base(),
+        provider_message_id,
+        action
+    );
+    // For trash/untrash the empty JSON object is load-bearing: they are
+    // bodyless POSTs, reqwest omits Content-Length for an empty body, and
+    // Google's frontend 411s without one. Those endpoints ignore the body.
+    let resp = HTTP_CLIENT
+        .post(url)
+        .bearer_auth(access_token)
+        .json(&body)
+        .send()
+        .await?;
+    let status = resp.status();
+    // Already gone from Gmail: there is nothing left to trash.
+    if action == "trash" && status.as_u16() == 404 {
+        return Ok(status);
+    }
+    if !status.is_success() {
+        let detail = resp.text().await.unwrap_or_default();
+        anyhow::bail!("Gmail {action} failed: {status} {detail}");
+    }
+    Ok(status)
+}
+
+#[async_trait]
+impl MailTrash for GoogleMailClient {
+    async fn trash(&self, access_token: &str, provider_message_id: &str) -> Result<TrashMoved> {
+        gmail_message_post(
+            access_token,
+            provider_message_id,
+            "trash",
+            serde_json::json!({}),
+        )
+        .await?;
+        Ok(TrashMoved::default())
+    }
+
+    async fn restore(&self, access_token: &str, provider_message_id: &str) -> Result<TrashMoved> {
+        gmail_message_post(
+            access_token,
+            provider_message_id,
+            "untrash",
+            serde_json::json!({}),
+        )
+        .await?;
+        // `untrash` only takes the TRASH label off: mail trashed out of the
+        // inbox comes back without INBOX, so it would land in All Mail rather
+        // than the inbox Restore promises. Put it back, as Gmail's own "Move to
+        // Inbox" does.
+        gmail_message_post(
+            access_token,
+            provider_message_id,
+            "modify",
+            serde_json::json!({ "addLabelIds": ["INBOX"] }),
+        )
+        .await?;
+        Ok(TrashMoved {
+            new_id: None,
+            in_inbox: true,
+        })
+    }
+}
+
 impl MailProviderClient for GoogleMailClient {
     fn provider(&self) -> MailProvider {
         MailProvider::Google
@@ -353,6 +447,60 @@ impl MailRead for OutlookMailClient {
             anyhow::bail!("Outlook mark-unread failed: {} {}", status, body);
         }
         Ok(())
+    }
+}
+
+/// Graph `POST /me/messages/{id}/move` to a well-known folder. A moved message
+/// gets a new id, which the response carries and the caller must store, or the
+/// next sync would see the moved message as new mail.
+async fn outlook_move(
+    access_token: &str,
+    provider_message_id: &str,
+    destination: &str,
+) -> Result<TrashMoved> {
+    let mut url = reqwest::Url::parse(&format!(
+        "{}/v1.0/me/messages",
+        crate::external::microsoft_graph_base()
+    ))?;
+    url.path_segments_mut()
+        .map_err(|_| anyhow::anyhow!("Graph base must be a base URL"))?
+        .push(provider_message_id)
+        .push("move");
+    let resp = HTTP_CLIENT
+        .post(url)
+        .bearer_auth(access_token)
+        .json(&serde_json::json!({ "destinationId": destination }))
+        .send()
+        .await?;
+    let status = resp.status();
+    // Already gone from Outlook: there is nothing left to trash.
+    if destination == "deleteditems" && status.as_u16() == 404 {
+        return Ok(TrashMoved::default());
+    }
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        anyhow::bail!("Outlook move to {destination} failed: {status} {body}");
+    }
+    let message: Value = resp.json().await?;
+    let new_id = message["id"]
+        .as_str()
+        .filter(|id| !id.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| anyhow::anyhow!("Outlook move response has no message id"))?;
+    Ok(TrashMoved {
+        new_id: Some(new_id),
+        in_inbox: destination == "inbox",
+    })
+}
+
+#[async_trait]
+impl MailTrash for OutlookMailClient {
+    async fn trash(&self, access_token: &str, provider_message_id: &str) -> Result<TrashMoved> {
+        outlook_move(access_token, provider_message_id, "deleteditems").await
+    }
+
+    async fn restore(&self, access_token: &str, provider_message_id: &str) -> Result<TrashMoved> {
+        outlook_move(access_token, provider_message_id, "inbox").await
     }
 }
 
@@ -492,6 +640,20 @@ impl MailRead for ImapMailClient {
     }
 }
 
+#[async_trait]
+impl MailTrash for ImapMailClient {
+    // No-ops: IMAP mail is trashed in Fluxze only for now. Moving it to the
+    // server's \Trash folder is not built yet; until it is, sync keeps the
+    // Fluxze TRASH label (see repo::upsert_one).
+    async fn trash(&self, _access_token: &str, _provider_message_id: &str) -> Result<TrashMoved> {
+        Ok(TrashMoved::default())
+    }
+
+    async fn restore(&self, _access_token: &str, _provider_message_id: &str) -> Result<TrashMoved> {
+        Ok(TrashMoved::default())
+    }
+}
+
 impl MailProviderClient for ImapMailClient {
     fn provider(&self) -> MailProvider {
         MailProvider::Imap
@@ -557,6 +719,22 @@ impl MailProvider {
     pub async fn mark_unread(self, access_token: &str, provider_message_id: &str) -> Result<()> {
         require_client(self)?
             .mark_unread(access_token, provider_message_id)
+            .await
+    }
+
+    pub async fn trash(self, access_token: &str, provider_message_id: &str) -> Result<TrashMoved> {
+        require_client(self)?
+            .trash(access_token, provider_message_id)
+            .await
+    }
+
+    pub async fn restore(
+        self,
+        access_token: &str,
+        provider_message_id: &str,
+    ) -> Result<TrashMoved> {
+        require_client(self)?
+            .restore(access_token, provider_message_id)
             .await
     }
 }

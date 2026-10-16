@@ -8,6 +8,7 @@ import {
   getAllEmailAttachments,
   getEmailThread,
   deleteEmail as deleteEmailRequest,
+  restoreEmail as restoreEmailRequest,
   markEmailRead,
   markEmailUnread,
   markEmailSenderNoise,
@@ -21,6 +22,17 @@ import {
   conversationMessageIds,
   isConversation,
 } from "./conversation";
+
+// What a delete moved to Trash: the list rows it took out, and every message
+// they cover. Undo restores the messages and puts the rows back.
+export interface TrashedBatch {
+  rows: EmailItem[];
+  ids: number[];
+}
+
+// The list is newest first, by each row's (newest message's) date.
+const newestFirst = (a: EmailItem, b: EmailItem) =>
+  new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
 
 export function useEmailInbox(
   user_id: number | undefined,
@@ -448,9 +460,10 @@ export function useEmailInbox(
     }
   };
 
-  // Deleting from the reading pane removes the whole conversation, as in
-  // Gmail. A plain row covers just itself.
-  const deleteEmail = async (emailId: number) => {
+  // Deleting moves the whole conversation to Trash, as in Gmail. A plain row
+  // covers just itself. Waits for the server, so a failure leaves the row and
+  // reaches the caller.
+  const deleteEmail = async (emailId: number): Promise<TrashedBatch> => {
     const row = emails.find(
       (email) => email.id === emailId || email.message_ids?.includes(emailId)
     );
@@ -458,15 +471,54 @@ export function useEmailInbox(
     await Promise.all(ids.map((id) => deleteEmailRequest(id)));
     for (const id of ids) delete emailCache.current[id];
     const gone = row ? conversationKey(row) : null;
-    setEmails((prev) =>
-      prev.filter(
-        (email) =>
-          email.id !== emailId &&
-          (gone === null || conversationKey(email) !== gone)
-      )
-    );
+    const isGone = (email: EmailItem) =>
+      email.id === emailId || (gone !== null && conversationKey(email) === gone);
+    const rows = emails.filter(isGone);
+    setEmails((prev) => prev.filter((email) => !isGone(email)));
     setSelectedEmail((cur) => (cur && ids.includes(cur.id) ? null : cur));
     setConversation(null);
+    return { rows, ids };
+  };
+
+  // Undo a delete: take its messages back out of Trash and put their rows back
+  // in the list. A row any of whose messages failed to restore stays out (the
+  // next refresh shows where it really is). Resolves to the number of failures.
+  const undoTrash = async (batch: TrashedBatch): Promise<number> => {
+    const results = await Promise.allSettled(
+      batch.ids.map((id) => restoreEmailRequest(id))
+    );
+    const failed = new Set(
+      batch.ids.filter((_, i) => results[i].status === "rejected")
+    );
+    if (failed.size > 0) {
+      logger.warn("undoTrash: some restores failed", {
+        failed: failed.size,
+        total: batch.ids.length,
+      });
+    }
+    // Restored mail leaves Trash, so there is nothing to put back there.
+    if (activeFolder !== "trash") {
+      const back = batch.rows.filter((row) =>
+        conversationMessageIds(row).every((id) => !failed.has(id))
+      );
+      setEmails((prev) => {
+        const listed = new Set(prev.map(conversationKey));
+        const missing = back.filter((row) => !listed.has(conversationKey(row)));
+        return missing.length > 0
+          ? [...prev, ...missing].sort(newestFirst)
+          : prev;
+      });
+    }
+    return failed.size;
+  };
+
+  // Restore one row from the Trash folder (listed per email there), which
+  // takes it out of this list. A failure leaves the row and reaches the caller.
+  const restoreEmail = async (emailId: number) => {
+    await restoreEmailRequest(emailId);
+    delete emailCache.current[emailId];
+    setEmails((prev) => prev.filter((email) => email.id !== emailId));
+    setSelectedEmail((cur) => (cur?.id === emailId ? null : cur));
   };
 
   // Mark the email's sender as noise. The backend routes all of that address's
@@ -583,10 +635,10 @@ export function useEmailInbox(
   // Optimistic removal, then parallel deletes. A failed delete leaves the row
   // gone from the UI until the next refresh pulls it back, which is acceptable
   // here because the user can simply re-delete.
-  // `ids` are list rows; deleting a conversation row deletes every message in
-  // it, as in Gmail.
-  const bulkDelete = async (rowIds: number[]) => {
-    if (rowIds.length === 0) return;
+  // `ids` are list rows; deleting a conversation row moves every message in it
+  // to Trash, as in Gmail.
+  const bulkDelete = async (rowIds: number[]): Promise<TrashedBatch> => {
+    if (rowIds.length === 0) return { rows: [], ids: [] };
     const rowSet = new Set(rowIds);
     const rows = emails.filter((email) => rowSet.has(email.id));
     const ids = Array.from(
@@ -607,6 +659,7 @@ export function useEmailInbox(
         }
       }
     );
+    return { rows, ids };
   };
 
   return {
@@ -634,6 +687,8 @@ export function useEmailInbox(
     conversation,
     fetchMessage,
     deleteEmail,
+    undoTrash,
+    restoreEmail,
     markSenderNoise,
     bulkMarkRead,
     bulkDelete,

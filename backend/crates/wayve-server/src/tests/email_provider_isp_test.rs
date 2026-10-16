@@ -8,7 +8,7 @@ mod tests {
     use crate::email::outlook::OutlookCredentials;
     use crate::email::provider::{
         GoogleMailClient, GoogleOAuthClient, MailProviderClient, MailRead, MailSender, MailSync,
-        OutlookMailClient, RefreshedEmailToken, TokenRefresher,
+        MailTrash, OutlookMailClient, RefreshedEmailToken, TokenRefresher, TrashMoved,
     };
     use crate::models::email_request::SendEmailRequest;
 
@@ -35,6 +35,7 @@ mod tests {
     fn takes_refresher(_s: &dyn TokenRefresher) {}
     fn takes_sync(_s: &dyn MailSync) {}
     fn takes_read(_s: &dyn MailRead) {}
+    fn takes_trash(_s: &dyn MailTrash) {}
 
     #[test]
     fn isp_send_only_stub_is_a_mail_sender() {
@@ -57,6 +58,7 @@ mod tests {
         takes_sync(&g);
         takes_sender(&g);
         takes_read(&g);
+        takes_trash(&g);
     }
 
     #[test]
@@ -72,6 +74,7 @@ mod tests {
         takes_sync(&o);
         takes_sender(&o);
         takes_read(&o);
+        takes_trash(&o);
     }
 
     // `Arc<dyn MailProviderClient>` must stay callable through each narrow trait
@@ -144,6 +147,24 @@ mod tests {
                 _provider_message_id: &str,
             ) -> Result<()> {
                 Ok(())
+            }
+        }
+
+        #[async_trait]
+        impl MailTrash for FullStub {
+            async fn trash(
+                &self,
+                _access_token: &str,
+                _provider_message_id: &str,
+            ) -> Result<TrashMoved> {
+                Ok(TrashMoved::default())
+            }
+            async fn restore(
+                &self,
+                _access_token: &str,
+                _provider_message_id: &str,
+            ) -> Result<TrashMoved> {
+                Ok(TrashMoved::default())
             }
         }
 

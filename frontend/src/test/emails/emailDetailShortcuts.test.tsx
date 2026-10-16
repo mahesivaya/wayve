@@ -1,5 +1,5 @@
 // Gmail-style shortcuts on the open message: R replies, F forwards, D deletes
-// (behind the existing confirm). The cases that matter most are the ones where
+// (to Trash, with no confirm: the page offers Undo). The cases that matter most are the ones where
 // a shortcut must NOT act: typing "reply" into the composer, and any keypress
 // while a popup owns the keyboard.
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
@@ -176,23 +176,26 @@ describe("EmailDetail keyboard shortcuts", () => {
     expect(screen.queryByLabelText("Forward recipient")).toBeNull();
   });
 
-  it("deletes on D once the confirm is accepted", async () => {
+  it("deletes on D straight away, without asking", async () => {
+    const confirm = vi.spyOn(window, "confirm");
     const { onDeleteEmail } = setup();
     await flushMountEffects();
 
     fireEvent.keyDown(document, { key: "d" });
 
     expect(onDeleteEmail).toHaveBeenCalledWith(42);
+    expect(confirm).not.toHaveBeenCalled();
   });
 
-  it("does not delete when the confirm is declined", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(false);
-    const { onDeleteEmail } = setup();
+  it("sends one delete when D is pressed twice", async () => {
+    const onDeleteEmail = vi.fn(() => new Promise<void>(() => {}));
+    setup({ onDeleteEmail });
     await flushMountEffects();
 
     fireEvent.keyDown(document, { key: "d" });
+    fireEvent.keyDown(document, { key: "d" });
 
-    expect(onDeleteEmail).not.toHaveBeenCalled();
+    expect(onDeleteEmail).toHaveBeenCalledTimes(1);
   });
 
   it("stands down while a menu owns the keyboard", async () => {

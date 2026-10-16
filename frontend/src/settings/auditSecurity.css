@@ -347,7 +347,8 @@
   color: var(--color-success);
 }
 
-.audit-activity.email_read {
+.audit-activity.email_read,
+.audit-activity.email_restored {
   background: var(--color-accent-purple-soft);
   color: var(--color-accent-purple);
 }
