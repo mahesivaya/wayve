@@ -1,12 +1,5 @@
 export type ServiceSlug =
-  | "mail"
-  | "chat"
-  | "meet"
-  | "calendar"
-  | "drive"
-  | "notes"
-  | "tasks"
-  | "ai";
+  "mail" | "chat" | "meet" | "calendar" | "drive" | "notes" | "tasks" | "ai";
 
 export type ServiceDetail = {
   slug: ServiceSlug;

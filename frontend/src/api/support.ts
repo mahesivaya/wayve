@@ -3,11 +3,7 @@ import { getAuthToken } from "../auth/token";
 import { apiFetch, apiFetchJson } from "./client";
 
 export type TicketCategory =
-  | "bug"
-  | "feature"
-  | "billing"
-  | "account"
-  | "other";
+  "bug" | "feature" | "billing" | "account" | "other";
 export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
 
 export type SupportTicket = {

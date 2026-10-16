@@ -748,8 +748,7 @@ export default function UserStoriesSummaryCard() {
                     // bar is drawn against, so restating them earns nothing.
                     content={({ active, payload }) => {
                       const row = payload?.[0]?.payload as
-                        | TimelineRow
-                        | undefined;
+                        TimelineRow | undefined;
                       if (!active || !row) return null;
                       return <div className="us-summary-tip">{row.title}</div>;
                     }}
