@@ -10,3 +10,12 @@ type-complexity-threshold = 200
 
 # 👇 Optional but useful
 cognitive-complexity-threshold = 30
+
+# actix-web 4.17 grew `HttpResponse` past the 128-byte default, so every helper
+# returning `Result<T, HttpResponse>` — the normal shape for "authorize, or hand
+# back the rejection response" — trips `result_large_err`. The lint is aimed at
+# error enums that bloat the Ok path; here the size is actix's, not ours, and
+# boxing it would only move an allocation onto a path that already allocates.
+# Raised rather than allow-listed at nine call sites so the next such helper
+# does not have to rediscover this.
+large-error-threshold = 256
