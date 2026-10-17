@@ -199,7 +199,7 @@ export default function App() {
           {/* Pricing sits outside ProtectedRoute so logged-out visitors can view
             plans without being bounced to /login, and it renders its own header
             chrome so it needs no Layout. Personal accounts are redirected to
-            Settings, where "Manage billing & upgrade" lives. */}
+            Settings › Billing, where "Manage billing & upgrade" lives. */}
           <Route
             path="/pricing"
             element={

@@ -7,7 +7,9 @@ import { canViewPricing } from "../auth/permissions";
 // Route guard for /pricing. The page is public, so logged-out marketing
 // visitors pass straight through. Signed-in users are filtered so the URL
 // can't bypass the hidden sidebar link:
-//   • personal accounts → /settings (where "Manage billing & upgrade" lives);
+//   • personal accounts → /settings/billing (where "Manage billing & upgrade"
+//     lives — not /settings, whose General page drops that card on wide
+//     screens);
 //   • org/platform roles that don't manage billing (admin, security,
 //     developer, support, guest, member) → their account home.
 // Only owner / super_admin / billing reach the plan grid.
@@ -21,7 +23,7 @@ export default function RequirePricingAccess({
   if (!user) return <>{children}</>;
 
   if (user.account_type === "personal") {
-    return <Navigate to="/settings" replace />;
+    return <Navigate to="/settings/billing" replace />;
   }
 
   if (!canViewPricing(user)) {
