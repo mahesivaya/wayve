@@ -340,15 +340,7 @@ async fn move_email(
     direction: TrashDirection,
 ) -> AppResult {
     let user_id = get_user_id_from_request(req).ok_or(AppError::Unauthorized)?;
-    let email = match load_owned_email(
-        pool,
-        user_id,
-        email_id,
-        direction.verb(),
-        ProviderCopy::Change,
-    )
-    .await?
-    {
+    let email = match load_owned_email(pool, user_id, email_id, direction.verb()).await? {
         Ok(email) => email,
         Err(response) => return Ok(response),
     };
@@ -445,7 +437,7 @@ pub async fn unstar_email(
 async fn set_star(req: &HttpRequest, pool: &PgPool, email_id: i32, starred: bool) -> AppResult {
     let user_id = get_user_id_from_request(req).ok_or(AppError::Unauthorized)?;
     let verb = if starred { "star" } else { "unstar" };
-    let email = match load_owned_email(pool, user_id, email_id, verb, ProviderCopy::Change).await? {
+    let email = match load_owned_email(pool, user_id, email_id, verb).await? {
         Ok(email) => email,
         Err(response) => return Ok(response),
     };
@@ -476,8 +468,9 @@ pub struct SnoozeInput {
 /// The longest snooze accepted, so a typo'd year can't bury mail for good.
 const MAX_SNOOZE_DAYS: i64 = 366;
 
-/// Snoozes one message until `until` (Fluxze only: providers have no snooze
-/// API, so Gmail and Outlook keep showing it). The inbox views hide it until
+/// Snoozes one message for the caller until `until` (Fluxze only: providers
+/// have no snooze API, so Gmail and Outlook keep showing it). Per person: in a
+/// shared inbox it hides the email from the caller alone. The inbox views hide it until
 /// then, and it comes back on its own, at the top (see `repo::ListOrder`).
 #[actix_web::post("/emails/{id}/snooze")]
 #[instrument(target = "http", skip(req, pool, path, body))]
@@ -522,23 +515,36 @@ async fn set_snooze(
     email_id: i32,
     until: Option<chrono::DateTime<chrono::Utc>>,
 ) -> AppResult {
-    let verb = if until.is_some() {
-        "snooze"
-    } else {
-        "unsnooze"
-    };
-    // Fluxze only: no provider call, so a disconnected mailbox can still snooze.
-    let email = match load_owned_email(pool, user_id, email_id, verb, ProviderCopy::Ignore).await? {
-        Ok(email) => email,
-        Err(response) => return Ok(response),
+    // A snooze is the caller's own, so anyone who can see the email may set
+    // one: its owner, a shared-inbox member, or the recipient of Fluxze mail.
+    // No provider call either, so a disconnected mailbox can still snooze.
+    let Some(row) = sqlx::query(
+        r#"
+        SELECT e.subject, e.sender, e.receiver, a.provider
+        FROM emails e
+        LEFT JOIN email_accounts a ON e.account_id = a.id
+        LEFT JOIN shared_inbox_members sm ON sm.account_id = a.id AND sm.user_id = $2
+        WHERE e.id = $1
+          AND (a.user_id = $2
+               OR sm.user_id IS NOT NULL
+               OR (e.source = 'wayve' AND e.recipient_user_id = $2))
+        "#,
+    )
+    .bind(email_id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await?
+    else {
+        return Ok(HttpResponse::NotFound().json(serde_json::json!({
+            "error": "Email not found"
+        })));
     };
     // Ending a snooze that already ran out (or never was) changes nothing, and
     // isn't recorded: undoing a conversation's snooze ends each message's.
-    if !repo::set_snoozed(pool, email_id, until.map(|t| t.naive_utc())).await? {
+    if !repo::set_snoozed(pool, email_id, user_id, until.map(|t| t.naive_utc())).await? {
         return Ok(HttpResponse::Ok().json(serde_json::json!({ "snoozed_until": null })));
     }
 
-    let row = &email.row;
     crate::audit::record_action(
         pool,
         req,
@@ -556,7 +562,7 @@ async fn set_snooze(
                 "from": row.try_get::<Option<String>, _>("sender").ok().flatten(),
                 "to": row.try_get::<Option<String>, _>("receiver").ok().flatten(),
                 "subject": row.try_get::<Option<String>, _>("subject").ok().flatten(),
-                "provider": email.provider.map(MailProvider::as_db),
+                "provider": row.try_get::<Option<String>, _>("provider").ok().flatten(),
             })),
         },
     )
@@ -567,7 +573,7 @@ async fn set_snooze(
     })))
 }
 
-/// An email the caller may change (trash, restore, star, snooze).
+/// An email the caller may change (trash, restore, star).
 struct OwnedEmail {
     /// subject / sender / receiver, for the audit record.
     row: sqlx::postgres::PgRow,
@@ -584,17 +590,8 @@ struct RemoteEmail {
     token: String,
 }
 
-/// Whether a change also goes to the email's provider copy. A Fluxze-only
-/// change (snooze) must not need a working mailbox connection, nor spend a
-/// token refresh on one.
-#[derive(Clone, Copy, PartialEq)]
-enum ProviderCopy {
-    Change,
-    Ignore,
-}
-
-/// Loads an email the caller owns and, when it has a provider copy to change,
-/// a fresh access token for it. The inner `Err` is a response to return as is: 404 for
+/// Loads an email the caller owns and, when it has a provider copy, a fresh
+/// access token for it. The inner `Err` is a response to return as is: 404 for
 /// mail that isn't theirs, 409 when the mailbox needs reconnecting, 502 when
 /// the token refresh fails. `verb` completes "Reconnect your email account to
 /// … this email".
@@ -603,7 +600,6 @@ async fn load_owned_email(
     user_id: i32,
     email_id: i32,
     verb: &str,
-    provider_copy: ProviderCopy,
 ) -> Result<Result<OwnedEmail, HttpResponse>, AppError> {
     // LEFT JOIN so account-less Fluxze-native rows still match; they are
     // authorized instead via the source/recipient clause, as in repo::get_detail.
@@ -643,10 +639,7 @@ async fn load_owned_email(
             remote: None,
         }));
     };
-    if provider_copy == ProviderCopy::Ignore
-        || source.as_deref() == Some("wayve")
-        || remote_provider == MailProvider::Imap
-    {
+    if source.as_deref() == Some("wayve") || remote_provider == MailProvider::Imap {
         return Ok(Ok(OwnedEmail {
             row,
             provider,

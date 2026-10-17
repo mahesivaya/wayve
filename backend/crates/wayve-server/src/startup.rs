@@ -81,10 +81,20 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         // The GIN index keeps `<label> = ANY(labels)` index-scanned.
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS labels TEXT[] NOT NULL DEFAULT '{}'",
         "CREATE INDEX IF NOT EXISTS idx_emails_labels ON emails USING GIN (labels)",
-        // Snooze (Fluxze only); see infra/postgres/migrations/2026-10-email-snooze.sql.
-        "ALTER TABLE emails ADD COLUMN IF NOT EXISTS snoozed_until TIMESTAMP",
-        "CREATE INDEX IF NOT EXISTS idx_emails_snoozed ON emails(account_id, snoozed_until) WHERE snoozed_until IS NOT NULL",
-        "CREATE INDEX IF NOT EXISTS idx_emails_account_sort ON emails(account_id, (GREATEST(created_at, snoozed_until)) DESC, id DESC)",
+        // Snooze (Fluxze only), per person; see
+        // infra/postgres/migrations/2026-10-email-snooze.sql, which also moves
+        // snoozes off the first version's emails.snoozed_until column.
+        "CREATE TABLE IF NOT EXISTS email_snoozes ( \
+           email_id INTEGER NOT NULL REFERENCES emails(id) ON DELETE CASCADE, \
+           user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, \
+           snoozed_until TIMESTAMP NOT NULL, \
+           PRIMARY KEY (email_id, user_id))",
+        "CREATE INDEX IF NOT EXISTS idx_email_snoozes_user ON email_snoozes(user_id, snoozed_until)",
+        "DO $$ BEGIN \
+           IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'wayve_app') THEN \
+             GRANT SELECT ON email_snoozes TO wayve_app; \
+           END IF; \
+         END $$",
         // `source` tags provenance so the list query knows whether to join through
         // email_accounts or scan by recipient_user_id (Wayve-native, account_id NULL).
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'imap'",

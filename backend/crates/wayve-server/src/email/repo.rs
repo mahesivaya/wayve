@@ -150,8 +150,10 @@ pub struct EmailListRow {
     /// any of its messages is, as in Gmail.
     pub is_starred: bool,
     pub created_at: Option<NaiveDateTime>,
-    /// UTC. Set while snoozed, and kept once the snooze has passed, so `sort_at`
-    /// can put returned mail at the top.
+    /// UTC. The caller's own snooze (`email_snoozes`): set while snoozed, and
+    /// kept once it has passed, so `sort_at` can put returned mail at the top.
+    /// Per person, so in a shared inbox one member's snooze hides the email
+    /// from them alone.
     pub snoozed_until: Option<NaiveDateTime>,
     /// The list's order and paging cursor (see `ListOrder`): `created_at`, a
     /// snooze's end in the inbox views once it has passed, or in Snoozed when
@@ -214,7 +216,7 @@ const LIST_COLUMNS: &str = r#"
         ) AS has_attachments,
         e.account_id, e.is_read, e.created_at,
         ('STARRED' = ANY(e.labels)) AS is_starred,
-        e.snoozed_until,
+        zs.snoozed_until,
         COALESCE(a.is_shared, FALSE) AS is_shared,
         a.shared_label,
         s.status AS inbox_status, s.assignee_id AS inbox_assignee_id
@@ -253,6 +255,12 @@ fn push_scope(qb: &mut QueryBuilder<'_, sqlx::Postgres>, user_id: i32) {
     qb.push(
         r#"
         LEFT JOIN shared_inbox_email_state s ON s.email_id = e.id
+        LEFT JOIN email_snoozes zs ON zs.email_id = e.id AND zs.user_id =
+        "#,
+    );
+    qb.push_bind(user_id);
+    qb.push(
+        r#"
         WHERE (a.user_id =
         "#,
     );
@@ -287,6 +295,7 @@ fn push_account_and_status(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &
 }
 
 /// The current time in the UTC that `snoozed_until` and `created_at` store.
+/// `zs` is the caller's own row of `email_snoozes`, joined by `push_scope`.
 const NOW_UTC: &str = "(now() AT TIME ZONE 'UTC')";
 
 /// A list's order, which is also its paging cursor (`sort_at`, sent with each
@@ -299,7 +308,7 @@ const NOW_UTC: &str = "(now() AT TIME ZONE 'UTC')";
 ///   own date, not at the future moment it returns.
 struct ListOrder {
     /// One row per email. For the inbox views the hidden rows can't reach the
-    /// list, so the indexable GREATEST (`idx_emails_account_sort`) is exact.
+    /// list, so GREATEST alone is exact.
     per_email: String,
     /// One message within a conversation; the conversation sorts by the
     /// latest of its messages'. Its older messages may still be snoozed (a
@@ -311,16 +320,16 @@ struct ListOrder {
 fn list_order(folder: Option<&str>) -> ListOrder {
     match folder_snooze(folder) {
         Some(SnoozeView::Hide) => ListOrder {
-            per_email: "GREATEST(e.created_at, e.snoozed_until)".to_string(),
+            per_email: "GREATEST(e.created_at, zs.snoozed_until)".to_string(),
             per_message: format!(
-                "CASE WHEN e.snoozed_until <= {NOW_UTC} \
-                 THEN GREATEST(e.created_at, e.snoozed_until) ELSE e.created_at END"
+                "CASE WHEN zs.snoozed_until <= {NOW_UTC} \
+                 THEN GREATEST(e.created_at, zs.snoozed_until) ELSE e.created_at END"
             ),
             ascending: false,
         },
         Some(SnoozeView::Only) => ListOrder {
-            per_email: "e.snoozed_until".to_string(),
-            per_message: "e.snoozed_until".to_string(),
+            per_email: "zs.snoozed_until".to_string(),
+            per_message: "zs.snoozed_until".to_string(),
             ascending: true,
         },
         None => ListOrder {
@@ -394,11 +403,11 @@ fn push_folder(
     match folder_snooze(filters.folder.as_deref()) {
         Some(SnoozeView::Hide) if per_email => {
             qb.push(format!(
-                " AND (e.snoozed_until IS NULL OR e.snoozed_until <= {NOW_UTC}) "
+                " AND (zs.snoozed_until IS NULL OR zs.snoozed_until <= {NOW_UTC}) "
             ));
         }
         Some(SnoozeView::Only) => {
-            qb.push(format!(" AND e.snoozed_until > {NOW_UTC} "));
+            qb.push(format!(" AND zs.snoozed_until > {NOW_UTC} "));
         }
         _ => {}
     }
@@ -1222,27 +1231,35 @@ async fn stamp_last_message_at(pool: &PgPool, account_id: i32, results: &[Insert
     }
 }
 
-/// Snoozes an email until `until` (UTC), or with `None` ends a snooze that has
-/// not run out yet, so the email goes back to its own place in the list (an
-/// Undo). A snooze that already ran out is left alone: it is what keeps
-/// returned mail at the top. Returns whether anything changed.
+/// Snoozes an email for one person until `until` (UTC), or with `None` ends
+/// their snooze if it hasn't run out yet, so the email goes back to its own
+/// place in their list (an Undo). A snooze that already ran out is left alone:
+/// it is what keeps returned mail at the top. Snoozes are per person
+/// (`email_snoozes`), so in a shared inbox nobody else is affected. Returns
+/// whether anything changed.
 pub async fn set_snoozed(
     pool: &PgPool,
     email_id: i32,
+    user_id: i32,
     until: Option<NaiveDateTime>,
 ) -> sqlx::Result<bool> {
     let changed = match until {
-        Some(until) => sqlx::query("UPDATE emails SET snoozed_until = $2 WHERE id = $1")
-            .bind(email_id)
-            .bind(until)
-            .execute(pool)
-            .await?
-            .rows_affected(),
+        Some(until) => sqlx::query(
+            "INSERT INTO email_snoozes (email_id, user_id, snoozed_until) VALUES ($1, $2, $3) \
+             ON CONFLICT (email_id, user_id) DO UPDATE SET snoozed_until = EXCLUDED.snoozed_until",
+        )
+        .bind(email_id)
+        .bind(user_id)
+        .bind(until)
+        .execute(pool)
+        .await?
+        .rows_affected(),
         None => sqlx::query(&format!(
-            "UPDATE emails SET snoozed_until = NULL \
-             WHERE id = $1 AND snoozed_until > {NOW_UTC}"
+            "DELETE FROM email_snoozes \
+             WHERE email_id = $1 AND user_id = $2 AND snoozed_until > {NOW_UTC}"
         ))
         .bind(email_id)
+        .bind(user_id)
         .execute(pool)
         .await?
         .rows_affected(),
