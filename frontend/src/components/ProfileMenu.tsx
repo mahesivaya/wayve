@@ -8,7 +8,13 @@ import { getApiBase } from "../config/env";
 
 export default function ProfileMenu({
   placement = "header",
-}: { placement?: "header" | "sidebar" } = {}) {
+  minimal = false,
+}: {
+  placement?: "header" | "sidebar";
+  // Only Settings + Log out. For wide screens, where Settings' left rail
+  // (SettingsShell) already carries Profile, Appearance and the admin switch.
+  minimal?: boolean;
+} = {}) {
   const { user, logout, switchMode } = useAuth();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -85,17 +91,19 @@ export default function ProfileMenu({
             <div className="profile-dropdown-name">{user.email}</div>
           </div>
 
-          <button
-            className="profile-dropdown-item"
-            title="My Profile"
-            onClick={() => {
-              setMenuOpen(false);
-              void navigate("/profile");
-            }}
-          >
-            <span className="profile-dropdown-icon">👤</span>
-            <span className="profile-dropdown-label">My Profile</span>
-          </button>
+          {!minimal && (
+            <button
+              className="profile-dropdown-item"
+              title="My Profile"
+              onClick={() => {
+                setMenuOpen(false);
+                void navigate("/profile");
+              }}
+            >
+              <span className="profile-dropdown-icon">👤</span>
+              <span className="profile-dropdown-label">My Profile</span>
+            </button>
+          )}
 
           <button
             className="profile-dropdown-item"
@@ -109,7 +117,7 @@ export default function ProfileMenu({
             <span className="profile-dropdown-label">Settings & Privacy</span>
           </button>
 
-          {canViewIntegrations(user) && (
+          {!minimal && canViewIntegrations(user) && (
             <button
               className="profile-dropdown-item"
               title="Integrations"
@@ -123,19 +131,21 @@ export default function ProfileMenu({
             </button>
           )}
 
-          <button
-            className="profile-dropdown-item"
-            title="Appearance"
-            onClick={() => {
-              setMenuOpen(false);
-              void navigate("/appearance");
-            }}
-          >
-            <span className="profile-dropdown-icon">🎨</span>
-            <span className="profile-dropdown-label">Appearance</span>
-          </button>
+          {!minimal && (
+            <button
+              className="profile-dropdown-item"
+              title="Appearance"
+              onClick={() => {
+                setMenuOpen(false);
+                void navigate("/appearance");
+              }}
+            >
+              <span className="profile-dropdown-icon">🎨</span>
+              <span className="profile-dropdown-label">Appearance</span>
+            </button>
+          )}
 
-          {showSwitcher && (
+          {!minimal && showSwitcher && (
             <>
               <div className="profile-dropdown-divider" />
               <button

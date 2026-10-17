@@ -21,8 +21,6 @@ import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
 import ProfileMenu from "./ProfileMenu";
 import ReminderPopups from "./ReminderPopups";
-import Avatar from "./Avatar";
-import { getApiBase } from "../config/env";
 import NotificationBell from "./NotificationBell";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import { useEmailsUnreadCount } from "../emails/useEmailsUnreadCount";
@@ -1783,7 +1781,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   ];
 
   // The profile control lives at the bottom of the sidebar in both runtimes
-  // (desktop as a plain Settings button, web as the full ProfileMenu dropdown).
+  // (a ProfileMenu dropdown, trimmed to Settings + Log out on wide screens).
   // `headerActions` is the cluster that stays in the header in both.
   const desktop = isDesktopApp();
 
@@ -1798,6 +1796,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     !isNarrow &&
     [
       "/settings",
+      "/settings/usage",
+      "/settings/billing",
       "/profile",
       "/integrations",
       "/appearance",
@@ -2068,43 +2068,14 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
               {/* Sits below the flex spacer so it stays pinned to the bottom
               regardless of how many nav groups render above it. */}
-              {/* Desktop shell: a plain profile button pinned to the bottom that
-              opens Settings (that runtime has no dropdown). */}
-              {desktop && (
-                <div className="sidebar-section sidebar-section-bottom">
-                  <button
-                    type="button"
-                    className={`sidebar-link sidebar-profile-btn${
-                      location.pathname === "/settings" ? " active" : ""
-                    }`}
-                    data-tooltip={`${user.email} — open settings`}
-                    data-tooltip-pos="top"
-                    data-tooltip-align="left"
-                    onClick={() => {
-                      setNavOpen(false);
-                      void navigate("/settings");
-                    }}
-                  >
-                    <span className="sidebar-icon" aria-hidden="true">
-                      <Avatar
-                        name={user.email}
-                        src={`${getApiBase()}/api/users/${user.id}/avatar`}
-                        size={22}
-                      />
-                    </span>
-                    <span className="sidebar-label">{user.email}</span>
-                  </button>
-                </div>
-              )}
-
-              {/* Web build: the profile menu lives at the sidebar bottom (like
-              the desktop button), but keeps its full dropdown — Log out,
-              Appearance, admin switch — rather than just linking to Settings. */}
-              {!desktop && (
-                <div className="sidebar-section sidebar-section-bottom">
-                  <ProfileMenu placement="sidebar" />
-                </div>
-              )}
+              {/* The profile menu pinned to the sidebar bottom, in both
+              runtimes. Wide screens get just Settings + Log out — Settings'
+              left rail (SettingsShell) carries Profile, Appearance and the
+              admin switch. Narrow screens drop that rail, so they keep the
+              full dropdown as the only way to reach those. */}
+              <div className="sidebar-section sidebar-section-bottom">
+                <ProfileMenu placement="sidebar" minimal={!isNarrow} />
+              </div>
             </nav>
 
             {/* Resizing is meaningless in the icon rail, the narrow overlay,

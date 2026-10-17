@@ -386,6 +386,14 @@ export default function App() {
               />
               <Route path="/profile" element={<Profile />} />
               <Route path="/settings" element={<Settings />} />
+              <Route
+                path="/settings/usage"
+                element={<Settings section="usage" />}
+              />
+              <Route
+                path="/settings/billing"
+                element={<Settings section="billing" />}
+              />
               {/* Integrations is for personal accounts, whose only route to
                 connecting a Gmail mailbox it is, and for organization and
                 platform owners. Other members are bounced home. The sidebar and
