@@ -5,4 +5,6 @@ pub use super::channel_members::{
 };
 pub use super::channel_messages::{get_channel_messages, get_channel_thread};
 pub use super::channel_queries::get_channels;
-pub use super::channel_settings::{update_channel_subject, update_channel_visibility};
+pub use super::channel_settings::{
+    delete_channel, update_channel_subject, update_channel_visibility,
+};

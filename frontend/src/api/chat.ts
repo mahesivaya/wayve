@@ -390,6 +390,19 @@ export const setChatChannelMemberRole = async (
   }
 };
 
+// Delete a channel for everyone, with its messages and files. Channel admins
+// only; the server refuses anyone else.
+export const deleteChatChannel = async (channelId: number) => {
+  const res = await apiFetch(`/api/chat/channels/${channelId}`, {
+    method: "DELETE",
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.error ?? "Failed to delete channel");
+  }
+};
+
 export const leaveChatChannel = async (channelId: number) => {
   const res = await apiFetch(`/api/chat/channels/${channelId}/leave`, {
     method: "POST",

@@ -96,6 +96,7 @@ const CHAT_ACTIONS = new Set([
   "channel_created",
   "channel_joined",
   "channel_left",
+  "channel_deleted",
   "channel_role_changed",
   "call",
 ]);
@@ -104,6 +105,7 @@ const CHAT_ACTION_LABEL: Record<string, string> = {
   channel_created: "Channel created",
   channel_joined: "Joined channel",
   channel_left: "Left channel",
+  channel_deleted: "Channel deleted",
   channel_role_changed: "Channel role changed",
 };
 
@@ -1199,6 +1201,7 @@ export default function AuditSecurity({
                 <option value="channel_created">Channel created</option>
                 <option value="channel_joined">Joined channel</option>
                 <option value="channel_left">Left channel</option>
+                <option value="channel_deleted">Channel deleted</option>
                 <option value="channel_role_changed">
                   Channel role changed
                 </option>

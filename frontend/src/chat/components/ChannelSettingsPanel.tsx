@@ -24,6 +24,8 @@ type Props = {
   onDeleteUser: (email: string) => void;
   onChangeRole: (email: string, role: ChannelRole) => void;
   onLeave: () => void;
+  // Shown in place of Leave to the channel's only admin.
+  onDelete: () => void;
   onAddUsers: () => void;
   onApproveJoinRequest: (userId: number) => void;
 };
@@ -47,6 +49,7 @@ export default function ChannelSettingsPanel({
   onDeleteUser,
   onChangeRole,
   onLeave,
+  onDelete,
   onAddUsers,
   onApproveJoinRequest,
 }: Props) {
@@ -63,6 +66,18 @@ export default function ChannelSettingsPanel({
     role: adminSet.has(email) ? "Admin" : "Member",
     invited: email.endsWith(" invited"),
   }));
+  // A channel must keep an admin, and the server refuses to demote or remove
+  // the last one (LAST_ADMIN in chat/channel_members.rs), so that row offers
+  // neither "Make member" nor remove: both could only fail.
+  const adminCount = members.filter(
+    (member) => member.role === "Admin" && !member.invited
+  ).length;
+  const isLastAdmin = (member: (typeof members)[number]) =>
+    member.role === "Admin" && adminCount <= 1;
+  // The same rule keeps the last admin from leaving (the server refuses it),
+  // so they are offered Delete channel instead of a Leave that would fail.
+  const iAmLastAdmin =
+    channel.current_user_role === "admin" && adminCount <= 1;
 
   const setVisibility = (value: ChannelVisibility) => {
     onVisibilityDraftChange(value);
@@ -160,7 +175,7 @@ export default function ChannelSettingsPanel({
                 >
                   {member.role}
                 </span>
-                {isAdmin && !member.invited && (
+                {isAdmin && !member.invited && !isLastAdmin(member) && (
                   <button
                     type="button"
                     className="channel-member-role-toggle"
@@ -174,7 +189,7 @@ export default function ChannelSettingsPanel({
                     {member.role === "Admin" ? "Make member" : "Make admin"}
                   </button>
                 )}
-                {isAdmin && (
+                {isAdmin && !isLastAdmin(member) && (
                   <button
                     type="button"
                     className="channel-member-remove"
@@ -277,7 +292,7 @@ export default function ChannelSettingsPanel({
         </div>
       )}
 
-      {channel.is_member && (
+      {channel.is_member && !iAmLastAdmin && (
         <button
           type="button"
           className="channel-settings-leave"
@@ -285,6 +300,23 @@ export default function ChannelSettingsPanel({
         >
           Leave channel
         </button>
+      )}
+
+      {channel.is_member && iAmLastAdmin && (
+        <>
+          <button
+            type="button"
+            className="channel-settings-leave"
+            onClick={onDelete}
+          >
+            Delete channel
+          </button>
+          <div className="channel-settings-note">
+            You're the only admin, so you can't leave. Deleting removes the
+            channel, its messages and files for everyone. To leave instead,
+            make another member an admin first.
+          </div>
+        </>
       )}
 
       {error && <div className="channel-error">{error}</div>}

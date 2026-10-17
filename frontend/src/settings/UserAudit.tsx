@@ -54,6 +54,7 @@ const LABELS: Record<string, string> = {
   channel_created: "Channel created",
   channel_joined: "Channel joined",
   channel_left: "Channel left",
+  channel_deleted: "Channel deleted",
   channel_role_changed: "Channel role changed",
   call: "Call",
   meeting_created: "Meeting created",
