@@ -1267,9 +1267,10 @@ pub async fn set_starred(pool: &PgPool, email_id: i32, starred: bool) -> sqlx::R
 }
 
 /// Labels an email as deleted (TRASH) or takes the label off again, keeping its
-/// other labels so a restore puts it back where it was. A restore also ends a
-/// snooze still pending, so restored mail is in the inbox, not hidden from it. `moved` is what the
-/// provider reported: a new provider id is stored (a moved Outlook message gets
+/// other labels so a restore puts it back where it was. A snooze is left alone
+/// both ways: Undo of a delete is this same restore, and must put the email
+/// back exactly as it was, so a pending snooze sends it back to Snoozed and
+/// it returns to the inbox on time. `moved` is what the provider reported: a new provider id is stored (a moved Outlook message gets
 /// one), and a restore the provider says landed in the inbox gets INBOX back
 /// (Gmail drops it from trashed mail, and sync may have mirrored that).
 pub async fn set_trashed(
@@ -1285,11 +1286,7 @@ pub async fn set_trashed(
              WHEN $3 THEN array_append(array_remove(array_remove(labels, 'TRASH'), 'INBOX'), 'INBOX') \
              ELSE array_remove(labels, 'TRASH') \
            END, \
-           gmail_id = COALESCE($4, gmail_id), \
-           snoozed_until = CASE \
-             WHEN NOT $2 AND snoozed_until > (now() AT TIME ZONE 'UTC') THEN NULL \
-             ELSE snoozed_until \
-           END \
+           gmail_id = COALESCE($4, gmail_id) \
          WHERE id = $1",
     )
     .bind(email_id)

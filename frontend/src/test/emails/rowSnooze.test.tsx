@@ -18,6 +18,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const getEmails = vi.fn();
 const snoozeEmail = vi.fn();
 const unsnoozeEmail = vi.fn();
+const deleteEmail = vi.fn();
+const restoreEmail = vi.fn();
 
 vi.mock("../../api/email", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../api/email")>()),
@@ -25,6 +27,8 @@ vi.mock("../../api/email", async (importOriginal) => ({
   getEmails: (params: unknown) => getEmails(params),
   snoozeEmail: (id: number, until: Date) => snoozeEmail(id, until),
   unsnoozeEmail: (id: number) => unsnoozeEmail(id),
+  deleteEmail: (id: number) => deleteEmail(id),
+  restoreEmail: (id: number) => restoreEmail(id),
 }));
 
 import { EmailList } from "../../emails/EmailList";
@@ -253,6 +257,46 @@ describe("useEmailInbox: snooze", () => {
     expect(failed).toBe(0);
     expect(unsnoozeEmail.mock.calls.map((c) => c[0]).sort()).toEqual([11, 12]);
     expect(result.current.emails.map((e) => e.id)).toEqual([12, 30]);
+  });
+
+  it("Undo of a delete in Snoozed puts the row back, still soonest-back first", async () => {
+    // The server keeps a snooze through a delete and its Undo (a restore), so
+    // the row belongs back in Snoozed.
+    deleteEmail.mockReset().mockResolvedValue(undefined);
+    restoreEmail.mockReset().mockResolvedValue(undefined);
+    const soon = {
+      ...single,
+      id: 50,
+      snoozed_until: "2026-10-16T17:05:00Z",
+      sort_at: "2026-10-16T17:05:00Z",
+    };
+    const later = {
+      ...single,
+      id: 51,
+      snoozed_until: "2026-10-16T17:30:00Z",
+      sort_at: "2026-10-16T17:30:00Z",
+    };
+    getEmails.mockResolvedValue({ emails: [soon, later], hasMore: false });
+    const { result } = renderHook(() => useEmailInbox(1, ""));
+    act(() => result.current.setActiveFolder("snoozed"));
+    await waitFor(() =>
+      expect(getEmails).toHaveBeenLastCalledWith(
+        expect.objectContaining({ folder: "snoozed" })
+      )
+    );
+    await waitFor(() => expect(result.current.emails).toHaveLength(2));
+
+    let batch = { rows: [] as EmailItem[], ids: [] as number[] };
+    await act(async () => {
+      batch = await result.current.deleteEmail(50);
+    });
+    expect(result.current.emails.map((e) => e.id)).toEqual([51]);
+    await act(async () => {
+      await result.current.undoTrash(batch);
+    });
+    expect(restoreEmail).toHaveBeenCalledWith(50);
+    expect(result.current.emails.map((e) => e.id)).toEqual([50, 51]);
+    expect(result.current.emails[0].snoozed_until).toBe(soon.snoozed_until);
   });
 
   it("pages on sort_at, so mail back from a snooze isn't skipped", async () => {

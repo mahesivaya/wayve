@@ -3,8 +3,8 @@
 // with nothing scheduled. Returned mail sorts at the top of the inbox, by when
 // it came back, and pages correctly; elsewhere snoozed mail keeps its own date;
 // Snoozed lists soonest-back first. A conversation's snooze is its newest
-// message's, so a new reply brings it back, at the reply's place. Restoring
-// from Trash ends a pending snooze, and sync never clears one.
+// message's, so a new reply brings it back, at the reply's place. Undoing a
+// delete (a restore) keeps a snooze, and sync never clears one.
 #[cfg(test)]
 mod tests {
     use crate::email::repo::{self, EmailListFilters, EmailListRow, InsertEmail};
@@ -433,27 +433,89 @@ mod tests {
 
     #[actix_web::test]
     #[serial_test::serial]
-    async fn restoring_from_trash_ends_a_pending_snooze_only() {
+    async fn undoing_a_delete_keeps_the_snooze() {
         let pool = test_pool().await;
         let me = mailbox(&pool).await;
-        let pending = email(&pool, me.account, None, ago(60), Some(ago(-30))).await;
-        let ended = email(&pool, me.account, None, ago(90), Some(ago(5))).await;
-        let moved = crate::email::provider::TrashMoved::default();
+        // Fluxze-to-Fluxze mail, so delete and restore need no provider.
+        let native = |snoozed: Option<NaiveDateTime>| {
+            let pool = pool.clone();
+            async move {
+                sqlx::query_scalar::<_, i32>(
+                    "INSERT INTO emails (gmail_id, account_id, sender, labels, source, \
+                                         recipient_user_id, created_at, snoozed_until) \
+                     VALUES ($1, NULL, 'ada@x.com', ARRAY['INBOX']::text[], 'wayve', $2, $3, $4) \
+                     RETURNING id",
+                )
+                .bind(format!("wayve:test:{}", random_email()))
+                .bind(me.user)
+                .bind(ago(60))
+                .bind(snoozed)
+                .fetch_one(&pool)
+                .await
+                .unwrap_or_else(|e| panic!("email: {e}"))
+            }
+        };
+        let pending_until = ago(-30);
+        let pending = native(Some(pending_until)).await;
+        let ended = native(Some(ago(5))).await;
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(crate::routes::email::delete_email)
+                .service(crate::routes::email::restore_email),
+        )
+        .await;
+        let auth = || {
+            (
+                "Authorization",
+                format!("Bearer {}", jwt_for(me.user, &me.login)),
+            )
+        };
         for id in [pending, ended] {
-            repo::set_trashed(&pool, id, true, &moved)
-                .await
-                .unwrap_or_else(|e| panic!("trash: {e}"));
-            // Trashing keeps it: Undo of the delete must not lose the snooze.
-            assert!(snoozed_until(&pool, id).await.is_some());
-            repo::set_trashed(&pool, id, false, &moved)
-                .await
-                .unwrap_or_else(|e| panic!("restore: {e}"));
+            let delete = actix_test::TestRequest::delete()
+                .uri(&format!("/emails/{id}"))
+                .insert_header(auth())
+                .to_request();
+            assert_eq!(
+                actix_test::call_service(&app, delete).await.status(),
+                StatusCode::OK
+            );
+            // The "Moved to Trash · Undo" button is this restore.
+            let undo = actix_test::TestRequest::post()
+                .uri(&format!("/emails/{id}/restore"))
+                .insert_header(auth())
+                .to_request();
+            assert_eq!(
+                actix_test::call_service(&app, undo).await.status(),
+                StatusCode::OK
+            );
         }
-        // Restored mail is in the inbox, not still hidden from it...
-        assert_eq!(snoozed_until(&pool, pending).await, None);
-        assert!(ids(&pool, me.user, "inbox", false).await.contains(&pending));
-        // ...and a snooze that already ended keeps its place at the top.
+
+        // Back exactly as it was: still snoozed, so in Snoozed and not the
+        // inbox, and it returns on time.
+        let kept = snoozed_until(&pool, pending)
+            .await
+            .unwrap_or_else(|| panic!("undo cleared the snooze"));
+        assert!((kept - pending_until).num_milliseconds().abs() < 1);
+        for grouped in [false, true] {
+            assert!(
+                ids(&pool, me.user, "snoozed", grouped)
+                    .await
+                    .contains(&pending)
+            );
+            assert!(
+                !ids(&pool, me.user, "inbox", grouped)
+                    .await
+                    .contains(&pending)
+            );
+        }
+        // A snooze that already ended keeps the email at the top.
         assert!(snoozed_until(&pool, ended).await.is_some());
+        assert_eq!(
+            ids(&pool, me.user, "inbox", true).await.first(),
+            Some(&ended)
+        );
 
         cleanup(&pool, &[me.user]).await;
     }
