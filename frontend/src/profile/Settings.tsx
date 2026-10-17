@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 
 import "./profile.css";
 
@@ -31,6 +31,7 @@ import SupportTicketView from "../support/SupportTicketView";
 import { fmtDate, fmtShortDate } from "../utils/datetime";
 import { isDesktopApp } from "../utils/desktop";
 import SettingsShell from "./SettingsShell";
+import { useIsNarrow } from "../components/useIsNarrow";
 import {
   desktopNotificationsEnabled,
   notificationSupport,
@@ -66,8 +67,26 @@ function formatMoney(cents: number, currency: string): string {
   });
 }
 
-export default function Settings() {
+// Which settings-rail entry this page renders: General (/settings), Usage
+// (/settings/usage) or Billing (/settings/billing).
+export type SettingsSection = "general" | "usage" | "billing";
+
+const SECTION_TITLES: Record<SettingsSection, React.ReactNode> = {
+  general: <>Settings &amp; Privacy</>,
+  usage: <>Storage &amp; Usage</>,
+  billing: <>Billing</>,
+};
+
+export default function Settings({
+  section = "general",
+}: { section?: SettingsSection } = {}) {
   const navigate = useNavigate();
+  // Narrow screens drop the settings rail (see SettingsShell), leaving no way
+  // to reach the Usage / Billing entries — so General shows every card there.
+  const narrow = useIsNarrow();
+  const showGeneral = section === "general";
+  const showUsage = section === "usage" || (narrow && showGeneral);
+  const showBillingSection = section === "billing" || (narrow && showGeneral);
   const { user, refresh, logout } = useAuth();
   // Desktop shell only: the header ProfileMenu dropdown is gone there, so its
   // account links (My Profile / Integrations / Appearance / Log out) are
@@ -415,12 +434,17 @@ export default function Settings() {
     }
   };
 
+  // Platform users have no billing cards, so their Billing page would be empty.
+  if (section === "billing" && isPlatformUser) {
+    return <Navigate to="/settings" replace />;
+  }
+
   return (
-    <SettingsShell title={<>Settings &amp; Privacy</>}>
+    <SettingsShell title={SECTION_TITLES[section]}>
       <>
         {/* Desktop shell: the Upgrade CTA, moved here from the header. Only for
           free personal accounts, matching the header gate on the web. */}
-        {desktop && isBasicPersonalUser && (
+        {showGeneral && desktop && isBasicPersonalUser && (
           <section className="settings-card settings-upgrade-card">
             <h2 className="settings-card-title">Upgrade</h2>
             <div className="settings-rows">
@@ -438,108 +462,133 @@ export default function Settings() {
           </section>
         )}
 
-        <section className="settings-card">
-          <h2 className="settings-card-title">Notifications</h2>
-          <div className="settings-rows">
-            <label className="settings-usage-row">
-              <span>Alert me before a meeting starts</span>
-              <select
-                className="settings-select"
-                value={meetingLead}
-                disabled={pendingLead !== null}
-                onChange={(e) => void changeMeetingLead(Number(e.target.value))}
-              >
-                {MEETING_LEAD_CHOICES.map((m) => (
-                  <option key={m} value={m}>
-                    {m === 0 ? "Off" : `${m} minutes before`}
-                  </option>
-                ))}
-              </select>
-            </label>
+        {showGeneral && (
+          <>
+            <section className="settings-card">
+              <h2 className="settings-card-title">Notifications</h2>
+              <div className="settings-rows">
+                <label className="settings-usage-row">
+                  <span>Alert me before a meeting starts</span>
+                  <select
+                    className="settings-select"
+                    value={meetingLead}
+                    disabled={pendingLead !== null}
+                    onChange={(e) =>
+                      void changeMeetingLead(Number(e.target.value))
+                    }
+                  >
+                    {MEETING_LEAD_CHOICES.map((m) => (
+                      <option key={m} value={m}>
+                        {m === 0 ? "Off" : `${m} minutes before`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-            <label className="settings-usage-row" style={{ cursor: "pointer" }}>
-              <span>
-                Also show a desktop notification
-                <small>This device only</small>
-              </span>
-              {notifPermission === "granted" ? (
-                <span className={`toggle-switch${desktopNotifs ? " on" : ""}`}>
-                  <input
-                    type="checkbox"
-                    className="toggle-switch-input"
-                    role="switch"
-                    aria-checked={desktopNotifs}
-                    checked={desktopNotifs}
-                    onChange={(e) => toggleDesktopNotifs(e.target.checked)}
-                  />
-                  <span className="toggle-switch-slider" aria-hidden="true" />
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  className="settings-secondary-btn"
-                  disabled={
-                    notifPermission === "denied" ||
-                    notifPermission === "unsupported"
-                  }
-                  onClick={() => void enableDesktopNotifs()}
+                <label
+                  className="settings-usage-row"
+                  style={{ cursor: "pointer" }}
                 >
-                  {notifPermission === "denied"
-                    ? "Blocked in browser"
-                    : notifPermission === "unsupported"
-                      ? "Not supported"
-                      : "Enable"}
-                </button>
-              )}
-            </label>
-          </div>
-          <p className="settings-support-empty" style={{ textAlign: "left" }}>
-            Meeting alerts appear as a card in the corner of the app. Desktop
-            notifications additionally surface them outside the browser, but
-            only while Wayve is open in a tab.
-            {notifPermission === "denied" &&
-              " Your browser is blocking notifications for this site — re-allow them in site settings to turn this on."}
-          </p>
-          {meetingLeadError && (
-            <p className="settings-danger-error">{meetingLeadError}</p>
-          )}
-        </section>
-
-        {showChatEncrypt && (
-          <section className="settings-card">
-            <h2 className="settings-card-title">Privacy</h2>
-            <div className="settings-rows">
-              <label
-                className="settings-usage-row"
-                style={{ cursor: "pointer" }}
+                  <span>
+                    Also show a desktop notification
+                    <small>This device only</small>
+                  </span>
+                  {notifPermission === "granted" ? (
+                    <span
+                      className={`toggle-switch${desktopNotifs ? " on" : ""}`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="toggle-switch-input"
+                        role="switch"
+                        aria-checked={desktopNotifs}
+                        checked={desktopNotifs}
+                        onChange={(e) => toggleDesktopNotifs(e.target.checked)}
+                      />
+                      <span
+                        className="toggle-switch-slider"
+                        aria-hidden="true"
+                      />
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="settings-secondary-btn"
+                      disabled={
+                        notifPermission === "denied" ||
+                        notifPermission === "unsupported"
+                      }
+                      onClick={() => void enableDesktopNotifs()}
+                    >
+                      {notifPermission === "denied"
+                        ? "Blocked in browser"
+                        : notifPermission === "unsupported"
+                          ? "Not supported"
+                          : "Enable"}
+                    </button>
+                  )}
+                </label>
+              </div>
+              <p
+                className="settings-support-empty"
+                style={{ textAlign: "left" }}
               >
-                <span>Encrypt files in chat (end-to-end)</span>
-                <span className={`toggle-switch${chatEncrypt ? " on" : ""}`}>
-                  <input
-                    type="checkbox"
-                    className="toggle-switch-input"
-                    role="switch"
-                    aria-checked={chatEncrypt}
-                    checked={chatEncrypt}
-                    disabled={chatEncryptSaving}
-                    onChange={(e) => void toggleChatEncrypt(e.target.checked)}
-                  />
-                  <span className="toggle-switch-slider" aria-hidden="true" />
-                </span>
-              </label>
-            </div>
-            <p className="settings-support-empty" style={{ textAlign: "left" }}>
-              When on, files you attach in chat are encrypted on your device so
-              the server can&apos;t read them. When off, attachments are stored
-              encrypted at rest but readable by the server.
-            </p>
-            {chatEncryptError && (
-              <p className="settings-danger-error">{chatEncryptError}</p>
-            )}
-          </section>
-        )}
+                Meeting alerts appear as a card in the corner of the app.
+                Desktop notifications additionally surface them outside the
+                browser, but only while Wayve is open in a tab.
+                {notifPermission === "denied" &&
+                  " Your browser is blocking notifications for this site — re-allow them in site settings to turn this on."}
+              </p>
+              {meetingLeadError && (
+                <p className="settings-danger-error">{meetingLeadError}</p>
+              )}
+            </section>
 
-        {/* Deliberately NOT in the Administration card below. That card is
+            {showChatEncrypt && (
+              <section className="settings-card">
+                <h2 className="settings-card-title">Privacy</h2>
+                <div className="settings-rows">
+                  <label
+                    className="settings-usage-row"
+                    style={{ cursor: "pointer" }}
+                  >
+                    <span>Encrypt files in chat (end-to-end)</span>
+                    <span
+                      className={`toggle-switch${chatEncrypt ? " on" : ""}`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="toggle-switch-input"
+                        role="switch"
+                        aria-checked={chatEncrypt}
+                        checked={chatEncrypt}
+                        disabled={chatEncryptSaving}
+                        onChange={(e) =>
+                          void toggleChatEncrypt(e.target.checked)
+                        }
+                      />
+                      <span
+                        className="toggle-switch-slider"
+                        aria-hidden="true"
+                      />
+                    </span>
+                  </label>
+                </div>
+                <p
+                  className="settings-support-empty"
+                  style={{ textAlign: "left" }}
+                >
+                  When on, files you attach in chat are encrypted on your device
+                  so the server can&apos;t read them. When off, attachments are
+                  stored encrypted at rest but readable by the server.
+                </p>
+                {chatEncryptError && (
+                  <p className="settings-danger-error">{chatEncryptError}</p>
+                )}
+              </section>
+            )}
+
+            {/* Deliberately NOT in the Administration card below. That card is
             gated per-console and, for org/platform accounts, is hidden entirely
             in normal session mode (downscope_for_mode demotes a non-personal
             owner to `member`) — which made this page unreachable without first
@@ -547,147 +596,151 @@ export default function Settings() {
             and the page renders read-only without `task_statuses:manage`, so
             the entry point is always shown and the page itself decides whether
             editing is offered. */}
-        <section className="settings-card">
-          <h2 className="settings-card-title">Tasks</h2>
-          <div className="settings-rows">
-            <div className="settings-usage-row">
-              <span data-tooltip="Name, colour and order the statuses tasks move through.">
-                Task statuses
-              </span>
-              <button
-                type="button"
-                className="settings-billing-link"
-                onClick={() => navigate("/settings/statuses")}
-              >
-                Open
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {adminConsoles.length > 0 && (
-          <section className="settings-card">
-            <h2 className="settings-card-title">Administration</h2>
-            <div className="settings-rows">
-              {adminConsoles.map((c) => (
-                <div className="settings-usage-row" key={c.path}>
-                  <span data-tooltip={c.description}>{c.label}</span>
+            <section className="settings-card">
+              <h2 className="settings-card-title">Tasks</h2>
+              <div className="settings-rows">
+                <div className="settings-usage-row">
+                  <span data-tooltip="Name, colour and order the statuses tasks move through.">
+                    Task statuses
+                  </span>
                   <button
                     type="button"
                     className="settings-billing-link"
-                    onClick={() => navigate(c.path)}
+                    onClick={() => navigate("/settings/statuses")}
                   >
                     Open
                   </button>
                 </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {(isPersonal || isPlatformUser) && (
-          <section className="settings-card">
-            <h2 className="settings-card-title">Domains</h2>
-            <div className="settings-rows">
-              <div className="settings-usage-row">
-                <span>Connect a custom domain to your account</span>
-                <button
-                  type="button"
-                  className="settings-billing-link"
-                  onClick={() => navigate("/coming-soon")}
-                >
-                  Manage domains
-                </button>
               </div>
-            </div>
-          </section>
-        )}
+            </section>
 
-        <section className="settings-card">
-          <h2 className="settings-card-title">Storage &amp; Usage</h2>
-          <div className="settings-rows">
-            <div className="settings-usage-row">
-              <span>Memory Used</span>
-              <strong className={!loaded ? "settings-loading-text" : ""}>
-                {profile?.memory_used_bytes === undefined
-                  ? "Loading…"
-                  : (profile.memory_limit_bytes ?? DEFAULT_MEMORY_LIMIT) < 0
-                    ? // A negative limit is the "unlimited" sentinel
-                      // (org/enterprise plans store storage_limit_bytes = -1).
-                      `${formatBytes(profile.memory_used_bytes)} / Unlimited`
-                    : `${formatBytes(profile.memory_used_bytes)} / ${(
-                        (profile.memory_limit_bytes ?? DEFAULT_MEMORY_LIMIT) /
-                        BYTES_IN_GB
-                      ).toFixed(0)} GB`}
-              </strong>
-            </div>
-            <div className="settings-usage-row">
-              <span data-tooltip="Number of emails synced to your local rwayve mailbox. Your Gmail/Outlook account may hold many more — sync pulls the most recent batch and grows over time.">
-                Synced Emails
-              </span>
-              <strong>
-                {profile?.total_emails !== undefined
-                  ? `${profile.total_emails.toLocaleString()} emails`
-                  : "Loading…"}
-              </strong>
-            </div>
-            <div className="settings-usage-row">
-              <span>Email Storage</span>
-              <strong>
-                {profile?.email_storage_bytes !== undefined
-                  ? formatBytes(profile.email_storage_bytes)
-                  : "Loading…"}
-              </strong>
-            </div>
-            <div className="settings-usage-row">
-              <span>Drive Storage</span>
-              <strong>
-                {profile?.drive_storage_bytes !== undefined
-                  ? formatBytes(profile.drive_storage_bytes)
-                  : "Loading…"}
-              </strong>
-            </div>
-            <div className="settings-usage-row">
-              <span>Other Apps (Chat, Notes)</span>
-              <strong>
-                {profile?.other_storage_bytes !== undefined
-                  ? formatBytes(profile.other_storage_bytes)
-                  : "Loading…"}
-              </strong>
-            </div>
-            <div className="settings-usage-row">
-              <span>Connected Accounts</span>
-              <strong>
-                {loaded
-                  ? `${accounts.length} ${accounts.length === 1 ? "account" : "accounts"}`
-                  : "Loading…"}
-              </strong>
-            </div>
-            {loaded && accounts.length > 0 && (
-              <div className="settings-accounts-inline">
-                {accounts.map((acc) => (
-                  <div key={acc.id} className="settings-account">
-                    <span className="settings-account-icon">📧</span>
-                    <span
-                      className="settings-account-email"
-                      data-tooltip={acc.email}
-                    >
-                      {acc.email}
-                    </span>
+            {adminConsoles.length > 0 && (
+              <section className="settings-card">
+                <h2 className="settings-card-title">Administration</h2>
+                <div className="settings-rows">
+                  {adminConsoles.map((c) => (
+                    <div className="settings-usage-row" key={c.path}>
+                      <span data-tooltip={c.description}>{c.label}</span>
+                      <button
+                        type="button"
+                        className="settings-billing-link"
+                        onClick={() => navigate(c.path)}
+                      >
+                        Open
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {(isPersonal || isPlatformUser) && (
+              <section className="settings-card">
+                <h2 className="settings-card-title">Domains</h2>
+                <div className="settings-rows">
+                  <div className="settings-usage-row">
+                    <span>Connect a custom domain to your account</span>
                     <button
-                      className="settings-account-delete"
-                      onClick={() => void remove(acc.id, acc.email)}
+                      type="button"
+                      className="settings-billing-link"
+                      onClick={() => navigate("/coming-soon")}
                     >
-                      Remove
+                      Manage domains
                     </button>
                   </div>
-                ))}
-              </div>
+                </div>
+              </section>
             )}
-          </div>
-        </section>
+          </>
+        )}
 
-        {(!hideBilling || isOrgOwner) && (
+        {showUsage && (
+          <section className="settings-card">
+            <h2 className="settings-card-title">Storage &amp; Usage</h2>
+            <div className="settings-rows">
+              <div className="settings-usage-row">
+                <span>Memory Used</span>
+                <strong className={!loaded ? "settings-loading-text" : ""}>
+                  {profile?.memory_used_bytes === undefined
+                    ? "Loading…"
+                    : (profile.memory_limit_bytes ?? DEFAULT_MEMORY_LIMIT) < 0
+                      ? // A negative limit is the "unlimited" sentinel
+                        // (org/enterprise plans store storage_limit_bytes = -1).
+                        `${formatBytes(profile.memory_used_bytes)} / Unlimited`
+                      : `${formatBytes(profile.memory_used_bytes)} / ${(
+                          (profile.memory_limit_bytes ?? DEFAULT_MEMORY_LIMIT) /
+                          BYTES_IN_GB
+                        ).toFixed(0)} GB`}
+                </strong>
+              </div>
+              <div className="settings-usage-row">
+                <span data-tooltip="Number of emails synced to your local rwayve mailbox. Your Gmail/Outlook account may hold many more — sync pulls the most recent batch and grows over time.">
+                  Synced Emails
+                </span>
+                <strong>
+                  {profile?.total_emails !== undefined
+                    ? `${profile.total_emails.toLocaleString()} emails`
+                    : "Loading…"}
+                </strong>
+              </div>
+              <div className="settings-usage-row">
+                <span>Email Storage</span>
+                <strong>
+                  {profile?.email_storage_bytes !== undefined
+                    ? formatBytes(profile.email_storage_bytes)
+                    : "Loading…"}
+                </strong>
+              </div>
+              <div className="settings-usage-row">
+                <span>Drive Storage</span>
+                <strong>
+                  {profile?.drive_storage_bytes !== undefined
+                    ? formatBytes(profile.drive_storage_bytes)
+                    : "Loading…"}
+                </strong>
+              </div>
+              <div className="settings-usage-row">
+                <span>Other Apps (Chat, Notes)</span>
+                <strong>
+                  {profile?.other_storage_bytes !== undefined
+                    ? formatBytes(profile.other_storage_bytes)
+                    : "Loading…"}
+                </strong>
+              </div>
+              <div className="settings-usage-row">
+                <span>Connected Accounts</span>
+                <strong>
+                  {loaded
+                    ? `${accounts.length} ${accounts.length === 1 ? "account" : "accounts"}`
+                    : "Loading…"}
+                </strong>
+              </div>
+              {loaded && accounts.length > 0 && (
+                <div className="settings-accounts-inline">
+                  {accounts.map((acc) => (
+                    <div key={acc.id} className="settings-account">
+                      <span className="settings-account-icon">📧</span>
+                      <span
+                        className="settings-account-email"
+                        data-tooltip={acc.email}
+                      >
+                        {acc.email}
+                      </span>
+                      <button
+                        className="settings-account-delete"
+                        onClick={() => void remove(acc.id, acc.email)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {showBillingSection && (!hideBilling || isOrgOwner) && (
           <section className="settings-card">
             <h2 className="settings-card-title">Billing &amp; Plans</h2>
             <div className="settings-rows">
@@ -722,7 +775,7 @@ export default function Settings() {
           </section>
         )}
 
-        {!isPlatformUser && (
+        {showBillingSection && !isPlatformUser && (
           <section className="settings-card">
             <h2 className="settings-card-title">Transaction history</h2>
             {!invoicesLoaded ? (
@@ -776,179 +829,189 @@ export default function Settings() {
           </section>
         )}
 
-        <section className="settings-card">
-          <div className="settings-support-head">
-            <h2 className="settings-card-title">Support</h2>
-            <button
-              type="button"
-              className="settings-billing-link"
-              onClick={() => setSupportOpen(true)}
-            >
-              Report an issue
-            </button>
-          </div>
-          {!ticketsLoaded ? (
-            <p className="settings-loading-text">Loading tickets…</p>
-          ) : tickets.length === 0 ? (
-            <p className="settings-support-empty">
-              No tickets yet. If something isn't working, use{" "}
-              <button
-                type="button"
-                className="settings-link-button"
-                onClick={() => setSupportOpen(true)}
-              >
-                Report an issue
-              </button>{" "}
-              and we'll reply by email.
-            </p>
-          ) : (
-            <ul className="settings-ticket-list">
-              {tickets.map((t) => (
-                <li key={t.id}>
-                  {/* The whole row opens the ticket read-only, so the status
-                      pill is clickable along with everything else — a filed
-                      report is a record, not a form to reopen. */}
+        {showGeneral && (
+          <>
+            <section className="settings-card">
+              <div className="settings-support-head">
+                <h2 className="settings-card-title">Support</h2>
+                <button
+                  type="button"
+                  className="settings-billing-link"
+                  onClick={() => setSupportOpen(true)}
+                >
+                  Report an issue
+                </button>
+              </div>
+              {!ticketsLoaded ? (
+                <p className="settings-loading-text">Loading tickets…</p>
+              ) : tickets.length === 0 ? (
+                <p className="settings-support-empty">
+                  No tickets yet. If something isn't working, use{" "}
                   <button
                     type="button"
-                    className="settings-ticket-row settings-ticket-row--open"
-                    onClick={() => setViewingTicketId(t.id)}
-                    aria-label={`Open ticket #${t.id}: ${t.subject}`}
+                    className="settings-link-button"
+                    onClick={() => setSupportOpen(true)}
                   >
-                    <span className="settings-ticket-main">
-                      <span
-                        className="settings-ticket-subject"
-                        data-tooltip={t.subject}
+                    Report an issue
+                  </button>{" "}
+                  and we'll reply by email.
+                </p>
+              ) : (
+                <ul className="settings-ticket-list">
+                  {tickets.map((t) => (
+                    <li key={t.id}>
+                      {/* The whole row opens the ticket read-only, so the status
+                      pill is clickable along with everything else — a filed
+                      report is a record, not a form to reopen. */}
+                      <button
+                        type="button"
+                        className="settings-ticket-row settings-ticket-row--open"
+                        onClick={() => setViewingTicketId(t.id)}
+                        aria-label={`Open ticket #${t.id}: ${t.subject}`}
                       >
-                        #{t.id} · {t.subject}
-                      </span>
-                      <span className="settings-ticket-meta">
-                        {t.category} · {fmtDate(t.created_at)}
-                        {t.attachment_count > 0 &&
-                          ` · ${t.attachment_count} attachment${t.attachment_count === 1 ? "" : "s"}`}
-                      </span>
-                    </span>
-                    <span
-                      className={`settings-ticket-status status-${t.status}`}
-                    >
-                      {t.status.replace("_", " ")}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+                        <span className="settings-ticket-main">
+                          <span
+                            className="settings-ticket-subject"
+                            data-tooltip={t.subject}
+                          >
+                            #{t.id} · {t.subject}
+                          </span>
+                          <span className="settings-ticket-meta">
+                            {t.category} · {fmtDate(t.created_at)}
+                            {t.attachment_count > 0 &&
+                              ` · ${t.attachment_count} attachment${t.attachment_count === 1 ? "" : "s"}`}
+                          </span>
+                        </span>
+                        <span
+                          className={`settings-ticket-status status-${t.status}`}
+                        >
+                          {t.status.replace("_", " ")}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
-        {isOrgOwner && (
-          <section className="settings-card">
-            <h2 className="settings-card-title">Organization</h2>
-            <div className="settings-rows">
-              <label className="settings-usage-row">
-                <span>Organization name</span>
-                <input
-                  value={orgName}
-                  maxLength={120}
-                  placeholder="Organization name"
-                  onChange={(e) => {
-                    setOrgName(e.target.value);
-                    setOrgSaved(false);
-                  }}
-                  style={{
-                    padding: "6px 10px",
-                    border: "1px solid #d1d5db",
-                    borderRadius: 6,
-                    minWidth: 220,
-                  }}
-                />
-              </label>
-              <label className="settings-usage-row">
-                <span>Sprint length (days)</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={90}
-                  step={1}
-                  // Uncontrolled + keyed to the saved value so it resets to the
-                  // canonical number after a save; commits on blur / Enter.
-                  key={sprintDays}
-                  defaultValue={sprintDays}
-                  disabled={pendingSprint !== null}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") e.currentTarget.blur();
-                  }}
-                  onBlur={(e) => void changeSprintDays(Number(e.target.value))}
-                  style={{
-                    padding: "6px 10px",
-                    border: "1px solid #d1d5db",
-                    borderRadius: 6,
-                    minWidth: 90,
-                  }}
-                />
-              </label>
-            </div>
-            {sprintError && (
-              <p className="settings-danger-error">{sprintError}</p>
+            {isOrgOwner && (
+              <section className="settings-card">
+                <h2 className="settings-card-title">Organization</h2>
+                <div className="settings-rows">
+                  <label className="settings-usage-row">
+                    <span>Organization name</span>
+                    <input
+                      value={orgName}
+                      maxLength={120}
+                      placeholder="Organization name"
+                      onChange={(e) => {
+                        setOrgName(e.target.value);
+                        setOrgSaved(false);
+                      }}
+                      style={{
+                        padding: "6px 10px",
+                        border: "1px solid #d1d5db",
+                        borderRadius: 6,
+                        minWidth: 220,
+                      }}
+                    />
+                  </label>
+                  <label className="settings-usage-row">
+                    <span>Sprint length (days)</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={90}
+                      step={1}
+                      // Uncontrolled + keyed to the saved value so it resets to the
+                      // canonical number after a save; commits on blur / Enter.
+                      key={sprintDays}
+                      defaultValue={sprintDays}
+                      disabled={pendingSprint !== null}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.currentTarget.blur();
+                      }}
+                      onBlur={(e) =>
+                        void changeSprintDays(Number(e.target.value))
+                      }
+                      style={{
+                        padding: "6px 10px",
+                        border: "1px solid #d1d5db",
+                        borderRadius: 6,
+                        minWidth: 90,
+                      }}
+                    />
+                  </label>
+                </div>
+                {sprintError && (
+                  <p className="settings-danger-error">{sprintError}</p>
+                )}
+                {orgError && (
+                  <p className="settings-danger-error">{orgError}</p>
+                )}
+                {orgSaved && (
+                  <p className="settings-support-empty">
+                    Organization renamed.
+                  </p>
+                )}
+                <button
+                  type="button"
+                  className="settings-billing-link"
+                  disabled={!orgDirty || orgSaving}
+                  onClick={() => void saveOrgName()}
+                >
+                  {orgSaving ? "Saving…" : "Save changes"}
+                </button>
+              </section>
             )}
-            {orgError && <p className="settings-danger-error">{orgError}</p>}
-            {orgSaved && (
-              <p className="settings-support-empty">Organization renamed.</p>
-            )}
-            <button
-              type="button"
-              className="settings-billing-link"
-              disabled={!orgDirty || orgSaving}
-              onClick={() => void saveOrgName()}
-            >
-              {orgSaving ? "Saving…" : "Save changes"}
-            </button>
-          </section>
-        )}
 
-        {isOrgOwner && (
-          <section className="settings-card settings-danger">
-            <h2 className="settings-card-title settings-danger-title">
-              Danger zone
-            </h2>
-            <p className="settings-danger-text">
-              Permanently delete this organization and every member account
-              provisioned under it. This cannot be undone.
-            </p>
-            {deleteOrgError && (
-              <p className="settings-danger-error">{deleteOrgError}</p>
+            {isOrgOwner && (
+              <section className="settings-card settings-danger">
+                <h2 className="settings-card-title settings-danger-title">
+                  Danger zone
+                </h2>
+                <p className="settings-danger-text">
+                  Permanently delete this organization and every member account
+                  provisioned under it. This cannot be undone.
+                </p>
+                {deleteOrgError && (
+                  <p className="settings-danger-error">{deleteOrgError}</p>
+                )}
+                <button
+                  type="button"
+                  className="settings-danger-btn"
+                  onClick={() => void onDeleteOrg()}
+                  disabled={deletingOrg}
+                >
+                  {deletingOrg ? "Deleting…" : "Delete organization"}
+                </button>
+              </section>
             )}
-            <button
-              type="button"
-              className="settings-danger-btn"
-              onClick={() => void onDeleteOrg()}
-              disabled={deletingOrg}
-            >
-              {deletingOrg ? "Deleting…" : "Delete organization"}
-            </button>
-          </section>
-        )}
 
-        {/* Self-service account deletion is personal-accounts only. Business
+            {/* Self-service account deletion is personal-accounts only. Business
             (organization) and platform team members can't delete their own
             account here — org owners tear down the whole org above instead. */}
-        {isPersonal && (
-          <section className="settings-card settings-danger settings-danger-compact">
-            <div className="settings-danger-row">
-              <span className="settings-danger-line">
-                Permanently delete your account and all of your data.
-              </span>
-              <button
-                type="button"
-                className="settings-danger-btn"
-                onClick={() => void onDeleteAccount()}
-                disabled={deletingAccount}
-              >
-                {deletingAccount ? "Deleting…" : "Delete account"}
-              </button>
-            </div>
-            {deleteAccountError && (
-              <p className="settings-danger-error">{deleteAccountError}</p>
+            {isPersonal && (
+              <section className="settings-card settings-danger settings-danger-compact">
+                <div className="settings-danger-row">
+                  <span className="settings-danger-line">
+                    Permanently delete your account and all of your data.
+                  </span>
+                  <button
+                    type="button"
+                    className="settings-danger-btn"
+                    onClick={() => void onDeleteAccount()}
+                    disabled={deletingAccount}
+                  >
+                    {deletingAccount ? "Deleting…" : "Delete account"}
+                  </button>
+                </div>
+                {deleteAccountError && (
+                  <p className="settings-danger-error">{deleteAccountError}</p>
+                )}
+              </section>
             )}
-          </section>
+          </>
         )}
 
         {supportOpen && (

@@ -72,6 +72,25 @@ function SettingsSideNav() {
           </button>
           <button
             type="button"
+            className={linkClass("/settings/usage")}
+            onClick={() => void navigate("/settings/usage")}
+          >
+            <span className="settings-account-link-icon">📊</span>
+            <span>Usage</span>
+          </button>
+          {/* Platform users have no billing cards; mirrors Settings' gate. */}
+          {user?.scope !== "platform" && (
+            <button
+              type="button"
+              className={linkClass("/settings/billing")}
+              onClick={() => void navigate("/settings/billing")}
+            >
+              <span className="settings-account-link-icon">💳</span>
+              <span>Billing</span>
+            </button>
+          )}
+          <button
+            type="button"
             className={linkClass("/profile")}
             onClick={() => void navigate("/profile")}
           >

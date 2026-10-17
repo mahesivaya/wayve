@@ -1798,6 +1798,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     !isNarrow &&
     [
       "/settings",
+      "/settings/usage",
+      "/settings/billing",
       "/profile",
       "/integrations",
       "/appearance",
@@ -2068,9 +2070,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
               {/* Sits below the flex spacer so it stays pinned to the bottom
               regardless of how many nav groups render above it. */}
-              {/* Desktop shell: a plain profile button pinned to the bottom that
-              opens Settings (that runtime has no dropdown). */}
-              {desktop && (
+              {/* A plain profile button pinned to the bottom that opens Settings
+              directly. Settings' left rail (SettingsShell) carries everything
+              the ProfileMenu dropdown did — Profile, Appearance, admin switch,
+              Log out — so wide screens in both runtimes skip the dropdown. */}
+              {(desktop || !isNarrow) && (
                 <div className="sidebar-section sidebar-section-bottom">
                   <button
                     type="button"
@@ -2097,10 +2101,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                 </div>
               )}
 
-              {/* Web build: the profile menu lives at the sidebar bottom (like
-              the desktop button), but keeps its full dropdown — Log out,
-              Appearance, admin switch — rather than just linking to Settings. */}
-              {!desktop && (
+              {/* Narrow web screens: SettingsShell drops its rail there, so the
+              dropdown stays the only way to reach Log out / admin switch. */}
+              {!desktop && isNarrow && (
                 <div className="sidebar-section sidebar-section-bottom">
                   <ProfileMenu placement="sidebar" />
                 </div>
