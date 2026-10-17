@@ -10,6 +10,8 @@ import {
   deleteEmail as deleteEmailRequest,
   restoreEmail as restoreEmailRequest,
   starEmail as starEmailRequest,
+  snoozeEmail as snoozeEmailRequest,
+  unsnoozeEmail as unsnoozeEmailRequest,
   unstarEmail as unstarEmailRequest,
   markEmailRead,
   markEmailUnread,
@@ -33,9 +35,23 @@ export interface TrashedBatch {
   ids: number[];
 }
 
-// The list is newest first, by each row's (newest message's) date.
-const newestFirst = (a: EmailItem, b: EmailItem) =>
-  new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+// The list's order, as the server sorts it (repo::ListOrder): by `sort_at`,
+// newest first, except Snoozed, which lists soonest-back first.
+const sortTime = (email: EmailItem) =>
+  new Date(email.sort_at ?? email.created_at).getTime();
+const listOrder =
+  (folder: EmailFolder) =>
+  (a: EmailItem, b: EmailItem): number =>
+    folder === "snoozed" ? sortTime(a) - sortTime(b) : sortTime(b) - sortTime(a);
+
+// Folders that hide snoozed mail (repo::folder_snooze); elsewhere a snoozed
+// row stays listed.
+const HIDES_SNOOZED: ReadonlyArray<EmailFolder> = [
+  "inbox",
+  "signal",
+  "noise",
+  "github",
+];
 
 export function useEmailInbox(
   user_id: number | undefined,
@@ -199,7 +215,8 @@ export function useEmailInbox(
       // Milliseconds, not seconds: flooring the cursor to a whole second skips
       // every email sharing that second on the next page, which makes load-more
       // return empty and the button vanish.
-      const before = new Date(last.created_at).getTime();
+      // The server pages on `sort_at`, so a returned snooze isn't skipped.
+      const before = sortTime(last);
       const { emails: data } = await getEmails<EmailItem>({
         folder: listFolder(activeFolder, normalizedSearchQuery),
         accountId: activeAccount,
@@ -508,7 +525,7 @@ export function useEmailInbox(
         const listed = new Set(prev.map(conversationKey));
         const missing = back.filter((row) => !listed.has(conversationKey(row)));
         return missing.length > 0
-          ? [...prev, ...missing].sort(newestFirst)
+          ? [...prev, ...missing].sort(listOrder(activeFolder))
           : prev;
       });
     }
@@ -663,6 +680,100 @@ export function useEmailInbox(
     }
   };
 
+  // Snooze a list row until `until`: every message in its conversation, as in
+  // Gmail. The row leaves the inbox views at once and comes back on its own;
+  // elsewhere (All mail, Starred, …) it stays, marked snoozed. If the server
+  // refuses, the messages already snoozed are unsnoozed again, the row comes
+  // back, and the error reaches the caller.
+  const snoozeRow = async (
+    rowId: number,
+    until: Date
+  ): Promise<TrashedBatch> => {
+    const row = emails.find((email) => email.id === rowId);
+    if (!row) return { rows: [], ids: [] };
+    const ids = conversationMessageIds(row);
+    const hides = HIDES_SNOOZED.includes(activeFolder);
+    const untilIso = until.toISOString();
+    if (hides) {
+      setEmails((prev) => prev.filter((email) => email.id !== rowId));
+      setSelectedEmail((cur) => (cur && ids.includes(cur.id) ? null : cur));
+    } else {
+      setEmails((prev) =>
+        prev.map((email) =>
+          email.id === rowId ? { ...email, snoozed_until: untilIso } : email
+        )
+      );
+    }
+    const results = await Promise.allSettled(
+      ids.map((id) => snoozeEmailRequest(id, until))
+    );
+    const failure = results.find(
+      (r): r is PromiseRejectedResult => r.status === "rejected"
+    );
+    if (failure) {
+      await Promise.allSettled(
+        ids
+          .filter((_, i) => results[i].status === "fulfilled")
+          .map((id) => unsnoozeEmailRequest(id))
+      );
+      setEmails((prev) =>
+        hides
+          ? [...prev.filter((email) => email.id !== rowId), row].sort(
+              listOrder(activeFolder)
+            )
+          : prev.map((email) => (email.id === rowId ? row : email))
+      );
+      throw failure.reason;
+    }
+    return { rows: [row], ids };
+  };
+
+  // Undo a snooze: end it and put the row back where it was. Resolves to the
+  // number of messages that couldn't be unsnoozed (their row stays out).
+  const undoSnooze = async (batch: TrashedBatch): Promise<number> => {
+    const results = await Promise.allSettled(
+      batch.ids.map((id) => unsnoozeEmailRequest(id))
+    );
+    const failed = new Set(
+      batch.ids.filter((_, i) => results[i].status === "rejected")
+    );
+    const back = batch.rows
+      .filter((row) =>
+        conversationMessageIds(row).every((id) => !failed.has(id))
+      )
+      .map((row) => ({ ...row, snoozed_until: null }));
+    if (activeFolder === "snoozed") {
+      setEmails((prev) =>
+        prev.filter((email) => !back.some((row) => row.id === email.id))
+      );
+    } else {
+      setEmails((prev) => {
+        const kept = prev.filter(
+          (email) => !back.some((row) => row.id === email.id)
+        );
+        return [...kept, ...back].sort(listOrder(activeFolder));
+      });
+    }
+    return failed.size;
+  };
+
+  // End a row's snooze from the Snoozed folder: back to the inbox now, at its
+  // own place. A failure keeps the row and reaches the caller.
+  const unsnoozeRow = async (rowId: number) => {
+    const row = emails.find((email) => email.id === rowId);
+    if (!row) return;
+    await Promise.all(
+      conversationMessageIds(row).map((id) => unsnoozeEmailRequest(id))
+    );
+    setEmails((prev) =>
+      activeFolder === "snoozed"
+        ? prev.filter((email) => email.id !== rowId)
+        : prev.map((email) =>
+            email.id === rowId ? { ...email, snoozed_until: null } : email
+          )
+    );
+  };
+
   // Optimistic removal, then parallel deletes. A failed delete leaves the row
   // gone from the UI until the next refresh pulls it back, which is acceptable
   // here because the user can simply re-delete.
@@ -719,6 +830,9 @@ export function useEmailInbox(
     fetchMessage,
     deleteEmail,
     toggleStar,
+    snoozeRow,
+    undoSnooze,
+    unsnoozeRow,
     undoTrash,
     restoreEmail,
     markSenderNoise,

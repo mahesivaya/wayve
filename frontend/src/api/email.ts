@@ -9,6 +9,7 @@ export type EmailFolder =
   | "sent"
   | "important"
   | "starred"
+  | "snoozed"
   | "updates"
   | "spam"
   | "drafts"
@@ -272,6 +273,18 @@ export const starEmail = async (id: number) => {
 
 export const unstarEmail = async (id: number) => {
   await apiFetch(`/api/emails/${id}/unstar`, { method: "POST" });
+};
+
+// Snooze one message until an exact moment (Fluxze only), or end its snooze.
+export const snoozeEmail = async (id: number, until: Date) => {
+  await apiFetch(`/api/emails/${id}/snooze`, {
+    method: "POST",
+    body: JSON.stringify({ until: until.toISOString() }),
+  });
+};
+
+export const unsnoozeEmail = async (id: number) => {
+  await apiFetch(`/api/emails/${id}/unsnooze`, { method: "POST" });
 };
 
 export const restoreEmail = async (id: number) => {

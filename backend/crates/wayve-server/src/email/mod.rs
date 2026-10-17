@@ -41,6 +41,8 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(crate::routes::email::restore_email)
         .service(crate::routes::email::star_email)
         .service(crate::routes::email::unstar_email)
+        .service(crate::routes::email::snooze_email)
+        .service(crate::routes::email::unsnooze_email)
         .service(crate::routes::email::mark_email_read)
         .service(crate::routes::email::mark_email_unread)
         .service(crate::routes::email::mark_email_noise)

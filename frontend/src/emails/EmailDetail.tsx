@@ -16,7 +16,8 @@ import {
   replyRecipients,
 } from "./replyRecipients";
 import { EmailItem } from "./types";
-import { StarIcon } from "../icons";
+import { SnoozeIcon, StarIcon } from "../icons";
+import { SnoozeMenu } from "./SnoozeMenu";
 import { updateEmailState, type InboxState } from "../api/sharedInboxes";
 import { APP_TIME_ZONE } from "../utils/datetime";
 import { useAuth } from "../auth/useAuth";
@@ -35,6 +36,9 @@ interface EmailDetailProps {
   // The open conversation's star, as on its list row. Omit to hide it.
   starred?: boolean;
   onToggleStar?: () => Promise<void>;
+  // Snooze the open conversation until a moment picked from the menu. Omit to
+  // hide the button (as in the Snoozed folder).
+  onSnooze?: (until: Date) => Promise<void>;
   // Marks the email's sender as noise (routes their mail to the Noise folder).
   onMarkNoise?: (emailId: number) => Promise<void>;
   // Narrows the mail list to one sender. The host owns this because showing
@@ -58,6 +62,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   onDeleteEmail,
   starred = false,
   onToggleStar,
+  onSnooze,
   onMarkNoise,
   onFilterBySender,
   conversation,
@@ -67,6 +72,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   const { user } = useAuth();
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // The snooze button while its menu is open.
+  const [snoozeAnchor, setSnoozeAnchor] = useState<HTMLElement | null>(null);
   // Gmail-style "more actions" kebab menu (temporary placeholder items).
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement | null>(null);
@@ -798,6 +805,36 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             >
               <StarIcon size={15} fill={starred ? "currentColor" : "none"} />
             </button>
+          )}
+          {onSnooze && (
+            <button
+              className="email-detail-snooze"
+              onClick={(event) => {
+                const anchor = event.currentTarget;
+                setSnoozeAnchor((cur) => (cur ? null : anchor));
+              }}
+              data-tooltip="Snooze"
+              aria-label="Snooze"
+              aria-haspopup="menu"
+              aria-expanded={snoozeAnchor !== null}
+            >
+              <SnoozeIcon size={15} />
+            </button>
+          )}
+          {onSnooze && snoozeAnchor && (
+            <SnoozeMenu
+              anchor={snoozeAnchor}
+              onClose={() => setSnoozeAnchor(null)}
+              onPick={(until) => {
+                setSnoozeAnchor(null);
+                setDeleteError(null);
+                onSnooze(until).catch((err: unknown) =>
+                  setDeleteError(
+                    err instanceof Error ? err.message : "Failed to snooze email"
+                  )
+                );
+              }}
+            />
           )}
           <button
             className="email-detail-delete"

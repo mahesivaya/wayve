@@ -268,6 +268,12 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
           >
             ⭐ Starred
           </button>
+          <button
+            className={`filter-btn ${activeFolder === "snoozed" && viewMode === "email" ? "active" : ""}`}
+            onClick={() => setActiveFolder("snoozed")}
+          >
+            ⏰ Snoozed
+          </button>
           {/* Gmail's Important marker, not a star: Gmail sets it on its own,
             and the star is the user's (Starred, above). */}
           <button

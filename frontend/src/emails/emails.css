@@ -1079,11 +1079,15 @@
   margin-left: auto;
 }
 
-.email-item:hover .email-row-meta {
+.email-item:hover .email-row-meta,
+.email-item.menu-open .email-row-meta {
   display: none;
 }
 
-.email-item:hover .email-row-actions {
+/* `menu-open`: the row's snooze menu lives on <body>, so pointing at it drops
+   the row's :hover; this keeps the row's actions up meanwhile. */
+.email-item:hover .email-row-actions,
+.email-item.menu-open .email-row-actions {
   display: inline-flex;
 }
 
@@ -1161,7 +1165,59 @@
   font-size: var(--text-sm);
 }
 
-/* "Moved to Trash · Undo", pinned above everything at the bottom of the page. */
+/* When a snoozed row comes back, in the Snoozed folder. */
+.email-snooze-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-warning);
+  font-weight: 600;
+}
+
+/* The snooze menu, drawn on <body> beside its button (SnoozeMenu.tsx). */
+.snooze-menu {
+  position: fixed;
+  z-index: 60;
+  padding: 6px 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-sm);
+}
+
+.snooze-menu-title {
+  padding: 4px 12px 6px;
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.snooze-menu-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.snooze-menu-item:hover,
+.snooze-menu-item:focus-visible {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  outline: none;
+}
+
+.snooze-menu-time {
+  color: var(--color-text-muted);
+}
+
+/* "Moved to Trash · Undo" / "Snoozed until … · Undo", pinned above everything
+   at the bottom of the page. */
 .email-trash-notice {
   position: fixed;
   left: 50%;
@@ -1705,7 +1761,8 @@
   position: relative;
 }
 
-.main.email-list-view .email-item:hover .email-row-actions {
+.main.email-list-view .email-item:hover .email-row-actions,
+.main.email-list-view .email-item.menu-open .email-row-actions {
   position: absolute;
   top: 50%;
   right: 10px;
@@ -1714,7 +1771,8 @@
   background: var(--email-row-hover-bg);
 }
 
-.email-item:hover {
+.email-item:hover,
+.email-item.menu-open {
   --email-row-hover-bg: var(--color-surface-cool-blue);
 }
 
@@ -1847,6 +1905,7 @@
 
 .email-detail-back,
 .email-detail-star,
+.email-detail-snooze,
 .email-detail-delete,
 .email-detail-reply,
 .email-detail-reply-all,
@@ -1870,7 +1929,8 @@
   padding: 0;
 }
 
-.email-detail-star {
+.email-detail-star,
+.email-detail-snooze {
   width: 26px;
   padding: 0;
 }

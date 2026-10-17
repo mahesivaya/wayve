@@ -28,6 +28,7 @@ import SearchBar from "../search/SearchBar";
 import { logger } from "../utils/logger";
 import type { EmailItem } from "./types";
 import { conversationKey, isStarred } from "./conversation";
+import { canSnoozeIn, formatSnoozeTime } from "./snoozePresets";
 
 const ACCOUNT_NAME_STORAGE_KEY = "rwayve.emailAccountNames";
 const EMAIL_LIST_WIDTH_STORAGE_KEY = "rwayve.emailList.width";
@@ -68,6 +69,9 @@ export default function Emails() {
     fetchMessage,
     deleteEmail,
     toggleStar,
+    snoozeRow,
+    undoSnooze,
+    unsnoozeRow,
     undoTrash,
     restoreEmail,
     markSenderNoise,
@@ -77,27 +81,41 @@ export default function Emails() {
     markUnread,
   } = useEmailInbox(user?.id, normalizedSearchQuery);
 
-  // After a delete: "Moved to Trash" with Undo, until it times out. Undo puts
-  // the rows back into the list on screen, so it is offered only in the view
-  // (account + folder) they were deleted from.
-  const [trashNotice, setTrashNotice] = useState<{
+  // After a delete or a snooze: what happened, with Undo, until it times out.
+  // Undo puts the rows back into the list on screen, so it is offered only in
+  // the view (account + folder) they left. `undo` resolves to the number of
+  // messages it couldn't put back, and `failure` says what to do about those.
+  const [notice, setNotice] = useState<{
     text: string;
     view: string;
-    batch?: TrashedBatch;
+    undo?: () => Promise<number>;
+    failure?: string;
   } | null>(null);
   const currentView = `${activeAccount ?? "all"}|${activeFolder}`;
   useEffect(() => {
-    if (!trashNotice) return;
-    const timer = window.setTimeout(() => setTrashNotice(null), 8000);
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(null), 8000);
     return () => window.clearTimeout(timer);
-  }, [trashNotice]);
+  }, [notice]);
   const offerUndo = (batch: TrashedBatch) => {
     if (batch.ids.length === 0) return;
     const n = batch.rows.length;
-    setTrashNotice({
+    setNotice({
       text: n > 1 ? `${n} conversations moved to Trash.` : "Moved to Trash.",
       view: currentView,
-      batch,
+      undo: () => undoTrash(batch),
+      failure: "Try again from Trash.",
+    });
+  };
+  // Reject on failure, so the row / reading pane shows the error.
+  const snoozeWithUndo = async (rowId: number, until: Date) => {
+    const batch = await snoozeRow(rowId, until);
+    if (batch.ids.length === 0) return;
+    setNotice({
+      text: `Snoozed until ${formatSnoozeTime(until)}.`,
+      view: currentView,
+      undo: () => undoSnooze(batch),
+      failure: "Unsnooze it from Snoozed.",
     });
   };
   // Reject on failure, so the row / reading pane shows the error. In Trash a
@@ -120,14 +138,14 @@ export default function Emails() {
           conversationKey(email) === conversationKey(selectedEmail)
       )
     : undefined;
-  const undoLastTrash = async () => {
-    const batch = trashNotice?.batch;
-    if (!batch) return;
-    setTrashNotice(null);
-    const failed = await undoTrash(batch);
+  const undoNotice = async () => {
+    const current = notice;
+    if (!current?.undo) return;
+    setNotice(null);
+    const failed = await current.undo();
     if (failed > 0) {
-      setTrashNotice({
-        text: `Couldn't restore ${failed} email${failed === 1 ? "" : "s"}. Try again from Trash.`,
+      setNotice({
+        text: `Couldn't undo ${failed} email${failed === 1 ? "" : "s"}. ${current.failure ?? ""}`.trim(),
         view: currentView,
       });
     }
@@ -789,6 +807,8 @@ export default function Emails() {
             onDelete={deleteWithUndo}
             onRestore={restoreEmail}
             onToggleStar={toggleStar}
+            onSnooze={snoozeWithUndo}
+            onUnsnooze={unsnoozeRow}
             activeFolder={activeFolder}
             hasAccounts={accounts.length > 0}
             accountsLoaded={accountsLoaded}
@@ -867,6 +887,11 @@ export default function Emails() {
             onToggleStar={
               selectedRow ? () => toggleStar(selectedRow.id) : undefined
             }
+            onSnooze={
+              selectedRow && canSnoozeIn(activeFolder)
+                ? (until) => snoozeWithUndo(selectedRow.id, until)
+                : undefined
+            }
             onMarkNoise={markSenderNoise}
             conversation={
               conversation && conversation.rowId === selectedEmail?.id
@@ -892,14 +917,14 @@ export default function Emails() {
           />
         )}
       </div>
-      {trashNotice && trashNotice.view === currentView && (
+      {notice && notice.view === currentView && (
         <div className="email-trash-notice" role="status">
-          <span>{trashNotice.text}</span>
-          {trashNotice.batch && (
+          <span>{notice.text}</span>
+          {notice.undo && (
             <button
               type="button"
               className="email-trash-notice-undo"
-              onClick={() => void undoLastTrash()}
+              onClick={() => void undoNotice()}
             >
               Undo
             </button>
