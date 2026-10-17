@@ -142,11 +142,17 @@ mod tests {
             .await,
             0
         );
-        // The file goes too, not just its row.
-        assert!(
-            crate::storage::get(&file).await.is_err(),
-            "attachment file left behind"
-        );
+        // The file goes too, not just its row. It is removed in the background
+        // after the response, so give that a moment.
+        let mut file_gone = false;
+        for _ in 0..50 {
+            if crate::storage::get(&file).await.is_err() {
+                file_gone = true;
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        assert!(file_gone, "attachment file left behind");
 
         let audited: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM audit_logs WHERE action = 'channel_deleted' \
