@@ -9,9 +9,8 @@ import { homePathForUser } from "../auth/accountHome";
 // replace-redirect so back-button doesn't bounce them straight back.
 //
 // `to` defaults to the user's account home (e.g. /home for personal); pass
-// an explicit target when the user has a more useful destination — /pricing
-// redirects to /settings, where the "Manage billing & upgrade" entry point
-// lives.
+// an explicit target when the user has a more useful destination — e.g.
+// /settings/billing, where the "Manage billing & upgrade" entry point lives.
 export default function RedirectIfPersonal({
   to,
   children,
