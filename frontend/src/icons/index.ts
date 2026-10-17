@@ -55,6 +55,8 @@ export {
   Trash2 as TrashIcon,
   ArchiveRestore as RestoreIcon,
   Star as StarIcon,
+  Clock as SnoozeIcon,
+  AlarmClockOff as UnsnoozeIcon,
   List as ListViewIcon,
   LayoutGrid as GridViewIcon,
   Save as SaveIcon,

@@ -150,6 +150,13 @@ pub struct EmailListRow {
     /// any of its messages is, as in Gmail.
     pub is_starred: bool,
     pub created_at: Option<NaiveDateTime>,
+    /// UTC. Set while snoozed, and kept once the snooze has passed, so `sort_at`
+    /// can put returned mail at the top.
+    pub snoozed_until: Option<NaiveDateTime>,
+    /// The list's order and paging cursor (see `ListOrder`): `created_at`, a
+    /// snooze's end in the inbox views once it has passed, or in Snoozed when
+    /// it comes back. For a conversation, the latest of its messages'.
+    pub sort_at: Option<NaiveDateTime>,
     pub is_shared: bool,
     pub shared_label: Option<String>,
     pub inbox_status: Option<String>,
@@ -207,6 +214,7 @@ const LIST_COLUMNS: &str = r#"
         ) AS has_attachments,
         e.account_id, e.is_read, e.created_at,
         ('STARRED' = ANY(e.labels)) AS is_starred,
+        e.snoozed_until,
         COALESCE(a.is_shared, FALSE) AS is_shared,
         a.shared_label,
         s.status AS inbox_status, s.assignee_id AS inbox_assignee_id
@@ -278,7 +286,91 @@ fn push_account_and_status(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &
     }
 }
 
-fn push_folder(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFilters) {
+/// The current time in the UTC that `snoozed_until` and `created_at` store.
+const NOW_UTC: &str = "(now() AT TIME ZONE 'UTC')";
+
+/// A list's order, which is also its paging cursor (`sort_at`, sent with each
+/// row). Snooze shapes it only where it hides mail:
+/// - the inbox views: when a message arrived, or came back from a snooze if
+///   that is later, so returned mail sits at the top as in Gmail. Mail still
+///   snoozed is hidden there, so only a snooze that has ended counts.
+/// - Snoozed: when each comes back, soonest first.
+/// - every other folder: when it arrived. A snoozed email shows there at its
+///   own date, not at the future moment it returns.
+struct ListOrder {
+    /// One row per email. For the inbox views the hidden rows can't reach the
+    /// list, so the indexable GREATEST (`idx_emails_account_sort`) is exact.
+    per_email: String,
+    /// One message within a conversation; the conversation sorts by the
+    /// latest of its messages'. Its older messages may still be snoozed (a
+    /// reply brought it back), so a snooze counts only once it has ended.
+    per_message: String,
+    ascending: bool,
+}
+
+fn list_order(folder: Option<&str>) -> ListOrder {
+    match folder_snooze(folder) {
+        Some(SnoozeView::Hide) => ListOrder {
+            per_email: "GREATEST(e.created_at, e.snoozed_until)".to_string(),
+            per_message: format!(
+                "CASE WHEN e.snoozed_until <= {NOW_UTC} \
+                 THEN GREATEST(e.created_at, e.snoozed_until) ELSE e.created_at END"
+            ),
+            ascending: false,
+        },
+        Some(SnoozeView::Only) => ListOrder {
+            per_email: "e.snoozed_until".to_string(),
+            per_message: "e.snoozed_until".to_string(),
+            ascending: true,
+        },
+        None => ListOrder {
+            per_email: "e.created_at".to_string(),
+            per_message: "e.created_at".to_string(),
+            ascending: false,
+        },
+    }
+}
+
+impl ListOrder {
+    /// `ASC` / `DESC`, and the keyset comparison that pages past a cursor.
+    fn direction(&self) -> (&'static str, &'static str) {
+        if self.ascending {
+            ("ASC", ">")
+        } else {
+            ("DESC", "<")
+        }
+    }
+}
+
+/// How a folder treats snoozed mail. The inbox views (Inbox, its Signal / Noise
+/// chips, Reviews) hide it; Snoozed lists only it; every other folder, All mail
+/// included, ignores snooze, so snoozed mail is out of the way but never
+/// unreachable.
+#[derive(Clone, Copy, PartialEq)]
+enum SnoozeView {
+    Hide,
+    Only,
+}
+
+fn folder_snooze(folder: Option<&str>) -> Option<SnoozeView> {
+    match folder {
+        Some("inbox" | "signal" | "noise" | "github") => Some(SnoozeView::Hide),
+        Some("snoozed") => Some(SnoozeView::Only),
+        _ => None,
+    }
+}
+
+/// `per_email`: the list judges each message's own snooze. A conversation
+/// list instead judges the whole conversation by its newest message
+/// (`push_grouped_list`), as Gmail does: a new reply brings a snoozed
+/// conversation back, and an older snoozed message can't keep one in the
+/// inbox and in Snoozed at once. Snoozed still narrows a conversation list to
+/// those with a snoozed message here, so it never scans every conversation.
+fn push_folder(
+    qb: &mut QueryBuilder<'_, sqlx::Postgres>,
+    filters: &EmailListFilters,
+    per_email: bool,
+) {
     // Pull-request mail lives exclusively under the "Reviews" folder: the
     // `github` arm selects on this predicate and the inbox tabs (All / Signal /
     // Noise) subtract it, so the two sides stay disjoint and a PR email never
@@ -298,6 +390,17 @@ fn push_folder(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFil
     // was), which would leave it listed under them: only Trash lists it.
     if filters.folder.as_deref() != Some("trash") {
         qb.push(" AND NOT ('TRASH' = ANY(e.labels)) ");
+    }
+    match folder_snooze(filters.folder.as_deref()) {
+        Some(SnoozeView::Hide) if per_email => {
+            qb.push(format!(
+                " AND (e.snoozed_until IS NULL OR e.snoozed_until <= {NOW_UTC}) "
+            ));
+        }
+        Some(SnoozeView::Only) => {
+            qb.push(format!(" AND e.snoozed_until > {NOW_UTC} "));
+        }
+        _ => {}
     }
 
     if let Some(folder) = filters.folder.as_deref() {
@@ -459,20 +562,30 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
     } else {
         // One row per email: the tenant scope, then the filters, then the
         // keyset cursor and page.
+        let order = list_order(filters.folder.as_deref());
+        let (dir, past) = order.direction();
+        let sort = &order.per_email;
         qb.push("SELECT ");
         qb.push(LIST_COLUMNS);
+        qb.push(format!(", {sort} AS sort_at"));
         push_scope(&mut qb, filters.user_id);
         push_account_and_status(&mut qb, &filters);
-        push_folder(&mut qb, &filters);
+        push_folder(&mut qb, &filters, true);
         push_search(&mut qb, &filters);
         if let Some((before_ms, before_id)) = filters.before {
-            qb.push(" AND (e.created_at, e.id) < (to_timestamp(");
+            // The cursor comes back in milliseconds (a JS Date), so compare at
+            // that precision: against the stored microseconds, paging forward
+            // (Snoozed) would return the cursor's own row forever, and paging
+            // back would skip rows later in the same millisecond.
+            qb.push(format!(
+                " AND (date_trunc('milliseconds', {sort}), e.id) {past} (to_timestamp("
+            ));
             qb.push_bind(before_ms);
             qb.push("::double precision / 1000.0), ");
             qb.push_bind(before_id);
             qb.push(")");
         }
-        qb.push(" ORDER BY e.created_at DESC, e.id DESC LIMIT ");
+        qb.push(format!(" ORDER BY {sort} {dir}, e.id {dir} LIMIT "));
         qb.push_bind(query_limit);
     }
 
@@ -526,19 +639,20 @@ fn push_grouped_list(
         qb.push(" ORDER BY ");
         qb.push(CONV_KEY);
         qb.push(", e.created_at DESC, e.id DESC) e WHERE TRUE ");
-        push_folder(qb, filters);
+        push_folder(qb, filters, false);
     } else {
         qb.push("SELECT DISTINCT ");
         qb.push(CONV_KEY);
         qb.push(" AS conv_key");
         push_scope(qb, filters.user_id);
         push_account_and_status(qb, filters);
-        push_folder(qb, filters);
+        push_folder(qb, filters, false);
         push_search(qb, filters);
     }
+    let order = list_order(filters.folder.as_deref());
     qb.push("), conv AS (SELECT ");
     qb.push(LIST_COLUMNS);
-    qb.push(", ");
+    qb.push(format!(", {} AS sort_at, ", order.per_message));
     qb.push(CONV_KEY);
     qb.push(" AS conv_key, e.thread_id, e.sender_hash");
     push_scope(qb, filters.user_id);
@@ -561,7 +675,8 @@ fn push_grouped_list(
                    COALESCE(ARRAY_AGG(id ORDER BY created_at DESC, id DESC)
                             FILTER (WHERE is_read = FALSE), '{}') AS unread_ids,
                    COALESCE(ARRAY_AGG(id ORDER BY created_at DESC, id DESC)
-                            FILTER (WHERE is_starred), '{}') AS starred_ids
+                            FILTER (WHERE is_starred), '{}') AS starred_ids,
+                   MAX(sort_at) AS sort_at
             FROM conv GROUP BY conv_key),
         -- Who wrote in each conversation, once each, in order of their first
         -- message (capped), and whether any of their messages is unread, for
@@ -589,18 +704,35 @@ fn push_grouped_list(
                l.inbox_status, l.inbox_assignee_id, l.thread_id,
                g.message_count, g.unread_count, g.message_ids, g.unread_ids,
                g.starred_ids, (cardinality(g.starred_ids) > 0) AS is_starred,
+               l.snoozed_until, g.sort_at,
                p.p_iv, p.p_enc, p.p_plain, p.p_unread
         FROM latest l JOIN agg g USING (conv_key) JOIN senders p USING (conv_key)
         WHERE TRUE"#,
     );
+    // A conversation's snooze is its newest message's (see `push_folder`).
+    match folder_snooze(filters.folder.as_deref()) {
+        Some(SnoozeView::Hide) => {
+            qb.push(format!(
+                " AND (l.snoozed_until IS NULL OR l.snoozed_until <= {NOW_UTC})"
+            ));
+        }
+        Some(SnoozeView::Only) => {
+            qb.push(format!(" AND l.snoozed_until > {NOW_UTC}"));
+        }
+        None => {}
+    }
+    let (dir, past) = order.direction();
     if let Some((before_ms, before_id)) = filters.before {
-        qb.push(" AND (l.created_at, l.id) < (to_timestamp(");
+        // Millisecond precision, as the cursor has (see `list`).
+        qb.push(format!(
+            " AND (date_trunc('milliseconds', g.sort_at), l.id) {past} (to_timestamp("
+        ));
         qb.push_bind(before_ms);
         qb.push("::double precision / 1000.0), ");
         qb.push_bind(before_id);
         qb.push(")");
     }
-    qb.push(" ORDER BY l.created_at DESC, l.id DESC LIMIT ");
+    qb.push(format!(" ORDER BY g.sort_at {dir}, l.id {dir} LIMIT "));
     qb.push_bind(query_limit);
 }
 
@@ -648,6 +780,14 @@ fn map_list_row(row: PgRow) -> EmailListRow {
             .ok()
             .flatten(),
         is_starred: row.try_get::<bool, _>("is_starred").unwrap_or(false),
+        snoozed_until: row
+            .try_get::<Option<NaiveDateTime>, _>("snoozed_until")
+            .ok()
+            .flatten(),
+        sort_at: row
+            .try_get::<Option<NaiveDateTime>, _>("sort_at")
+            .ok()
+            .flatten(),
         starred_ids: row
             .try_get::<Option<Vec<i32>>, _>("starred_ids")
             .ok()
@@ -1082,6 +1222,34 @@ async fn stamp_last_message_at(pool: &PgPool, account_id: i32, results: &[Insert
     }
 }
 
+/// Snoozes an email until `until` (UTC), or with `None` ends a snooze that has
+/// not run out yet, so the email goes back to its own place in the list (an
+/// Undo). A snooze that already ran out is left alone: it is what keeps
+/// returned mail at the top. Returns whether anything changed.
+pub async fn set_snoozed(
+    pool: &PgPool,
+    email_id: i32,
+    until: Option<NaiveDateTime>,
+) -> sqlx::Result<bool> {
+    let changed = match until {
+        Some(until) => sqlx::query("UPDATE emails SET snoozed_until = $2 WHERE id = $1")
+            .bind(email_id)
+            .bind(until)
+            .execute(pool)
+            .await?
+            .rows_affected(),
+        None => sqlx::query(&format!(
+            "UPDATE emails SET snoozed_until = NULL \
+             WHERE id = $1 AND snoozed_until > {NOW_UTC}"
+        ))
+        .bind(email_id)
+        .execute(pool)
+        .await?
+        .rows_affected(),
+    };
+    Ok(changed > 0)
+}
+
 /// Stars or unstars an email: the STARRED label, as Gmail stores it.
 pub async fn set_starred(pool: &PgPool, email_id: i32, starred: bool) -> sqlx::Result<()> {
     sqlx::query(
@@ -1099,7 +1267,8 @@ pub async fn set_starred(pool: &PgPool, email_id: i32, starred: bool) -> sqlx::R
 }
 
 /// Labels an email as deleted (TRASH) or takes the label off again, keeping its
-/// other labels so a restore puts it back where it was. `moved` is what the
+/// other labels so a restore puts it back where it was. A restore also ends a
+/// snooze still pending, so restored mail is in the inbox, not hidden from it. `moved` is what the
 /// provider reported: a new provider id is stored (a moved Outlook message gets
 /// one), and a restore the provider says landed in the inbox gets INBOX back
 /// (Gmail drops it from trashed mail, and sync may have mirrored that).
@@ -1116,7 +1285,11 @@ pub async fn set_trashed(
              WHEN $3 THEN array_append(array_remove(array_remove(labels, 'TRASH'), 'INBOX'), 'INBOX') \
              ELSE array_remove(labels, 'TRASH') \
            END, \
-           gmail_id = COALESCE($4, gmail_id) \
+           gmail_id = COALESCE($4, gmail_id), \
+           snoozed_until = CASE \
+             WHEN NOT $2 AND snoozed_until > (now() AT TIME ZONE 'UTC') THEN NULL \
+             ELSE snoozed_until \
+           END \
          WHERE id = $1",
     )
     .bind(email_id)

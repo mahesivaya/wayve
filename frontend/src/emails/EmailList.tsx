@@ -6,9 +6,13 @@ import {
   EmailsIcon,
   MailOpenIcon,
   RestoreIcon,
+  SnoozeIcon,
   StarIcon,
   TrashIcon,
+  UnsnoozeIcon,
 } from "../icons";
+import { SnoozeMenu } from "./SnoozeMenu";
+import { canSnoozeIn, formatSnoozeTime } from "./snoozePresets";
 import { useGlobalSearch } from "../search/SearchContext";
 import { useListScrollMemory } from "./useListScrollMemory";
 import { fmtListTimestamp } from "../utils/datetime";
@@ -46,6 +50,11 @@ interface EmailListProps {
   // The star on every row, as in Gmail. Rejects on failure, which the list
   // shows (the star itself flips back in useEmailInbox).
   onToggleStar?: (id: number) => Promise<unknown>;
+  // Snooze a row until a moment picked from the row's menu (the inbox views
+  // hide it until then), or in the Snoozed folder end it. Both reject on
+  // failure, which the list shows.
+  onSnooze?: (id: number, until: Date) => Promise<unknown>;
+  onUnsnooze?: (id: number) => Promise<unknown>;
   activeFolder?: EmailFolder;
   // `accountsLoaded` distinguishes "no accounts" from "not fetched yet", so the
   // connect-an-account empty state never flashes at users who do have mailboxes.
@@ -114,6 +123,8 @@ export const EmailList: React.FC<EmailListProps> = ({
   onDelete,
   onRestore,
   onToggleStar,
+  onSnooze,
+  onUnsnooze,
   activeFolder,
   hasAccounts = true,
   accountsLoaded = true,
@@ -231,6 +242,18 @@ export const EmailList: React.FC<EmailListProps> = ({
       </button>
     );
   };
+
+  // The row whose snooze menu is open, and the button it hangs from. The menu
+  // lives on <body> (see SnoozeMenu), so pointing at it drops the row's
+  // :hover; `menu-open` keeps that row's actions showing meanwhile.
+  const [snoozeFor, setSnoozeFor] = useState<{
+    id: number;
+    anchor: HTMLElement;
+  } | null>(null);
+  // Snoozed rows offer Unsnooze instead of Snooze, and show when they return.
+  const inSnoozed = activeFolder === "snoozed";
+  const rowSnooze = canSnoozeIn(activeFolder) ? onSnooze : undefined;
+  const rowUnsnooze = inSnoozed ? onUnsnooze : undefined;
 
   // Trash rows offer Restore instead of Delete: deleting them again would do
   // nothing, and there is no permanent delete (see routes/email.rs).
@@ -582,6 +605,7 @@ export const EmailList: React.FC<EmailListProps> = ({
                 "email-item",
                 isUnread(email) ? "unread" : "read",
                 selectedEmailId === email.id ? "active" : "",
+                snoozeFor?.id === email.id ? "menu-open" : "",
               ]
                 .filter(Boolean)
                 .join(" ")}
@@ -685,11 +709,26 @@ export const EmailList: React.FC<EmailListProps> = ({
                       📎
                     </span>
                   )}
-                  <span className="email-time">
-                    {fmtListTimestamp(email.created_at)}
-                  </span>
+                  {inSnoozed && email.snoozed_until ? (
+                    <span
+                      className="email-time email-snooze-time"
+                      title="Back in the inbox at"
+                    >
+                      <SnoozeIcon size={12} aria-hidden="true" />
+                      {formatSnoozeTime(new Date(email.snoozed_until))}
+                    </span>
+                  ) : (
+                    <span className="email-time">
+                      {fmtListTimestamp(email.created_at)}
+                    </span>
+                  )}
                 </span>
-                {(onMarkRead || onMarkUnread || rowDelete || rowRestore) && (
+                {(onMarkRead ||
+                  onMarkUnread ||
+                  rowDelete ||
+                  rowRestore ||
+                  rowSnooze ||
+                  rowUnsnooze) && (
                   <span
                     className="email-row-actions"
                     onClick={(event) => event.stopPropagation()}
@@ -769,6 +808,46 @@ export const EmailList: React.FC<EmailListProps> = ({
                         <AttachmentIcon size={16} />
                       </button>
                     )}
+                    {/* Last, at the row's end. */}
+                    {rowSnooze && (
+                      <button
+                        type="button"
+                        className="email-row-action"
+                        data-tooltip="Snooze"
+                        data-tooltip-align="right"
+                        aria-label="Snooze"
+                        aria-haspopup="menu"
+                        aria-expanded={snoozeFor?.id === email.id}
+                        disabled={busyIds.has(email.id)}
+                        onClick={(event) => {
+                          const anchor = event.currentTarget;
+                          setSnoozeFor((cur) =>
+                            cur?.id === email.id ? null : { id: email.id, anchor }
+                          );
+                        }}
+                      >
+                        <SnoozeIcon size={16} />
+                      </button>
+                    )}
+                    {rowUnsnooze && (
+                      <button
+                        type="button"
+                        className="email-row-action"
+                        data-tooltip="Unsnooze"
+                        data-tooltip-align="right"
+                        aria-label="Unsnooze"
+                        disabled={busyIds.has(email.id)}
+                        onClick={() =>
+                          void runRowAction(
+                            email.id,
+                            rowUnsnooze,
+                            "Failed to unsnooze email"
+                          )
+                        }
+                      >
+                        <UnsnoozeIcon size={16} />
+                      </button>
+                    )}
                   </span>
                 )}
               </div>
@@ -816,6 +895,22 @@ export const EmailList: React.FC<EmailListProps> = ({
             </div>
           ))}
         </>
+      )}
+
+      {snoozeFor && rowSnooze && (
+        <SnoozeMenu
+          anchor={snoozeFor.anchor}
+          onClose={() => setSnoozeFor(null)}
+          onPick={(until) => {
+            const { id } = snoozeFor;
+            setSnoozeFor(null);
+            void runRowAction(
+              id,
+              (rowId) => rowSnooze(rowId, until),
+              "Failed to snooze email"
+            );
+          }}
+        />
       )}
 
       {/* Rendered whenever the folder can page, even while a fetch is in flight,

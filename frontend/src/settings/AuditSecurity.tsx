@@ -45,6 +45,8 @@ const EMAIL_ACTIONS = new Set([
   "email_read",
   "email_deleted",
   "email_restored",
+  "email_snoozed",
+  "email_unsnoozed",
   "email_account_delete",
 ]);
 
@@ -54,6 +56,8 @@ const EMAIL_ACTION_LABEL: Record<string, string> = {
   email_read: "Read",
   email_deleted: "Deleted",
   email_restored: "Restored",
+  email_snoozed: "Snoozed",
+  email_unsnoozed: "Unsnoozed",
   email_account_delete: "Account removed",
 };
 
@@ -1058,6 +1062,8 @@ export default function AuditSecurity({
                 <option value="email_read">Read</option>
                 <option value="email_deleted">Deleted</option>
                 <option value="email_restored">Restored</option>
+                <option value="email_snoozed">Snoozed</option>
+                <option value="email_unsnoozed">Unsnoozed</option>
                 <option value="email_account_delete">Account removed</option>
               </select>
             </label>

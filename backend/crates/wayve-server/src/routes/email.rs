@@ -173,7 +173,10 @@ pub async fn get_emails(
     // latency even when the DB already holds the rows.
     let mut rows = repo::list(pool.get_ref(), filters.clone()).await?;
 
-    if let Some(before_ms) = query.before {
+    // Snoozed holds Fluxze-only state, ordered by when mail comes back, so its
+    // cursor is a future time and the provider has nothing older to give.
+    let pages_provider = filters.folder.as_deref() != Some("snoozed");
+    if let Some(before_ms) = query.before.filter(|_| pages_provider) {
         let account_id = query.account_id;
         // sync_older_page expects Unix seconds; the wire format is milliseconds, for
         // sub-second precision on the DB keyset cursor.
@@ -245,10 +248,11 @@ pub async fn get_emails(
         .into_iter()
         .take(page_size)
         .map(|row| {
-            let created_at = row.created_at.map(|dt| {
+            let utc = |dt: chrono::NaiveDateTime| {
                 chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(dt, chrono::Utc)
                     .to_rfc3339()
-            });
+            };
+            let created_at = row.created_at.map(utc);
             serde_json::json!({
                 "id": row.id,
                 "gmail_id": row.gmail_id,
@@ -271,6 +275,8 @@ pub async fn get_emails(
                 "unread_ids": row.unread_ids,
                 "is_starred": row.is_starred,
                 "starred_ids": row.starred_ids,
+                "snoozed_until": row.snoozed_until.map(utc),
+                "sort_at": row.sort_at.map(utc),
                 "participants": row.participants,
             })
         })
@@ -334,7 +340,15 @@ async fn move_email(
     direction: TrashDirection,
 ) -> AppResult {
     let user_id = get_user_id_from_request(req).ok_or(AppError::Unauthorized)?;
-    let email = match load_owned_email(pool, user_id, email_id, direction.verb()).await? {
+    let email = match load_owned_email(
+        pool,
+        user_id,
+        email_id,
+        direction.verb(),
+        ProviderCopy::Change,
+    )
+    .await?
+    {
         Ok(email) => email,
         Err(response) => return Ok(response),
     };
@@ -431,7 +445,7 @@ pub async fn unstar_email(
 async fn set_star(req: &HttpRequest, pool: &PgPool, email_id: i32, starred: bool) -> AppResult {
     let user_id = get_user_id_from_request(req).ok_or(AppError::Unauthorized)?;
     let verb = if starred { "star" } else { "unstar" };
-    let email = match load_owned_email(pool, user_id, email_id, verb).await? {
+    let email = match load_owned_email(pool, user_id, email_id, verb, ProviderCopy::Change).await? {
         Ok(email) => email,
         Err(response) => return Ok(response),
     };
@@ -452,7 +466,108 @@ async fn set_star(req: &HttpRequest, pool: &PgPool, email_id: i32, starred: bool
     Ok(HttpResponse::Ok().json(serde_json::json!({ "is_starred": starred })))
 }
 
-/// An email the caller may change (trash, restore, star).
+#[derive(Deserialize)]
+pub struct SnoozeInput {
+    /// When the email comes back, as an exact moment (RFC 3339 with an offset).
+    /// The client picks it in the user's own time zone.
+    pub until: chrono::DateTime<chrono::Utc>,
+}
+
+/// The longest snooze accepted, so a typo'd year can't bury mail for good.
+const MAX_SNOOZE_DAYS: i64 = 366;
+
+/// Snoozes one message until `until` (Fluxze only: providers have no snooze
+/// API, so Gmail and Outlook keep showing it). The inbox views hide it until
+/// then, and it comes back on its own, at the top (see `repo::ListOrder`).
+#[actix_web::post("/emails/{id}/snooze")]
+#[instrument(target = "http", skip(req, pool, path, body))]
+pub async fn snooze_email(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<EmailDeletePath>,
+    body: web::Json<SnoozeInput>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let now = chrono::Utc::now();
+    let until = body.until;
+    if until <= now {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "Choose a time in the future"
+        })));
+    }
+    if until > now + chrono::Duration::days(MAX_SNOOZE_DAYS) {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "Snooze for at most a year"
+        })));
+    }
+    set_snooze(&req, pool.get_ref(), user_id, path.id, Some(until)).await
+}
+
+/// Ends a snooze: the email goes back to its own place in the list.
+#[actix_web::post("/emails/{id}/unsnooze")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn unsnooze_email(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<EmailDeletePath>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    set_snooze(&req, pool.get_ref(), user_id, path.id, None).await
+}
+
+async fn set_snooze(
+    req: &HttpRequest,
+    pool: &PgPool,
+    user_id: i32,
+    email_id: i32,
+    until: Option<chrono::DateTime<chrono::Utc>>,
+) -> AppResult {
+    let verb = if until.is_some() {
+        "snooze"
+    } else {
+        "unsnooze"
+    };
+    // Fluxze only: no provider call, so a disconnected mailbox can still snooze.
+    let email = match load_owned_email(pool, user_id, email_id, verb, ProviderCopy::Ignore).await? {
+        Ok(email) => email,
+        Err(response) => return Ok(response),
+    };
+    // Ending a snooze that already ran out (or never was) changes nothing, and
+    // isn't recorded: undoing a conversation's snooze ends each message's.
+    if !repo::set_snoozed(pool, email_id, until.map(|t| t.naive_utc())).await? {
+        return Ok(HttpResponse::Ok().json(serde_json::json!({ "snoozed_until": null })));
+    }
+
+    let row = &email.row;
+    crate::audit::record_action(
+        pool,
+        req,
+        crate::audit::AuditEvent {
+            actor_user_id: user_id,
+            action: if until.is_some() {
+                "email_snoozed"
+            } else {
+                "email_unsnoozed"
+            },
+            resource_type: "email",
+            resource_id: Some(email_id.to_string()),
+            metadata: Some(serde_json::json!({
+                "until": until.map(|t| t.to_rfc3339()),
+                "from": row.try_get::<Option<String>, _>("sender").ok().flatten(),
+                "to": row.try_get::<Option<String>, _>("receiver").ok().flatten(),
+                "subject": row.try_get::<Option<String>, _>("subject").ok().flatten(),
+                "provider": email.provider.map(MailProvider::as_db),
+            })),
+        },
+    )
+    .await;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "snoozed_until": until.map(|t| t.to_rfc3339())
+    })))
+}
+
+/// An email the caller may change (trash, restore, star, snooze).
 struct OwnedEmail {
     /// subject / sender / receiver, for the audit record.
     row: sqlx::postgres::PgRow,
@@ -469,8 +584,17 @@ struct RemoteEmail {
     token: String,
 }
 
-/// Loads an email the caller owns and, when it has a provider copy, a fresh
-/// access token for it. The inner `Err` is a response to return as is: 404 for
+/// Whether a change also goes to the email's provider copy. A Fluxze-only
+/// change (snooze) must not need a working mailbox connection, nor spend a
+/// token refresh on one.
+#[derive(Clone, Copy, PartialEq)]
+enum ProviderCopy {
+    Change,
+    Ignore,
+}
+
+/// Loads an email the caller owns and, when it has a provider copy to change,
+/// a fresh access token for it. The inner `Err` is a response to return as is: 404 for
 /// mail that isn't theirs, 409 when the mailbox needs reconnecting, 502 when
 /// the token refresh fails. `verb` completes "Reconnect your email account to
 /// … this email".
@@ -479,6 +603,7 @@ async fn load_owned_email(
     user_id: i32,
     email_id: i32,
     verb: &str,
+    provider_copy: ProviderCopy,
 ) -> Result<Result<OwnedEmail, HttpResponse>, AppError> {
     // LEFT JOIN so account-less Fluxze-native rows still match; they are
     // authorized instead via the source/recipient clause, as in repo::get_detail.
@@ -518,7 +643,10 @@ async fn load_owned_email(
             remote: None,
         }));
     };
-    if source.as_deref() == Some("wayve") || remote_provider == MailProvider::Imap {
+    if provider_copy == ProviderCopy::Ignore
+        || source.as_deref() == Some("wayve")
+        || remote_provider == MailProvider::Imap
+    {
         return Ok(Ok(OwnedEmail {
             row,
             provider,

@@ -30,6 +30,11 @@ export interface EmailItem {
   // messages is; `starred_ids` names them, so unstarring clears every one.
   is_starred?: boolean;
   starred_ids?: number[];
+  // Snooze (Fluxze only). Set while snoozed and kept after it runs out;
+  // `sort_at` is the list's order and paging cursor: `created_at`, or when the
+  // email came back from a snooze if that is later, so it sits at the top.
+  snoozed_until?: string | null;
+  sort_at?: string | null;
   attachments_checked?: boolean;
   attachments?: EmailAttachment[];
   zoom_join_url?: string | null;
@@ -76,6 +81,8 @@ export type EmailFolder =
   | "important"
   // Starred mail (the STARRED label: Gmail's star, Outlook's flag).
   | "starred"
+  // Snoozed mail, until it comes back to the inbox.
+  | "snoozed"
   | "updates"
   | "spam"
   | "drafts"

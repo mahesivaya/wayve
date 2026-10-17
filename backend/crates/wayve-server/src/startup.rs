@@ -81,6 +81,10 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         // The GIN index keeps `<label> = ANY(labels)` index-scanned.
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS labels TEXT[] NOT NULL DEFAULT '{}'",
         "CREATE INDEX IF NOT EXISTS idx_emails_labels ON emails USING GIN (labels)",
+        // Snooze (Fluxze only); see infra/postgres/migrations/2026-10-email-snooze.sql.
+        "ALTER TABLE emails ADD COLUMN IF NOT EXISTS snoozed_until TIMESTAMP",
+        "CREATE INDEX IF NOT EXISTS idx_emails_snoozed ON emails(account_id, snoozed_until) WHERE snoozed_until IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_emails_account_sort ON emails(account_id, (GREATEST(created_at, snoozed_until)) DESC, id DESC)",
         // `source` tags provenance so the list query knows whether to join through
         // email_accounts or scan by recipient_user_id (Wayve-native, account_id NULL).
         "ALTER TABLE emails ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'imap'",

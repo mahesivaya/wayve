@@ -48,6 +48,8 @@ const LABELS: Record<string, string> = {
   email_read: "Email read",
   email_deleted: "Email deleted",
   email_restored: "Email restored",
+  email_snoozed: "Email snoozed",
+  email_unsnoozed: "Email unsnoozed",
   email_account_delete: "Mailbox removed",
   channel_created: "Channel created",
   channel_joined: "Channel joined",
