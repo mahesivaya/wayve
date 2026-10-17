@@ -37,6 +37,9 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(crate::routes::email::get_emails)
         .service(crate::routes::email::get_unread_count)
         .service(crate::routes::email::search_contacts)
+        // Before the `/emails/{id}` routes, so `trash` / `restore` are never read as an id.
+        .service(crate::routes::email::trash_emails)
+        .service(crate::routes::email::restore_emails)
         .service(crate::routes::email::delete_email)
         .service(crate::routes::email::restore_email)
         .service(crate::routes::email::star_email)

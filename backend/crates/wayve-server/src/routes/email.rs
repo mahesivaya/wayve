@@ -573,6 +573,231 @@ async fn set_snooze(
     })))
 }
 
+#[derive(Deserialize)]
+pub struct BulkEmailsInput {
+    pub ids: Vec<i32>,
+}
+
+/// The most emails one bulk trash / restore takes: Gmail's `batchModify`
+/// limit, and plenty for a selection or a conversation.
+const MAX_BULK_EMAILS: usize = 1000;
+
+/// One mailbox's share of a bulk move: what it needs for a single token
+/// refresh and one provider batch call.
+struct MailboxBatch {
+    provider: MailProvider,
+    refresh_token: Option<String>,
+    /// (email id, provider message id).
+    emails: Vec<(i32, String)>,
+}
+
+/// Move many emails to Trash at once (a conversation, or a selection).
+#[actix_web::post("/emails/trash")]
+#[instrument(target = "http", skip(req, pool, body))]
+pub async fn trash_emails(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    body: web::Json<BulkEmailsInput>,
+) -> AppResult {
+    bulk_move(&req, pool.get_ref(), &body.ids, TrashDirection::Trash).await
+}
+
+/// Restore many emails from Trash at once (a selection in Trash, or Undo).
+#[actix_web::post("/emails/restore")]
+#[instrument(target = "http", skip(req, pool, body))]
+pub async fn restore_emails(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    body: web::Json<BulkEmailsInput>,
+) -> AppResult {
+    bulk_move(&req, pool.get_ref(), &body.ids, TrashDirection::Restore).await
+}
+
+/// `move_email` for many emails, without its per-email cost: one ownership
+/// query for them all, one token refresh per mailbox, the provider's batch
+/// call (`MailTrash::move_many`: Gmail `batchModify`, Graph `$batch`), one
+/// database update, and one audit row. Partial by design: each email that
+/// can't be moved (not the caller's, mailbox needs reconnecting, provider
+/// refused) is reported in `failed` with its reason, and the rest still move.
+async fn bulk_move(
+    req: &HttpRequest,
+    pool: &PgPool,
+    ids: &[i32],
+    direction: TrashDirection,
+) -> AppResult {
+    let user_id = get_user_id_from_request(req).ok_or(AppError::Unauthorized)?;
+    let trash = direction == TrashDirection::Trash;
+    let verb = direction.verb();
+
+    let mut ids = ids.to_vec();
+    ids.sort_unstable();
+    ids.dedup();
+    if ids.is_empty() {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "No emails given"
+        })));
+    }
+    if ids.len() > MAX_BULK_EMAILS {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": format!("At most {MAX_BULK_EMAILS} emails at once")
+        })));
+    }
+
+    // The same ownership as `load_owned_email`, for every id at once.
+    let rows = sqlx::query(
+        r#"
+        SELECT e.id, e.gmail_id, e.source, e.account_id, a.refresh_token, a.provider
+        FROM emails e
+        LEFT JOIN email_accounts a ON e.account_id = a.id
+        WHERE e.id = ANY($1)
+          AND (a.user_id = $2
+               OR (e.source = 'wayve' AND e.recipient_user_id = $2))
+        "#,
+    )
+    .bind(&ids)
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut failed: Vec<(i32, String)> = Vec::new();
+    let mut moved: Vec<(i32, TrashMoved)> = Vec::new();
+    let found: std::collections::HashSet<i32> = rows.iter().map(|r| r.get("id")).collect();
+    for id in &ids {
+        if !found.contains(id) {
+            failed.push((*id, "Email not found".to_string()));
+        }
+    }
+
+    // Mail with a provider copy, grouped by mailbox so each one costs a
+    // single token refresh and the provider's batch call. Fluxze-to-Fluxze
+    // mail has none, and IMAP is moved in Fluxze only (as in `move_email`).
+    let mut mailboxes: std::collections::BTreeMap<i32, MailboxBatch> =
+        std::collections::BTreeMap::new();
+    for row in &rows {
+        let id: i32 = row.get("id");
+        let provider = row
+            .try_get::<Option<String>, _>("provider")
+            .ok()
+            .flatten()
+            .map(|value| MailProvider::from_db(&value));
+        let source: Option<String> = row.try_get("source").ok().flatten();
+        let account_id: Option<i32> = row.try_get("account_id").ok().flatten();
+        match (account_id, provider) {
+            (Some(account_id), Some(provider))
+                if source.as_deref() != Some("wayve") && provider != MailProvider::Imap =>
+            {
+                mailboxes
+                    .entry(account_id)
+                    .or_insert_with(|| MailboxBatch {
+                        provider,
+                        refresh_token: row
+                            .try_get::<Option<String>, _>("refresh_token")
+                            .ok()
+                            .flatten(),
+                        emails: Vec::new(),
+                    })
+                    .emails
+                    .push((id, row.get("gmail_id")));
+            }
+            _ => moved.push((id, TrashMoved::default())),
+        }
+    }
+
+    for (
+        account_id,
+        MailboxBatch {
+            provider,
+            refresh_token,
+            emails,
+        },
+    ) in mailboxes
+    {
+        let fail_all = |failed: &mut Vec<(i32, String)>, reason: &str| {
+            failed.extend(emails.iter().map(|(id, _)| (*id, reason.to_string())));
+        };
+        let Some(refresh_token) = refresh_token
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            fail_all(
+                &mut failed,
+                &format!("Reconnect your email account to {verb} these emails"),
+            );
+            continue;
+        };
+        let token = match refresh_and_persist_email_token(pool, account_id, provider, refresh_token)
+            .await
+        {
+            Ok(token) => token.access_token,
+            Err(e) => {
+                error!(target: "gmail", user_id, account_id, provider = provider.as_db(), ?direction, error = ?e, "bulk trash move token refresh failed");
+                fail_all(&mut failed, "Failed to refresh email account credentials");
+                continue;
+            }
+        };
+        let message_ids: Vec<String> = emails.iter().map(|(_, m)| m.clone()).collect();
+        let results = match provider.move_many(&token, &message_ids, trash).await {
+            Ok(results) => results,
+            Err(e) => {
+                error!(target: "gmail", user_id, account_id, provider = provider.as_db(), ?direction, error = ?e, "bulk trash move unavailable");
+                fail_all(
+                    &mut failed,
+                    &format!("Email provider rejected the {verb} request"),
+                );
+                continue;
+            }
+        };
+        for ((id, _), result) in emails.iter().zip(results) {
+            match result {
+                Ok(m) => moved.push((*id, m)),
+                Err(e) => {
+                    error!(target: "gmail", user_id, account_id, provider = provider.as_db(), email_id = id, ?direction, error = ?e, "provider trash move failed");
+                    failed.push((*id, format!("Email provider rejected the {verb} request")));
+                }
+            }
+        }
+    }
+
+    repo::set_trashed_many(pool, trash, &moved).await?;
+
+    let done: Vec<i32> = moved.iter().map(|(id, _)| *id).collect();
+    if !done.is_empty() {
+        // One record for the whole request, listing what moved.
+        crate::audit::record_action(
+            pool,
+            req,
+            crate::audit::AuditEvent {
+                actor_user_id: user_id,
+                action: match direction {
+                    TrashDirection::Trash => "email_deleted",
+                    TrashDirection::Restore => "email_restored",
+                },
+                resource_type: "email",
+                resource_id: None,
+                metadata: Some(serde_json::json!({
+                    "direction": match direction {
+                        TrashDirection::Trash => "deleted",
+                        TrashDirection::Restore => "restored",
+                    },
+                    "email_ids": done,
+                    "count": done.len(),
+                    "failed": failed.len(),
+                })),
+            },
+        )
+        .await;
+    }
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "done": done,
+        "failed": failed
+            .iter()
+            .map(|(id, error)| serde_json::json!({ "id": id, "error": error }))
+            .collect::<Vec<_>>(),
+    })))
+}
+
 /// An email the caller may change (trash, restore, star).
 struct OwnedEmail {
     /// subject / sender / receiver, for the audit record.

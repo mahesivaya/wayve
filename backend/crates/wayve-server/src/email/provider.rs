@@ -22,7 +22,7 @@ use crate::models::email_request::SendEmailRequest;
 use crate::prelude::*;
 use async_trait::async_trait;
 use std::sync::Arc;
-use tracing::instrument;
+use tracing::{instrument, warn};
 
 /// Discriminator stored in `email_accounts.provider`. Pure-data methods stay on
 /// the enum; everything that does I/O is on the traits.
@@ -128,6 +128,26 @@ pub struct TrashMoved {
 pub trait MailTrash: Send + Sync {
     async fn trash(&self, access_token: &str, provider_message_id: &str) -> Result<TrashMoved>;
     async fn restore(&self, access_token: &str, provider_message_id: &str) -> Result<TrashMoved>;
+
+    /// Moves many of one mailbox's messages into (`trash`) or out of its
+    /// trash, with one result per id, in order. Providers with a batch API
+    /// override this; by default they go one by one.
+    async fn move_many(
+        &self,
+        access_token: &str,
+        provider_message_ids: &[String],
+        trash: bool,
+    ) -> Vec<Result<TrashMoved>> {
+        let mut results = Vec::with_capacity(provider_message_ids.len());
+        for id in provider_message_ids {
+            results.push(if trash {
+                self.trash(access_token, id).await
+            } else {
+                self.restore(access_token, id).await
+            });
+        }
+        results
+    }
 }
 
 /// The star, as Gmail has it: the STARRED label (Outlook: the message flag).
@@ -312,8 +332,76 @@ async fn gmail_message_post(
     Ok(status)
 }
 
+/// Gmail's `messages.batchModify` takes at most this many ids per call.
+const GMAIL_BATCH_MODIFY_MAX: usize = 1000;
+
+/// `messages.batchModify`: one label change across many messages, under the
+/// same `gmail.modify` scope. TRASH can be applied and removed like INBOX.
+async fn gmail_batch_modify(access_token: &str, body: Value) -> Result<()> {
+    let url = format!(
+        "{}/gmail/v1/users/me/messages/batchModify",
+        crate::external::gmail_api_base()
+    );
+    let resp = HTTP_CLIENT
+        .post(url)
+        .bearer_auth(access_token)
+        .json(&body)
+        .send()
+        .await?;
+    let status = resp.status();
+    if !status.is_success() {
+        let detail = resp.text().await.unwrap_or_default();
+        anyhow::bail!("Gmail batchModify failed: {status} {detail}");
+    }
+    Ok(())
+}
+
 #[async_trait]
 impl MailTrash for GoogleMailClient {
+    /// One `batchModify` per 1,000 messages instead of a call (two, for a
+    /// restore) each: trash adds TRASH; restore removes it and adds INBOX, as
+    /// the single restore does. One bad id fails the whole call, so a chunk
+    /// that fails is retried one by one: the rest still move, and the failure
+    /// lands on the message it belongs to.
+    async fn move_many(
+        &self,
+        access_token: &str,
+        provider_message_ids: &[String],
+        trash: bool,
+    ) -> Vec<Result<TrashMoved>> {
+        let mut results = Vec::with_capacity(provider_message_ids.len());
+        for chunk in provider_message_ids.chunks(GMAIL_BATCH_MODIFY_MAX) {
+            let body = if trash {
+                serde_json::json!({ "ids": chunk, "addLabelIds": ["TRASH"] })
+            } else {
+                serde_json::json!({
+                    "ids": chunk,
+                    "removeLabelIds": ["TRASH"],
+                    "addLabelIds": ["INBOX"],
+                })
+            };
+            match gmail_batch_modify(access_token, body).await {
+                Ok(()) => results.extend(chunk.iter().map(|_| {
+                    Ok(TrashMoved {
+                        new_id: None,
+                        in_inbox: !trash,
+                    })
+                })),
+                Err(err) => {
+                    warn!(target: "gmail", messages = chunk.len(), error = %err, "batchModify failed; moving one by one");
+                    for id in chunk {
+                        results.push(if trash {
+                            self.trash(access_token, id).await
+                        } else {
+                            self.restore(access_token, id).await
+                        });
+                    }
+                }
+            }
+        }
+        results
+    }
+
     async fn trash(&self, access_token: &str, provider_message_id: &str) -> Result<TrashMoved> {
         gmail_message_post(
             access_token,
@@ -522,8 +610,115 @@ async fn outlook_move(
     })
 }
 
+/// Graph's JSON batching takes at most this many requests per call.
+const GRAPH_BATCH_MAX: usize = 20;
+
+/// Up to 20 Graph `move`s in one `POST /$batch`, one result per id in order.
+/// Mirrors `outlook_move`: a moved message's new id is returned, and moving
+/// one that is already gone to Deleted Items is a success.
+async fn outlook_move_batch(
+    access_token: &str,
+    provider_message_ids: &[String],
+    destination: &str,
+) -> Result<Vec<Result<TrashMoved>>> {
+    let requests = provider_message_ids
+        .iter()
+        .enumerate()
+        .map(|(i, id)| {
+            // Graph ids carry `/` and `+`, so encode the id as a path segment.
+            let mut path = reqwest::Url::parse("https://graph.invalid/me/messages")?;
+            path.path_segments_mut()
+                .map_err(|_| anyhow::anyhow!("not a base URL"))?
+                .push(id)
+                .push("move");
+            Ok(serde_json::json!({
+                "id": i.to_string(),
+                "method": "POST",
+                "url": path.path(),
+                "headers": { "Content-Type": "application/json" },
+                "body": { "destinationId": destination },
+            }))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let resp = HTTP_CLIENT
+        .post(format!(
+            "{}/v1.0/$batch",
+            crate::external::microsoft_graph_base()
+        ))
+        .bearer_auth(access_token)
+        .json(&serde_json::json!({ "requests": requests }))
+        .send()
+        .await?;
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        anyhow::bail!("Outlook batch move to {destination} failed: {status} {body}");
+    }
+    let body: Value = resp.json().await?;
+    // Responses come back in any order; match them to requests by id.
+    let mut by_id: std::collections::HashMap<String, Value> = body["responses"]
+        .as_array()
+        .map(|responses| {
+            responses
+                .iter()
+                .filter_map(|r| Some((r["id"].as_str()?.to_string(), r.clone())))
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok((0..provider_message_ids.len())
+        .map(|i| {
+            let Some(response) = by_id.remove(&i.to_string()) else {
+                anyhow::bail!("Outlook batch move returned no response for a message");
+            };
+            let code = response["status"].as_u64().unwrap_or(0);
+            if destination == "deleteditems" && code == 404 {
+                return Ok(TrashMoved::default());
+            }
+            if !(200..300).contains(&code) {
+                anyhow::bail!(
+                    "Outlook move to {destination} failed: {code} {}",
+                    response["body"]["error"]["message"].as_str().unwrap_or("")
+                );
+            }
+            let new_id = response["body"]["id"]
+                .as_str()
+                .filter(|id| !id.is_empty())
+                .map(str::to_string)
+                .ok_or_else(|| anyhow::anyhow!("Outlook move response has no message id"))?;
+            Ok(TrashMoved {
+                new_id: Some(new_id),
+                in_inbox: destination == "inbox",
+            })
+        })
+        .collect())
+}
+
 #[async_trait]
 impl MailTrash for OutlookMailClient {
+    /// One Graph `$batch` per 20 moves instead of a request each. A batch that
+    /// fails outright is retried one by one, as for Gmail.
+    async fn move_many(
+        &self,
+        access_token: &str,
+        provider_message_ids: &[String],
+        trash: bool,
+    ) -> Vec<Result<TrashMoved>> {
+        let destination = if trash { "deleteditems" } else { "inbox" };
+        let mut results = Vec::with_capacity(provider_message_ids.len());
+        for chunk in provider_message_ids.chunks(GRAPH_BATCH_MAX) {
+            match outlook_move_batch(access_token, chunk, destination).await {
+                Ok(moved) => results.extend(moved),
+                Err(err) => {
+                    warn!(target: "gmail", messages = chunk.len(), error = %err, "Graph batch move failed; moving one by one");
+                    for id in chunk {
+                        results.push(outlook_move(access_token, id, destination).await);
+                    }
+                }
+            }
+        }
+        results
+    }
+
     async fn trash(&self, access_token: &str, provider_message_id: &str) -> Result<TrashMoved> {
         outlook_move(access_token, provider_message_id, "deleteditems").await
     }
@@ -813,6 +1008,17 @@ impl MailProvider {
         require_client(self)?
             .set_starred(access_token, provider_message_id, starred)
             .await
+    }
+
+    pub async fn move_many(
+        self,
+        access_token: &str,
+        provider_message_ids: &[String],
+        trash: bool,
+    ) -> Result<Vec<Result<TrashMoved>>> {
+        Ok(require_client(self)?
+            .move_many(access_token, provider_message_ids, trash)
+            .await)
     }
 
     pub async fn restore(

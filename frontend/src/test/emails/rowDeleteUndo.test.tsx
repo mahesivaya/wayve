@@ -13,15 +13,15 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const getEmails = vi.fn();
-const deleteEmail = vi.fn();
-const restoreEmail = vi.fn();
+const trashEmails = vi.fn();
+const restoreEmails = vi.fn();
 
 vi.mock("../../api/email", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../api/email")>()),
   getAccounts: vi.fn().mockResolvedValue([]),
   getEmails: (params: unknown) => getEmails(params),
-  deleteEmail: (id: number) => deleteEmail(id),
-  restoreEmail: (id: number) => restoreEmail(id),
+  trashEmails: (ids: number[]) => trashEmails(ids),
+  restoreEmails: (ids: number[]) => restoreEmails(ids),
 }));
 
 import { EmailList } from "../../emails/EmailList";
@@ -85,6 +85,7 @@ describe("the row's Delete and Restore actions", () => {
         onMarkRead={() => {}}
         onMarkUnread={() => {}}
         onBulkDelete={props.onBulkDelete}
+        onBulkRestore={props.onBulkRestore}
         onDelete={props.onDelete}
         onRestore={props.onRestore}
       />
@@ -164,6 +165,30 @@ describe("the row's Delete and Restore actions", () => {
     await waitFor(() => expect(onRestore).toHaveBeenCalledWith(12));
   });
 
+  it("restores a Trash selection from the bulk bar, without a confirm", async () => {
+    const confirm = vi.spyOn(window, "confirm");
+    const onBulkRestore = vi.fn().mockResolvedValue(undefined);
+    list({ folder: "trash", onBulkRestore });
+    fireEvent.click(screen.getByLabelText('Select email "Plans"'));
+    fireEvent.click(screen.getByLabelText('Select email "Lunch"'));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Restore selected to inbox" })
+    );
+    await waitFor(() => expect(onBulkRestore).toHaveBeenCalledWith([12, 30]));
+    expect(confirm).not.toHaveBeenCalled();
+    confirm.mockRestore();
+    // The selection clears once it's done.
+    await waitFor(() => expect(screen.queryByText("2 selected")).toBeNull());
+  });
+
+  it("has no bulk Restore outside Trash", () => {
+    list({ onBulkDelete: vi.fn() });
+    fireEvent.click(screen.getByLabelText('Select email "Lunch"'));
+    expect(
+      screen.queryByRole("button", { name: "Restore selected to inbox" })
+    ).toBeNull();
+  });
+
   it("isn't shown when the list has no delete handler", () => {
     list({});
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
@@ -173,8 +198,8 @@ describe("the row's Delete and Restore actions", () => {
 describe("useEmailInbox: delete to Trash and Undo", () => {
   beforeEach(() => {
     getEmails.mockReset();
-    deleteEmail.mockReset().mockResolvedValue(undefined);
-    restoreEmail.mockReset().mockResolvedValue(undefined);
+    trashEmails.mockReset().mockImplementation(async (ids: number[]) => ({ done: ids, failed: [] }));
+    restoreEmails.mockReset().mockImplementation(async (ids: number[]) => ({ done: ids, failed: [] }));
     getEmails.mockResolvedValue({
       emails: [conversation, single],
       hasMore: false,
@@ -195,15 +220,18 @@ describe("useEmailInbox: delete to Trash and Undo", () => {
     await act(async () => {
       batch = await result.current.deleteEmail(12);
     });
-    expect(deleteEmail.mock.calls.map((c) => c[0]).sort()).toEqual([
-      10, 11, 12,
-    ]);
+    // One request for the whole conversation, not one per message.
+    expect(trashEmails).toHaveBeenCalledTimes(1);
+    expect(trashEmails).toHaveBeenCalledWith([12, 11, 10]);
     expect(result.current.emails.map((e) => e.id)).toEqual([30]);
     expect(batch).toEqual({ rows: [conversation], ids: [12, 11, 10] });
   });
 
   it("keeps the row when the delete fails", async () => {
-    deleteEmail.mockRejectedValue(new Error("Email provider rejected"));
+    trashEmails.mockResolvedValue({
+      done: [],
+      failed: [{ id: 30, error: "Email provider rejected" }],
+    });
     const { result } = await loaded();
     await act(async () => {
       await expect(result.current.deleteEmail(30)).rejects.toThrow(
@@ -224,16 +252,16 @@ describe("useEmailInbox: delete to Trash and Undo", () => {
       failed = await result.current.undoTrash(batch);
     });
     expect(failed).toBe(0);
-    expect(restoreEmail.mock.calls.map((c) => c[0]).sort()).toEqual([
-      10, 11, 12,
-    ]);
+    expect(restoreEmails).toHaveBeenCalledTimes(1);
+    expect(restoreEmails).toHaveBeenCalledWith([12, 11, 10]);
     // Newest first, as the list is sorted.
     expect(result.current.emails.map((e) => e.id)).toEqual([12, 30]);
   });
 
   it("Undo leaves out a row whose restore failed, and counts it", async () => {
-    restoreEmail.mockImplementation(async (id: number) => {
-      if (id === 11) throw new Error("nope");
+    restoreEmails.mockResolvedValue({
+      done: [12, 10],
+      failed: [{ id: 11, error: "nope" }],
     });
     const { result } = await loaded();
     let batch = { rows: [] as EmailItem[], ids: [] as number[] };
@@ -253,7 +281,60 @@ describe("useEmailInbox: delete to Trash and Undo", () => {
     await act(async () => {
       await result.current.restoreEmail(30);
     });
-    expect(restoreEmail).toHaveBeenCalledWith(30);
+    expect(restoreEmails).toHaveBeenCalledWith([30]);
     expect(result.current.emails.map((e) => e.id)).toEqual([12]);
+  });
+
+  it("restores a Trash selection in one request", async () => {
+    const { result } = await loaded();
+    let outcome = { restored: -1, failed: -1 } as {
+      restored: number;
+      failed: number;
+      error?: string;
+    };
+    await act(async () => {
+      outcome = await result.current.bulkRestore([12, 30]);
+    });
+    expect(restoreEmails).toHaveBeenCalledTimes(1);
+    expect(restoreEmails).toHaveBeenCalledWith([12, 30]);
+    expect(outcome).toEqual({ restored: 2, failed: 0, error: undefined });
+    expect(result.current.emails).toHaveLength(0);
+  });
+
+  it("puts back the Trash rows that couldn't be restored, and says why", async () => {
+    restoreEmails.mockResolvedValue({
+      done: [12],
+      failed: [{ id: 30, error: "Reconnect your email account" }],
+    });
+    const { result } = await loaded();
+    let outcome = { restored: -1, failed: -1 } as {
+      restored: number;
+      failed: number;
+      error?: string;
+    };
+    await act(async () => {
+      outcome = await result.current.bulkRestore([12, 30]);
+    });
+    expect(outcome).toEqual({
+      restored: 1,
+      failed: 1,
+      error: "Reconnect your email account",
+    });
+    expect(result.current.emails.map((e) => e.id)).toEqual([30]);
+  });
+
+  it("puts every row back when the restore request fails outright", async () => {
+    restoreEmails.mockRejectedValue(new Error("Network down"));
+    const { result } = await loaded();
+    let outcome = { restored: -1, failed: -1 } as {
+      restored: number;
+      failed: number;
+      error?: string;
+    };
+    await act(async () => {
+      outcome = await result.current.bulkRestore([12, 30]);
+    });
+    expect(outcome).toEqual({ restored: 0, failed: 2, error: "Network down" });
+    expect(result.current.emails.map((e) => e.id)).toEqual([12, 30]);
   });
 });

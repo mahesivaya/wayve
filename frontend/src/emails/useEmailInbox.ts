@@ -7,8 +7,9 @@ import {
   getEmailBody,
   getAllEmailAttachments,
   getEmailThread,
-  deleteEmail as deleteEmailRequest,
-  restoreEmail as restoreEmailRequest,
+  trashEmails as trashEmailsRequest,
+  restoreEmails as restoreEmailsRequest,
+  type BulkMoveResult,
   starEmail as starEmailRequest,
   snoozeEmail as snoozeEmailRequest,
   unsnoozeEmail as unsnoozeEmailRequest,
@@ -34,6 +35,15 @@ export interface TrashedBatch {
   rows: EmailItem[];
   ids: number[];
 }
+
+// A bulk move that couldn't be sent at all fails every id, with its message.
+const allFailed = (ids: number[], err: unknown): BulkMoveResult => ({
+  done: [],
+  failed: ids.map((id) => ({
+    id,
+    error: err instanceof Error ? err.message : "Request failed",
+  })),
+});
 
 // The list's order, as the server sorts it (repo::ListOrder): by `sort_at`,
 // newest first, except Snoozed, which lists soonest-back first.
@@ -488,7 +498,11 @@ export function useEmailInbox(
       (email) => email.id === emailId || email.message_ids?.includes(emailId)
     );
     const ids = row ? conversationMessageIds(row) : [emailId];
-    await Promise.all(ids.map((id) => deleteEmailRequest(id)));
+    // One request for the whole conversation. If any message can't move, the
+    // row stays and the reason reaches the caller; the ones that did move are
+    // in Trash, and the next refresh shows that.
+    const { failed } = await trashEmailsRequest(ids);
+    if (failed.length > 0) throw new Error(failed[0].error);
     for (const id of ids) delete emailCache.current[id];
     const gone = row ? conversationKey(row) : null;
     const isGone = (email: EmailItem) =>
@@ -504,12 +518,10 @@ export function useEmailInbox(
   // in the list. A row any of whose messages failed to restore stays out (the
   // next refresh shows where it really is). Resolves to the number of failures.
   const undoTrash = async (batch: TrashedBatch): Promise<number> => {
-    const results = await Promise.allSettled(
-      batch.ids.map((id) => restoreEmailRequest(id))
+    const result = await restoreEmailsRequest(batch.ids).catch((err) =>
+      allFailed(batch.ids, err)
     );
-    const failed = new Set(
-      batch.ids.filter((_, i) => results[i].status === "rejected")
-    );
+    const failed = new Set(result.failed.map((f) => f.id));
     if (failed.size > 0) {
       logger.warn("undoTrash: some restores failed", {
         failed: failed.size,
@@ -535,7 +547,8 @@ export function useEmailInbox(
   // Restore one row from the Trash folder (listed per email there), which
   // takes it out of this list. A failure leaves the row and reaches the caller.
   const restoreEmail = async (emailId: number) => {
-    await restoreEmailRequest(emailId);
+    const { failed } = await restoreEmailsRequest([emailId]);
+    if (failed.length > 0) throw new Error(failed[0].error);
     delete emailCache.current[emailId];
     setEmails((prev) => prev.filter((email) => email.id !== emailId));
     setSelectedEmail((cur) => (cur?.id === emailId ? null : cur));
@@ -790,18 +803,46 @@ export function useEmailInbox(
     setEmails((prev) => prev.filter((email) => !rowSet.has(email.id)));
     setSelectedEmail((cur) => (cur && idSet.has(cur.id) ? null : cur));
     for (const id of ids) delete emailCache.current[id];
-    await Promise.allSettled(ids.map((id) => deleteEmailRequest(id))).then(
-      (results) => {
-        const failed = results.filter((r) => r.status === "rejected").length;
-        if (failed > 0) {
-          logger.warn("bulkDelete: some calls failed", {
-            failed,
-            total: ids.length,
-          });
-        }
-      }
+    const { failed } = await trashEmailsRequest(ids).catch((err) =>
+      allFailed(ids, err)
     );
+    if (failed.length > 0) {
+      logger.warn("bulkDelete: some emails failed", {
+        failed: failed.length,
+        total: ids.length,
+      });
+    }
     return { rows, ids };
+  };
+
+  // Restore the selected rows from Trash in one request: they leave the Trash
+  // list at once, and any that fail come back with the first reason. Trash
+  // lists one row per email, so a row is one message.
+  const bulkRestore = async (
+    rowIds: number[]
+  ): Promise<{ restored: number; failed: number; error?: string }> => {
+    if (rowIds.length === 0) return { restored: 0, failed: 0 };
+    const rowSet = new Set(rowIds);
+    const rows = emails.filter((email) => rowSet.has(email.id));
+    setEmails((prev) => prev.filter((email) => !rowSet.has(email.id)));
+    setSelectedEmail((cur) => (cur && rowSet.has(cur.id) ? null : cur));
+    const result = await restoreEmailsRequest(rowIds).catch((err) =>
+      allFailed(rowIds, err)
+    );
+    for (const id of result.done) delete emailCache.current[id];
+    const failed = new Set(result.failed.map((f) => f.id));
+    if (failed.size > 0) {
+      setEmails((prev) =>
+        [...prev, ...rows.filter((row) => failed.has(row.id))].sort(
+          listOrder(activeFolder)
+        )
+      );
+    }
+    return {
+      restored: result.done.length,
+      failed: failed.size,
+      error: result.failed[0]?.error,
+    };
   };
 
   return {
@@ -838,6 +879,7 @@ export function useEmailInbox(
     markSenderNoise,
     bulkMarkRead,
     bulkDelete,
+    bulkRestore,
     markRead,
     markUnread,
   };
