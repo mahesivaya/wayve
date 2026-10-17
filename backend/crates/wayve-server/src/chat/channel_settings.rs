@@ -8,6 +8,9 @@ use wayve_security::rbac::resolve_role_context_moded;
 use actix_web::{delete, patch};
 use tracing::{instrument, warn};
 
+/// Stored attachment files a channel delete removes at once.
+const FILE_DELETE_CONCURRENCY: usize = 16;
+
 #[patch("/chat/channels/{channel_id}")]
 #[instrument(target = "http", skip(req, pool, input), fields(channel_id))]
 pub async fn update_channel_subject(
@@ -128,13 +131,20 @@ pub async fn delete_channel(
         .await?;
     tx.commit().await?;
 
-    // After the commit, so a rolled-back delete never loses a file. Best
-    // effort: a file left behind is unreachable, as its row is gone.
-    for path in &files {
-        if let Err(err) = crate::storage::delete(path).await {
-            warn!(target: "chat", channel_id, path, error = %err, "channel attachment file not deleted");
-        }
-    }
+    let attachments = files.len();
+    // After the commit, so a rolled-back delete never loses a file, and off the
+    // request, so a channel with thousands of files on S3 can't time it out
+    // after the delete already went through. Best effort: a file left behind is
+    // unreachable, as its row is gone.
+    tokio::spawn(async move {
+        futures::stream::iter(files)
+            .for_each_concurrent(FILE_DELETE_CONCURRENCY, |path| async move {
+                if let Err(err) = crate::storage::delete(&path).await {
+                    warn!(target: "chat", channel_id, path, error = %err, "channel attachment file not deleted");
+                }
+            })
+            .await;
+    });
 
     crate::audit::record_action(
         pool.get_ref(),
@@ -148,7 +158,7 @@ pub async fn delete_channel(
                 "channel_id": channel_id,
                 "channel": name,
                 "members": members,
-                "attachments": files.len(),
+                "attachments": attachments,
             })),
         },
     )
