@@ -40,9 +40,11 @@
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid rgb(17, 24, 39, 0.12);
+  /* Theme tokens, not a fixed translucent white: over the dark canvas that
+     washed out to a flat grey the muted text couldn't be read on. */
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: rgb(255, 255, 255, 0.62);
+  background: var(--color-surface);
   color: var(--color-text-primary);
   cursor: pointer;
   text-align: left;
@@ -160,6 +162,12 @@
 .email-files-size {
   color: var(--color-text-muted);
   font-size: var(--text-sm);
+}
+
+/* The email a file came from (subject · sender) is worth reading; only the
+   size stays muted. */
+.email-files-meta {
+  color: var(--color-text-secondary);
 }
 
 .email-files-empty,
