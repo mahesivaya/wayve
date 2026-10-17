@@ -1,5 +1,5 @@
 import { useAuth } from "../auth/useAuth";
-import { BRAND_NAME, HEADER_NAME } from "../config/brand";
+import { HEADER_NAME } from "../config/brand";
 import BrandLogo from "../components/BrandLogo";
 import { BrandIcon } from "../integrations/BrandIcon";
 import { useNavigate } from "react-router-dom";
@@ -344,7 +344,7 @@ export default function Home() {
 
         <footer className="public-home-footer">
           <p className="public-home-footer-legal">
-            © {BRAND_NAME} {new Date().getFullYear()}
+            © {HEADER_NAME} {new Date().getFullYear()}
           </p>
         </footer>
       </div>

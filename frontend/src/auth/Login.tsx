@@ -12,6 +12,7 @@ import { isDesktopApp } from "../utils/desktop";
 import { parseJwt } from "./bootToken";
 import { unwrapAndCacheMemberKeys } from "../orgKeys/memberLogin";
 import { AuthDowngradeError } from "./authKey";
+import { HEADER_NAME } from "../config/brand";
 import "./login.css";
 
 // Error codes the backend SSO callback puts in the hash fragment, mapped so the
@@ -245,7 +246,7 @@ export default function Login() {
                 ✓ Verified — sign in to continue
               </p>
             )}
-            <p className="subtitle">Login to your Fluxze account</p>
+            <p className="subtitle">Login to your {HEADER_NAME} account</p>
 
             <input
               type="text"
