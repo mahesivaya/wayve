@@ -18,8 +18,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const getEmails = vi.fn();
 const snoozeEmail = vi.fn();
 const unsnoozeEmail = vi.fn();
-const deleteEmail = vi.fn();
-const restoreEmail = vi.fn();
+const trashEmails = vi.fn();
+const restoreEmails = vi.fn();
 
 vi.mock("../../api/email", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../api/email")>()),
@@ -27,8 +27,8 @@ vi.mock("../../api/email", async (importOriginal) => ({
   getEmails: (params: unknown) => getEmails(params),
   snoozeEmail: (id: number, until: Date) => snoozeEmail(id, until),
   unsnoozeEmail: (id: number) => unsnoozeEmail(id),
-  deleteEmail: (id: number) => deleteEmail(id),
-  restoreEmail: (id: number) => restoreEmail(id),
+  trashEmails: (ids: number[]) => trashEmails(ids),
+  restoreEmails: (ids: number[]) => restoreEmails(ids),
 }));
 
 import { EmailList } from "../../emails/EmailList";
@@ -262,8 +262,8 @@ describe("useEmailInbox: snooze", () => {
   it("Undo of a delete in Snoozed puts the row back, still soonest-back first", async () => {
     // The server keeps a snooze through a delete and its Undo (a restore), so
     // the row belongs back in Snoozed.
-    deleteEmail.mockReset().mockResolvedValue(undefined);
-    restoreEmail.mockReset().mockResolvedValue(undefined);
+    trashEmails.mockReset().mockImplementation(async (ids: number[]) => ({ done: ids, failed: [] }));
+    restoreEmails.mockReset().mockImplementation(async (ids: number[]) => ({ done: ids, failed: [] }));
     const soon = {
       ...single,
       id: 50,
@@ -294,7 +294,7 @@ describe("useEmailInbox: snooze", () => {
     await act(async () => {
       await result.current.undoTrash(batch);
     });
-    expect(restoreEmail).toHaveBeenCalledWith(50);
+    expect(restoreEmails).toHaveBeenCalledWith([50]);
     expect(result.current.emails.map((e) => e.id)).toEqual([50, 51]);
     expect(result.current.emails[0].snoozed_until).toBe(soon.snoozed_until);
   });

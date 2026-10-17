@@ -1283,6 +1283,40 @@ pub async fn set_starred(pool: &PgPool, email_id: i32, starred: bool) -> sqlx::R
     Ok(())
 }
 
+/// `set_trashed` for many emails in one statement: each `(email id, what its
+/// provider reported)` gets the same label change and new provider id the
+/// single version would give it.
+pub async fn set_trashed_many(
+    pool: &PgPool,
+    trashed: bool,
+    moved: &[(i32, crate::email::provider::TrashMoved)],
+) -> sqlx::Result<()> {
+    if moved.is_empty() {
+        return Ok(());
+    }
+    let ids: Vec<i32> = moved.iter().map(|(id, _)| *id).collect();
+    let new_ids: Vec<Option<String>> = moved.iter().map(|(_, m)| m.new_id.clone()).collect();
+    let in_inbox: Vec<bool> = moved.iter().map(|(_, m)| m.in_inbox).collect();
+    sqlx::query(
+        "UPDATE emails e SET \
+           labels = CASE \
+             WHEN $1 THEN array_append(array_remove(e.labels, 'TRASH'), 'TRASH') \
+             WHEN u.in_inbox THEN array_append(array_remove(array_remove(e.labels, 'TRASH'), 'INBOX'), 'INBOX') \
+             ELSE array_remove(e.labels, 'TRASH') \
+           END, \
+           gmail_id = COALESCE(u.new_id, e.gmail_id) \
+         FROM unnest($2::int[], $3::text[], $4::bool[]) AS u(id, new_id, in_inbox) \
+         WHERE e.id = u.id",
+    )
+    .bind(trashed)
+    .bind(&ids)
+    .bind(&new_ids)
+    .bind(&in_inbox)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Labels an email as deleted (TRASH) or takes the label off again, keeping its
 /// other labels so a restore puts it back where it was. A snooze is left alone
 /// both ways: Undo of a delete is this same restore, and must put the email

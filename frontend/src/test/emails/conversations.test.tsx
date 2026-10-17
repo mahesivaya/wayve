@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const getEmails = vi.fn();
 const getEmailThread = vi.fn();
-const deleteEmail = vi.fn();
+const trashEmails = vi.fn();
 const markEmailRead = vi.fn();
 const downloadEmailAttachment = vi.fn();
 
@@ -27,7 +27,7 @@ vi.mock("../../api/email", async (importOriginal) => ({
   getEmail: vi.fn(async (id: number) => ({ id, body: `body ${id}` })),
   getEmailBody: vi.fn(async (id: number) => ({ body: `body ${id}` })),
   getEmailAttachments: vi.fn().mockResolvedValue([]),
-  deleteEmail: (id: number) => deleteEmail(id),
+  trashEmails: (ids: number[]) => trashEmails(ids),
   markEmailRead: (id: number) => markEmailRead(id),
   downloadEmailAttachment: (a: unknown, userId: unknown) =>
     downloadEmailAttachment(a, userId),
@@ -214,7 +214,7 @@ describe("useEmailInbox with conversations", () => {
   beforeEach(() => {
     getEmails.mockReset();
     getEmailThread.mockReset();
-    deleteEmail.mockReset().mockResolvedValue(undefined);
+    trashEmails.mockReset().mockImplementation(async (ids: number[]) => ({ done: ids, failed: [] }));
     markEmailRead.mockReset().mockResolvedValue(undefined);
     getEmails.mockResolvedValue({ emails: [row], hasMore: false });
     getEmailThread.mockResolvedValue(thread);
@@ -289,9 +289,8 @@ describe("useEmailInbox with conversations", () => {
     await act(async () => {
       await result.current.bulkDelete([12]);
     });
-    expect(deleteEmail.mock.calls.map((c) => c[0]).sort()).toEqual([
-      10, 11, 12,
-    ]);
+    expect(trashEmails).toHaveBeenCalledTimes(1);
+    expect(trashEmails.mock.calls[0][0].slice().sort()).toEqual([10, 11, 12]);
     expect(result.current.emails).toHaveLength(0);
   });
 

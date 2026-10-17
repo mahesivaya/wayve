@@ -77,6 +77,7 @@ export default function Emails() {
     markSenderNoise,
     bulkMarkRead,
     bulkDelete,
+    bulkRestore,
     markRead,
     markUnread,
   } = useEmailInbox(user?.id, normalizedSearchQuery);
@@ -125,6 +126,18 @@ export default function Emails() {
   const deleteWithUndo = async (emailId: number) => {
     if (inTrash) throw new Error("This email is already in Trash.");
     offerUndo(await deleteEmail(emailId));
+  };
+  // Trash's bulk Restore: says how many went back, and why any didn't.
+  const bulkRestoreWithNotice = async (rowIds: number[]) => {
+    const { restored, failed, error } = await bulkRestore(rowIds);
+    const back = restored === 1 ? "1 email" : `${restored} emails`;
+    setNotice({
+      text:
+        failed > 0
+          ? `Restored ${back}; couldn't restore ${failed}. ${error ?? ""}`.trim()
+          : `Restored ${back} to the inbox.`,
+      view: currentView,
+    });
   };
   const bulkDeleteWithUndo = async (rowIds: number[]) => {
     offerUndo(await bulkDelete(rowIds));
@@ -802,6 +815,7 @@ export default function Emails() {
             ownAddresses={ownAddresses}
             onBulkMarkRead={bulkMarkRead}
             onBulkDelete={inTrash ? undefined : bulkDeleteWithUndo}
+            onBulkRestore={inTrash ? bulkRestoreWithNotice : undefined}
             onMarkRead={markRead}
             onMarkUnread={markUnread}
             onDelete={deleteWithUndo}

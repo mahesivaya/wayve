@@ -287,6 +287,26 @@ export const unsnoozeEmail = async (id: number) => {
   await apiFetch(`/api/emails/${id}/unsnooze`, { method: "POST" });
 };
 
+// Many emails into or out of Trash in one request: one token refresh per
+// mailbox and the provider's batch call, instead of a request per email.
+// Partial: `failed` lists the ones that couldn't move, with why.
+export interface BulkMoveResult {
+  done: number[];
+  failed: { id: number; error: string }[];
+}
+
+export const trashEmails = (ids: number[]) =>
+  apiFetchJson<BulkMoveResult>("/api/emails/trash", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+
+export const restoreEmails = (ids: number[]) =>
+  apiFetchJson<BulkMoveResult>("/api/emails/restore", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+
 export const restoreEmail = async (id: number) => {
   await apiFetch(`/api/emails/${id}/restore`, {
     method: "POST",

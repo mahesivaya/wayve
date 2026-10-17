@@ -40,6 +40,8 @@ interface EmailListProps {
   // drop both sides together.
   onBulkMarkRead?: (ids: number[]) => Promise<void> | void;
   onBulkDelete?: (ids: number[]) => Promise<void> | void;
+  // In Trash: restore the selected rows in one request.
+  onBulkRestore?: (ids: number[]) => Promise<void> | void;
   // Per-row hover actions: toggle a single email's read state.
   onMarkRead?: (id: number) => Promise<void> | void;
   onMarkUnread?: (id: number) => Promise<void> | void;
@@ -118,6 +120,7 @@ export const EmailList: React.FC<EmailListProps> = ({
   width,
   isListView = false,
   onBulkDelete,
+  onBulkRestore,
   onMarkRead,
   onMarkUnread,
   onDelete,
@@ -337,6 +340,18 @@ export const EmailList: React.FC<EmailListProps> = ({
     }
   };
 
+  // No confirm: restoring only takes mail out of Trash, nothing is lost.
+  const runBulkRestore = async () => {
+    if (!onBulkRestore || checkedIds.size === 0) return;
+    setBulkBusy(true);
+    try {
+      await onBulkRestore(Array.from(checkedIds));
+      setCheckedIds(new Set());
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   // Infinite scroll. The observer binds once and reads through refs, because
   // `loadMore` is re-created every parent render and would churn it. `inFlightRef`
   // guards duplicates: the callback can fire again before React commits the
@@ -518,6 +533,18 @@ export const EmailList: React.FC<EmailListProps> = ({
             gone; both actions stay on the row itself, where they act on the
             email under the pointer rather than on a selection. The attachments
             paperclip is now the "Docs" chip beside Sent, in FolderChips. */}
+          {onBulkRestore && checkedIds.size > 0 && (
+            <button
+              type="button"
+              className="email-bulk-action email-bulk-action--icon"
+              onClick={runBulkRestore}
+              disabled={bulkBusy}
+              data-tooltip="Restore selected to inbox"
+              aria-label="Restore selected to inbox"
+            >
+              <RestoreIcon size={18} />
+            </button>
+          )}
           {onBulkDelete && checkedIds.size > 0 && (
             <button
               type="button"
