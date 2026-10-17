@@ -37,6 +37,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
     .service(handler::create_channel)
     .service(handler::update_channel_subject)
     .service(handler::update_channel_visibility)
+    .service(handler::delete_channel)
     .service(handler::join_channel)
     .service(handler::approve_channel_join_request)
     .service(handler::add_channel_users)

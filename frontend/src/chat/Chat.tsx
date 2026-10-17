@@ -11,6 +11,7 @@ import {
   getChatMessages,
   joinChatChannel,
   leaveChatChannel,
+  deleteChatChannel,
   reactionFrame,
   removeChatChannelUser,
   setChatChannelMemberRole,
@@ -879,6 +880,29 @@ export default function Chat() {
     }
   };
 
+  // Offered in place of Leave to a channel's only admin, who can't leave it.
+  const deleteChannel = async () => {
+    if (!selectedChannel) return;
+    if (
+      !window.confirm(
+        `Delete #${selectedChannel.name} for everyone? Its messages and files are deleted too. This can't be undone.`
+      )
+    )
+      return;
+    setSettingsError("");
+
+    try {
+      await deleteChatChannel(selectedChannel.id);
+      setChannelSettingsOpen(false);
+      setSelectedConversation(null);
+      await fetchChannels();
+    } catch (err) {
+      setSettingsError(
+        err instanceof Error ? err.message : "Failed to delete channel"
+      );
+    }
+  };
+
   const approveJoinRequest = async (userId: number) => {
     if (!selectedChannel) return;
     setSettingsError("");
@@ -1085,6 +1109,7 @@ export default function Chat() {
               onDeleteUser={deleteUser}
               onChangeRole={changeMemberRole}
               onLeave={leaveChannel}
+              onDelete={deleteChannel}
               onAddUsers={addUsers}
               onApproveJoinRequest={approveJoinRequest}
             />

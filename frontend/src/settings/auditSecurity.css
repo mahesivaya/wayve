@@ -377,6 +377,11 @@
   color: var(--color-warning);
 }
 
+.audit-activity.channel_deleted {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-strong);
+}
+
 .audit-activity.channel_role_changed {
   background: var(--color-accent-indigo-mist);
   color: var(--color-accent-indigo-deep);

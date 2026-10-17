@@ -773,6 +773,13 @@
   border: 1px solid var(--color-input-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
+  /* Set with the background: left to the browser it is black, which on the
+     dark theme's surface made the channel name (and typed invites) unreadable. */
+  color: var(--color-text-primary);
+}
+
+.channel-settings-input::placeholder {
+  color: var(--color-text-muted);
 }
 
 /* Primary action button (Add, Approve). */

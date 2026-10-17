@@ -24,6 +24,7 @@ const renderPanel = (ch: ChatChannel, isAdmin: boolean) => {
   const handlers = {
     onChangeRole: vi.fn(),
     onLeave: vi.fn(),
+    onDelete: vi.fn(),
     onDeleteUser: vi.fn(),
   };
   render(
@@ -52,12 +53,54 @@ const renderPanel = (ch: ChatChannel, isAdmin: boolean) => {
 };
 
 describe("ChannelSettingsPanel roles and leaving", () => {
-  it("lets an admin promote a member and demote an admin", async () => {
+  it("lets an admin promote a member", async () => {
     const { onChangeRole } = renderPanel(channel(), true);
     await userEvent.click(screen.getByRole("button", { name: "Make admin" }));
     expect(onChangeRole).toHaveBeenCalledWith("b@x.test", "admin");
-    await userEvent.click(screen.getByRole("button", { name: "Make member" }));
-    expect(onChangeRole).toHaveBeenCalledWith("a@x.test", "user");
+  });
+
+  it("lets an admin demote or remove another admin while one would remain", async () => {
+    const { onChangeRole, onDeleteUser } = renderPanel(
+      channel({ admin_emails: ["a@x.test", "b@x.test"] }),
+      true
+    );
+    const demote = screen.getAllByRole("button", { name: "Make member" });
+    expect(demote).toHaveLength(2);
+    await userEvent.click(demote[1]);
+    expect(onChangeRole).toHaveBeenCalledWith("b@x.test", "user");
+    await userEvent.click(screen.getByRole("button", { name: "Remove b@x.test" }));
+    expect(onDeleteUser).toHaveBeenCalledWith("b@x.test");
+  });
+
+  it("offers the last admin Delete channel in place of Leave", async () => {
+    // a@x.test, the current user, is the only admin: the server refuses a leave.
+    const { onDelete, onLeave } = renderPanel(channel(), true);
+    expect(screen.queryByRole("button", { name: "Leave channel" })).toBeNull();
+    expect(screen.getByText(/You're the only admin/)).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Delete channel" }));
+    expect(onDelete).toHaveBeenCalled();
+    expect(onLeave).not.toHaveBeenCalled();
+  });
+
+  it("lets an admin leave while another admin remains", async () => {
+    const { onLeave } = renderPanel(
+      channel({ admin_emails: ["a@x.test", "b@x.test"] }),
+      true
+    );
+    expect(screen.queryByText(/You're the only admin/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete channel" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Leave channel" }));
+    expect(onLeave).toHaveBeenCalled();
+  });
+
+  it("offers the last admin neither Make member nor remove", () => {
+    // a@x.test is the only admin: the server would refuse both.
+    renderPanel(channel(), true);
+    expect(screen.queryByRole("button", { name: "Make member" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove a@x.test" })).toBeNull();
+    // Members keep their controls.
+    expect(screen.getByRole("button", { name: "Make admin" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove b@x.test" })).toBeTruthy();
   });
 
   it("gives a regular member Leave but no role controls", async () => {
@@ -66,6 +109,7 @@ describe("ChannelSettingsPanel roles and leaving", () => {
       false
     );
     expect(screen.queryByRole("button", { name: "Make admin" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete channel" })).toBeNull();
     await userEvent.click(
       screen.getByRole("button", { name: "Leave channel" })
     );
