@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BRAND_NAME } from "../config/brand";
+import { HEADER_NAME } from "../config/brand";
 import BrandLogo from "./BrandLogo";
 import "../home/home.css";
 
@@ -42,7 +42,7 @@ export default function PublicHeader({
       <header className="public-home-nav">
         <button className="public-home-brand" onClick={() => navigate("/")}>
           <BrandLogo className="brand-mark" size={40} />
-          <span>{BRAND_NAME}</span>
+          <span>{HEADER_NAME}</span>
         </button>
 
         <nav className="public-home-links" aria-label="Main navigation">
