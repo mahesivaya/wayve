@@ -1,10 +1,12 @@
-// Snooze (Fluxze only): `emails.snoozed_until` hides a message from the inbox
-// views while it is in the future and lets it back on its own once it passes,
+// Snooze (Fluxze only), per person: the caller's own `email_snoozes` row hides
+// a message from their inbox views while it is in the future and lets it back on its own once it passes,
 // with nothing scheduled. Returned mail sorts at the top of the inbox, by when
 // it came back, and pages correctly; elsewhere snoozed mail keeps its own date;
 // Snoozed lists soonest-back first. A conversation's snooze is its newest
 // message's, so a new reply brings it back, at the reply's place. Undoing a
-// delete (a restore) keeps a snooze, and sync never clears one.
+// delete (a restore) keeps a snooze, and sync never clears one. In a shared
+// inbox each member's snooze hides the email from them alone, and any member
+// may snooze for themselves.
 #[cfg(test)]
 mod tests {
     use crate::email::repo::{self, EmailListFilters, EmailListRow, InsertEmail};
@@ -52,8 +54,24 @@ mod tests {
         (Utc::now() - Duration::minutes(minutes)).naive_utc()
     }
 
+    /// `user`'s own snooze of `email` until `until` (UTC).
+    async fn snooze_for(pool: &PgPool, email: i32, user: i32, until: NaiveDateTime) {
+        repo::set_snoozed(pool, email, user, Some(until))
+            .await
+            .unwrap_or_else(|e| panic!("snooze: {e}"));
+    }
+
+    /// The mailbox's owner, who a test email's snooze belongs to.
+    async fn owner_of(pool: &PgPool, account: i32) -> i32 {
+        sqlx::query_scalar("SELECT user_id FROM email_accounts WHERE id = $1")
+            .bind(account)
+            .fetch_one(pool)
+            .await
+            .unwrap_or_else(|e| panic!("owner: {e}"))
+    }
+
     /// An inbox email received `when`, optionally in a conversation, snoozed
-    /// until `snoozed` (UTC).
+    /// by the mailbox's owner until `snoozed` (UTC).
     async fn email(
         pool: &PgPool,
         account: i32,
@@ -61,18 +79,21 @@ mod tests {
         when: NaiveDateTime,
         snoozed: Option<NaiveDateTime>,
     ) -> i32 {
-        sqlx::query_scalar(
-            "INSERT INTO emails (gmail_id, account_id, thread_id, sender, labels, created_at, snoozed_until) \
-             VALUES ($1, $2, $3, 'ada@x.com', ARRAY['INBOX']::text[], $4, $5) RETURNING id",
+        let id = sqlx::query_scalar(
+            "INSERT INTO emails (gmail_id, account_id, thread_id, sender, labels, created_at) \
+             VALUES ($1, $2, $3, 'ada@x.com', ARRAY['INBOX']::text[], $4) RETURNING id",
         )
         .bind(format!("g-{}", random_email()))
         .bind(account)
         .bind(thread)
         .bind(when)
-        .bind(snoozed)
         .fetch_one(pool)
         .await
-        .unwrap_or_else(|e| panic!("email: {e}"))
+        .unwrap_or_else(|e| panic!("email: {e}"));
+        if let Some(until) = snoozed {
+            snooze_for(pool, id, owner_of(pool, account).await, until).await;
+        }
+        id
     }
 
     /// Like `email`, with Gmail labels of its own.
@@ -83,18 +104,21 @@ mod tests {
         when: NaiveDateTime,
         snoozed: Option<NaiveDateTime>,
     ) -> i32 {
-        sqlx::query_scalar(
-            "INSERT INTO emails (gmail_id, account_id, sender, labels, created_at, snoozed_until) \
-             VALUES ($1, $2, 'ada@x.com', $3, $4, $5) RETURNING id",
+        let id = sqlx::query_scalar(
+            "INSERT INTO emails (gmail_id, account_id, sender, labels, created_at) \
+             VALUES ($1, $2, 'ada@x.com', $3, $4) RETURNING id",
         )
         .bind(format!("g-{}", random_email()))
         .bind(account)
         .bind(labels.iter().map(|l| l.to_string()).collect::<Vec<_>>())
         .bind(when)
-        .bind(snoozed)
         .fetch_one(pool)
         .await
-        .unwrap_or_else(|e| panic!("email: {e}"))
+        .unwrap_or_else(|e| panic!("email: {e}"));
+        if let Some(until) = snoozed {
+            snooze_for(pool, id, owner_of(pool, account).await, until).await;
+        }
+        id
     }
 
     fn filters(user: i32, folder: &str, grouped: bool) -> EmailListFilters {
@@ -124,12 +148,25 @@ mod tests {
             .collect()
     }
 
+    /// The email's snooze, in the single-person tests (anyone's).
     async fn snoozed_until(pool: &PgPool, id: i32) -> Option<NaiveDateTime> {
-        sqlx::query_scalar("SELECT snoozed_until FROM emails WHERE id = $1")
+        sqlx::query_scalar("SELECT snoozed_until FROM email_snoozes WHERE email_id = $1")
             .bind(id)
-            .fetch_one(pool)
+            .fetch_optional(pool)
             .await
             .unwrap_or_else(|e| panic!("snoozed_until: {e}"))
+    }
+
+    /// One person's snooze of the email.
+    async fn snoozed_for(pool: &PgPool, id: i32, user: i32) -> Option<NaiveDateTime> {
+        sqlx::query_scalar(
+            "SELECT snoozed_until FROM email_snoozes WHERE email_id = $1 AND user_id = $2",
+        )
+        .bind(id)
+        .bind(user)
+        .fetch_optional(pool)
+        .await
+        .unwrap_or_else(|e| panic!("snoozed_for: {e}"))
     }
 
     async fn cleanup(pool: &PgPool, users: &[i32]) {
@@ -440,19 +477,22 @@ mod tests {
         let native = |snoozed: Option<NaiveDateTime>| {
             let pool = pool.clone();
             async move {
-                sqlx::query_scalar::<_, i32>(
+                let id = sqlx::query_scalar::<_, i32>(
                     "INSERT INTO emails (gmail_id, account_id, sender, labels, source, \
-                                         recipient_user_id, created_at, snoozed_until) \
-                     VALUES ($1, NULL, 'ada@x.com', ARRAY['INBOX']::text[], 'wayve', $2, $3, $4) \
+                                         recipient_user_id, created_at) \
+                     VALUES ($1, NULL, 'ada@x.com', ARRAY['INBOX']::text[], 'wayve', $2, $3) \
                      RETURNING id",
                 )
                 .bind(format!("wayve:test:{}", random_email()))
                 .bind(me.user)
                 .bind(ago(60))
-                .bind(snoozed)
                 .fetch_one(&pool)
                 .await
-                .unwrap_or_else(|e| panic!("email: {e}"))
+                .unwrap_or_else(|e| panic!("email: {e}"));
+                if let Some(until) = snoozed {
+                    snooze_for(&pool, id, me.user, until).await;
+                }
+                id
             }
         };
         let pending_until = ago(-30);
@@ -520,6 +560,90 @@ mod tests {
         cleanup(&pool, &[me.user]).await;
     }
 
+    /// A shared inbox: `owner`'s mailbox, with `member` added to it.
+    async fn share(pool: &PgPool, owner: &Mailbox) -> (i32, String) {
+        let login = random_email();
+        let member = insert_local_user(pool, &login, "password123").await;
+        sqlx::query("UPDATE email_accounts SET is_shared = TRUE WHERE id = $1")
+            .bind(owner.account)
+            .execute(pool)
+            .await
+            .unwrap_or_else(|e| panic!("share: {e}"));
+        sqlx::query("INSERT INTO shared_inbox_members (account_id, user_id) VALUES ($1, $2)")
+            .bind(owner.account)
+            .bind(member)
+            .execute(pool)
+            .await
+            .unwrap_or_else(|e| panic!("member: {e}"));
+        (member, login)
+    }
+
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn in_a_shared_inbox_a_snooze_hides_the_email_from_its_snoozer_only() {
+        let pool = test_pool().await;
+        let owner = mailbox(&pool).await;
+        let (member, _) = share(&pool, &owner).await;
+        // The owner snoozes it: one email row, seen by both.
+        let id = email(&pool, owner.account, None, ago(60), Some(ago(-30))).await;
+
+        for grouped in [false, true] {
+            assert!(!ids(&pool, owner.user, "inbox", grouped).await.contains(&id));
+            assert!(
+                ids(&pool, owner.user, "snoozed", grouped)
+                    .await
+                    .contains(&id)
+            );
+            // The member still has it, and nothing in their Snoozed.
+            assert!(ids(&pool, member, "inbox", grouped).await.contains(&id));
+            assert!(ids(&pool, member, "snoozed", grouped).await.is_empty());
+        }
+        let row = list(&pool, filters(member, "inbox", true)).await;
+        assert_eq!(row[0].snoozed_until, None, "the owner's snooze leaked");
+
+        cleanup(&pool, &[owner.user, member]).await;
+    }
+
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn a_shared_inbox_member_snoozes_for_themselves() {
+        let pool = test_pool().await;
+        let owner = mailbox(&pool).await;
+        let (member, member_login) = share(&pool, &owner).await;
+        let stranger = mailbox(&pool).await;
+        let id = email(&pool, owner.account, None, ago(60), None).await;
+        let until = (Utc::now() + Duration::minutes(30)).to_rfc3339();
+
+        // Members could only get 404 here before.
+        assert_eq!(
+            call(&pool, member, &member_login, id, Some(until.clone())).await,
+            StatusCode::OK
+        );
+        assert!(snoozed_for(&pool, id, member).await.is_some());
+        assert_eq!(snoozed_for(&pool, id, owner.user).await, None);
+        assert!(!ids(&pool, member, "inbox", true).await.contains(&id));
+        assert!(ids(&pool, owner.user, "inbox", true).await.contains(&id));
+
+        // Someone outside the shared inbox still can't touch it.
+        assert_eq!(
+            call(&pool, stranger.user, &stranger.login, id, Some(until)).await,
+            StatusCode::NOT_FOUND
+        );
+
+        // Unsnoozing ends the member's snooze only.
+        snooze_for(&pool, id, owner.user, ago(-60)).await;
+        assert_eq!(
+            call(&pool, member, &member_login, id, None).await,
+            StatusCode::OK
+        );
+        assert_eq!(snoozed_for(&pool, id, member).await, None);
+        assert!(snoozed_for(&pool, id, owner.user).await.is_some());
+        assert!(ids(&pool, member, "inbox", true).await.contains(&id));
+        assert!(!ids(&pool, owner.user, "inbox", true).await.contains(&id));
+
+        cleanup(&pool, &[owner.user, member, stranger.user]).await;
+    }
+
     #[actix_web::test]
     #[serial_test::serial]
     async fn a_resync_never_clears_a_snooze() {
@@ -543,9 +667,7 @@ mod tests {
             .await
             .unwrap_or_else(|e| panic!("upsert: {e}"));
         let until = ago(-30);
-        repo::set_snoozed(&pool, id, Some(until))
-            .await
-            .unwrap_or_else(|e| panic!("snooze: {e}"));
+        snooze_for(&pool, id, me.user, until).await;
         repo::upsert_one(&pool, me.account, &row)
             .await
             .unwrap_or_else(|e| panic!("resync: {e}"));

@@ -684,16 +684,21 @@ CREATE INDEX IF NOT EXISTS idx_emails_cc_unknown ON emails(account_id, created_a
 ALTER TABLE emails ADD COLUMN IF NOT EXISTS labels TEXT[] NOT NULL DEFAULT '{}';
 CREATE INDEX IF NOT EXISTS idx_emails_labels ON emails USING GIN (labels);
 
--- Snooze (Fluxze only: providers have no snooze API). A message is hidden from
--- the inbox views while `snoozed_until` is in the future and comes back on its
--- own when it passes, with nothing scheduled. It is kept afterwards: the list
--- sorts on GREATEST(created_at, snoozed_until), so returned mail sits at the
--- top of the inbox, at the moment it came back, as in Gmail. NULL = never
--- snoozed. A column, not a label, because sync rewrites labels. TIMESTAMP in
--- UTC like created_at, so the sort expression is indexable.
-ALTER TABLE emails ADD COLUMN IF NOT EXISTS snoozed_until TIMESTAMP;
-CREATE INDEX IF NOT EXISTS idx_emails_snoozed ON emails(account_id, snoozed_until) WHERE snoozed_until IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_emails_account_sort ON emails(account_id, (GREATEST(created_at, snoozed_until)) DESC, id DESC);
+-- Snooze (Fluxze only: providers have no snooze API), per person: a shared
+-- inbox's emails are one row for every member, so a snooze on the email
+-- itself would hide it from the whole team. The list reads the caller's own
+-- row: while `snoozed_until` is in the future the email is hidden from their
+-- inbox views, and it comes back on its own when it passes, with nothing
+-- scheduled. The row is kept afterwards, so returned mail sorts at the top
+-- (GREATEST(created_at, snoozed_until)), as in Gmail. TIMESTAMP in UTC, like
+-- emails.created_at. See migrations/2026-10-email-snooze.sql.
+CREATE TABLE IF NOT EXISTS email_snoozes (
+    email_id INTEGER NOT NULL REFERENCES emails(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    snoozed_until TIMESTAMP NOT NULL,
+    PRIMARY KEY (email_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_email_snoozes_user ON email_snoozes(user_id, snoozed_until);
 
 -- Per-email help-desk workflow state. Created lazily on first state
 -- mutation (status change or assignment) so we don't have to backfill rows
