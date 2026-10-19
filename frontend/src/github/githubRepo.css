@@ -2566,43 +2566,6 @@
   color: var(--color-text-secondary);
 }
 
-/* Read-only comment composer (write needs per-user OAuth, out of scope) */
-.github-pr-composer {
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: var(--color-surface-soft);
-  opacity: 0.85;
-}
-.github-pr-composer-input {
-  padding: 12px 14px 18px;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-.github-pr-composer-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  border-top: 1px solid var(--color-border);
-}
-.github-pr-composer-tools {
-  display: flex;
-  gap: 12px;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-.github-pr-composer-send {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--color-surface-hover);
-  color: var(--color-text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-}
-
 /* Sidebar cards (Details / Checks) */
 .github-pr-card {
   border: 1px solid var(--color-border);

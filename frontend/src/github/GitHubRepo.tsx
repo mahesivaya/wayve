@@ -17,6 +17,7 @@ import {
   approvePullRequest,
   mergePullRequest,
   createCommitComment,
+  createPullComment,
   listImportableRepos,
   getGithubConnection,
   getGithubConnectUrl,
@@ -161,6 +162,8 @@ type PullDetail = {
   // "draft" | …
   mergeable?: boolean | null;
   mergeable_state?: string;
+  // A locked conversation takes no new comments (open, closed or merged).
+  locked?: boolean;
 };
 
 type PullReview = {
@@ -726,6 +729,16 @@ export function GitHubRepoViewer({
   >({});
   // Merge is owner-only. `confirmMergePull` drives the two-step confirm.
   const [mergingPull, setMergingPull] = useState<number | null>(null);
+  // PR conversation composer, per PR so a draft survives switching PRs.
+  const [pullCommentDraft, setPullCommentDraft] = useState<
+    Record<number, string>
+  >({});
+  const [postingPullComment, setPostingPullComment] = useState<number | null>(
+    null
+  );
+  const [pullCommentError, setPullCommentError] = useState<
+    Record<number, string>
+  >({});
   const [confirmMergePull, setConfirmMergePull] = useState<number | null>(null);
   const [mergeMethod, setMergeMethod] = useState<MergeMethod>("merge");
   const [mergeErrorByPull, setMergeErrorByPull] = useState<
@@ -1203,6 +1216,39 @@ export function GitHubRepoViewer({
 
   // On success, refetch the detail (it flips to merged, hiding the action cards)
   // and the PR list (which drops it and its count badge).
+  // Posts to GitHub, then appends the created comment to the open PR's
+  // conversation, so it shows at once without reloading the whole PR.
+  const postPullComment = async (prNumber: number) => {
+    const body = (pullCommentDraft[prNumber] ?? "").trim();
+    if (!body || postingPullComment !== null) return;
+    setPostingPullComment(prNumber);
+    setPullCommentError((cur) => {
+      const next = { ...cur };
+      delete next[prNumber];
+      return next;
+    });
+    try {
+      const created = await createPullComment(owner, repoName, prNumber, body);
+      setPullBundleByNumber((cur) => {
+        const bundle = cur[prNumber];
+        if (!bundle) return cur;
+        return {
+          ...cur,
+          [prNumber]: { ...bundle, comments: [...bundle.comments, created] },
+        };
+      });
+      setPullCommentDraft((cur) => ({ ...cur, [prNumber]: "" }));
+    } catch (err) {
+      setPullCommentError((cur) => ({
+        ...cur,
+        [prNumber]:
+          err instanceof Error ? err.message : "Couldn't post the comment.",
+      }));
+    } finally {
+      setPostingPullComment(null);
+    }
+  };
+
   const mergePull = async (prNumber: number) => {
     setMergingPull(prNumber);
     setConfirmMergePull(null);
@@ -2608,27 +2654,69 @@ export function GitHubRepoViewer({
                                     ))}
                                   </ul>
                                 )}
-                                <div
-                                  className="github-pr-composer"
-                                  aria-disabled="true"
-                                  data-tooltip="Read-only — commenting needs a connected GitHub account"
-                                >
-                                  <div className="github-pr-composer-input">
-                                    Leave a comment…
+                                {/* Text only: GitHub's API has no attachment
+                                    upload. Open, closed and merged PRs all take
+                                    comments; only a locked conversation doesn't. */}
+                                {d.locked ? (
+                                  <div className="github-empty">
+                                    This conversation is locked on GitHub, so it
+                                    can&apos;t take new comments.
                                   </div>
-                                  <div className="github-pr-composer-foot">
-                                    <span className="github-pr-composer-tools">
-                                      <span aria-hidden="true">📎</span>
-                                      <span aria-hidden="true">Aa</span>
-                                    </span>
-                                    <span
-                                      className="github-pr-composer-send"
-                                      aria-hidden="true"
-                                    >
-                                      ↑
-                                    </span>
+                                ) : (
+                                  <div className="github-commit-composer">
+                                    <textarea
+                                      className="github-commit-composer-input"
+                                      placeholder="Leave a comment…"
+                                      aria-label="Comment on this pull request"
+                                      value={pullCommentDraft[d.number] ?? ""}
+                                      onChange={(e) =>
+                                        setPullCommentDraft((cur) => ({
+                                          ...cur,
+                                          [d.number]: e.target.value,
+                                        }))
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (
+                                          e.key === "Enter" &&
+                                          (e.metaKey || e.ctrlKey)
+                                        ) {
+                                          e.preventDefault();
+                                          void postPullComment(d.number);
+                                        }
+                                      }}
+                                      rows={3}
+                                      disabled={postingPullComment === d.number}
+                                    />
+                                    {pullCommentError[d.number] && (
+                                      <div className="github-banner">
+                                        {pullCommentError[d.number]}
+                                      </div>
+                                    )}
+                                    <div className="github-commit-composer-foot">
+                                      <span className="github-commit-composer-note">
+                                        Posts to GitHub as the connected
+                                        account. ⌘/Ctrl + Enter to send.
+                                      </span>
+                                      <button
+                                        type="button"
+                                        className="github-commit-composer-send"
+                                        disabled={
+                                          postingPullComment !== null ||
+                                          !(
+                                            pullCommentDraft[d.number] ?? ""
+                                          ).trim()
+                                        }
+                                        onClick={() =>
+                                          void postPullComment(d.number)
+                                        }
+                                      >
+                                        {postingPullComment === d.number
+                                          ? "Posting…"
+                                          : "Comment"}
+                                      </button>
+                                    </div>
                                   </div>
-                                </div>
+                                )}
                               </div>
                             )}
                           </section>

@@ -43,6 +43,7 @@ mod platform_billing_feature_access_test;
 mod platform_github_connect_test;
 mod platform_users_test;
 mod profile_password_test;
+mod pull_comment_test;
 mod quotas_test;
 mod rbac_authorization_test;
 mod rbac_permissions_golden_test;

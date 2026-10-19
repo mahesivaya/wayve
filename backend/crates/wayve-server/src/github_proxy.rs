@@ -932,6 +932,99 @@ pub async fn create_commit_comment(
     .body(resp_body)
 }
 
+/// GitHub's limit on a comment body, in characters.
+const MAX_COMMENT_CHARS: usize = 65_536;
+
+/// Post a conversation comment on a pull request. GitHub serves a PR's
+/// conversation as its issue's comments, so this goes to
+/// `issues/{number}/comments`, and it works on closed and merged PRs too
+/// (GitHub refuses only a locked conversation, mirrored back as its 403).
+/// Attributed to the account behind `effective_github_token`: the caller's own
+/// GitHub for a connected personal account, else the shared token's account.
+#[post("/github/repos/{owner}/{repo}/pulls/{number}/comments")]
+#[instrument(target = "http", skip(req, pool, payload))]
+pub async fn create_pull_comment(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<(String, String, i64)>,
+    payload: web::Bytes,
+) -> impl Responder {
+    let (owner, repo, number) = path.into_inner();
+    // The tail the conversation is read through, so the same owner-only PR gate
+    // that guards reading it guards writing to it.
+    let tail = format!("repos/{owner}/{repo}/issues/{number}/comments");
+    if let Err(resp) = authorize_github_access(&req, pool.get_ref(), &tail).await {
+        return resp;
+    }
+
+    let Some(pat) = effective_github_token(&req, pool.get_ref()).await else {
+        warn!(target: "http", "pr comment denied: GITHUB_TOKEN not configured");
+        return HttpResponse::ServiceUnavailable().json(serde_json::json!({
+            "message": "GitHub isn't connected on the server (no token configured)."
+        }));
+    };
+
+    let body_text = serde_json::from_slice::<CommitCommentInput>(&payload)
+        .ok()
+        .and_then(|input| input.body)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let Some(body_text) = body_text else {
+        return HttpResponse::BadRequest().json(serde_json::json!({
+            "message": "Comment body is required"
+        }));
+    };
+    if body_text.chars().count() > MAX_COMMENT_CHARS {
+        return HttpResponse::BadRequest().json(serde_json::json!({
+            "message": "Comment is too long (GitHub allows 65,536 characters)"
+        }));
+    }
+
+    let api_base = crate::external::github_api_base();
+    let url = format!("{api_base}/repos/{owner}/{repo}/issues/{number}/comments");
+    let response = match HTTP_CLIENT
+        .post(&url)
+        .timeout(Duration::from_secs(20))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "rwayve-app")
+        .header("Authorization", format!("Bearer {pat}"))
+        .json(&serde_json::json!({ "body": body_text }))
+        .send()
+        .await
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            warn!(target: "http", error = ?e, url = %url, "pr comment upstream call failed");
+            return HttpResponse::BadGateway().json(serde_json::json!({
+                "message": "Upstream GitHub call failed"
+            }));
+        }
+    };
+
+    let status = response.status().as_u16();
+    let resp_body = match response.bytes().await {
+        Ok(b) => b.to_vec(),
+        Err(e) => {
+            warn!(target: "http", error = ?e, "pr comment body read failed");
+            return HttpResponse::BadGateway().finish();
+        }
+    };
+    if (200..300).contains(&status) {
+        info!(target: "http", owner = %owner, repo = %repo, number, "pull request comment posted");
+        // The page refetches the conversation next; drop the cached copy so it
+        // shows the new comment rather than one up to CACHE_TTL_SECS old.
+        invalidate_cached(&format!("repos/{owner}/{repo}/issues/{number}/comments")).await;
+    } else {
+        warn!(target: "http", status, owner = %owner, repo = %repo, number, "pr comment rejected by GitHub");
+    }
+    HttpResponse::build(
+        actix_web::http::StatusCode::from_u16(status).unwrap_or(actix_web::http::StatusCode::OK),
+    )
+    .insert_header(("Content-Type", "application/json"))
+    .body(resp_body)
+}
+
 /// The Projects page data for the current user. Project admins are unrestricted;
 /// other members see only the repos granted to them in `member_project_access`.
 /// Filtered server-side so a restricted member can't bypass a client filter.
@@ -1090,6 +1183,7 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(approve_pull_request);
     cfg.service(merge_pull_request);
     cfg.service(create_commit_comment);
+    cfg.service(create_pull_comment);
     cfg.service(visible_projects);
 }
 
