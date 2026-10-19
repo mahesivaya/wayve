@@ -307,6 +307,39 @@ export const restoreEmails = (ids: number[]) =>
     body: JSON.stringify({ ids }),
   });
 
+// The meeting in an invitation email, as the invite card shows it. Times are
+// exact moments (RFC 3339, UTC) when the time zone is known; `start_local` /
+// `end_local` are wall times in `time_zone` when it isn't; all-day events have
+// dates only (`end_date` is exclusive, as in iCalendar).
+export interface EmailInvite {
+  method: string | null;
+  title: string | null;
+  start: string | null;
+  end: string | null;
+  all_day: boolean;
+  start_date: string | null;
+  end_date: string | null;
+  start_local: string | null;
+  end_local: string | null;
+  time_zone: string | null;
+  location: string | null;
+  join_url: string | null;
+  organizer_name: string | null;
+  organizer_email: string | null;
+  status: string | null;
+}
+
+// `null` when the email carries no readable invitation (404).
+export const getEmailInvite = async (
+  id: number
+): Promise<EmailInvite | null> => {
+  const res = await apiFetch(`/api/emails/${id}/invite`, {
+    preserve404: true,
+  });
+  if (res.status === 404) return null;
+  return (await res.json()) as EmailInvite;
+};
+
 export const restoreEmail = async (id: number) => {
   await apiFetch(`/api/emails/${id}/restore`, {
     method: "POST",

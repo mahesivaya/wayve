@@ -1,6 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { SNOOZE_PRESETS, formatSnoozeTime, snoozeEnd } from "./snoozePresets";
+import {
+  SNOOZE_PRESETS,
+  customSnoozeError,
+  defaultCustomSnooze,
+  formatSnoozeTime,
+  fromLocalInputValue,
+  snoozeEnd,
+  toLocalInputValue,
+} from "./snoozePresets";
 
 const MENU_WIDTH = 220;
 const GAP = 4;
@@ -32,6 +40,12 @@ export function SnoozeMenu({ anchor, onPick, onClose }: SnoozeMenuProps) {
   );
   // Re-rendered each minute so the times shown stay right while it is open.
   const [now, setNow] = useState(() => new Date());
+  // "Custom": the presets give way to a date-and-time field.
+  const [custom, setCustom] = useState(false);
+  const [customValue, setCustomValue] = useState(() =>
+    toLocalInputValue(defaultCustomSnooze())
+  );
+  const [customError, setCustomError] = useState<string | null>(null);
 
   useLayoutEffect(() => {
     const rect = anchor.getBoundingClientRect();
@@ -46,8 +60,12 @@ export function SnoozeMenu({ anchor, onPick, onClose }: SnoozeMenuProps) {
       window.innerWidth - MENU_WIDTH - GAP
     );
     setPosition({ top, left });
-    menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
-  }, [anchor]);
+    // The field when picking a custom time, else the first preset.
+    menuRef.current
+      ?.querySelector<HTMLElement>(custom ? "input" : "button")
+      ?.focus();
+    // Re-placed when the form opens: it is taller, and may need to flip.
+  }, [anchor, custom]);
 
   useEffect(() => {
     const close = () => onCloseRef.current();
@@ -63,7 +81,10 @@ export function SnoozeMenu({ anchor, onPick, onClose }: SnoozeMenuProps) {
     };
     const onScroll = (event: Event) => {
       // Scrolling inside the menu itself is not a reason to close it.
-      if (event.target instanceof Node && menuRef.current?.contains(event.target))
+      if (
+        event.target instanceof Node &&
+        menuRef.current?.contains(event.target)
+      )
         return;
       close();
     };
@@ -87,26 +108,93 @@ export function SnoozeMenu({ anchor, onPick, onClose }: SnoozeMenuProps) {
     <div
       ref={menuRef}
       className="snooze-menu"
-      role="menu"
+      // A menu holds only menu items: while the Custom form shows, it is a
+      // small dialog, so screen readers announce its field and buttons.
+      role={custom ? "dialog" : "menu"}
       aria-label="Snooze until"
       style={{ top: position.top, left: position.left, width: MENU_WIDTH }}
       onClick={(event) => event.stopPropagation()}
     >
       <div className="snooze-menu-title">Snooze until…</div>
-      {SNOOZE_PRESETS.map((preset) => (
-        <button
-          key={preset.minutes}
-          type="button"
-          role="menuitem"
-          className="snooze-menu-item"
-          onClick={() => onPick(snoozeEnd(preset.minutes))}
+      {custom ? (
+        <form
+          className="snooze-menu-custom"
+          // Our own check and message, not the browser's: `min` alone would
+          // block the submit with a native bubble that ignores the theme.
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            // Checked at submit, against the time then, as a preset is.
+            const when = fromLocalInputValue(customValue);
+            const error = customSnoozeError(when);
+            if (error || !when) {
+              setCustomError(error);
+              return;
+            }
+            onPick(when);
+          }}
         >
-          <span>{preset.label}</span>
-          <span className="snooze-menu-time">
-            {formatSnoozeTime(snoozeEnd(preset.minutes, now))}
-          </span>
-        </button>
-      ))}
+          <label className="snooze-menu-custom-label">
+            Date and time
+            <input
+              type="datetime-local"
+              className="snooze-menu-custom-input"
+              value={customValue}
+              min={toLocalInputValue(now)}
+              onChange={(event) => {
+                setCustomValue(event.target.value);
+                setCustomError(null);
+              }}
+            />
+          </label>
+          {customError && (
+            <span className="snooze-menu-custom-error" role="alert">
+              {customError}
+            </span>
+          )}
+          <div className="snooze-menu-custom-actions">
+            <button
+              type="button"
+              className="snooze-menu-custom-back"
+              onClick={() => {
+                setCustom(false);
+                setCustomError(null);
+              }}
+            >
+              Back
+            </button>
+            <button type="submit" className="snooze-menu-custom-save">
+              Snooze
+            </button>
+          </div>
+        </form>
+      ) : (
+        <>
+          {SNOOZE_PRESETS.map((preset) => (
+            <button
+              key={preset.minutes}
+              type="button"
+              role="menuitem"
+              className="snooze-menu-item"
+              onClick={() => onPick(snoozeEnd(preset.minutes))}
+            >
+              <span>{preset.label}</span>
+              <span className="snooze-menu-time">
+                {formatSnoozeTime(snoozeEnd(preset.minutes, now))}
+              </span>
+            </button>
+          ))}
+          <div className="snooze-menu-divider" role="separator" />
+          <button
+            type="button"
+            role="menuitem"
+            className="snooze-menu-item"
+            onClick={() => setCustom(true)}
+          >
+            <span>Custom</span>
+          </button>
+        </>
+      )}
     </div>,
     document.body
   );

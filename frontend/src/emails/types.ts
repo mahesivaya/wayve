@@ -29,6 +29,9 @@ export interface EmailItem {
   // Starred, as in Gmail. A conversation row is starred while any of its
   // messages is; `starred_ids` names them, so unstarring clears every one.
   is_starred?: boolean;
+  // A meeting invitation (or its update, cancellation or reply). The card in
+  // the reading pane loads the meeting itself (getEmailInvite).
+  is_invite?: boolean;
   starred_ids?: number[];
   // Snooze (Fluxze only). Set while snoozed and kept after it runs out;
   // `sort_at` is the list's order and paging cursor: `created_at`, or when the

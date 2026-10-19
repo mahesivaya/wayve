@@ -9,6 +9,7 @@ import { formatFileSize } from "./renderUtils";
 import { isGmailReconnectError } from "./bodyUtils";
 import EmailBody from "./EmailBody";
 import { ConversationView } from "./ConversationView";
+import { InviteCard } from "./InviteCard";
 import { EmailAttachments } from "./EmailAttachments";
 import {
   hasMultipleRecipients,
@@ -913,6 +914,11 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         {selectedEmail.subject || "(No subject)"}
       </h2>
       {deleteError && <p className="email-body-error">{deleteError}</p>}
+
+      {/* Above the conversation and body, as Gmail shows an invitation. */}
+      {selectedEmail.is_invite && (
+        <InviteCard key={selectedEmail.id} emailId={selectedEmail.id} />
+      )}
 
       {conversation && onLoadMessage && conversation.length > 1 && (
         <ConversationView

@@ -32,7 +32,12 @@ vi.mock("../../api/email", async (importOriginal) => ({
 }));
 
 import { EmailList } from "../../emails/EmailList";
-import { formatSnoozeTime } from "../../emails/snoozePresets";
+import {
+  customSnoozeError,
+  formatSnoozeTime,
+  fromLocalInputValue,
+  toLocalInputValue,
+} from "../../emails/snoozePresets";
 import { useEmailInbox } from "../../emails/useEmailInbox";
 import type { EmailFolder, EmailItem } from "../../emails/types";
 
@@ -101,6 +106,57 @@ describe("the row's Snooze action", () => {
       />
     );
 
+  it("snoozes until a picked date and time", async () => {
+    const onSnooze = vi.fn().mockResolvedValue(undefined);
+    list({ onSnooze });
+    fireEvent.click(screen.getAllByRole("button", { name: "Snooze" })[1]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Custom" }));
+
+    const field = screen.getByLabelText("Date and time") as HTMLInputElement;
+    // Starts on tomorrow at 9:00, local time.
+    const now = new Date();
+    expect(field.value).toBe(
+      toLocalInputValue(
+        new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9, 0)
+      )
+    );
+    expect(document.activeElement).toBe(field);
+
+    fireEvent.change(field, { target: { value: "2026-10-22T14:30" } });
+    // The form's Snooze, inside the popup (a dialog while the form shows),
+    // not a row's.
+    const menu = screen.getByRole("dialog", { name: "Snooze until" });
+    fireEvent.click(within(menu).getByRole("button", { name: "Snooze" }));
+    await waitFor(() => expect(onSnooze).toHaveBeenCalledTimes(1));
+    const [id, until] = onSnooze.mock.calls[0];
+    expect(id).toBe(30);
+    // The wall time picked, in the viewer's zone.
+    expect((until as Date).getTime()).toBe(
+      new Date(2026, 9, 22, 14, 30).getTime()
+    );
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("refuses a past time and says why, and Back returns to the presets", () => {
+    const onSnooze = vi.fn();
+    list({ onSnooze });
+    fireEvent.click(screen.getAllByRole("button", { name: "Snooze" })[0]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Custom" }));
+    fireEvent.change(screen.getByLabelText("Date and time"), {
+      target: { value: "2026-10-16T08:00" },
+    });
+    const menu = screen.getByRole("dialog", { name: "Snooze until" });
+    fireEvent.click(within(menu).getByRole("button", { name: "Snooze" }));
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Pick a time in the future."
+    );
+    expect(onSnooze).not.toHaveBeenCalled();
+
+    fireEvent.click(within(menu).getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("menuitem", { name: /30 minutes/ })).toBeTruthy();
+    expect(screen.queryByLabelText("Date and time")).toBeNull();
+  });
+
   it("sits at the end of the row's actions", () => {
     const { container } = list({ onSnooze: vi.fn() });
     const labels = Array.from(
@@ -122,7 +178,7 @@ describe("the row's Snooze action", () => {
       within(menu)
         .getAllByRole("menuitem")
         .map((item) => item.firstChild?.textContent)
-    ).toEqual(["2 minutes", "10 minutes", "30 minutes"]);
+    ).toEqual(["2 minutes", "10 minutes", "30 minutes", "Custom"]);
     expect(container.querySelector(".email-item")?.className).toContain(
       "menu-open"
     );
@@ -347,5 +403,31 @@ describe("formatSnoozeTime", () => {
     expect(formatSnoozeTime(later, now)).toBe(
       `${later.toLocaleDateString([], { month: "short", day: "numeric" })}, ${time(later)}`
     );
+  });
+});
+
+describe("the custom snooze time", () => {
+  const now = new Date(2026, 9, 16, 13, 0);
+
+  it("reads the field's wall time in the viewer's zone, and nothing partial", () => {
+    expect(fromLocalInputValue("2026-10-20T09:05")?.getTime()).toBe(
+      new Date(2026, 9, 20, 9, 5).getTime()
+    );
+    expect(fromLocalInputValue("2026-10-20")).toBeNull();
+    expect(fromLocalInputValue("")).toBeNull();
+    expect(toLocalInputValue(new Date(2026, 0, 5, 7, 3))).toBe(
+      "2026-01-05T07:03"
+    );
+  });
+
+  it("takes only a future time within a year, as the server does", () => {
+    expect(customSnoozeError(null, now)).toBe("Pick a date and time.");
+    expect(customSnoozeError(new Date(2026, 9, 16, 12, 0), now)).toBe(
+      "Pick a time in the future."
+    );
+    expect(customSnoozeError(new Date(2028, 0, 1), now)).toBe(
+      "Snooze for at most a year."
+    );
+    expect(customSnoozeError(new Date(2026, 9, 17, 9, 0), now)).toBeNull();
   });
 });

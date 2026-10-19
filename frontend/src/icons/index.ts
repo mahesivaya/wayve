@@ -14,6 +14,7 @@ export {
   Mail as EmailsIcon,
   MessageCircle as ChatIcon,
   Calendar as SchedulerIcon,
+  CalendarDays as InviteIcon,
   Folder as DriveIcon,
   NotebookPen as NotesIcon,
   SquareCheck as TasksIcon,

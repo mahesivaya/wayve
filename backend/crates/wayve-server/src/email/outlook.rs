@@ -198,6 +198,14 @@ fn parse_message(m: &Value) -> Option<OutlookMessage> {
     if m["importance"].as_str() == Some("high") {
         labels.push("IMPORTANT".to_string());
     }
+    // A meeting request, update, cancellation or response is an `eventMessage`
+    // (Graph names the derived type on each item): mark it as an invitation.
+    if m["@odata.type"]
+        .as_str()
+        .is_some_and(|t| t.contains("eventMessage"))
+    {
+        labels.push("WAYVE_INVITE".to_string());
+    }
     // Outlook's follow-up flag is its star (see provider::MailStar).
     if m["flag"]["flagStatus"].as_str() == Some("flagged") {
         labels.push("STARRED".to_string());
@@ -880,6 +888,30 @@ mod tests {
         let parsed = parse_message(&m).unwrap_or_else(|| panic!("parse"));
         assert_eq!(parsed.cc, "");
         assert_eq!(parsed.receiver, "Unknown");
+    }
+
+    #[test]
+    fn a_meeting_message_is_marked_as_an_invitation() {
+        let message = |odata_type: &str| {
+            serde_json::json!({
+                "@odata.type": odata_type,
+                "id": "AAMk4",
+                "from": { "emailAddress": { "address": "ada@x.com" } },
+            })
+        };
+        for (odata_type, invite) in [
+            ("#microsoft.graph.eventMessageRequest", true),
+            ("#microsoft.graph.eventMessageResponse", true),
+            ("#microsoft.graph.eventMessage", true),
+            ("#microsoft.graph.message", false),
+        ] {
+            let parsed = parse_message(&message(odata_type)).unwrap_or_else(|| panic!("parse"));
+            assert_eq!(
+                parsed.labels.iter().any(|l| l == "WAYVE_INVITE"),
+                invite,
+                "{odata_type}"
+            );
+        }
     }
 
     #[test]
