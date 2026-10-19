@@ -11,8 +11,8 @@ export default function ProfileMenu({
   minimal = false,
 }: {
   placement?: "header" | "sidebar";
-  // Only Settings + Log out. For wide screens, where Settings' left rail
-  // (SettingsShell) already carries Profile, Appearance and the admin switch.
+  // Only Settings, the admin switch and Log out. For wide screens, where
+  // Settings' left rail (SettingsShell) already carries Profile and Appearance.
   minimal?: boolean;
 } = {}) {
   const { user, logout, switchMode } = useAuth();
@@ -30,7 +30,7 @@ export default function ProfileMenu({
     try {
       await switchMode(target);
       setMenuOpen(false);
-      navigate(
+      void navigate(
         target === "admin"
           ? homePathForUser({ ...user, mode: "admin", can_switch_admin: true })
           : "/home"
@@ -87,10 +87,6 @@ export default function ProfileMenu({
 
       {menuOpen && (
         <div className="profile-dropdown" role="menu">
-          <div className="profile-dropdown-header">
-            <div className="profile-dropdown-name">{user.email}</div>
-          </div>
-
           {!minimal && (
             <button
               className="profile-dropdown-item"
@@ -145,7 +141,7 @@ export default function ProfileMenu({
             </button>
           )}
 
-          {!minimal && showSwitcher && (
+          {showSwitcher && (
             <>
               <div className="profile-dropdown-divider" />
               <button
