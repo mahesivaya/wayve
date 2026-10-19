@@ -40,6 +40,7 @@ mod meeting_link_test;
 mod mode_switch_test;
 mod org_keys_test;
 mod platform_billing_feature_access_test;
+mod platform_github_connect_test;
 mod platform_users_test;
 mod profile_password_test;
 mod quotas_test;

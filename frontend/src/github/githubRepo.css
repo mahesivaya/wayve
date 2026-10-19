@@ -914,6 +914,9 @@
   border-bottom: 1px solid var(--color-border);
 }
 .github-pr-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: var(--text-xs);
   font-weight: 600;
   padding: 4px 12px;
@@ -930,6 +933,21 @@
   background: var(--color-primary-action);
   border-color: var(--color-primary-action);
   color: #fff;
+}
+/* The per-state total inside each tab, a pill like .github-sidebar-count. */
+.github-pr-filter-count {
+  font-weight: 700;
+  color: var(--color-text-muted);
+  background: var(--color-surface-hover);
+  padding: 0 7px;
+  border-radius: 999px;
+  min-width: 18px;
+  line-height: 18px;
+  text-align: center;
+}
+.github-pr-filter-btn.active .github-pr-filter-count {
+  color: var(--color-primary-action);
+  background: var(--color-surface);
 }
 
 .github-pr-status {

@@ -219,6 +219,21 @@ where
     pub async fn invalidate(&self, key: &K) {
         self.inner.invalidate(key).await;
     }
+
+    /// Drop every entry whose key matches `pred`, for keys that embed a query
+    /// string and so can't be named exactly. Walks the whole cache, which is
+    /// fine at these capacities (hundreds to low thousands of entries).
+    pub async fn invalidate_where(&self, pred: impl Fn(&K) -> bool) {
+        let keys: Vec<_> = self
+            .inner
+            .iter()
+            .filter(|(key, _)| pred(key))
+            .map(|(key, _)| key)
+            .collect();
+        for key in keys {
+            self.inner.invalidate(&*key).await;
+        }
+    }
 }
 
 fn local_json_cache() -> MokaCache<String, String> {
