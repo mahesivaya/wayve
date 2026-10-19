@@ -41,6 +41,20 @@ fn cache_key(path: &str, query: &str) -> String {
     }
 }
 
+/// A response fetched with one user's own GitHub token is theirs alone: key it
+/// by user so the shared cache never serves it to anyone else.
+fn user_cache_key(user_id: i32, key: &str) -> String {
+    format!("user:{user_id}:{key}")
+}
+
+/// The GitHub path part of a cache key, without any `user:<id>:` scope.
+fn unscoped_key(key: &str) -> &str {
+    key.strip_prefix("user:")
+        .and_then(|rest| rest.split_once(':'))
+        .filter(|(user_id, _)| !user_id.is_empty() && user_id.bytes().all(|b| b.is_ascii_digit()))
+        .map_or(key, |(_, path)| path)
+}
+
 /// Whether a cache key is `prefix` itself or sits under it (`prefix/...` or
 /// `prefix?...`). Case-insensitive, like GitHub's owner and repo names.
 fn key_under(key: &str, prefix: &str) -> bool {
@@ -52,9 +66,10 @@ fn key_under(key: &str, prefix: &str) -> bool {
 
 /// Forget cached GETs under `prefix` after a write through this proxy, so the
 /// page's refetch sees the change instead of a copy up to CACHE_TTL_SECS old.
+/// Covers the shared copies and every user's own.
 async fn invalidate_cached(prefix: &str) {
     GITHUB_CACHE
-        .invalidate_where(|key| key_under(key, prefix))
+        .invalidate_where(|key| key_under(unscoped_key(key), prefix))
         .await;
 }
 
@@ -107,6 +122,45 @@ pub(crate) async fn effective_github_token(req: &HttpRequest, pool: &PgPool) -> 
         return Some(user_token);
     }
     token()
+}
+
+/// A platform owner in admin mode who connected their own GitHub: their user id
+/// and token. Reads use it first, falling back to the shared PAT, so the
+/// platform dashboard can open the owner's private repos as well as everything
+/// the PAT sees. Writes (approve, merge, comment) still go through
+/// `effective_github_token`, i.e. the shared PAT. `None` for everyone else.
+pub(crate) async fn platform_owner_github_token(
+    req: &HttpRequest,
+    pool: &PgPool,
+) -> Option<(i32, String)> {
+    let user_id = get_user_id_from_request(req)?;
+    let ctx = resolve_role_context_moded(req, pool, user_id).await.ok()?;
+    if ctx.scope != Scope::Platform || ctx.role != Role::Owner {
+        return None;
+    }
+    let user_token = crate::github_oauth::stored_token_for(pool, user_id).await?;
+    Some((user_id, user_token))
+}
+
+/// `shared` followed by the repos in `own` it lacks, deduplicated by
+/// `full_name` (case-insensitive, like GitHub).
+fn merge_repo_lists(
+    shared: Vec<serde_json::Value>,
+    own: Vec<serde_json::Value>,
+) -> Vec<serde_json::Value> {
+    let full_name = |r: &serde_json::Value| {
+        r.get("full_name")
+            .and_then(|n| n.as_str())
+            .map(str::to_ascii_lowercase)
+    };
+    let mut seen: std::collections::HashSet<String> = shared.iter().filter_map(full_name).collect();
+    let mut merged = shared;
+    for repo in own {
+        if full_name(&repo).is_none_or(|name| seen.insert(name)) {
+            merged.push(repo);
+        }
+    }
+    merged
 }
 
 /// Fetch the repo objects `bearer` can see. `Err(())` on a transport or upstream
@@ -370,10 +424,19 @@ pub async fn github_proxy(
         query.to_string()
     };
 
+    // A platform owner who connected their own GitHub reads as themselves, so
+    // their private repos open; their responses are cached under their own key
+    // so another platform user can't be served them.
+    let platform_user = platform_owner_github_token(&req, pool.get_ref()).await;
+
     // JSON only: diff/patch responses are large and rarely re-fetched, so caching
     // them would evict hot JSON from the bounded LRU.
     let cache_enabled = media_override.is_none();
-    let key = cache_key(&tail, query);
+    let shared_key = cache_key(&tail, query);
+    let key = match &platform_user {
+        Some((user_id, _)) => user_cache_key(*user_id, &shared_key),
+        None => shared_key,
+    };
 
     if cache_enabled && let Some(cached) = GITHUB_CACHE.get(&key).await {
         let mut builder = HttpResponse::build(
@@ -395,49 +458,39 @@ pub async fn github_proxy(
     } else {
         format!("{api_base}/{tail}?{upstream_query}")
     };
-
-    // GitHub 403s any request without a User-Agent.
     let accept_header = media_override.unwrap_or("application/vnd.github+json");
-    let mut builder = HTTP_CLIENT
-        .get(&url)
-        .timeout(Duration::from_secs(20))
-        .header("Accept", accept_header)
-        .header("X-GitHub-Api-Version", "2022-11-28")
-        .header("User-Agent", "rwayve-app");
 
-    if let Some(pat) = effective_github_token(&req, pool.get_ref()).await {
-        builder = builder.header("Authorization", format!("Bearer {pat}"));
-    }
-
-    let response = match builder.send().await {
-        Ok(resp) => resp,
-        Err(e) => {
-            warn!(target: "http", error = ?e, url = %url, "github proxy upstream call failed");
-            return HttpResponse::BadGateway().json(serde_json::json!({
-                "message": "Upstream GitHub call failed"
-            }));
+    let upstream = match &platform_user {
+        Some((_, user_token)) => {
+            let mine = match fetch_upstream(&url, accept_header, Some(user_token)).await {
+                Ok(upstream) => upstream,
+                Err(resp) => return resp,
+            };
+            // A repo only the shared token can see answers 404 (or 401/403) to
+            // the user's token. Fall back so connecting never loses a repo.
+            if matches!(mine.status, 401 | 403 | 404) {
+                match fetch_upstream(&url, accept_header, token().as_deref()).await {
+                    Ok(upstream) => upstream,
+                    Err(resp) => return resp,
+                }
+            } else {
+                mine
+            }
+        }
+        None => {
+            let bearer = effective_github_token(&req, pool.get_ref()).await;
+            match fetch_upstream(&url, accept_header, bearer.as_deref()).await {
+                Ok(upstream) => upstream,
+                Err(resp) => return resp,
+            }
         }
     };
-
-    let status = response.status().as_u16();
-    // Echo the upstream Content-Type so diff/patch isn't mislabeled as JSON.
-    let upstream_content_type = response
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
-    let upstream_link = response
-        .headers()
-        .get(reqwest::header::LINK)
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
-    let body = match response.bytes().await {
-        Ok(b) => b.to_vec(),
-        Err(e) => {
-            warn!(target: "http", error = ?e, "github proxy body read failed");
-            return HttpResponse::BadGateway().finish();
-        }
-    };
+    let Upstream {
+        status,
+        content_type: upstream_content_type,
+        link: upstream_link,
+        body,
+    } = upstream;
 
     // Success only: caching a 403/500 would make the user wait out the TTL even
     // after the rate limit recovers.
@@ -472,6 +525,63 @@ pub async fn github_proxy(
         builder.insert_header(("Link", link.clone()));
     }
     builder.body(body)
+}
+
+/// One upstream GitHub response, read in full.
+struct Upstream {
+    status: u16,
+    content_type: Option<String>,
+    link: Option<String>,
+    body: Vec<u8>,
+}
+
+/// GET `url` from GitHub as `bearer` (anonymous when `None`). `Err` is a
+/// ready-to-return 502 for a transport or body-read failure.
+async fn fetch_upstream(
+    url: &str,
+    accept: &str,
+    bearer: Option<&str>,
+) -> Result<Upstream, HttpResponse> {
+    // GitHub 403s any request without a User-Agent.
+    let mut builder = HTTP_CLIENT
+        .get(url)
+        .timeout(Duration::from_secs(20))
+        .header("Accept", accept)
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "rwayve-app");
+    if let Some(bearer) = bearer {
+        builder = builder.header("Authorization", format!("Bearer {bearer}"));
+    }
+
+    let response = builder.send().await.map_err(|e| {
+        warn!(target: "http", error = ?e, url = %url, "github proxy upstream call failed");
+        HttpResponse::BadGateway().json(serde_json::json!({
+            "message": "Upstream GitHub call failed"
+        }))
+    })?;
+
+    let status = response.status().as_u16();
+    // Echo the upstream Content-Type so diff/patch isn't mislabeled as JSON.
+    let header = |name| {
+        response
+            .headers()
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string())
+    };
+    let content_type = header(reqwest::header::CONTENT_TYPE);
+    let link = header(reqwest::header::LINK);
+    let body = response.bytes().await.map_err(|e| {
+        warn!(target: "http", error = ?e, "github proxy body read failed");
+        HttpResponse::BadGateway().finish()
+    })?;
+
+    Ok(Upstream {
+        status,
+        content_type,
+        link,
+        body: body.to_vec(),
+    })
 }
 
 /// Optional approval message. The frontend sends `{}` or `{"body":"…"}`.
@@ -943,9 +1053,21 @@ pub async fn github_importable_repos(req: HttpRequest, pool: web::Data<PgPool>) 
     }
 
     let public_only = ctx.scope != Scope::Platform;
-    let repos = match list_repos(token().as_deref()).await {
-        Ok(repos) => repos,
-        Err(()) => {
+    let shared = list_repos(token().as_deref()).await;
+    // A platform owner who connected their own GitHub also gets that account's
+    // repos, private ones included (`ctx` is already downscoped by mode).
+    let own = if ctx.scope == Scope::Platform && ctx.role == Role::Owner {
+        match crate::github_oauth::stored_token_for(pool.get_ref(), user_id).await {
+            Some(user_token) => Some(list_repos(Some(&user_token)).await),
+            None => None,
+        }
+    } else {
+        None
+    };
+    let repos = match (shared, own) {
+        (Ok(shared), Some(Ok(own))) => merge_repo_lists(shared, own),
+        (Ok(repos), None | Some(Err(()))) | (Err(()), Some(Ok(repos))) => repos,
+        (Err(()), None | Some(Err(()))) => {
             return HttpResponse::BadGateway().json(serde_json::json!({
                 "message": "Couldn't reach GitHub"
             }));
@@ -997,6 +1119,32 @@ mod tests {
         assert!(key_under("repos/mahesivaya/wayve/commits?sha=main", prefix));
     }
 
+    #[test]
+    fn user_scoped_keys_unscope_to_the_github_path() {
+        let shared = "repos/o/r/pulls?state=open";
+        let mine = user_cache_key(42, shared);
+        assert_ne!(mine, shared, "a user's copy must not share the shared key");
+        assert_eq!(unscoped_key(&mine), shared);
+        assert_eq!(unscoped_key(shared), shared);
+        // Only a numeric user id is a scope.
+        assert_eq!(unscoped_key("user:abc:repos/o/r"), "user:abc:repos/o/r");
+        assert!(key_under(unscoped_key(&mine), "repos/o/r"));
+    }
+
+    #[test]
+    fn merge_repo_lists_appends_own_repos_once() {
+        let repo = |name: &str| serde_json::json!({ "full_name": name });
+        let merged = merge_repo_lists(
+            vec![repo("acme/shared"), repo("acme/other")],
+            vec![repo("Acme/Shared"), repo("me/private")],
+        );
+        let names: Vec<_> = merged
+            .iter()
+            .filter_map(|r| r["full_name"].as_str())
+            .collect();
+        assert_eq!(names, ["acme/shared", "acme/other", "me/private"]);
+    }
+
     // A plain executor, not #[tokio::test]: moka needs no runtime, and the
     // tokio macro expands to an `.expect` that clippy.toml bans.
     #[test]
@@ -1008,17 +1156,22 @@ mod tests {
                 "repos/o/r/pulls/7",
                 "repos/o/r/commits?sha=main",
                 "repos/o/r2/pulls?state=open",
+                "user:42:repos/o/r/pulls?state=open",
+                "user:42:repos/o/r2/pulls?state=open",
             ] {
                 cache.insert(key.to_string(), 1).await;
             }
+            // As invalidate_cached does: a user's own copies go too.
             cache
-                .invalidate_where(|key| key_under(key, "repos/o/r/pulls"))
+                .invalidate_where(|key| key_under(unscoped_key(key), "repos/o/r/pulls"))
                 .await;
             for (key, kept) in [
                 ("repos/o/r/pulls?state=open", false),
                 ("repos/o/r/pulls/7", false),
                 ("repos/o/r/commits?sha=main", true),
                 ("repos/o/r2/pulls?state=open", true),
+                ("user:42:repos/o/r/pulls?state=open", false),
+                ("user:42:repos/o/r2/pulls?state=open", true),
             ] {
                 assert_eq!(cache.get(&key.to_string()).await.is_some(), kept, "{key}");
             }

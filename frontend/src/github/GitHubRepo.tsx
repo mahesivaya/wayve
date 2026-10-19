@@ -21,6 +21,7 @@ import {
   getGithubConnection,
   getGithubConnectUrl,
   disconnectGithub,
+  type GithubConnection,
   type MergeMethod,
 } from "../api/github";
 import "./githubRepo.css";
@@ -3716,51 +3717,147 @@ type RepoListItem = {
 function PlatformRepoManager() {
   // Deep-link support: the Projects page opens a repo via ?owner=&repo=.
   const [searchParams] = useSearchParams();
+  const { user } = useAuth();
+  // A platform owner in admin mode may connect their own GitHub to add its
+  // repos (private ones too) to this list. UI gating only: the server uses a
+  // connection for exactly this caller and ignores it for everyone else.
+  const canConnect =
+    user?.scope === "platform" && user?.effective_role === "owner";
   const [repos, setRepos] = useState<RepoListItem[] | null>(null);
+  const [ghConn, setGhConn] = useState<GithubConnection | null>(null);
+  // GitHub's OAuth callback bounces back to /github#connected=true, or
+  // #github_error=<reason> when the connect didn't go through.
+  const [connErr, setConnErr] = useState(() => {
+    const failure = /github_error=([^&]+)/.exec(window.location.hash)?.[1];
+    return failure
+      ? `Couldn't connect GitHub (${decodeURIComponent(failure)}). Try again.`
+      : "";
+  });
   const [selected, setSelected] = useState<{ owner: string; repo: string }>({
     owner: searchParams.get("owner") || FALLBACK_OWNER,
     repo: searchParams.get("repo") || FALLBACK_REPO,
   });
 
-  useEffect(() => {
-    void githubJson<RepoListItem[]>(
-      "/api/github/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member"
-    )
-      .then((rows) => setRepos(Array.isArray(rows) ? rows : []))
+  // An owner gets the server's merged list (shared token + their own GitHub);
+  // everyone else the shared token's repos, as before.
+  const loadRepos = useCallback(() => {
+    const rows = canConnect
+      ? listImportableRepos().then((res) => res.repos)
+      : githubJson<RepoListItem[]>(
+          "/api/github/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member"
+        );
+    void rows
+      .then((list) => setRepos(Array.isArray(list) ? list : []))
       .catch(() => setRepos([]));
-  }, []);
+  }, [canConnect]);
+
+  useEffect(() => {
+    loadRepos();
+  }, [loadRepos]);
+
+  // Drop the callback's hash (keeping any ?owner=&repo= deep link), then read
+  // the connection state.
+  useEffect(() => {
+    if (!canConnect) return;
+    const hash = window.location.hash;
+    if (hash.includes("github_error=") || hash.includes("connected=true")) {
+      history.replaceState(
+        null,
+        "",
+        window.location.pathname + window.location.search
+      );
+    }
+    void getGithubConnection()
+      .then(setGhConn)
+      .catch(() => setGhConn({ connected: false }));
+  }, [canConnect]);
+
+  const connectGithub = () => {
+    setConnErr("");
+    void getGithubConnectUrl()
+      .then((u) => {
+        window.location.href = u;
+      })
+      .catch((e) =>
+        setConnErr(
+          e instanceof Error
+            ? e.message
+            : "Couldn't start the GitHub connect flow."
+        )
+      );
+  };
+
+  const disconnect = () => {
+    setConnErr("");
+    void disconnectGithub()
+      .then(() => {
+        setGhConn({ connected: false });
+        loadRepos();
+      })
+      .catch(() => setConnErr("Couldn't disconnect GitHub. Try again."));
+  };
 
   const selectedFullName = `${selected.owner}/${selected.repo}`;
   const hasRepos = (repos?.length ?? 0) > 0;
 
   // Selecting a repo remounts the viewer, which is keyed by owner/repo below.
-  const switcher = hasRepos ? (
-    <div className="github-sidebar-card github-repo-switch">
-      <span className="github-sidebar-branch-label">Repository</span>
-      <select
-        className="github-repo-switch-select"
-        value={selectedFullName}
-        onChange={(e) => {
-          const hit = repos?.find((r) => r.full_name === e.target.value);
-          if (hit) setSelected({ owner: hit.owner.login, repo: hit.name });
-        }}
-        aria-label="Select a repository"
-      >
-        {/* Show just the repo name (not owner/repo); the option value keeps the
+  const switcher =
+    hasRepos || canConnect ? (
+      <div className="github-sidebar-card github-repo-switch">
+        <span className="github-sidebar-branch-label">Repository</span>
+        {hasRepos && (
+          <select
+            className="github-repo-switch-select"
+            value={selectedFullName}
+            onChange={(e) => {
+              const hit = repos?.find((r) => r.full_name === e.target.value);
+              if (hit) setSelected({ owner: hit.owner.login, repo: hit.name });
+            }}
+            aria-label="Select a repository"
+          >
+            {/* Show just the repo name (not owner/repo); the option value keeps the
             full name so the onChange lookup still resolves owner + repo.
             Keep the current/default repo selectable even if the list doesn't
             include it (e.g. the token can read but not enumerate it). */}
-        {repos?.some((r) => r.full_name === selectedFullName) ? null : (
-          <option value={selectedFullName}>{selected.repo}</option>
+            {repos?.some((r) => r.full_name === selectedFullName) ? null : (
+              <option value={selectedFullName}>{selected.repo}</option>
+            )}
+            {repos?.map((r) => (
+              <option key={r.full_name} value={r.full_name}>
+                {r.name}
+              </option>
+            ))}
+          </select>
         )}
-        {repos?.map((r) => (
-          <option key={r.full_name} value={r.full_name}>
-            {r.name}
-          </option>
-        ))}
-      </select>
-    </div>
-  ) : undefined;
+        {canConnect && (
+          <div className="github-repo-switch-conn">
+            {ghConn?.connected ? (
+              <span className="github-repo-switch-conn-who">
+                @{ghConn.login}
+                {" · "}
+                <button
+                  type="button"
+                  className="github-link-btn"
+                  onClick={disconnect}
+                >
+                  Disconnect
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="github-link-btn"
+                onClick={connectGithub}
+                disabled={ghConn === null}
+              >
+                Connect GitHub to import your repos
+              </button>
+            )}
+            {connErr && <p className="github-add-repo-error">{connErr}</p>}
+          </div>
+        )}
+      </div>
+    ) : undefined;
 
   return (
     <GitHubRepoViewer
