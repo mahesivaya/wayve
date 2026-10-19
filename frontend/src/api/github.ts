@@ -129,6 +129,25 @@ export const mergePullRequest = (
 
 // Post a conversation comment on a commit. Note that it is attributed to the
 // shared server token's GitHub account, not to the individual app user.
+// A pull request's conversation comment (GitHub stores it on the PR's issue).
+// Works on closed and merged PRs; GitHub refuses only a locked conversation.
+export const createPullComment = (
+  owner: string,
+  repo: string,
+  number: number,
+  body: string
+) =>
+  apiFetchJson<{
+    id: number;
+    user: { login: string } | null;
+    body: string | null;
+    created_at: string;
+  }>(`/api/github/repos/${owner}/${repo}/pulls/${number}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+    preserve401: true,
+  });
+
 export const createCommitComment = (
   owner: string,
   repo: string,

@@ -163,6 +163,92 @@ fn merge_repo_lists(
     merged
 }
 
+/// Whether `name` is a plausible GitHub owner/login or repository name: 1–100
+/// of `[A-Za-z0-9_.-]`, and never `.` or `..`. Path parameters arrive
+/// percent-decoded, so without this a `/` (from `%2F`) or a dot-segment could
+/// make the URL built for GitHub name a different repo than the one the access
+/// checks approved.
+pub(crate) fn valid_repo_segment(name: &str) -> bool {
+    (1..=100).contains(&name.len())
+        && name != "."
+        && name != ".."
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+}
+
+/// Whether a commit SHA path parameter is plain hex of a sane length.
+fn valid_sha(sha: &str) -> bool {
+    (4..=64).contains(&sha.len()) && sha.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// Whether a read-proxy tail is safe to append to the GitHub API base. Rejects
+/// anything that could move the request off the path the access checks saw:
+/// dot-segments (also the `%2e` spellings URL parsers honour), backslashes
+/// (parsed as `/` in https URLs), and `?` / `#` (which would start a new query
+/// or fragment). Under `repos/`, owner and repo must also be valid names.
+fn safe_proxy_tail(tail: &str) -> bool {
+    if tail.contains(['\\', '?', '#']) {
+        return false;
+    }
+    let dot_segment = |seg: &str| {
+        let s = seg.to_ascii_lowercase().replace("%2e", ".");
+        s == "." || s == ".."
+    };
+    if tail.split('/').any(dot_segment) {
+        return false;
+    }
+    let mut segs = tail.split('/');
+    if segs.next() == Some("repos") {
+        let owner = segs.next().unwrap_or("");
+        let repo = segs.next().unwrap_or("");
+        return valid_repo_segment(owner) && valid_repo_segment(repo);
+    }
+    true
+}
+
+fn invalid_repo_path() -> HttpResponse {
+    HttpResponse::BadRequest().json(serde_json::json!({
+        "message": "Invalid repository path"
+    }))
+}
+
+/// The GitHub token for a write made on the caller's behalf (comment, review,
+/// merge, collaborator change). Like `effective_github_token`, except that a
+/// personal account must use its own connected GitHub: the shared PAT is never
+/// lent to self-signup accounts to act on GitHub, where it would post, approve
+/// or merge as the server's account. `Err` is a ready-to-return response.
+pub(crate) async fn write_github_token(
+    req: &HttpRequest,
+    pool: &PgPool,
+) -> Result<String, HttpResponse> {
+    let Some(user_id) = get_user_id_from_request(req) else {
+        return Err(HttpResponse::Unauthorized()
+            .json(serde_json::json!({ "message": "Authentication required" })));
+    };
+    let ctx = resolve_role_context_moded(req, pool, user_id)
+        .await
+        .map_err(|e| {
+            warn!(target: "auth", user_id, error = ?e, "github write token: rbac resolution failed");
+            HttpResponse::InternalServerError().finish()
+        })?;
+    if ctx.scope == Scope::Personal {
+        return crate::github_oauth::stored_token_for(pool, user_id)
+            .await
+            .ok_or_else(|| {
+                HttpResponse::Forbidden().json(serde_json::json!({
+                    "message": "Connect your GitHub account to do this from the app."
+                }))
+            });
+    }
+    token().ok_or_else(|| {
+        warn!(target: "http", "github write denied: GITHUB_TOKEN not configured");
+        HttpResponse::ServiceUnavailable().json(serde_json::json!({
+            "message": "GitHub isn't connected on the server (no token configured)."
+        }))
+    })
+}
+
 /// Fetch the repo objects `bearer` can see. `Err(())` on a transport or upstream
 /// failure so the caller can 502.
 pub async fn list_repos(bearer: Option<&str>) -> Result<Vec<serde_json::Value>, ()> {
@@ -203,14 +289,6 @@ fn parse_repos_tail(tail: &str) -> Option<(String, String)> {
         return None;
     }
     Some((owner.to_string(), repo.to_string()))
-}
-
-/// Whether a proxy tail targets the pull-request surface: `.../pulls[/...]` plus
-/// `.../issues/{n}/comments`, where GitHub serves a PR's conversation comments.
-/// PRs are owner-only in every scope, and this is the predicate for that gate.
-fn is_pr_path(tail: &str) -> bool {
-    let segs: Vec<&str> = tail.split('/').collect();
-    segs.len() >= 4 && segs[0] == "repos" && (segs[3] == "pulls" || segs[3] == "issues")
 }
 
 /// Roles that see every project in their scope; every other role reaches only the
@@ -391,16 +469,31 @@ async fn authorize_github_access(
         }
     }
 
-    // Pull requests are owner-only in every scope, layered on top of the per-scope
-    // checks above: a non-owner who can read the repo still can't touch its PRs.
-    if is_pr_path(tail) && ctx.role != Role::Owner {
+    // Pull requests are readable (and commentable) by anyone who passed the
+    // per-scope checks above; approving and merging stay owner-only, enforced in
+    // those handlers by `require_pr_owner`.
+    Ok(())
+}
+
+/// Approving and merging a pull request is owner-only in every scope (in
+/// normal session mode an owner is downscoped to member, so this needs admin
+/// mode). `Err` is a ready-to-return 403.
+async fn require_pr_owner(req: &HttpRequest, pool: &PgPool) -> Result<(), HttpResponse> {
+    let user_id =
+        get_user_id_from_request(req).ok_or_else(|| HttpResponse::Unauthorized().finish())?;
+    let ctx = resolve_role_context_moded(req, pool, user_id)
+        .await
+        .map_err(|e| {
+            warn!(target: "auth", user_id, error = ?e, "pr owner check: rbac resolution failed");
+            HttpResponse::InternalServerError().finish()
+        })?;
+    if ctx.role != Role::Owner {
         warn!(target: "auth", user_id, role = ctx.role.as_str(),
-              "github proxy denied: pull requests are owner-only");
+              "github proxy denied: approving and merging pull requests is owner-only");
         return Err(HttpResponse::Forbidden().json(serde_json::json!({
-            "message": "Only the owner can view pull requests"
+            "message": "Only the owner can approve or merge pull requests"
         })));
     }
-
     Ok(())
 }
 
@@ -412,6 +505,10 @@ pub async fn github_proxy(
     path: web::Path<String>,
 ) -> impl Responder {
     let tail = path.into_inner();
+    if !safe_proxy_tail(&tail) {
+        warn!(target: "auth", tail = %tail, "github proxy denied: unsafe path");
+        return invalid_repo_path();
+    }
     if let Err(resp) = authorize_github_access(&req, pool.get_ref(), &tail).await {
         return resp;
     }
@@ -687,18 +784,25 @@ pub async fn approve_pull_request(
     payload: web::Bytes,
 ) -> impl Responder {
     let (owner, repo, number) = path.into_inner();
+    // Validated before the tail is built: a decoded `/` or dot-segment in a name
+    // would otherwise send the write to a repo the gate never checked.
+    if !valid_repo_segment(&owner) || !valid_repo_segment(&repo) {
+        return invalid_repo_path();
+    }
     // Canonical PR tail, so the shared gate runs before any write reaches GitHub.
     let tail = format!("repos/{owner}/{repo}/pulls/{number}");
     if let Err(resp) = authorize_github_access(&req, pool.get_ref(), &tail).await {
         return resp;
     }
+    if let Err(resp) = require_pr_owner(&req, pool.get_ref()).await {
+        return resp;
+    }
 
-    // Fail fast rather than let GitHub 401 an anonymous approve.
-    let Some(pat) = effective_github_token(&req, pool.get_ref()).await else {
-        warn!(target: "http", "pr approve denied: GITHUB_TOKEN not configured");
-        return HttpResponse::ServiceUnavailable().json(serde_json::json!({
-            "message": "GitHub isn't connected on the server (no token configured)."
-        }));
+    // Fail fast rather than let GitHub 401 an anonymous approve. Personal
+    // accounts approve only as their own connected GitHub, never the shared PAT.
+    let pat = match write_github_token(&req, pool.get_ref()).await {
+        Ok(pat) => pat,
+        Err(resp) => return resp,
     };
 
     let review = build_approve_review(&payload);
@@ -774,18 +878,25 @@ pub async fn merge_pull_request(
     payload: web::Bytes,
 ) -> impl Responder {
     let (owner, repo, number) = path.into_inner();
+    // Validated before the tail is built: a decoded `/` or dot-segment in a name
+    // would otherwise send the write to a repo the gate never checked.
+    if !valid_repo_segment(&owner) || !valid_repo_segment(&repo) {
+        return invalid_repo_path();
+    }
     // Canonical PR tail, so the shared gate runs before any write reaches GitHub.
     let tail = format!("repos/{owner}/{repo}/pulls/{number}");
     if let Err(resp) = authorize_github_access(&req, pool.get_ref(), &tail).await {
         return resp;
     }
+    if let Err(resp) = require_pr_owner(&req, pool.get_ref()).await {
+        return resp;
+    }
 
-    // Fail fast rather than let GitHub 401 an anonymous merge.
-    let Some(pat) = effective_github_token(&req, pool.get_ref()).await else {
-        warn!(target: "http", "pr merge denied: GITHUB_TOKEN not configured");
-        return HttpResponse::ServiceUnavailable().json(serde_json::json!({
-            "message": "GitHub isn't connected on the server (no token configured)."
-        }));
+    // Fail fast rather than let GitHub 401 an anonymous merge. Personal
+    // accounts merge only as their own connected GitHub, never the shared PAT.
+    let pat = match write_github_token(&req, pool.get_ref()).await {
+        Ok(pat) => pat,
+        Err(resp) => return resp,
     };
 
     let merge_body = build_merge_body(&payload);
@@ -866,17 +977,20 @@ pub async fn create_commit_comment(
     payload: web::Bytes,
 ) -> impl Responder {
     let (owner, repo, sha) = path.into_inner();
+    // Validated before the tail is built; see `valid_repo_segment`.
+    if !valid_repo_segment(&owner) || !valid_repo_segment(&repo) || !valid_sha(&sha) {
+        return invalid_repo_path();
+    }
     // Same gate as reading the repo: anyone with Code Repo access may comment.
     let tail = format!("repos/{owner}/{repo}/commits/{sha}");
     if let Err(resp) = authorize_github_access(&req, pool.get_ref(), &tail).await {
         return resp;
     }
 
-    let Some(pat) = effective_github_token(&req, pool.get_ref()).await else {
-        warn!(target: "http", "commit comment denied: GITHUB_TOKEN not configured");
-        return HttpResponse::ServiceUnavailable().json(serde_json::json!({
-            "message": "GitHub isn't connected on the server (no token configured)."
-        }));
+    // Personal accounts comment only as their own connected GitHub.
+    let pat = match write_github_token(&req, pool.get_ref()).await {
+        Ok(pat) => pat,
+        Err(resp) => return resp,
     };
 
     let body_text = serde_json::from_slice::<CommitCommentInput>(&payload)
@@ -924,6 +1038,102 @@ pub async fn create_commit_comment(
         info!(target: "http", owner = %owner, repo = %repo, sha = %sha, "commit comment posted");
     } else {
         warn!(target: "http", status, owner = %owner, repo = %repo, "commit comment rejected by GitHub");
+    }
+    HttpResponse::build(
+        actix_web::http::StatusCode::from_u16(status).unwrap_or(actix_web::http::StatusCode::OK),
+    )
+    .insert_header(("Content-Type", "application/json"))
+    .body(resp_body)
+}
+
+/// GitHub's limit on a comment body, in characters.
+const MAX_COMMENT_CHARS: usize = 65_536;
+
+/// Post a conversation comment on a pull request. GitHub serves a PR's
+/// conversation as its issue's comments, so this goes to
+/// `issues/{number}/comments`, and it works on closed and merged PRs too
+/// (GitHub refuses only a locked conversation, mirrored back as its 403).
+/// Attributed to the account behind `effective_github_token`: the caller's own
+/// GitHub for a connected personal account, else the shared token's account.
+#[post("/github/repos/{owner}/{repo}/pulls/{number}/comments")]
+#[instrument(target = "http", skip(req, pool, payload))]
+pub async fn create_pull_comment(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<(String, String, i64)>,
+    payload: web::Bytes,
+) -> impl Responder {
+    let (owner, repo, number) = path.into_inner();
+    // Validated before the tail is built; see `valid_repo_segment`.
+    if !valid_repo_segment(&owner) || !valid_repo_segment(&repo) {
+        return invalid_repo_path();
+    }
+    // The tail the conversation is read through, so anyone who may read it (the
+    // same per-scope repo checks) may comment on it.
+    let tail = format!("repos/{owner}/{repo}/issues/{number}/comments");
+    if let Err(resp) = authorize_github_access(&req, pool.get_ref(), &tail).await {
+        return resp;
+    }
+
+    // Personal accounts comment only as their own connected GitHub.
+    let pat = match write_github_token(&req, pool.get_ref()).await {
+        Ok(pat) => pat,
+        Err(resp) => return resp,
+    };
+
+    let body_text = serde_json::from_slice::<CommitCommentInput>(&payload)
+        .ok()
+        .and_then(|input| input.body)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let Some(body_text) = body_text else {
+        return HttpResponse::BadRequest().json(serde_json::json!({
+            "message": "Comment body is required"
+        }));
+    };
+    if body_text.chars().count() > MAX_COMMENT_CHARS {
+        return HttpResponse::BadRequest().json(serde_json::json!({
+            "message": "Comment is too long (GitHub allows 65,536 characters)"
+        }));
+    }
+
+    let api_base = crate::external::github_api_base();
+    let url = format!("{api_base}/repos/{owner}/{repo}/issues/{number}/comments");
+    let response = match HTTP_CLIENT
+        .post(&url)
+        .timeout(Duration::from_secs(20))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "rwayve-app")
+        .header("Authorization", format!("Bearer {pat}"))
+        .json(&serde_json::json!({ "body": body_text }))
+        .send()
+        .await
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            warn!(target: "http", error = ?e, url = %url, "pr comment upstream call failed");
+            return HttpResponse::BadGateway().json(serde_json::json!({
+                "message": "Upstream GitHub call failed"
+            }));
+        }
+    };
+
+    let status = response.status().as_u16();
+    let resp_body = match response.bytes().await {
+        Ok(b) => b.to_vec(),
+        Err(e) => {
+            warn!(target: "http", error = ?e, "pr comment body read failed");
+            return HttpResponse::BadGateway().finish();
+        }
+    };
+    if (200..300).contains(&status) {
+        info!(target: "http", owner = %owner, repo = %repo, number, "pull request comment posted");
+        // The page refetches the conversation next; drop the cached copy so it
+        // shows the new comment rather than one up to CACHE_TTL_SECS old.
+        invalidate_cached(&format!("repos/{owner}/{repo}/issues/{number}/comments")).await;
+    } else {
+        warn!(target: "http", status, owner = %owner, repo = %repo, number, "pr comment rejected by GitHub");
     }
     HttpResponse::build(
         actix_web::http::StatusCode::from_u16(status).unwrap_or(actix_web::http::StatusCode::OK),
@@ -1090,12 +1300,82 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(approve_pull_request);
     cfg.service(merge_pull_request);
     cfg.service(create_commit_comment);
+    cfg.service(create_pull_comment);
     cfg.service(visible_projects);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn repo_segments_allow_github_names_only() {
+        for ok in [
+            "mahesivaya",
+            "wayve",
+            "my-repo",
+            "my_repo",
+            "repo.js",
+            ".github",
+            "a",
+        ] {
+            assert!(valid_repo_segment(ok), "{ok}");
+        }
+        let too_long = "a".repeat(101);
+        for bad in [
+            "",
+            ".",
+            "..",
+            "a/b",
+            "a\\b",
+            "a b",
+            "a%2Fb",
+            "a?b",
+            "a#b",
+            "ü",
+            too_long.as_str(),
+        ] {
+            assert!(!valid_repo_segment(bad), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn shas_must_be_hex() {
+        assert!(valid_sha("abc1234"));
+        assert!(valid_sha(&"f".repeat(40)));
+        assert!(!valid_sha("abc"));
+        assert!(!valid_sha("abc123z"));
+        assert!(!valid_sha("abc/../x"));
+    }
+
+    #[test]
+    fn proxy_tails_stay_on_the_authorized_path() {
+        // The query string is never part of the tail, so none appears here.
+        for ok in [
+            "repos/o/r",
+            "repos/o/r/contents/",
+            "repos/o/r/contents/src/a file.ts",
+            "repos/o/r/contents/docs/v1.2/readme.md",
+            "repos/o/r/commits",
+            "user/repos",
+        ] {
+            assert!(safe_proxy_tail(ok), "{ok}");
+        }
+        for bad in [
+            "repos/o/r/../../x/y",
+            "repos/o/r/./contents",
+            "repos/o/r/%2e%2e/x",
+            "repos/o/r/%2E./x",
+            "repos/o/r\\..\\x",
+            "repos/o/r/contents/a?ref=x",
+            "repos/o/r/contents/a#frag",
+            "repos/o/r b/contents",
+            "repos/o",
+            "repos//r",
+        ] {
+            assert!(!safe_proxy_tail(bad), "{bad}");
+        }
+    }
 
     #[test]
     fn key_under_matches_the_prefix_and_what_sits_below_it() {
@@ -1205,9 +1485,9 @@ mod tests {
     }
 
     #[test]
-    fn approve_tail_is_owner_gated_pr_path() {
-        // The reconstructed approve tail must trip the owner-only PR gate.
-        assert!(is_pr_path("repos/acme/widgets/pulls/42"));
+    fn approve_tail_resolves_to_the_repo_it_names() {
+        // The reconstructed approve tail must reach the per-scope repo checks
+        // for the repo it names (the owner-only rule lives in the handler).
         assert_eq!(
             parse_repos_tail("repos/acme/widgets/pulls/42"),
             Some(("acme".to_string(), "widgets".to_string()))

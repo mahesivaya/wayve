@@ -17,6 +17,7 @@ import {
   approvePullRequest,
   mergePullRequest,
   createCommitComment,
+  createPullComment,
   listImportableRepos,
   getGithubConnection,
   getGithubConnectUrl,
@@ -161,6 +162,8 @@ type PullDetail = {
   // "draft" | …
   mergeable?: boolean | null;
   mergeable_state?: string;
+  // A locked conversation takes no new comments (open, closed or merged).
+  locked?: boolean;
 };
 
 type PullReview = {
@@ -617,8 +620,9 @@ export function GitHubRepoViewer({
   const API_BASE = `/api/github/repos/${owner}/${repoName}`;
 
   // UI gating only, never authorization: the backend proxy is the authority and
-  // re-checks every request. Pull Requests are owner-only in every scope, so
-  // hiding the tab just spares non-owners a guaranteed 403.
+  // re-checks every request. Anyone who can open the repo can read and comment
+  // on its pull requests; approving and merging are owner-only, so those cards
+  // are hidden from everyone else.
   const { user } = useAuth();
   const isOwner = user?.effective_role === "owner";
   // The per-repo Access panel is for a scope owner or anyone with members:manage.
@@ -726,6 +730,16 @@ export function GitHubRepoViewer({
   >({});
   // Merge is owner-only. `confirmMergePull` drives the two-step confirm.
   const [mergingPull, setMergingPull] = useState<number | null>(null);
+  // PR conversation composer, per PR so a draft survives switching PRs.
+  const [pullCommentDraft, setPullCommentDraft] = useState<
+    Record<number, string>
+  >({});
+  const [postingPullComment, setPostingPullComment] = useState<number | null>(
+    null
+  );
+  const [pullCommentError, setPullCommentError] = useState<
+    Record<number, string>
+  >({});
   const [confirmMergePull, setConfirmMergePull] = useState<number | null>(null);
   const [mergeMethod, setMergeMethod] = useState<MergeMethod>("merge");
   const [mergeErrorByPull, setMergeErrorByPull] = useState<
@@ -1203,6 +1217,39 @@ export function GitHubRepoViewer({
 
   // On success, refetch the detail (it flips to merged, hiding the action cards)
   // and the PR list (which drops it and its count badge).
+  // Posts to GitHub, then appends the created comment to the open PR's
+  // conversation, so it shows at once without reloading the whole PR.
+  const postPullComment = async (prNumber: number) => {
+    const body = (pullCommentDraft[prNumber] ?? "").trim();
+    if (!body || postingPullComment !== null) return;
+    setPostingPullComment(prNumber);
+    setPullCommentError((cur) => {
+      const next = { ...cur };
+      delete next[prNumber];
+      return next;
+    });
+    try {
+      const created = await createPullComment(owner, repoName, prNumber, body);
+      setPullBundleByNumber((cur) => {
+        const bundle = cur[prNumber];
+        if (!bundle) return cur;
+        return {
+          ...cur,
+          [prNumber]: { ...bundle, comments: [...bundle.comments, created] },
+        };
+      });
+      setPullCommentDraft((cur) => ({ ...cur, [prNumber]: "" }));
+    } catch (err) {
+      setPullCommentError((cur) => ({
+        ...cur,
+        [prNumber]:
+          err instanceof Error ? err.message : "Couldn't post the comment.",
+      }));
+    } finally {
+      setPostingPullComment(null);
+    }
+  };
+
   const mergePull = async (prNumber: number) => {
     setMergingPull(prNumber);
     setConfirmMergePull(null);
@@ -1436,26 +1483,24 @@ export function GitHubRepoViewer({
 
   // PRs aren't branch-filtered, so unlike the block above these don't reload
   // on a branch change: the list follows the repo and the Open/Closed tab
-  // (back to page 1 on either), the counts follow the repo. Non-owners never
-  // fetch PRs; the proxy would 403 them.
+  // (back to page 1 on either), the counts follow the repo.
   useEffect(() => {
-    if (!repo || !isOwner) return;
+    if (!repo) return;
     void loadPulls(pullFilter, 1);
-  }, [isOwner, loadPulls, pullFilter, repo]);
+  }, [loadPulls, pullFilter, repo]);
 
   useEffect(() => {
-    if (!repo || !isOwner) return;
+    if (!repo) return;
     void loadPullsTotal("open");
     void loadPullsTotal("closed");
-  }, [isOwner, loadPullsTotal, repo]);
+  }, [loadPullsTotal, repo]);
 
-  // A non-owner can land on "pulls" from a persisted section or a mid-session
-  // role change, so fall back to the overview instead of a blank panel.
+  // Someone who can't manage access can land on "access" from a persisted
+  // section or a mid-session role change, so fall back to the overview.
   useEffect(() => {
-    if (!isOwner && activeSection === "pulls") setActiveSection("description");
     if (!canManageAccess && activeSection === "access")
       setActiveSection("description");
-  }, [isOwner, canManageAccess, activeSection]);
+  }, [canManageAccess, activeSection]);
 
   async function openFile(item: ContentItem) {
     setSelectedFile(item);
@@ -1667,23 +1712,21 @@ export function GitHubRepoViewer({
                 {commitsTotal ?? commits.length}
               </span>
             </button>
-            {isOwner && (
-              <button
-                type="button"
-                className={`github-sidebar-link ${activeSection === "pulls" ? "active" : ""}`}
-                onClick={() => setActiveSection("pulls")}
-              >
-                <span className="github-sidebar-icon" aria-hidden="true">
-                  🔀
-                </span>
-                <span className="github-sidebar-label">Pull Requests</span>
-                <span className="github-sidebar-count">
-                  {/* Open PRs, as GitHub counts them, not every PR ever. */}
-                  {pullCounts.open ??
-                    (pullFilter === "open" ? filteredPulls.length : null)}
-                </span>
-              </button>
-            )}
+            <button
+              type="button"
+              className={`github-sidebar-link ${activeSection === "pulls" ? "active" : ""}`}
+              onClick={() => setActiveSection("pulls")}
+            >
+              <span className="github-sidebar-icon" aria-hidden="true">
+                🔀
+              </span>
+              <span className="github-sidebar-label">Pull Requests</span>
+              <span className="github-sidebar-count">
+                {/* Open PRs, as GitHub counts them, not every PR ever. */}
+                {pullCounts.open ??
+                  (pullFilter === "open" ? filteredPulls.length : null)}
+              </span>
+            </button>
             <button
               type="button"
               className={`github-sidebar-link ${activeSection === "actions" ? "active" : ""}`}
@@ -2112,8 +2155,7 @@ export function GitHubRepoViewer({
             </div>
           )}
 
-          {isOwner &&
-            activeSection === "pulls" &&
+          {activeSection === "pulls" &&
             (selectedPull == null ? (
               <div className="github-panel">
                 <div className="github-panel-head">
@@ -2608,32 +2650,74 @@ export function GitHubRepoViewer({
                                     ))}
                                   </ul>
                                 )}
-                                <div
-                                  className="github-pr-composer"
-                                  aria-disabled="true"
-                                  data-tooltip="Read-only — commenting needs a connected GitHub account"
-                                >
-                                  <div className="github-pr-composer-input">
-                                    Leave a comment…
+                                {/* Text only: GitHub's API has no attachment
+                                    upload. Open, closed and merged PRs all take
+                                    comments; only a locked conversation doesn't. */}
+                                {d.locked ? (
+                                  <div className="github-empty">
+                                    This conversation is locked on GitHub, so it
+                                    can&apos;t take new comments.
                                   </div>
-                                  <div className="github-pr-composer-foot">
-                                    <span className="github-pr-composer-tools">
-                                      <span aria-hidden="true">📎</span>
-                                      <span aria-hidden="true">Aa</span>
-                                    </span>
-                                    <span
-                                      className="github-pr-composer-send"
-                                      aria-hidden="true"
-                                    >
-                                      ↑
-                                    </span>
+                                ) : (
+                                  <div className="github-commit-composer">
+                                    <textarea
+                                      className="github-commit-composer-input"
+                                      placeholder="Leave a comment…"
+                                      aria-label="Comment on this pull request"
+                                      value={pullCommentDraft[d.number] ?? ""}
+                                      onChange={(e) =>
+                                        setPullCommentDraft((cur) => ({
+                                          ...cur,
+                                          [d.number]: e.target.value,
+                                        }))
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (
+                                          e.key === "Enter" &&
+                                          (e.metaKey || e.ctrlKey)
+                                        ) {
+                                          e.preventDefault();
+                                          void postPullComment(d.number);
+                                        }
+                                      }}
+                                      rows={3}
+                                      disabled={postingPullComment === d.number}
+                                    />
+                                    {pullCommentError[d.number] && (
+                                      <div className="github-banner">
+                                        {pullCommentError[d.number]}
+                                      </div>
+                                    )}
+                                    <div className="github-commit-composer-foot">
+                                      <span className="github-commit-composer-note">
+                                        Posts to GitHub as the connected
+                                        account. ⌘/Ctrl + Enter to send.
+                                      </span>
+                                      <button
+                                        type="button"
+                                        className="github-commit-composer-send"
+                                        disabled={
+                                          postingPullComment !== null ||
+                                          !(
+                                            pullCommentDraft[d.number] ?? ""
+                                          ).trim()
+                                        }
+                                        onClick={() =>
+                                          void postPullComment(d.number)
+                                        }
+                                      >
+                                        {postingPullComment === d.number
+                                          ? "Posting…"
+                                          : "Comment"}
+                                      </button>
+                                    </div>
                                   </div>
-                                </div>
+                                )}
                               </div>
                             )}
                           </section>
 
-                          {d.state === "open" && !d.merged && (
+                          {isOwner && d.state === "open" && !d.merged && (
                             <aside className="github-pr-side-col github-pr-full">
                               {d.state === "open" && !d.merged && (
                                 <div className="github-pr-card github-pr-approve-card">

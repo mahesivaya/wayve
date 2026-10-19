@@ -469,12 +469,12 @@ mod tests {
         cleanup(&pool, &[owner_id, member_id], &[org_id]).await;
     }
 
-    // Pull requests are owner-only. The caller under test is an admin rather
-    // than a plain member because admin is in code_repo's default roles, so a
-    // refusal isolates the PR gate from the broader Code Repo feature gate.
+    // Pull requests are readable by anyone who can open the repo, not just the
+    // owner (approving and merging stay owner-only; see pull_comment_test). The
+    // caller is an admin because admin is in code_repo's default roles.
     #[actix_web::test]
     #[serial_test::serial]
-    async fn pull_requests_are_owner_only_via_proxy() {
+    async fn pull_requests_are_readable_by_repo_viewers_via_proxy() {
         use crate::github_proxy;
         use wiremock::matchers::{method, path};
         use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -491,6 +491,11 @@ mod tests {
             .await;
         Mock::given(method("GET"))
             .and(path("/repos/octocat/Hello-World/pulls"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+            .mount(&mock)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/repos/octocat/Hello-World/issues/5/comments"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
             .mount(&mock)
             .await;
@@ -543,7 +548,7 @@ mod tests {
             StatusCode::OK
         );
 
-        // Only PRs are gated, not the whole Code Repo feature.
+        // A non-owner who can open the repo can read it...
         let req = actix_test::TestRequest::get()
             .uri("/github/repos/octocat/Hello-World")
             .insert_header(("Authorization", admin_bearer.clone()))
@@ -557,19 +562,20 @@ mod tests {
             .uri("/github/repos/octocat/Hello-World/pulls")
             .insert_header(("Authorization", admin_bearer.clone()))
             .to_request();
+        // ...its pull requests...
         assert_eq!(
             actix_test::call_service(&app, req).await.status(),
-            StatusCode::FORBIDDEN
+            StatusCode::OK
         );
 
-        // A PR's conversation lives under issue comments and is gated too.
+        // ...and a PR's conversation, which lives under issue comments.
         let req = actix_test::TestRequest::get()
             .uri("/github/repos/octocat/Hello-World/issues/5/comments")
             .insert_header(("Authorization", admin_bearer))
             .to_request();
         assert_eq!(
             actix_test::call_service(&app, req).await.status(),
-            StatusCode::FORBIDDEN
+            StatusCode::OK
         );
 
         unsafe {
