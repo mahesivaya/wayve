@@ -47,17 +47,24 @@ pub fn extract_attachments(payload: &Value) -> Vec<AttachmentMeta> {
 }
 
 fn collect_attachments(payload: &Value, attachments: &mut Vec<AttachmentMeta>) {
-    let filename = payload["filename"].as_str().unwrap_or("").trim();
+    let mime_type = payload["mimeType"].as_str().unwrap_or("");
     let attachment_id = payload["body"]["attachmentId"]
         .as_str()
         .unwrap_or("")
         .trim();
+    // A meeting invitation's calendar part often has no file name. Keep it,
+    // as invite.ics, so the list can tell the email is an invitation.
+    let is_calendar = mime_type.to_ascii_lowercase().starts_with("text/calendar");
+    let filename = match payload["filename"].as_str().unwrap_or("").trim() {
+        "" if is_calendar => "invite.ics",
+        name => name,
+    };
 
     if !filename.is_empty() && !attachment_id.is_empty() {
         attachments.push(AttachmentMeta {
             attachment_id: attachment_id.to_string(),
             filename: filename.to_string(),
-            mime_type: payload["mimeType"].as_str().unwrap_or("").to_string(),
+            mime_type: mime_type.to_string(),
             size: payload["body"]["size"].as_i64().unwrap_or(0),
         });
     }

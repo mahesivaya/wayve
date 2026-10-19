@@ -4,6 +4,7 @@ import { FolderChips } from "./FolderChips";
 import {
   AttachmentIcon,
   EmailsIcon,
+  InviteIcon,
   MailOpenIcon,
   RestoreIcon,
   SnoozeIcon,
@@ -723,6 +724,14 @@ export const EmailList: React.FC<EmailListProps> = ({
                       {email.inbox_status}
                     </span>
                   )}
+                  {email.is_invite && (
+                    <InviteIcon
+                      size={14}
+                      className="email-invite-mark"
+                      aria-label="Meeting invitation"
+                      role="img"
+                    />
+                  )}
                   <span className="email-list-subject">
                     {email.subject || "(No Subject)"}
                   </span>
@@ -896,6 +905,14 @@ export const EmailList: React.FC<EmailListProps> = ({
                   <ConversationCount email={email} />
                 </span>
                 <span className="mobile-email-subject-line">
+                  {email.is_invite && (
+                    <InviteIcon
+                      size={12}
+                      className="email-invite-mark"
+                      aria-label="Meeting invitation"
+                      role="img"
+                    />
+                  )}
                   <span className="mobile-email-subject">
                     {email.subject || "(No Subject)"}
                   </span>

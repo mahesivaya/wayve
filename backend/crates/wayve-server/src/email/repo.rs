@@ -149,6 +149,11 @@ pub struct EmailListRow {
     /// Starred (Gmail's STARRED label). A conversation row is starred while
     /// any of its messages is, as in Gmail.
     pub is_starred: bool,
+    /// A meeting invitation (or its update, cancellation or reply): it carries
+    /// a calendar part (`text/calendar` / `.ics`), or Outlook sent it as a
+    /// meeting message (the WAYVE_INVITE label sync stamps on). For a
+    /// conversation, any of its messages.
+    pub is_invite: bool,
     pub created_at: Option<NaiveDateTime>,
     /// UTC. The caller's own snooze (`email_snoozes`): set while snoozed, and
     /// kept once it has passed, so `sort_at` can put returned mail at the top.
@@ -216,6 +221,11 @@ const LIST_COLUMNS: &str = r#"
         ) AS has_attachments,
         e.account_id, e.is_read, e.created_at,
         ('STARRED' = ANY(e.labels)) AS is_starred,
+        (EXISTS (
+            SELECT 1 FROM email_attachments ia
+            WHERE ia.email_id = e.id
+              AND (ia.mime_type ILIKE 'text/calendar%' OR ia.filename ILIKE '%.ics')
+        ) OR 'WAYVE_INVITE' = ANY(e.labels)) AS is_invite,
         zs.snoozed_until,
         COALESCE(a.is_shared, FALSE) AS is_shared,
         a.shared_label,
@@ -680,6 +690,7 @@ fn push_grouped_list(
                    COUNT(*)::BIGINT AS message_count,
                    (COUNT(*) FILTER (WHERE is_read = FALSE))::BIGINT AS unread_count,
                    BOOL_OR(has_attachments) AS any_attachments,
+                   BOOL_OR(is_invite) AS any_invite,
                    ARRAY_AGG(id ORDER BY created_at DESC, id DESC) AS message_ids,
                    COALESCE(ARRAY_AGG(id ORDER BY created_at DESC, id DESC)
                             FILTER (WHERE is_read = FALSE), '{}') AS unread_ids,
@@ -708,7 +719,7 @@ fn push_grouped_list(
         SELECT l.id, l.gmail_id, l.subject, l.subject_iv, l.subject_encrypted,
                l.sender, l.receiver, l.sender_iv, l.sender_encrypted,
                l.receiver_iv, l.receiver_encrypted, l.has_body,
-               g.any_attachments AS has_attachments,
+               g.any_attachments AS has_attachments, g.any_invite AS is_invite,
                l.account_id, l.is_read, l.created_at, l.is_shared, l.shared_label,
                l.inbox_status, l.inbox_assignee_id, l.thread_id,
                g.message_count, g.unread_count, g.message_ids, g.unread_ids,
@@ -789,6 +800,7 @@ fn map_list_row(row: PgRow) -> EmailListRow {
             .ok()
             .flatten(),
         is_starred: row.try_get::<bool, _>("is_starred").unwrap_or(false),
+        is_invite: row.try_get::<bool, _>("is_invite").unwrap_or(false),
         snoozed_until: row
             .try_get::<Option<NaiveDateTime>, _>("snoozed_until")
             .ok()
