@@ -40,6 +40,13 @@ async fn authorize(
     repo: &str,
 ) -> Result<RepoAdmin, AppError> {
     let user_id = get_user_id_from_request(req).ok_or(AppError::Unauthorized)?;
+    // Names reach GitHub URLs (collaborator sync), so they must be real
+    // owner/repo names, never a decoded `/` or dot-segment.
+    if !crate::github_proxy::valid_repo_segment(owner)
+        || !crate::github_proxy::valid_repo_segment(repo)
+    {
+        return Err(AppError::bad_request("Invalid repository path"));
+    }
     let ctx = resolve_role_context(pool, user_id).await?;
 
     match ctx.scope {
@@ -408,8 +415,12 @@ pub async fn set_access(
         dashboard_updated = true;
     }
 
-    // Best-effort GitHub sync; it needs both an admin token and a login.
-    let token = crate::github_proxy::effective_github_token(&req, pool).await;
+    // Best-effort GitHub sync; it needs both an admin token and a login. A
+    // personal account syncs only as its own connected GitHub (never the
+    // shared PAT); without one the sync is skipped and the grant still stands.
+    let token = crate::github_proxy::write_github_token(&req, pool)
+        .await
+        .ok();
     let github_outcome = match &login {
         Some(l) => github::add_collaborator(&owner, &repo, l, level, token.as_deref()).await,
         None => SyncOutcome::Forbidden, // no login to act on
@@ -482,7 +493,10 @@ pub async fn remove_access(
         dashboard_updated = true;
     }
 
-    let token = crate::github_proxy::effective_github_token(&req, pool).await;
+    // Same write-token rule as adding; see set_access.
+    let token = crate::github_proxy::write_github_token(&req, pool)
+        .await
+        .ok();
     let github_outcome = match &login {
         Some(l) => github::remove_collaborator(&owner, &repo, l, token.as_deref()).await,
         None => SyncOutcome::Forbidden,

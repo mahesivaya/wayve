@@ -29,6 +29,7 @@ mod email_star_test;
 mod email_threading_test;
 mod email_trash_test;
 mod embed_tokens_test;
+mod github_write_token_test;
 mod gitlab_test;
 mod integrations_status_test;
 mod jira_test;
