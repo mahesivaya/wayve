@@ -116,13 +116,25 @@ describe("Code Repo pull requests", () => {
   it("loads closed PRs when switching to the Closed tab", async () => {
     renderViewer();
     await screen.findByText("Old but still open");
-    fireEvent.click(screen.getByRole("button", { name: "Closed" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Closed/ }));
     expect(await screen.findByText("Recently merged")).toBeTruthy();
     expect(screen.queryByText("Old but still open")).toBeNull();
     expect(
       pullUrls().some((u) => u.includes("state=closed&per_page=50&page=1"))
     ).toBe(true);
-    // The panel count is the true closed total, not the rows on this page.
-    expect(await screen.findByText("175")).toBeTruthy();
+  });
+
+  it("shows each tab's true total as a badge, like GitHub", async () => {
+    renderViewer();
+    // Open: one PR. Closed: 175, from the Link header's last page, not the one
+    // row on the current page.
+    const openTab = await screen.findByRole("button", { name: "Open 1" });
+    const closedTab = await screen.findByRole("button", { name: "Closed 175" });
+    expect(openTab.querySelector(".github-pr-filter-count")?.textContent).toBe(
+      "1"
+    );
+    expect(
+      closedTab.querySelector(".github-pr-filter-count")?.textContent
+    ).toBe("175");
   });
 });

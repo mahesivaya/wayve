@@ -2129,6 +2129,18 @@ export function GitHubRepoViewer({
                       onClick={() => setPullFilter(f)}
                     >
                       {f === "open" ? "Open" : "Closed"}
+                      {/* True total for the state, as GitHub shows it; hidden
+                          until known rather than showing a misleading 0. The
+                          space keeps the accessible name "Open 1", not
+                          "Open1"; flex layout doesn't render it. */}
+                      {pullCounts[f] != null && (
+                        <>
+                          {" "}
+                          <span className="github-pr-filter-count">
+                            {pullCounts[f]}
+                          </span>
+                        </>
+                      )}
                     </button>
                   ))}
                 </div>
