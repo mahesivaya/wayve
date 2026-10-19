@@ -1216,6 +1216,73 @@
   color: var(--color-text-muted);
 }
 
+.snooze-menu-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--color-border);
+}
+
+/* "Custom": the presets give way to this form. */
+.snooze-menu-custom {
+  display: grid;
+  gap: 8px;
+  padding: 4px 12px 8px;
+}
+
+.snooze-menu-custom-label {
+  display: grid;
+  gap: 4px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.snooze-menu-custom-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--color-input-border, var(--color-border));
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  /* The native picker's icon and text follow the theme. */
+  color-scheme: light dark;
+}
+
+.snooze-menu-custom-error {
+  color: var(--color-danger-strong);
+  font-size: var(--text-xs);
+}
+
+.snooze-menu-custom-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.snooze-menu-custom-back,
+.snooze-menu-custom-save {
+  padding: 5px 12px;
+  border-radius: var(--radius-sm, 6px);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.snooze-menu-custom-back {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-primary);
+}
+
+.snooze-menu-custom-save {
+  border: 1px solid var(--color-primary-action);
+  background: var(--color-primary-action);
+  color: var(--color-surface);
+}
+
 /* "Moved to Trash · Undo" / "Snoozed until … · Undo", pinned above everything
    at the bottom of the page. */
 .email-trash-notice {
