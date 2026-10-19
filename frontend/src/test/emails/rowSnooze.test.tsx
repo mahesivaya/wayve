@@ -123,8 +123,9 @@ describe("the row's Snooze action", () => {
     expect(document.activeElement).toBe(field);
 
     fireEvent.change(field, { target: { value: "2026-10-22T14:30" } });
-    // The form's Snooze, inside the menu, not a row's.
-    const menu = screen.getByRole("menu", { name: "Snooze until" });
+    // The form's Snooze, inside the popup (a dialog while the form shows),
+    // not a row's.
+    const menu = screen.getByRole("dialog", { name: "Snooze until" });
     fireEvent.click(within(menu).getByRole("button", { name: "Snooze" }));
     await waitFor(() => expect(onSnooze).toHaveBeenCalledTimes(1));
     const [id, until] = onSnooze.mock.calls[0];
@@ -144,7 +145,7 @@ describe("the row's Snooze action", () => {
     fireEvent.change(screen.getByLabelText("Date and time"), {
       target: { value: "2026-10-16T08:00" },
     });
-    const menu = screen.getByRole("menu", { name: "Snooze until" });
+    const menu = screen.getByRole("dialog", { name: "Snooze until" });
     fireEvent.click(within(menu).getByRole("button", { name: "Snooze" }));
     expect(screen.getByRole("alert").textContent).toBe(
       "Pick a time in the future."

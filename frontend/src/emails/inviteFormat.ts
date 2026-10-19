@@ -1,5 +1,18 @@
 import type { EmailInvite } from "../api/email";
 
+// The join link, only when it is an https URL. The server already allows no
+// other, but the link goes into an href, and an invite is written by its
+// sender: never let a `javascript:` or `data:` URL reach one.
+export const safeJoinUrl = (url: string | null): string | null => {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && parsed.hostname ? parsed.href : null;
+  } catch {
+    return null;
+  }
+};
+
 // What kind of calendar message it is, for the card's label.
 export const inviteLabel = (invite: EmailInvite): string => {
   if (invite.status === "cancelled" || invite.method === "cancel") {

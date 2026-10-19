@@ -19,7 +19,11 @@ vi.mock("../../api/email", async (importOriginal) => ({
 import type { EmailInvite } from "../../api/email";
 import { EmailList } from "../../emails/EmailList";
 import { InviteCard } from "../../emails/InviteCard";
-import { inviteLabel, inviteWhen } from "../../emails/inviteFormat";
+import {
+  inviteLabel,
+  inviteWhen,
+  safeJoinUrl,
+} from "../../emails/inviteFormat";
 import type { EmailItem } from "../../emails/types";
 
 const base: EmailInvite = {
@@ -115,6 +119,23 @@ describe("InviteCard", () => {
     const join = screen.getByRole("link", { name: "Join meeting" });
     expect(join.getAttribute("href")).toBe("https://meet.google.com/abc");
     expect(join.getAttribute("rel")).toContain("noopener");
+  });
+
+  it("never links a join URL that isn't https", async () => {
+    getEmailInvite.mockResolvedValue({
+      ...base,
+      join_url: "javascript:alert(document.cookie)",
+    });
+    render(<InviteCard emailId={7} />);
+    expect(await screen.findByText("Design review")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Join meeting" })).toBeNull();
+    expect(safeJoinUrl("JaVaScRiPt:alert(1)")).toBeNull();
+    expect(safeJoinUrl("data:text/html,x")).toBeNull();
+    expect(safeJoinUrl("http://meet.google.com/a")).toBeNull();
+    expect(safeJoinUrl("not a url")).toBeNull();
+    expect(safeJoinUrl("https://meet.google.com/abc")).toBe(
+      "https://meet.google.com/abc"
+    );
   });
 
   it("marks a cancellation and offers no Join", async () => {

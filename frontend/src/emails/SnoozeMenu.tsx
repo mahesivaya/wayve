@@ -108,7 +108,9 @@ export function SnoozeMenu({ anchor, onPick, onClose }: SnoozeMenuProps) {
     <div
       ref={menuRef}
       className="snooze-menu"
-      role="menu"
+      // A menu holds only menu items: while the Custom form shows, it is a
+      // small dialog, so screen readers announce its field and buttons.
+      role={custom ? "dialog" : "menu"}
       aria-label="Snooze until"
       style={{ top: position.top, left: position.left, width: MENU_WIDTH }}
       onClick={(event) => event.stopPropagation()}

@@ -150,6 +150,15 @@ END:VEVENT\r\nEND:VCALENDAR\r\n";
             outlook_event_invite(&serde_json::json!({ "subject": "Hi" })),
             None
         );
+
+        // Only an https join link survives, whatever the event says.
+        let scripted = serde_json::json!({
+            "meetingMessageType": "meetingRequest",
+            "event": { "onlineMeeting": { "joinUrl": "javascript:alert(1)" },
+                       "onlineMeetingUrl": "data:text/html,x" }
+        });
+        let invite = outlook_event_invite(&scripted).unwrap_or_else(|| panic!("no invite"));
+        assert_eq!(invite.join_url, None);
     }
 
     #[actix_web::test]
@@ -303,6 +312,68 @@ END:VEVENT\r\nEND:VCALENDAR\r\n";
             .bind(user)
             .execute(&pool)
             .await;
+    }
+
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn the_card_reads_the_conversations_invitation_not_a_later_reply() {
+        let pool = test_pool().await;
+        let (user, _, account) = mailbox(&pool).await;
+        let thread: i32 =
+            sqlx::query_scalar("INSERT INTO email_threads (account_id) VALUES ($1) RETURNING id")
+                .bind(account)
+                .fetch_one(&pool)
+                .await
+                .unwrap_or_else(|e| panic!("thread: {e}"));
+        let gmail_id = |id: i32| {
+            let pool = pool.clone();
+            async move {
+                sqlx::query_scalar::<_, String>("SELECT gmail_id FROM emails WHERE id = $1")
+                    .bind(id)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap_or_else(|e| panic!("gmail_id: {e}"))
+            }
+        };
+        let invitation = email(&pool, account, Some(thread), &["INBOX"]).await;
+        attach(&pool, invitation, account, "invite.ics", "text/calendar").await;
+        // A later reply, which is what the conversation row opens.
+        let reply = email(&pool, account, Some(thread), &["INBOX"]).await;
+        let lookup = |id: i32, thread: Option<i32>| {
+            let pool = pool.clone();
+            async move {
+                crate::email::invite::invitation_message_id(&pool, id, account, thread)
+                    .await
+                    .unwrap_or_else(|e| panic!("lookup: {e}"))
+            }
+        };
+
+        assert_eq!(
+            lookup(reply, Some(thread)).await,
+            Some(gmail_id(invitation).await)
+        );
+        // The invitation itself reads itself.
+        assert_eq!(
+            lookup(invitation, Some(thread)).await,
+            Some(gmail_id(invitation).await)
+        );
+        // A lone email with no known calendar part: the caller reads it anyway.
+        let lone = email(&pool, account, None, &["INBOX"]).await;
+        assert_eq!(lookup(lone, None).await, None);
+        // Another mailbox's invitation in a same-numbered thread never leaks.
+        let (other_user, _, other_account) = mailbox(&pool).await;
+        let theirs =
+            crate::email::invite::invitation_message_id(&pool, reply, other_account, Some(thread))
+                .await
+                .unwrap_or_else(|e| panic!("lookup: {e}"));
+        assert_eq!(theirs, None);
+
+        for u in [user, other_user] {
+            let _ = sqlx::query("DELETE FROM users WHERE id = $1")
+                .bind(u)
+                .execute(&pool)
+                .await;
+        }
     }
 
     #[actix_web::test]

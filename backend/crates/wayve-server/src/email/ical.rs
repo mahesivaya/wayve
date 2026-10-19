@@ -209,6 +209,15 @@ fn parse_when(
     }
 }
 
+/// `value` when it is an absolute `https://` URL with a host, else `None`. The
+/// card puts a join link in an `href`, and an invite is written by its sender:
+/// anything else (`javascript:`, `data:`, plain text) could run in Fluxze.
+pub(crate) fn https_url(value: &str) -> Option<String> {
+    let parsed = reqwest::Url::parse(value.trim()).ok()?;
+    (parsed.scheme() == "https" && parsed.host_str().is_some_and(|h| !h.is_empty()))
+        .then(|| parsed.to_string())
+}
+
 /// The first https link to a known video-call service in `text`.
 pub(crate) fn video_link(text: &str) -> Option<String> {
     const SERVICES: [&str; 5] = [
@@ -221,8 +230,8 @@ pub(crate) fn video_link(text: &str) -> Option<String> {
     text.split(|c: char| c.is_whitespace() || matches!(c, '<' | '>' | '"' | '(' | ')'))
         .filter(|word| word.starts_with("https://"))
         .map(|word| word.trim_end_matches(['.', ',', ';']))
-        .find(|url| SERVICES.iter().any(|s| url.contains(s)))
-        .map(str::to_string)
+        .filter(|url| SERVICES.iter().any(|s| url.contains(s)))
+        .find_map(https_url)
 }
 
 /// Reads an invitation from a `text/calendar` body. `None` when it has no
@@ -295,8 +304,11 @@ pub fn parse_invite(text: &str) -> Option<Invite> {
     if !seen_event && !in_event {
         return None;
     }
+    // Every join link passes `https_url`: an invite is written by its sender.
     invite.join_url = conference
-        .or_else(|| url.filter(|u| video_link(u).is_some()))
+        .as_deref()
+        .and_then(https_url)
+        .or_else(|| url.as_deref().and_then(video_link))
         .or_else(|| invite.location.as_deref().and_then(video_link))
         .or_else(|| video_link(&description));
     Some(invite)
@@ -402,6 +414,30 @@ END:VEVENT\nEND:VCALENDAR\n";
             Some("2026-10-20 10:00:00".to_string())
         );
         assert_eq!(invite.time_zone.as_deref(), Some("Somewhere Odd"));
+    }
+
+    #[test]
+    fn a_join_link_must_be_https() {
+        // The sender writes the invite: a script URL must never become a link.
+        for bad in [
+            "javascript:alert(document.cookie)",
+            "JaVaScRiPt:alert(1)",
+            "data:text/html,<script>alert(1)</script>",
+            "http://meet.google.com/abc",
+            "meet.google.com/abc",
+        ] {
+            let ics = format!(
+                "BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:x\nX-GOOGLE-CONFERENCE:{bad}\n\
+URL:{bad}\nLOCATION:{bad}\nEND:VEVENT\nEND:VCALENDAR\n"
+            );
+            let invite = parse_invite(&ics).unwrap_or_else(|| panic!("no invite"));
+            assert_eq!(invite.join_url, None, "{bad}");
+        }
+        // A bad conference value doesn't hide a good link in the description.
+        let ics = "BEGIN:VCALENDAR\nBEGIN:VEVENT\nX-GOOGLE-CONFERENCE:javascript:alert(1)\n\
+DESCRIPTION:Join https://zoom.us/j/123 now\nEND:VEVENT\nEND:VCALENDAR\n";
+        let invite = parse_invite(ics).unwrap_or_else(|| panic!("no invite"));
+        assert_eq!(invite.join_url.as_deref(), Some("https://zoom.us/j/123"));
     }
 
     #[test]

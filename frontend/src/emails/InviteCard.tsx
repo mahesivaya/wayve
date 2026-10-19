@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getEmailInvite, type EmailInvite } from "../api/email";
 import { InviteIcon } from "../icons";
-import { inviteLabel, inviteWhen } from "./inviteFormat";
+import { inviteLabel, inviteWhen, safeJoinUrl } from "./inviteFormat";
 
 // The meeting in an invitation email, above its body: what, when (in the
 // viewer's time zone), where, a Join link, and who organized it. Loaded when
@@ -54,6 +54,7 @@ export function InviteCard({ emailId }: { emailId: number }) {
 
   const label = inviteLabel(invite);
   const when = inviteWhen(invite);
+  const joinUrl = safeJoinUrl(invite.join_url);
   const organizer = invite.organizer_name
     ? invite.organizer_email
       ? `${invite.organizer_name} <${invite.organizer_email}>`
@@ -79,10 +80,10 @@ export function InviteCard({ emailId }: { emailId: number }) {
           <span className="invite-card-detail">Organizer: {organizer}</span>
         )}
       </div>
-      {invite.join_url && label !== "Cancelled" && (
+      {joinUrl && label !== "Cancelled" && (
         <a
           className="invite-card-join"
-          href={invite.join_url}
+          href={joinUrl}
           target="_blank"
           rel="noopener noreferrer"
         >

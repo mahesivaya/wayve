@@ -7,7 +7,7 @@
 //! Outlook's comes structured, from the meeting message's event.
 
 use crate::email::attachments::fetch_gmail_attachment_bytes;
-use crate::email::ical::{Invite, parse_invite, video_link, windows_zone};
+use crate::email::ical::{Invite, https_url, parse_invite, video_link, windows_zone};
 use crate::email::oauth::HTTP_CLIENT;
 use crate::email::provider::{MailProvider, refresh_and_persist_email_token};
 use crate::prelude::*;
@@ -29,7 +29,7 @@ pub async fn get_email_invite(
     // shared-inbox member, or the recipient of Fluxze mail.
     let Some(row) = sqlx::query(
         r#"
-        SELECT e.gmail_id, e.source, e.account_id, a.provider, a.refresh_token
+        SELECT e.gmail_id, e.source, e.account_id, e.thread_id, a.provider, a.refresh_token
         FROM emails e
         LEFT JOIN email_accounts a ON e.account_id = a.id
         LEFT JOIN shared_inbox_members sm ON sm.account_id = a.id AND sm.user_id = $2
@@ -97,7 +97,10 @@ pub async fn get_email_invite(
         }
     };
 
-    let message_id: String = row.get("gmail_id");
+    let thread_id: Option<i32> = row.try_get("thread_id").ok().flatten();
+    let message_id = invitation_message_id(pool.get_ref(), email_id, account_id, thread_id)
+        .await?
+        .unwrap_or_else(|| row.get("gmail_id"));
     let invite = if provider.is_microsoft() {
         outlook_invite(&token, &message_id).await
     } else {
@@ -113,6 +116,41 @@ pub async fn get_email_invite(
             })))
         }
     }
+}
+
+/// Which message's invitation the card shows: this email if it carries one,
+/// else the newest one in its conversation that does. The list marks a
+/// conversation when any message is an invitation (`is_invite`), and the
+/// email opened is its newest, which may be a reply with no calendar part.
+/// `None` when no message is known to carry one: the caller then reads this
+/// email anyway, as Gmail may hold a calendar part the list never saw.
+pub async fn invitation_message_id(
+    pool: &PgPool,
+    email_id: i32,
+    account_id: i32,
+    thread_id: Option<i32>,
+) -> sqlx::Result<Option<String>> {
+    sqlx::query_scalar(
+        r#"
+        SELECT c.gmail_id
+        FROM emails c
+        WHERE c.account_id = $2
+          AND (c.id = $1 OR ($3::int IS NOT NULL AND c.thread_id = $3))
+          AND NOT ('TRASH' = ANY(c.labels))
+          AND (EXISTS (
+                  SELECT 1 FROM email_attachments ia
+                  WHERE ia.email_id = c.id
+                    AND (ia.mime_type ILIKE 'text/calendar%' OR ia.filename ILIKE '%.ics')
+               ) OR 'WAYVE_INVITE' = ANY(c.labels))
+        ORDER BY (c.id = $1) DESC, c.created_at DESC, c.id DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(email_id)
+    .bind(account_id)
+    .bind(thread_id)
+    .fetch_optional(pool)
+    .await
 }
 
 /// The message's calendar part: a `text/calendar` part first (the one calendar
@@ -302,11 +340,11 @@ pub fn outlook_event_invite(message: &Value) -> Option<Invite> {
             invite.time_zone = event["start"]["timeZone"].as_str().map(str::to_string);
         }
     }
+    // https only, as for Gmail (`ical::https_url`): the event is the sender's.
     invite.join_url = event["onlineMeeting"]["joinUrl"]
         .as_str()
-        .or(event["onlineMeetingUrl"].as_str())
-        .map(str::to_string)
-        .filter(|u| !u.is_empty())
+        .and_then(https_url)
+        .or_else(|| event["onlineMeetingUrl"].as_str().and_then(https_url))
         .or_else(|| invite.location.as_deref().and_then(video_link));
     Some(invite)
 }
