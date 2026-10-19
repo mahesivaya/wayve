@@ -620,8 +620,9 @@ export function GitHubRepoViewer({
   const API_BASE = `/api/github/repos/${owner}/${repoName}`;
 
   // UI gating only, never authorization: the backend proxy is the authority and
-  // re-checks every request. Pull Requests are owner-only in every scope, so
-  // hiding the tab just spares non-owners a guaranteed 403.
+  // re-checks every request. Anyone who can open the repo can read and comment
+  // on its pull requests; approving and merging are owner-only, so those cards
+  // are hidden from everyone else.
   const { user } = useAuth();
   const isOwner = user?.effective_role === "owner";
   // The per-repo Access panel is for a scope owner or anyone with members:manage.
@@ -1482,26 +1483,24 @@ export function GitHubRepoViewer({
 
   // PRs aren't branch-filtered, so unlike the block above these don't reload
   // on a branch change: the list follows the repo and the Open/Closed tab
-  // (back to page 1 on either), the counts follow the repo. Non-owners never
-  // fetch PRs; the proxy would 403 them.
+  // (back to page 1 on either), the counts follow the repo.
   useEffect(() => {
-    if (!repo || !isOwner) return;
+    if (!repo) return;
     void loadPulls(pullFilter, 1);
-  }, [isOwner, loadPulls, pullFilter, repo]);
+  }, [loadPulls, pullFilter, repo]);
 
   useEffect(() => {
-    if (!repo || !isOwner) return;
+    if (!repo) return;
     void loadPullsTotal("open");
     void loadPullsTotal("closed");
-  }, [isOwner, loadPullsTotal, repo]);
+  }, [loadPullsTotal, repo]);
 
-  // A non-owner can land on "pulls" from a persisted section or a mid-session
-  // role change, so fall back to the overview instead of a blank panel.
+  // Someone who can't manage access can land on "access" from a persisted
+  // section or a mid-session role change, so fall back to the overview.
   useEffect(() => {
-    if (!isOwner && activeSection === "pulls") setActiveSection("description");
     if (!canManageAccess && activeSection === "access")
       setActiveSection("description");
-  }, [isOwner, canManageAccess, activeSection]);
+  }, [canManageAccess, activeSection]);
 
   async function openFile(item: ContentItem) {
     setSelectedFile(item);
@@ -1713,23 +1712,21 @@ export function GitHubRepoViewer({
                 {commitsTotal ?? commits.length}
               </span>
             </button>
-            {isOwner && (
-              <button
-                type="button"
-                className={`github-sidebar-link ${activeSection === "pulls" ? "active" : ""}`}
-                onClick={() => setActiveSection("pulls")}
-              >
-                <span className="github-sidebar-icon" aria-hidden="true">
-                  🔀
-                </span>
-                <span className="github-sidebar-label">Pull Requests</span>
-                <span className="github-sidebar-count">
-                  {/* Open PRs, as GitHub counts them, not every PR ever. */}
-                  {pullCounts.open ??
-                    (pullFilter === "open" ? filteredPulls.length : null)}
-                </span>
-              </button>
-            )}
+            <button
+              type="button"
+              className={`github-sidebar-link ${activeSection === "pulls" ? "active" : ""}`}
+              onClick={() => setActiveSection("pulls")}
+            >
+              <span className="github-sidebar-icon" aria-hidden="true">
+                🔀
+              </span>
+              <span className="github-sidebar-label">Pull Requests</span>
+              <span className="github-sidebar-count">
+                {/* Open PRs, as GitHub counts them, not every PR ever. */}
+                {pullCounts.open ??
+                  (pullFilter === "open" ? filteredPulls.length : null)}
+              </span>
+            </button>
             <button
               type="button"
               className={`github-sidebar-link ${activeSection === "actions" ? "active" : ""}`}
@@ -2158,8 +2155,7 @@ export function GitHubRepoViewer({
             </div>
           )}
 
-          {isOwner &&
-            activeSection === "pulls" &&
+          {activeSection === "pulls" &&
             (selectedPull == null ? (
               <div className="github-panel">
                 <div className="github-panel-head">
@@ -2721,7 +2717,7 @@ export function GitHubRepoViewer({
                             )}
                           </section>
 
-                          {d.state === "open" && !d.merged && (
+                          {isOwner && d.state === "open" && !d.merged && (
                             <aside className="github-pr-side-col github-pr-full">
                               {d.state === "open" && !d.merged && (
                                 <div className="github-pr-card github-pr-approve-card">

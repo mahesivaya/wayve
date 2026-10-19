@@ -291,14 +291,6 @@ fn parse_repos_tail(tail: &str) -> Option<(String, String)> {
     Some((owner.to_string(), repo.to_string()))
 }
 
-/// Whether a proxy tail targets the pull-request surface: `.../pulls[/...]` plus
-/// `.../issues/{n}/comments`, where GitHub serves a PR's conversation comments.
-/// PRs are owner-only in every scope, and this is the predicate for that gate.
-fn is_pr_path(tail: &str) -> bool {
-    let segs: Vec<&str> = tail.split('/').collect();
-    segs.len() >= 4 && segs[0] == "repos" && (segs[3] == "pulls" || segs[3] == "issues")
-}
-
 /// Roles that see every project in their scope; every other role reaches only the
 /// repos granted to it in `member_project_access`. Must stay in sync with the arm
 /// in `visible_projects` so the list and the 403 gate agree.
@@ -477,16 +469,31 @@ async fn authorize_github_access(
         }
     }
 
-    // Pull requests are owner-only in every scope, layered on top of the per-scope
-    // checks above: a non-owner who can read the repo still can't touch its PRs.
-    if is_pr_path(tail) && ctx.role != Role::Owner {
+    // Pull requests are readable (and commentable) by anyone who passed the
+    // per-scope checks above; approving and merging stay owner-only, enforced in
+    // those handlers by `require_pr_owner`.
+    Ok(())
+}
+
+/// Approving and merging a pull request is owner-only in every scope (in
+/// normal session mode an owner is downscoped to member, so this needs admin
+/// mode). `Err` is a ready-to-return 403.
+async fn require_pr_owner(req: &HttpRequest, pool: &PgPool) -> Result<(), HttpResponse> {
+    let user_id =
+        get_user_id_from_request(req).ok_or_else(|| HttpResponse::Unauthorized().finish())?;
+    let ctx = resolve_role_context_moded(req, pool, user_id)
+        .await
+        .map_err(|e| {
+            warn!(target: "auth", user_id, error = ?e, "pr owner check: rbac resolution failed");
+            HttpResponse::InternalServerError().finish()
+        })?;
+    if ctx.role != Role::Owner {
         warn!(target: "auth", user_id, role = ctx.role.as_str(),
-              "github proxy denied: pull requests are owner-only");
+              "github proxy denied: approving and merging pull requests is owner-only");
         return Err(HttpResponse::Forbidden().json(serde_json::json!({
-            "message": "Only the owner can view pull requests"
+            "message": "Only the owner can approve or merge pull requests"
         })));
     }
-
     Ok(())
 }
 
@@ -787,6 +794,9 @@ pub async fn approve_pull_request(
     if let Err(resp) = authorize_github_access(&req, pool.get_ref(), &tail).await {
         return resp;
     }
+    if let Err(resp) = require_pr_owner(&req, pool.get_ref()).await {
+        return resp;
+    }
 
     // Fail fast rather than let GitHub 401 an anonymous approve. Personal
     // accounts approve only as their own connected GitHub, never the shared PAT.
@@ -876,6 +886,9 @@ pub async fn merge_pull_request(
     // Canonical PR tail, so the shared gate runs before any write reaches GitHub.
     let tail = format!("repos/{owner}/{repo}/pulls/{number}");
     if let Err(resp) = authorize_github_access(&req, pool.get_ref(), &tail).await {
+        return resp;
+    }
+    if let Err(resp) = require_pr_owner(&req, pool.get_ref()).await {
         return resp;
     }
 
@@ -1051,18 +1064,21 @@ pub async fn create_pull_comment(
     payload: web::Bytes,
 ) -> impl Responder {
     let (owner, repo, number) = path.into_inner();
-    // The tail the conversation is read through, so the same owner-only PR gate
-    // that guards reading it guards writing to it.
+    // Validated before the tail is built; see `valid_repo_segment`.
+    if !valid_repo_segment(&owner) || !valid_repo_segment(&repo) {
+        return invalid_repo_path();
+    }
+    // The tail the conversation is read through, so anyone who may read it (the
+    // same per-scope repo checks) may comment on it.
     let tail = format!("repos/{owner}/{repo}/issues/{number}/comments");
     if let Err(resp) = authorize_github_access(&req, pool.get_ref(), &tail).await {
         return resp;
     }
 
-    let Some(pat) = effective_github_token(&req, pool.get_ref()).await else {
-        warn!(target: "http", "pr comment denied: GITHUB_TOKEN not configured");
-        return HttpResponse::ServiceUnavailable().json(serde_json::json!({
-            "message": "GitHub isn't connected on the server (no token configured)."
-        }));
+    // Personal accounts comment only as their own connected GitHub.
+    let pat = match write_github_token(&req, pool.get_ref()).await {
+        Ok(pat) => pat,
+        Err(resp) => return resp,
     };
 
     let body_text = serde_json::from_slice::<CommitCommentInput>(&payload)
@@ -1469,9 +1485,9 @@ mod tests {
     }
 
     #[test]
-    fn approve_tail_is_owner_gated_pr_path() {
-        // The reconstructed approve tail must trip the owner-only PR gate.
-        assert!(is_pr_path("repos/acme/widgets/pulls/42"));
+    fn approve_tail_resolves_to_the_repo_it_names() {
+        // The reconstructed approve tail must reach the per-scope repo checks
+        // for the repo it names (the owner-only rule lives in the handler).
         assert_eq!(
             parse_repos_tail("repos/acme/widgets/pulls/42"),
             Some(("acme".to_string(), "widgets".to_string()))
