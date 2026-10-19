@@ -41,6 +41,23 @@ fn cache_key(path: &str, query: &str) -> String {
     }
 }
 
+/// Whether a cache key is `prefix` itself or sits under it (`prefix/...` or
+/// `prefix?...`). Case-insensitive, like GitHub's owner and repo names.
+fn key_under(key: &str, prefix: &str) -> bool {
+    key.len() >= prefix.len()
+        && key.is_char_boundary(prefix.len())
+        && key[..prefix.len()].eq_ignore_ascii_case(prefix)
+        && matches!(key.as_bytes().get(prefix.len()), None | Some(b'/' | b'?'))
+}
+
+/// Forget cached GETs under `prefix` after a write through this proxy, so the
+/// page's refetch sees the change instead of a copy up to CACHE_TTL_SECS old.
+async fn invalidate_cached(prefix: &str) {
+    GITHUB_CACHE
+        .invalidate_where(|key| key_under(key, prefix))
+        .await;
+}
+
 /// Map a `?media=...` opt-in to the GitHub `Accept` header for the raw
 /// representation, used by the frontend's commits-diff fallback when GitHub's
 /// JSON commit detail omits `files[].patch`. Unknown values fall through to JSON.
@@ -608,6 +625,8 @@ pub async fn approve_pull_request(
     };
     if (200..300).contains(&status) {
         info!(target: "http", owner = %owner, repo = %repo, number, "pull request approved");
+        // The PR's reviews and detail changed; drop the repo's cached PR reads.
+        invalidate_cached(&format!("repos/{owner}/{repo}/pulls")).await;
         // Notify the requester and the approver. After the fact and best effort:
         // GitHub has already recorded the approval, so a notification problem
         // must not turn a successful approve into an error response.
@@ -693,6 +712,9 @@ pub async fn merge_pull_request(
     };
     if (200..300).contains(&status) {
         info!(target: "http", owner = %owner, repo = %repo, number, "pull request merged");
+        // A merge changes the PR lists and detail, and moves the base branch
+        // (commits, tree, README), so drop everything cached for the repo.
+        invalidate_cached(&format!("repos/{owner}/{repo}")).await;
         notify_after_pr_action(
             &req,
             pool.get_ref(),
@@ -952,6 +974,56 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn key_under_matches_the_prefix_and_what_sits_below_it() {
+        let prefix = "repos/mahesivaya/wayve/pulls";
+        assert!(key_under("repos/mahesivaya/wayve/pulls", prefix));
+        assert!(key_under(
+            "repos/mahesivaya/wayve/pulls?state=open&per_page=50&page=1",
+            prefix
+        ));
+        assert!(key_under("repos/mahesivaya/wayve/pulls/124/files", prefix));
+        // GitHub owner and repo names are case-insensitive.
+        assert!(key_under("repos/Mahesivaya/Wayve/pulls?state=open", prefix));
+    }
+
+    #[test]
+    fn key_under_skips_siblings_and_other_repos() {
+        let prefix = "repos/mahesivaya/wayve";
+        assert!(!key_under("repos/mahesivaya/wayve-docs/pulls", prefix));
+        assert!(!key_under("repos/mahesivaya/way", prefix));
+        assert!(!key_under("repos/someone/wayve/pulls", prefix));
+        assert!(key_under("repos/mahesivaya/wayve/commits?sha=main", prefix));
+    }
+
+    // A plain executor, not #[tokio::test]: moka needs no runtime, and the
+    // tokio macro expands to an `.expect` that clippy.toml bans.
+    #[test]
+    fn invalidate_where_drops_only_matching_entries() {
+        futures::executor::block_on(async {
+            let cache: crate::cache::TtlCache<String, u8> = crate::cache::TtlCache::new(100, 60);
+            for key in [
+                "repos/o/r/pulls?state=open",
+                "repos/o/r/pulls/7",
+                "repos/o/r/commits?sha=main",
+                "repos/o/r2/pulls?state=open",
+            ] {
+                cache.insert(key.to_string(), 1).await;
+            }
+            cache
+                .invalidate_where(|key| key_under(key, "repos/o/r/pulls"))
+                .await;
+            for (key, kept) in [
+                ("repos/o/r/pulls?state=open", false),
+                ("repos/o/r/pulls/7", false),
+                ("repos/o/r/commits?sha=main", true),
+                ("repos/o/r2/pulls?state=open", true),
+            ] {
+                assert_eq!(cache.get(&key.to_string()).await.is_some(), kept, "{key}");
+            }
+        });
+    }
 
     #[test]
     fn approve_review_without_message_is_event_only() {

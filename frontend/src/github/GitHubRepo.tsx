@@ -277,6 +277,11 @@ const RUNS_PER_PAGE = 50;
 
 const COMMITS_PER_PAGE = 25;
 
+// Pull requests per page, fetched for one state (open or closed) at a time.
+const PULLS_PER_PAGE = 50;
+
+type PullState = "open" | "closed";
+
 // `number` is the 1-indexed position of the step within its job.
 type JobStep = {
   name: string;
@@ -595,7 +600,7 @@ function isContentList(
   return Array.isArray(value);
 }
 
-function GitHubRepoViewer({
+export function GitHubRepoViewer({
   owner,
   repo: repoName,
   repoSwitcher,
@@ -665,13 +670,20 @@ function GitHubRepoViewer({
   const [pulls, setPulls] = useState<GitHubPull[]>([]);
   const [pullsLoading, setPullsLoading] = useState(false);
   const [pullsError, setPullsError] = useState("");
-  // The PR list is capped at one page (per_page=50), so `pulls.length` tops out
-  // at 50 and can't be trusted as a total. Like commitsTotal, derive the real
-  // count (all states) from the `rel="last"` page of a per_page=1 Link header.
-  const [pullsTotal, setPullsTotal] = useState<number | null>(null);
-  // Open and closed PRs are fetched together (state=all) and filtered here.
+  const [pullsPage, setPullsPage] = useState(1);
+  const [pullsHasMore, setPullsHasMore] = useState(false);
+  // Guards against a slow response for the tab you just left landing on the
+  // one you switched to.
+  const pullsRequestRef = useRef(0);
+  // True count per state. A page tops out at PULLS_PER_PAGE, so like
+  // commitsTotal it comes from the `rel="last"` page of a per_page=1 request.
+  const [pullCounts, setPullCounts] = useState<
+    Record<PullState, number | null>
+  >({ open: null, closed: null });
+  // Each tab asks GitHub for its own state. Fetching `state=all` and filtering
+  // here hid every open PR older than the newest page.
   // Persisted so a refresh keeps you on the same tab (Open vs Closed).
-  const [pullFilter, setPullFilter] = useState<"open" | "closed">(() => {
+  const [pullFilter, setPullFilter] = useState<PullState>(() => {
     try {
       const raw = localStorage.getItem("rwayve.github.pullFilter");
       if (raw === "open" || raw === "closed") return raw;
@@ -1033,54 +1045,70 @@ function GitHubRepoViewer({
     [API_BASE]
   );
 
-  // PRs aren't branch-filtered, so this takes no branch.
-  const loadPulls = useCallback(async () => {
-    setPullsError("");
-    setPullsLoading(true);
-    try {
-      const data = await githubJson<GitHubPull[]>(
-        `${API_BASE}/pulls?state=all&per_page=50`
-      );
-      setPulls(data);
-    } catch (err) {
-      setPulls([]);
-      setPullsError(
-        err instanceof Error ? err.message : "Pull requests failed to load"
-      );
-    } finally {
-      setPullsLoading(false);
-    }
-  }, [API_BASE]);
+  // One page of PRs in one state. PRs aren't branch-filtered, so this takes no
+  // branch. GitHub's "closed" includes merged.
+  const loadPulls = useCallback(
+    async (state: PullState, page: number) => {
+      const requestId = ++pullsRequestRef.current;
+      setPullsError("");
+      setPullsLoading(true);
+      try {
+        const data = await githubJson<GitHubPull[]>(
+          `${API_BASE}/pulls?state=${state}&per_page=${PULLS_PER_PAGE}&page=${page}`
+        );
+        if (requestId !== pullsRequestRef.current) return;
+        setPulls(data);
+        setPullsPage(page);
+        // A full page implies there may be another; a short page is the last.
+        setPullsHasMore(data.length === PULLS_PER_PAGE);
+      } catch (err) {
+        if (requestId !== pullsRequestRef.current) return;
+        setPulls([]);
+        setPullsHasMore(false);
+        setPullsError(
+          err instanceof Error ? err.message : "Pull requests failed to load"
+        );
+      } finally {
+        if (requestId === pullsRequestRef.current) setPullsLoading(false);
+      }
+    },
+    [API_BASE]
+  );
 
   // /pulls has no total_count field, so read the true count off the Link
   // header of a per_page=1 request — the same trick as loadCommitsTotal.
-  // state=all matches the sidebar badge, which counts every PR.
-  const loadPullsTotal = useCallback(async () => {
-    try {
-      const token = getAuthToken();
-      const res = await fetch(`${API_BASE}/pulls?state=all&per_page=1`, {
-        credentials: "include",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) {
-        setPullsTotal(null);
-        return;
+  const loadPullsTotal = useCallback(
+    async (state: PullState) => {
+      const setCount = (count: number | null) =>
+        setPullCounts((cur) => ({ ...cur, [state]: count }));
+      try {
+        const token = getAuthToken();
+        const res = await fetch(`${API_BASE}/pulls?state=${state}&per_page=1`, {
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok) {
+          setCount(null);
+          return;
+        }
+        const link = res.headers.get("Link");
+        const last = link?.match(/[?&]page=(\d+)>;\s*rel="last"/);
+        if (last) {
+          setCount(parseInt(last[1], 10));
+          return;
+        }
+        // No "last" relation means a single page, so the body length is the total.
+        const data = (await res.json()) as unknown;
+        setCount(Array.isArray(data) ? data.length : null);
+      } catch {
+        setCount(null);
       }
-      const link = res.headers.get("Link");
-      const last = link?.match(/[?&]page=(\d+)>;\s*rel="last"/);
-      if (last) {
-        setPullsTotal(parseInt(last[1], 10));
-        return;
-      }
-      // No "last" relation means a single page, so the body length is the total.
-      const data = (await res.json()) as unknown;
-      setPullsTotal(Array.isArray(data) ? data.length : null);
-    } catch {
-      setPullsTotal(null);
-    }
-  }, [API_BASE]);
+    },
+    [API_BASE]
+  );
 
-  // "closed" includes merged, since a merged PR has state === "closed".
+  // The list is already one state; this only hides the previous tab's rows for
+  // the moment between switching tabs and the new page starting to load.
   const filteredPulls = pulls.filter((pr) =>
     pullFilter === "open" ? pr.state === "open" : pr.state !== "open"
   );
@@ -1185,7 +1213,9 @@ function GitHubRepoViewer({
     try {
       await mergePullRequest(owner, repoName, prNumber, mergeMethod);
       await loadPullDetail(prNumber, true);
-      await loadPulls();
+      await loadPulls(pullFilter, pullsPage);
+      void loadPullsTotal("open");
+      void loadPullsTotal("closed");
     } catch (err) {
       setMergeErrorByPull((cur) => ({
         ...cur,
@@ -1384,12 +1414,8 @@ function GitHubRepoViewer({
     void loadCommits(branch, 1);
     void loadCommitsTotal(branch);
     // Reset to the PR list rather than a stale detail when the repo or branch
-    // changes. Non-owners never fetch PRs; the proxy would 403 them.
+    // changes. The PRs themselves load in their own effect below.
     setSelectedPull(null);
-    if (isOwner) {
-      void loadPulls();
-      void loadPullsTotal();
-    }
     // The Actions list is branch-agnostic, so it only refreshes on the initial
     // repo load. Run-detail caches stay valid because run ids are global.
     setRunsPage(1);
@@ -1399,16 +1425,28 @@ function GitHubRepoViewer({
     void loadRuns(1, false);
   }, [
     branch,
-    isOwner,
     loadCommits,
     loadCommitsTotal,
-    loadPulls,
-    loadPullsTotal,
     loadReadme,
     loadRuns,
     loadWorkflows,
     repo,
   ]);
+
+  // PRs aren't branch-filtered, so unlike the block above these don't reload
+  // on a branch change: the list follows the repo and the Open/Closed tab
+  // (back to page 1 on either), the counts follow the repo. Non-owners never
+  // fetch PRs; the proxy would 403 them.
+  useEffect(() => {
+    if (!repo || !isOwner) return;
+    void loadPulls(pullFilter, 1);
+  }, [isOwner, loadPulls, pullFilter, repo]);
+
+  useEffect(() => {
+    if (!repo || !isOwner) return;
+    void loadPullsTotal("open");
+    void loadPullsTotal("closed");
+  }, [isOwner, loadPullsTotal, repo]);
 
   // A non-owner can land on "pulls" from a persisted section or a mid-session
   // role change, so fall back to the overview instead of a blank panel.
@@ -1639,7 +1677,9 @@ function GitHubRepoViewer({
                 </span>
                 <span className="github-sidebar-label">Pull Requests</span>
                 <span className="github-sidebar-count">
-                  {pullsTotal ?? pulls.length}
+                  {/* Open PRs, as GitHub counts them, not every PR ever. */}
+                  {pullCounts.open ??
+                    (pullFilter === "open" ? filteredPulls.length : null)}
                 </span>
               </button>
             )}
@@ -2077,7 +2117,7 @@ function GitHubRepoViewer({
               <div className="github-panel">
                 <div className="github-panel-head">
                   <h2>Pull Requests</h2>
-                  <span>{filteredPulls.length}</span>
+                  <span>{pullCounts[pullFilter] ?? filteredPulls.length}</span>
                 </div>
                 <div className="github-pr-filter">
                   {(["open", "closed"] as const).map((f) => (
@@ -2097,7 +2137,9 @@ function GitHubRepoViewer({
                   <div className="github-empty">{pullsError}</div>
                 ) : filteredPulls.length === 0 ? (
                   <div className="github-empty">
-                    {`No ${pullFilter} pull requests.`}
+                    {pullsPage > 1
+                      ? `No more ${pullFilter} pull requests.`
+                      : `No ${pullFilter} pull requests.`}
                   </div>
                 ) : (
                   filteredPulls.map((pr) => {
@@ -2136,6 +2178,25 @@ function GitHubRepoViewer({
                       </div>
                     );
                   })
+                )}
+                {(pullsHasMore || pullsPage > 1) && (
+                  <div className="github-pager">
+                    <button
+                      type="button"
+                      disabled={pullsPage <= 1 || pullsLoading}
+                      onClick={() => void loadPulls(pullFilter, pullsPage - 1)}
+                    >
+                      ← Previous
+                    </button>
+                    <span className="github-pager-label">Page {pullsPage}</span>
+                    <button
+                      type="button"
+                      disabled={!pullsHasMore || pullsLoading}
+                      onClick={() => void loadPulls(pullFilter, pullsPage + 1)}
+                    >
+                      Next →
+                    </button>
+                  </div>
                 )}
               </div>
             ) : (
