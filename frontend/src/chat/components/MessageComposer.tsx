@@ -226,8 +226,35 @@ export default function MessageComposer({
             ))}
           </ul>
         )}
-        {/* Border + background live on this wrapper so the attach/emoji icons
-            sit *inside* the textbox; the textarea itself is borderless. */}
+        {/* Before the textbox, outside it, as in WhatsApp. */}
+        {allowAttachments && (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => {
+                handlePick(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              className="chat-attach-btn"
+              data-tooltip="Attach files"
+              data-tooltip-pos="top"
+              data-tooltip-align="left"
+              aria-label="Attach files"
+              disabled={disabled}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <AttachmentIcon size={18} aria-hidden />
+            </button>
+          </>
+        )}
+        {/* Border + background live on this wrapper so the emoji icon sits
+            *inside* the textbox; the textarea itself is borderless. */}
         <div className="chat-input-field">
           <textarea
             ref={textareaRef}
@@ -280,35 +307,8 @@ export default function MessageComposer({
               }
             }}
           />
-          {/* Icons on the right, grouped so the attach + emoji controls always
-              sit on the same horizontal line inside the box. */}
+          {/* The emoji control on the right, inside the box. */}
           <div className="chat-input-actions">
-            {allowAttachments && (
-              <>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  hidden
-                  onChange={(e) => {
-                    handlePick(e.target.files);
-                    e.target.value = "";
-                  }}
-                />
-                <button
-                  type="button"
-                  className="chat-attach-btn"
-                  data-tooltip="Attach files"
-                  data-tooltip-pos="top"
-                  data-tooltip-align="right"
-                  aria-label="Attach files"
-                  disabled={disabled}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <AttachmentIcon size={18} aria-hidden />
-                </button>
-              </>
-            )}
             <div className="chat-emoji-anchor" ref={emojiAnchorRef}>
               {emojiOpen && (
                 <EmojiPicker
