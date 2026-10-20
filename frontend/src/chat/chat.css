@@ -1224,9 +1224,9 @@
   border-color: var(--color-primary-action);
 }
 
-/* The attach + emoji controls as one horizontal group, kept on a single line
-   and pinned to the bottom of the field so they stay level with the first line
-   of text as the textarea grows. */
+/* The controls inside the field (emoji), kept on a single line and pinned to
+   the bottom of the field so they stay level with the first line of text as
+   the textarea grows. */
 .chat-input-actions {
   flex: 0 0 auto;
   display: flex;
@@ -1518,22 +1518,29 @@
 
 /* ===== Chat attachments ===== */
 /* Composer: paperclip + pending file chips */
-.chat-attach-btn {
+/* Its own control before the textbox, framed like the field beside it.
+   `.chat-input` in each selector out-ranks `.chat-input button`, which styles
+   the Send button. */
+.chat-input .chat-attach-btn {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: none;
-  background: none;
+  width: 32px;
+  padding: 0;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
   color: var(--color-text-muted);
+  font-weight: normal;
   cursor: pointer;
-  padding: 0 1px;
   line-height: 1;
 }
-.chat-attach-btn:hover:not(:disabled) {
+.chat-input .chat-attach-btn:hover:not(:disabled) {
+  background: var(--color-surface);
   color: var(--color-text-primary);
 }
-.chat-attach-btn:disabled {
+.chat-input .chat-attach-btn:disabled {
   opacity: 0.5;
   cursor: default;
 }
@@ -1651,8 +1658,7 @@
   align-items: stretch;
 }
 
-/* Matches .chat-attach-btn so the emoji + attachment icons read as one pair of
-   muted line-icon controls inside the textbox. */
+/* A muted line-icon control inside the textbox. */
 .chat-emoji-btn-toggle {
   display: flex;
   align-items: center;
