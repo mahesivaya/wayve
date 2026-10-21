@@ -22,7 +22,7 @@ permissions:
 jobs:
   notify:
     if: ${{ !startsWith(github.event.pull_request.head.ref, 'ai-fix/ticket-') }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Email the owner via the app SMTP
         env:

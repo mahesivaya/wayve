@@ -27,11 +27,11 @@ concurrency:
 
 jobs:
   ws-chat:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: useblacksmith/checkout@v1
 
       # ---- Bring up the docker stack (same env contract as smoke.sh /
       #      smoke.yml / e2e.yml — keep these in sync).

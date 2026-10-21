@@ -13,7 +13,7 @@ on:
 
 jobs:
   backend-tests:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     services:
       postgres:
@@ -60,7 +60,7 @@ jobs:
       RUST_BACKTRACE: 1
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: useblacksmith/checkout@v1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -93,13 +93,13 @@ jobs:
         run: cargo test --no-fail-fast -- --test-threads=1
 
   frontend-tests:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: frontend
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: useblacksmith/checkout@v1
 
       - uses: actions/setup-node@v4
         with:
@@ -119,14 +119,14 @@ jobs:
         run: npm test
 
   docker-smoke:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # Smoke depends on the unit/integration suites passing first.
     needs: [backend-tests, frontend-tests]
     env:
       COMPOSE_FILE: infra/docker-compose.yml
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: useblacksmith/checkout@v1
 
       # Set up the stack via the shared composite action. env-files are
       # auto-populated from .example templates, stack comes up under
