@@ -7,7 +7,7 @@
 // compatibility — it just composes the four sub-handlers.
 
 use crate::prelude::*;
-use chrono::{Local, NaiveDateTime, NaiveTime};
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use sqlx::Row;
 use tracing::instrument;
 use wayve_security::encryption::decrypt;
@@ -78,8 +78,31 @@ pub enum RecentItem {
 
 // ─────────────────────────── Today ────────────────────────────
 
-async fn load_today(pool: &PgPool, user_id: i32) -> Result<TodaySummary, sqlx::Error> {
-    let today = Local::now().date_naive();
+/// The caller's zone for "today", sent by the browser as `?tz=<IANA name>`
+/// (e.g. `Asia/Kolkata`).
+#[derive(Debug, Deserialize)]
+pub struct TodayQuery {
+    tz: Option<String>,
+}
+
+/// Today's date in the viewer's zone. Meetings store a zone-less date and
+/// wall-clock time read in the viewer's zone (see the frontend's
+/// `api/scheduler.ts`), so "today" must be the viewer's day too — not the
+/// server's, which is UTC in the container and would show the wrong day's
+/// meetings near midnight for anyone far from UTC. A missing or unknown zone
+/// falls back to UTC, the same default meeting creation uses.
+fn today_in(tz: Option<&str>) -> NaiveDate {
+    let zone = tz
+        .and_then(|name| name.trim().parse::<chrono_tz::Tz>().ok())
+        .unwrap_or(chrono_tz::Tz::UTC);
+    Utc::now().with_timezone(&zone).date_naive()
+}
+
+async fn load_today(
+    pool: &PgPool,
+    user_id: i32,
+    today: NaiveDate,
+) -> Result<TodaySummary, sqlx::Error> {
     let rows = sqlx::query(
         "SELECT m.id, m.title, m.title_iv, m.title_encrypted,
                 m.start_time, m.end_time,
@@ -130,9 +153,14 @@ async fn load_today(pool: &PgPool, user_id: i32) -> Result<TodaySummary, sqlx::E
 
 #[get("/home/today")]
 #[instrument(target = "http", skip(req, pool))]
-pub async fn home_today(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+pub async fn home_today(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<TodayQuery>,
+) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let data = load_today(pool.get_ref(), user_id).await?;
+    let today = today_in(query.tz.as_deref());
+    let data = load_today(pool.get_ref(), user_id, today).await?;
     Ok(HttpResponse::Ok().json(data))
 }
 
@@ -353,15 +381,20 @@ pub async fn home_recent(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult
 // upstream code we don't author, so suppress the lint at the function
 // scope rather than on every macro invocation.
 #[allow(clippy::disallowed_methods)]
-pub async fn home_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+pub async fn home_summary(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<TodayQuery>,
+) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let pool_ref = pool.get_ref();
+    let today = today_in(query.tz.as_deref());
 
     // Backward-compat aggregate — still runs the four sub-loaders in
     // parallel so total wall time matches the old single-endpoint
     // behavior. New frontends call the per-card endpoints instead.
     let (today, inbox, tasks, recent) = tokio::try_join!(
-        load_today(pool_ref, user_id),
+        load_today(pool_ref, user_id, today),
         load_inbox(pool_ref, user_id),
         load_tasks(pool_ref, user_id),
         load_recent(pool_ref, user_id),
@@ -396,4 +429,30 @@ fn decrypt_or_legacy(
 
 fn format_hm(time: NaiveTime) -> String {
     time.format("%H:%M").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::today_in;
+
+    #[test]
+    fn today_follows_the_viewers_zone() {
+        // Kiritimati (UTC+14) and Pago Pago (UTC−11) are 25 hours apart, so
+        // their calendar dates differ by exactly one day at every moment. The
+        // server's own clock could never give both.
+        let ahead = today_in(Some("Pacific/Kiritimati"));
+        let behind = today_in(Some("Pacific/Pago_Pago"));
+        assert_eq!((ahead - behind).num_days(), 1);
+    }
+
+    #[test]
+    fn an_unknown_or_missing_zone_falls_back_to_utc() {
+        let utc = today_in(Some("UTC"));
+        assert_eq!(today_in(None), utc);
+        assert_eq!(today_in(Some("Not/AZone")), utc);
+        assert_eq!(
+            today_in(Some("  Asia/Kolkata ")),
+            today_in(Some("Asia/Kolkata"))
+        );
+    }
 }
