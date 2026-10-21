@@ -40,7 +40,15 @@ export type HomeSummary = {
   recent: RecentItem[];
 };
 
-export const getHomeToday = () => apiFetchJson<TodaySummary>("/api/home/today");
+// "Today" is the viewer's day: meetings store a zone-less date read in the
+// viewer's zone, so the server needs that zone to pick the right date.
+const todayQuery = () =>
+  `tz=${encodeURIComponent(
+    Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+  )}`;
+
+export const getHomeToday = () =>
+  apiFetchJson<TodaySummary>(`/api/home/today?${todayQuery()}`);
 
 export const getHomeInbox = () => apiFetchJson<InboxSummary>("/api/home/inbox");
 
@@ -51,4 +59,4 @@ export const getHomeRecent = () =>
 
 /** @deprecated Prefer the per-card endpoints (`getHomeToday`, …). */
 export const getHomeSummary = () =>
-  apiFetchJson<HomeSummary>("/api/home/summary");
+  apiFetchJson<HomeSummary>(`/api/home/summary?${todayQuery()}`);
