@@ -17,7 +17,7 @@ static EMAIL_BODY_CACHE: Lazy<TtlCache<(i32, i32), String>> =
     Lazy::new(|| TtlCache::new(EMAIL_BODY_CACHE_MAX_CAPACITY, EMAIL_BODY_CACHE_TTL_SECS));
 
 #[get("/emails/{id}")]
-#[instrument(target = "http", skip(pool))]
+#[instrument(target = "http", skip(req, pool))]
 pub async fn get_email_by_id(
     req: HttpRequest,
     pool: web::Data<PgPool>,
