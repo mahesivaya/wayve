@@ -1019,11 +1019,14 @@ async fn seed_plan_catalog(pool: &PgPool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-/// Initialise tracing, load `.env` files, and validate required config. Called
-/// once at process start, before anything reads config.
+/// Load `.env` files, initialise tracing, and validate required config. Called
+/// once at process start, before anything reads config. The env files load
+/// first so tracing sees the RUST_LOG, RWAYVE_LOG_STDOUT and TRACING_LOG_*
+/// settings they hold; loading them logs nothing, so nothing is lost by
+/// starting tracing second.
 pub fn init_telemetry() {
-    observability::tracing::init_tracing();
     config::load_env_files();
+    observability::tracing::init_tracing();
     config::validate();
     info!("Server starting...");
     tracing::info!("Server starting...");

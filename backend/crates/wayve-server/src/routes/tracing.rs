@@ -1,6 +1,7 @@
 // Platform-owner-only tracing overview. Aggregates the JSON-lines tracing log
-// (logs/tracing.log, the same stream the tracing layer writes) into the shape the
-// in-app dashboard charts. The file can reach tens of MB, so only the tail is read.
+// (logs/tracing.log, the API process's stream; the email workers write their own
+// files, see observability::tracing) into the shape the in-app dashboard charts.
+// The file can reach tens of MB, so only the tail is read.
 
 use crate::prelude::*;
 use chrono::{DateTime, Timelike, Utc};
