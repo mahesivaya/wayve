@@ -39,7 +39,6 @@ sha2 = "0.10"
 pbkdf2 = "0.12"
 rand = { version = "0.8", features = ["std"] }
 uuid = { version = "1", features = ["v4"] }
-lazy_static = "1.4"
 tracing = { version = "0.1.44", features = ["log-always"] }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 tracing-appender = "0.2"
