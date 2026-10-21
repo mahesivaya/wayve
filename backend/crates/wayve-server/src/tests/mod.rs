@@ -31,6 +31,7 @@ mod email_trash_test;
 mod embed_tokens_test;
 mod github_write_token_test;
 mod gitlab_test;
+mod instrument_skip_request_test;
 mod integrations_status_test;
 mod jira_test;
 mod jira_webhook_test;

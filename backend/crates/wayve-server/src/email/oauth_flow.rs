@@ -214,7 +214,7 @@ pub async fn gmail_login(
         .finish()
 }
 
-#[instrument(target = "gmail", skip(pool, query))]
+#[instrument(target = "gmail", skip(req, pool, query))]
 pub async fn oauth_callback(
     req: HttpRequest,
     pool: web::Data<PgPool>,

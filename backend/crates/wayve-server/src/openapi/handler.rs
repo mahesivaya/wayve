@@ -28,7 +28,7 @@ fn md5_like_hash(bytes: &[u8]) -> u128 {
 }
 
 #[get("/openapi.json")]
-#[instrument(target = "http")]
+#[instrument(target = "http", skip(req))]
 pub async fn openapi_json(req: HttpRequest) -> HttpResponse {
     let (bytes, etag) = &*SPEC;
     if let Some(if_none_match) = req.headers().get("If-None-Match")
