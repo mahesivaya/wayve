@@ -17,14 +17,14 @@ concurrency:
 
 jobs:
   playwright:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # Cap the whole job — a wedged docker stack would otherwise burn an hour.
     timeout-minutes: 25
     env:
       COMPOSE_FILE: infra/docker-compose.yml
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: useblacksmith/checkout@v1
 
       # ---- 1 · Stack-up (env files + compose up + wait for /api/ready).
       # Single composite action — same setup as smoke and security DAST.

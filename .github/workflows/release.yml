@@ -12,9 +12,9 @@ permissions:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v4
+      - uses: useblacksmith/checkout@v1
         with:
           fetch-depth: 0 # full history so notes can diff against the previous tag
 
@@ -34,9 +34,9 @@ jobs:
   # CHANGELOG.md from Conventional Commits (config: cliff.toml) and commit it
   # back to main. The `publish` job above still owns the public Release Notes.
   changelog:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v4
+      - uses: useblacksmith/checkout@v1
         with:
           ref: main # commit the regenerated changelog onto the branch, not the tag
           fetch-depth: 0 # full history + all tags so every release section renders

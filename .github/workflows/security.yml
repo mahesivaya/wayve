@@ -55,9 +55,9 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────
   secret-scan:
     name: 1 · Secret scan (gitleaks)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v4
+      - uses: useblacksmith/checkout@v1
         with:
           fetch-depth: 0   # full history so gitleaks sees every commit
 
@@ -82,9 +82,9 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────
   deps-rust:
     name: 2 · Rust deps (audit + deny)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v4
+      - uses: useblacksmith/checkout@v1
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -112,12 +112,12 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────
   deps-frontend:
     name: 3 · Frontend deps (npm audit)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     defaults:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: useblacksmith/checkout@v1
 
       - uses: actions/setup-node@v4
         with:
@@ -137,11 +137,11 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────
   sast:
     name: 4 · SAST (Semgrep)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     container:
       image: semgrep/semgrep:latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: useblacksmith/checkout@v1
 
       - name: semgrep ci
         # `--config auto` pulls Semgrep's curated baseline + language packs.
@@ -181,9 +181,9 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────
   sbom:
     name: 5 · SBOM (Syft)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v4
+      - uses: useblacksmith/checkout@v1
 
       - name: Generate SBOM (backend)
         uses: anchore/sbom-action@v0
@@ -208,9 +208,9 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────
   trivy-fs:
     name: 6 · Trivy filesystem
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
-      - uses: actions/checkout@v4
+      - uses: useblacksmith/checkout@v1
 
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@v0.36.0
@@ -248,7 +248,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────
   build-images:
     name: 7 · Build images
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
@@ -260,12 +260,13 @@ jobs:
             context: frontend
             dockerfile: frontend/Dockerfile.prod
     steps:
-      - uses: actions/checkout@v4
+      - uses: useblacksmith/checkout@v1
 
-      - uses: docker/setup-buildx-action@v3
+      - name: Setup Blacksmith Builder
+        uses: useblacksmith/setup-docker-builder@v1
 
       - name: Build ${{ matrix.name }}
-        uses: docker/build-push-action@v6
+        uses: useblacksmith/build-push-action@v2
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -273,8 +274,6 @@ jobs:
           load: true
           tags: rwayve-${{ matrix.name }}:scan
           outputs: type=docker,dest=/tmp/rwayve-${{ matrix.name }}.tar
-          cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,scope=${{ matrix.name }},mode=max
 
       - name: Upload image tarball
         uses: actions/upload-artifact@v4
@@ -288,14 +287,14 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────
   trivy-image:
     name: 8 · Trivy image
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: build-images
     strategy:
       fail-fast: false
       matrix:
         name: [backend, frontend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: useblacksmith/checkout@v1
 
       - name: Download image tarball
         uses: actions/download-artifact@v4
@@ -347,7 +346,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────
   dast:
     name: 9 · DAST (ZAP + headers + Schemathesis)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # No `needs:` — dast brings up its own compose stack via the
     # setup-docker-stack composite action, so it doesn't actually
     # consume any artifact from build-images / trivy-image. Running
@@ -358,7 +357,7 @@ jobs:
       APP_URL: http://localhost:8080
       WEB_URL: http://localhost
     steps:
-      - uses: actions/checkout@v4
+      - uses: useblacksmith/checkout@v1
 
       # Shared composite action — env-files + compose up + wait-healthy.
       # Same setup used by smoke.yml and e2e.yml so the stack-up logic
@@ -447,7 +446,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────
   summary:
     name: 10 · Summary
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # All stage IDs are listed so `needs.<id>.result` resolves below.
     # `if: always()` ensures the summary still publishes when an earlier
     # stage failed (and downstream stages were skipped).
