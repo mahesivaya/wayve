@@ -79,15 +79,18 @@ pub async fn send_meeting_emails_with(
     // qualify — anything else falls through to SMTP rather than failing, which
     // is what silently broke invites for every local-auth (non-Gmail) user.
     let gmail = sqlx::query(
-        "SELECT access_token, email FROM email_accounts \
-         WHERE user_id = $1 AND is_active = true AND access_token <> '' LIMIT 1",
+        "SELECT access_token_iv, access_token_encrypted, email FROM email_accounts \
+         WHERE user_id = $1 AND is_active = true AND access_token_encrypted IS NOT NULL LIMIT 1",
     )
     .bind(user_id)
     .fetch_optional(pool)
     .await?;
 
-    if let Some(row) = gmail {
-        let access_token: String = row.get("access_token");
+    let gmail = gmail.and_then(|row| {
+        let access_token = crate::email::account::open_access_token(&row)?;
+        Some((row, access_token))
+    });
+    if let Some((row, access_token)) = gmail {
         let sender_email: String = row.get("email");
 
         let message = build_meeting_message(

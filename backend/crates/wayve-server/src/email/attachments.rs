@@ -1,3 +1,4 @@
+use crate::email::account::open_refresh_token;
 use crate::email::utils::AttachmentMeta;
 use sqlx::PgPool;
 use tracing::error;
@@ -80,7 +81,7 @@ pub async fn fetch_for_forward(
 
     let rows = sqlx::query(
         "SELECT ea.id, ea.attachment_id, ea.gmail_id, ea.filename, ea.mime_type, \
-                a.id AS account_id, a.refresh_token, a.provider \
+                a.id AS account_id, a.refresh_token_iv, a.refresh_token_encrypted, a.provider \
          FROM email_attachments ea JOIN email_accounts a ON ea.account_id = a.id \
          WHERE ea.id = ANY($1) AND a.user_id = $2",
     )
@@ -107,7 +108,7 @@ pub async fn fetch_for_forward(
         let token = match tokens.get(&account_id) {
             Some(token) => token.clone(),
             None => {
-                let refresh_token: Option<String> = row.get("refresh_token");
+                let refresh_token = open_refresh_token(row);
                 let refresh_token = refresh_token
                     .filter(|t| !t.trim().is_empty())
                     .ok_or(ForwardAttachmentError::Reconnect)?;

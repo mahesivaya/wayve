@@ -3,6 +3,7 @@
 // the caller's own attachments, every file or none, and within the send limits.
 #[cfg(test)]
 mod tests {
+    use crate::email::account::seal_token;
     use crate::email::attachments::{
         ForwardAttachmentError, fetch_for_forward, fetch_gmail_attachment_bytes,
     };
@@ -20,15 +21,28 @@ mod tests {
     }
 
     async fn mailbox(pool: &PgPool, refresh_token: &str) -> Mailbox {
+        // SAFETY: env mutation is serialized by #[serial]; CI runs --test-threads=1.
+        unsafe {
+            if std::env::var("AES_KEY").is_err() {
+                std::env::set_var(
+                    "AES_KEY",
+                    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                );
+            }
+        }
+        let (iv, ciphertext) =
+            seal_token(refresh_token).unwrap_or_else(|e| panic!("seal refresh token: {e}"));
         let user_email = random_email();
         let user = insert_local_user(pool, &user_email, "password123").await;
         let account = sqlx::query_scalar(
-            "INSERT INTO email_accounts (email, user_id, provider, refresh_token) \
-             VALUES ($1, $2, 'google', $3) RETURNING id",
+            "INSERT INTO email_accounts \
+               (email, user_id, provider, refresh_token_iv, refresh_token_encrypted) \
+             VALUES ($1, $2, 'google', $3, $4) RETURNING id",
         )
         .bind(random_email())
         .bind(user)
-        .bind(refresh_token)
+        .bind(iv)
+        .bind(ciphertext)
         .fetch_one(pool)
         .await
         .unwrap_or_else(|e| panic!("mailbox: {e}"));

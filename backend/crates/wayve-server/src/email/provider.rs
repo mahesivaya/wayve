@@ -32,7 +32,7 @@ pub enum MailProvider {
     Microsoft,
     /// IMAP (read) plus SMTP (send) for custom-domain mailboxes. There is no
     /// OAuth refresh token: the encrypted app password lives in
-    /// `email_accounts.refresh_token` and the connection settings in the
+    /// the `email_accounts.refresh_token_*` pair and the connection settings in the
     /// `imap_*` / `smtp_*` / `mail_security` columns, loaded by account_id.
     Imap,
 }
@@ -1079,14 +1079,25 @@ pub async fn persist_refreshed_token(
     account_id: i32,
     token: &RefreshedEmailToken,
 ) -> Result<()> {
+    let refresh_token = token.refresh_token.as_deref().unwrap_or("");
+    let (access_iv, access_ct) = crate::email::account::seal_token(&token.access_token)?;
+    let (refresh_iv, refresh_ct) = crate::email::account::seal_token(refresh_token)?;
+    // No new refresh token (the provider didn't rotate it) keeps the stored one.
+    // Plaintext a new token supersedes is cleared (see backfill_token_encryption).
     sqlx::query(
         "UPDATE email_accounts
-         SET access_token = $1,
-             refresh_token = COALESCE(NULLIF($2, ''), refresh_token)
-         WHERE id = $3",
+         SET access_token = NULL,
+             refresh_token = CASE WHEN $3::text IS NULL THEN refresh_token END,
+             access_token_iv = $1,
+             access_token_encrypted = $2,
+             refresh_token_iv = COALESCE($3, refresh_token_iv),
+             refresh_token_encrypted = COALESCE($4, refresh_token_encrypted)
+         WHERE id = $5",
     )
-    .bind(&token.access_token)
-    .bind(token.refresh_token.as_deref().unwrap_or(""))
+    .bind(access_iv)
+    .bind(access_ct)
+    .bind(refresh_iv)
+    .bind(refresh_ct)
     .bind(account_id)
     .execute(pool)
     .await?;

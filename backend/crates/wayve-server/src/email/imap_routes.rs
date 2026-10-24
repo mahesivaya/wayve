@@ -2,7 +2,7 @@
 //! custom-domain address not on Google or Microsoft. The connect wizard walks
 //! autodiscover, then test-login, then connect.
 //!
-//! The IMAP/SMTP password is encrypted at rest in `email_accounts.refresh_token`
+//! The IMAP/SMTP password is encrypted at rest in the `email_accounts.refresh_token_*` pair
 //! as `<iv>.<cipher>`; host, port, and security go in the
 //! `imap_*`/`smtp_*`/`mail_security` columns.
 

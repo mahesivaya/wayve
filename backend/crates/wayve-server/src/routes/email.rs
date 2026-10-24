@@ -1,4 +1,5 @@
 use crate::cache::Cache;
+use crate::email::account::open_refresh_token;
 use crate::email::outlook::{OutlookAttachmentRef, download_outlook_attachment};
 use crate::email::provider::{MailProvider, TrashMoved, refresh_and_persist_email_token};
 use crate::email::repo::{self, EmailListFilters};
@@ -647,7 +648,7 @@ async fn bulk_move(
     // The same ownership as `load_owned_email`, for every id at once.
     let rows = sqlx::query(
         r#"
-        SELECT e.id, e.gmail_id, e.source, e.account_id, a.refresh_token, a.provider
+        SELECT e.id, e.gmail_id, e.source, e.account_id, a.refresh_token_iv, a.refresh_token_encrypted, a.provider
         FROM emails e
         LEFT JOIN email_accounts a ON e.account_id = a.id
         WHERE e.id = ANY($1)
@@ -691,10 +692,7 @@ async fn bulk_move(
                     .entry(account_id)
                     .or_insert_with(|| MailboxBatch {
                         provider,
-                        refresh_token: row
-                            .try_get::<Option<String>, _>("refresh_token")
-                            .ok()
-                            .flatten(),
+                        refresh_token: open_refresh_token(row),
                         emails: Vec::new(),
                     })
                     .emails
@@ -831,7 +829,7 @@ async fn load_owned_email(
     // authorized instead via the source/recipient clause, as in repo::get_detail.
     let Some(row) = sqlx::query(
         r#"
-        SELECT e.gmail_id, e.source, e.account_id, a.refresh_token, a.provider,
+        SELECT e.gmail_id, e.source, e.account_id, a.refresh_token_iv, a.refresh_token_encrypted, a.provider,
                e.subject, e.sender, e.receiver
         FROM emails e
         LEFT JOIN email_accounts a ON e.account_id = a.id
@@ -874,7 +872,7 @@ async fn load_owned_email(
     }
 
     let message_id: String = row.get("gmail_id");
-    let refresh_token: Option<String> = row.get("refresh_token");
+    let refresh_token = open_refresh_token(&row);
     let Some(refresh_token) = refresh_token
         .as_deref()
         .map(str::trim)
@@ -1015,7 +1013,7 @@ pub async fn mark_email_read(
            AND e.id = $1
            AND a.user_id = $2
            AND e.is_read = FALSE
-        RETURNING e.gmail_id, a.id AS account_id, a.refresh_token, a.provider,
+        RETURNING e.gmail_id, a.id AS account_id, a.refresh_token_iv, a.refresh_token_encrypted, a.provider,
                   e.subject, e.sender, e.receiver
         "#,
     )
@@ -1078,7 +1076,7 @@ pub async fn mark_email_read(
             .try_get::<String, _>("provider")
             .map(|value| MailProvider::from_db(&value))
             .unwrap_or(MailProvider::Google);
-        let refresh_token: Option<String> = row.get("refresh_token");
+        let refresh_token = open_refresh_token(&row);
 
         if let Some(refresh_token) = refresh_token
             .as_deref()
@@ -1217,7 +1215,7 @@ pub async fn mark_email_unread(
            AND e.id = $1
            AND a.user_id = $2
            AND e.is_read = TRUE
-        RETURNING e.gmail_id, a.id AS account_id, a.refresh_token, a.provider,
+        RETURNING e.gmail_id, a.id AS account_id, a.refresh_token_iv, a.refresh_token_encrypted, a.provider,
                   e.subject, e.sender, e.receiver
         "#,
     )
@@ -1267,7 +1265,7 @@ pub async fn mark_email_unread(
             .try_get::<String, _>("provider")
             .map(|value| MailProvider::from_db(&value))
             .unwrap_or(MailProvider::Google);
-        let refresh_token: Option<String> = row.get("refresh_token");
+        let refresh_token = open_refresh_token(&row);
 
         if let Some(refresh_token) = refresh_token
             .as_deref()
@@ -1615,7 +1613,7 @@ pub async fn download_email_attachment(
     let row = match sqlx::query(
         r#"
         SELECT ea.attachment_id, ea.gmail_id, ea.filename, ea.mime_type,
-               a.id AS account_id, a.refresh_token, a.provider
+               a.id AS account_id, a.refresh_token_iv, a.refresh_token_encrypted, a.provider
         FROM email_attachments ea
         JOIN email_accounts a ON ea.account_id = a.id
         WHERE ea.id = $1 AND a.user_id = $2
@@ -1631,7 +1629,7 @@ pub async fn download_email_attachment(
     };
 
     let account_id: i32 = row.get("account_id");
-    let refresh_token: Option<String> = row.get("refresh_token");
+    let refresh_token = open_refresh_token(&row);
     let refresh_token = match refresh_token.filter(|value| !value.trim().is_empty()) {
         Some(value) => value,
         None => {

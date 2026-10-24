@@ -4,7 +4,7 @@ use crate::prelude::*;
 use moka::future::Cache as MokaCache;
 use sqlx::QueryBuilder;
 use std::time::Duration;
-use tracing::instrument;
+use tracing::{error, instrument};
 
 const EMAIL_ACCOUNT_CACHE_TTL_SECS: u64 = 60;
 const EMAIL_ACCOUNT_CACHE_MAX_CAPACITY: u64 = 10_000;
@@ -79,7 +79,7 @@ fn account_from_row(row: sqlx::postgres::PgRow) -> EmailAccount {
         user_id: row.get("user_id"),
         email: row.try_get("email").unwrap_or_default(),
         provider,
-        refresh_token: row.try_get("refresh_token").ok().flatten(),
+        refresh_token: open_refresh_token(&row),
         last_sync: row.try_get("last_sync").ok(),
         // Some callers select without this column, so a missing one must read as
         // NULL rather than fail the whole row.
@@ -101,7 +101,7 @@ pub async fn load_email_account_for_user(
     }
 
     let row = sqlx::query(
-        "SELECT id, user_id, email, provider, refresh_token, last_sync
+        "SELECT id, user_id, email, provider, refresh_token_iv, refresh_token_encrypted, last_sync
          FROM email_accounts
          WHERE id = $1 AND user_id = $2",
     )
@@ -135,7 +135,7 @@ pub async fn load_email_account_for_send(
     }
     let row = sqlx::query(
         r#"
-        SELECT a.id, a.user_id, a.email, a.provider, a.refresh_token, a.last_sync
+        SELECT a.id, a.user_id, a.email, a.provider, a.refresh_token_iv, a.refresh_token_encrypted, a.last_sync
           FROM email_accounts a
           JOIN shared_inbox_members m
             ON m.account_id = a.id
@@ -159,9 +159,9 @@ pub async fn load_email_account_by_email(
     email: &str,
 ) -> Result<Option<EmailAccount>> {
     let row = sqlx::query(
-        "SELECT id, user_id, email, provider, refresh_token, last_sync, last_message_at
+        "SELECT id, user_id, email, provider, refresh_token_iv, refresh_token_encrypted, last_sync, last_message_at
          FROM email_accounts
-         WHERE lower(email) = lower($1) AND access_token IS NOT NULL
+         WHERE lower(email) = lower($1) AND token_expiry IS NOT NULL
          ORDER BY id
          LIMIT 1",
     )
@@ -174,9 +174,10 @@ pub async fn load_email_account_by_email(
 #[instrument(target = "db", skip(pool))]
 pub async fn load_syncable_email_accounts(pool: &PgPool) -> Result<Vec<EmailAccount>> {
     let rows = sqlx::query(
-        "SELECT id, user_id, email, provider, refresh_token, last_sync, last_message_at
+        "SELECT id, user_id, email, provider, refresh_token_iv, refresh_token_encrypted, last_sync, last_message_at
          FROM email_accounts
-         WHERE access_token IS NOT NULL",
+         -- Set on every connect; rows inserted any other way are not mailboxes.
+         WHERE token_expiry IS NOT NULL",
     )
     .fetch_all(pool)
     .await?;
@@ -191,7 +192,7 @@ pub async fn load_user_email_accounts_for_older_sync(
     account_id: Option<i32>,
 ) -> Result<Vec<EmailAccount>> {
     let mut qb = QueryBuilder::new(
-        "SELECT id, user_id, email, provider, refresh_token, last_sync
+        "SELECT id, user_id, email, provider, refresh_token_iv, refresh_token_encrypted, last_sync
          FROM email_accounts
          WHERE user_id = ",
     );
@@ -329,6 +330,137 @@ pub async fn account_may_attach_mailbox(
         .eq_ignore_ascii_case(authorized_email.trim()))
 }
 
+/// Encrypts a mailbox token for the `*_token_iv` / `*_token_encrypted` column
+/// pair. An empty token maps to `(None, None)` so the "keep the stored refresh
+/// token" COALESCE in the writers leaves the stored pair alone.
+pub fn seal_token(token: &str) -> Result<(Option<String>, Option<String>)> {
+    if token.is_empty() {
+        return Ok((None, None));
+    }
+    let (iv, ciphertext) = wayve_security::encryption::encrypt(token)?;
+    Ok((Some(iv), Some(ciphertext)))
+}
+
+/// Decrypts a `*_token_iv` / `*_token_encrypted` pair. `None` when the pair is
+/// NULL, empty, or fails to decrypt; callers treat that as "reconnect needed",
+/// the same as a missing token.
+pub fn open_token(iv: Option<String>, ciphertext: Option<String>) -> Option<String> {
+    let (iv, ciphertext) = (iv?, ciphertext?);
+    match wayve_security::encryption::decrypt(&iv, &ciphertext) {
+        Ok(token) if !token.trim().is_empty() => Some(token),
+        Ok(_) => None,
+        Err(e) => {
+            error!(target: "auth", error = %e, "mailbox token decrypt failed");
+            None
+        }
+    }
+}
+
+/// The refresh token from a row that selected `refresh_token_iv` and
+/// `refresh_token_encrypted`. A row from a LEFT JOIN with no account reads as
+/// `None`.
+pub fn open_refresh_token(row: &sqlx::postgres::PgRow) -> Option<String> {
+    open_token(
+        row.try_get("refresh_token_iv").ok().flatten(),
+        row.try_get("refresh_token_encrypted").ok().flatten(),
+    )
+}
+
+/// The access token from a row that selected `access_token_iv` and
+/// `access_token_encrypted`.
+pub fn open_access_token(row: &sqlx::postgres::PgRow) -> Option<String> {
+    open_token(
+        row.try_get("access_token_iv").ok().flatten(),
+        row.try_get("access_token_encrypted").ok().flatten(),
+    )
+}
+
+/// Moves tokens still in the legacy plaintext `access_token` / `refresh_token`
+/// columns into the encrypted pairs and clears the plaintext. Every writer
+/// clears the plaintext it supersedes, so any plaintext still present is the
+/// newest copy (e.g. written by an older build after a rollback) and wins over
+/// an existing encrypted pair. Migrated rows have NULL plaintext, so re-runs
+/// touch nothing. Each UPDATE is guarded on the plaintext it read, so a write
+/// racing the backfill is left for the next run rather than clobbered.
+///
+/// Runs at boot and again on every sync tick, which picks up rows a failed run
+/// skipped and plaintext an older build writes during a deploy. A row whose
+/// UPDATE fails is logged and skipped; an encryption failure (bad `AES_KEY`)
+/// would fail every row alike, so it aborts the run.
+#[instrument(target = "db", skip(pool))]
+pub async fn backfill_token_encryption(pool: &PgPool) -> Result<u64> {
+    let rows = sqlx::query(
+        "SELECT id, access_token, refresh_token FROM email_accounts \
+         WHERE access_token IS NOT NULL OR refresh_token IS NOT NULL",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut moved = 0;
+    for row in rows {
+        let id: i32 = row.get("id");
+        let access_token: Option<String> = row.get("access_token");
+        let refresh_token: Option<String> = row.get("refresh_token");
+        let (access_iv, access_ct) = seal_token(access_token.as_deref().unwrap_or(""))?;
+        let (refresh_iv, refresh_ct) = seal_token(refresh_token.as_deref().unwrap_or(""))?;
+
+        // A non-NULL plaintext access token marked the row as connected; carry
+        // that over to `token_expiry`, which the loaders now filter on.
+        let result = sqlx::query(
+            "UPDATE email_accounts SET \
+               access_token_iv = COALESCE($1, access_token_iv), \
+               access_token_encrypted = COALESCE($2, access_token_encrypted), \
+               refresh_token_iv = COALESCE($3, refresh_token_iv), \
+               refresh_token_encrypted = COALESCE($4, refresh_token_encrypted), \
+               token_expiry = CASE WHEN access_token IS NOT NULL \
+                                   THEN COALESCE(token_expiry, NOW()) \
+                                   ELSE token_expiry END, \
+               access_token = NULL, \
+               refresh_token = NULL \
+             WHERE id = $5 \
+               AND access_token IS NOT DISTINCT FROM $6 \
+               AND refresh_token IS NOT DISTINCT FROM $7",
+        )
+        .bind(access_iv)
+        .bind(access_ct)
+        .bind(refresh_iv)
+        .bind(refresh_ct)
+        .bind(id)
+        .bind(&access_token)
+        .bind(&refresh_token)
+        .execute(pool)
+        .await;
+        match result {
+            Ok(done) if done.rows_affected() > 0 => {
+                moved += 1;
+                invalidate_email_account_cache(id).await;
+            }
+            Ok(_) => {}
+            Err(e) => {
+                error!(target: "db", account_id = id, error = ?e, "mailbox token backfill failed for row");
+            }
+        }
+    }
+    Ok(moved)
+}
+
+/// Stores a freshly minted access token.
+#[instrument(target = "db", skip(pool, access_token))]
+pub async fn store_access_token(pool: &PgPool, account_id: i32, access_token: &str) -> Result<()> {
+    let (iv, ciphertext) = seal_token(access_token)?;
+    sqlx::query(
+        "UPDATE email_accounts \
+         SET access_token_iv = $1, access_token_encrypted = $2, access_token = NULL \
+         WHERE id = $3",
+    )
+    .bind(iv)
+    .bind(ciphertext)
+    .bind(account_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 #[instrument(
     target = "db",
     skip(pool, account),
@@ -340,34 +472,49 @@ pub async fn upsert_connected_email_account(
 ) -> Result<i32> {
     let expiry = (chrono::Utc::now() + chrono::Duration::seconds(account.expires_in)).naive_utc();
     let refresh_token = account.refresh_token.unwrap_or("");
+    let (access_iv, access_ct) = seal_token(account.access_token)?;
+    let (refresh_iv, refresh_ct) = seal_token(refresh_token)?;
 
     // `last_sync` is the worker's incremental cursor, and NULL means "crawl the
     // whole mailbox". Seeding it to NOW keeps the first tick to a bounded
     // `after:` query; the on-connect `sync_account_recent` has already pulled
     // recent mail, so nothing is lost. ON CONFLICT preserves it on reconnect.
+    // A reconnect without a new refresh token keeps the stored one, including
+    // a not-yet-backfilled plaintext one (the next sync tick's backfill seals
+    // it into the pair); any plaintext a new token supersedes
+    // is cleared. `token_expiry` is always set here; the loaders read it as
+    // "connected".
     let row = sqlx::query(
         r#"
         INSERT INTO email_accounts
-          (email, user_id, access_token, refresh_token, token_expiry, is_active, provider, last_sync)
-        VALUES ($1, $2, $3, $4, $5, true, $6, EXTRACT(EPOCH FROM NOW())::BIGINT)
+          (email, user_id, token_expiry, is_active, provider, last_sync,
+           access_token_iv, access_token_encrypted, refresh_token_iv, refresh_token_encrypted)
+        VALUES ($1, $2, $3, true, $4, EXTRACT(EPOCH FROM NOW())::BIGINT, $5, $6, $7, $8)
         ON CONFLICT (user_id, email) DO UPDATE SET
-          access_token = EXCLUDED.access_token,
+          access_token = NULL,
+          refresh_token = CASE WHEN EXCLUDED.refresh_token_encrypted IS NULL
+                               THEN email_accounts.refresh_token END,
+          access_token_iv = EXCLUDED.access_token_iv,
+          access_token_encrypted = EXCLUDED.access_token_encrypted,
           token_expiry = EXCLUDED.token_expiry,
           provider = EXCLUDED.provider,
           is_active = true,
-          refresh_token = COALESCE(
-            NULLIF(EXCLUDED.refresh_token, ''),
-            email_accounts.refresh_token
+          refresh_token_iv = COALESCE(EXCLUDED.refresh_token_iv, email_accounts.refresh_token_iv),
+          refresh_token_encrypted = COALESCE(
+            EXCLUDED.refresh_token_encrypted,
+            email_accounts.refresh_token_encrypted
           )
         RETURNING id
         "#,
     )
     .bind(account.email)
     .bind(account.user_id)
-    .bind(account.access_token)
-    .bind(refresh_token)
     .bind(expiry)
     .bind(account.provider.as_db())
+    .bind(access_iv)
+    .bind(access_ct)
+    .bind(refresh_iv)
+    .bind(refresh_ct)
     .fetch_one(pool)
     .await?;
 

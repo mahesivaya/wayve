@@ -7,7 +7,7 @@ use actix_cors::Cors;
 use actix_web::http::header;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use std::time::Duration;
-use tracing::{info, instrument, warn};
+use tracing::{error, info, instrument, warn};
 
 #[instrument(target = "startup", skip(db_url), fields(max_conns))]
 #[allow(dead_code)]
@@ -368,6 +368,12 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         // Where the Gmail label-change sync has read history up to
         // (email/label_history.rs).
         "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS label_history_id BIGINT",
+        // Encrypted-at-rest OAuth tokens. Every token write sets these, so a DB
+        // without them fails mailbox connect and token refresh.
+        "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS access_token_iv TEXT",
+        "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS access_token_encrypted TEXT",
+        "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS refresh_token_iv TEXT",
+        "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS refresh_token_encrypted TEXT",
         "CREATE TABLE IF NOT EXISTS shared_inbox_members (
             account_id INTEGER NOT NULL REFERENCES email_accounts(id) ON DELETE CASCADE,
             user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1058,6 +1064,17 @@ pub async fn connect_db_and_migrate(role: RuntimeRole) -> PgPool {
         Err(e) => warn!(target: "startup", error = ?e, "address backfill failed"),
     }
 
+    // Runs before the workers start, since they read only the encrypted pair. A
+    // failed or partial run is retried on every sync tick (sync_due_accounts);
+    // until then the affected mailboxes read as "reconnect needed".
+    match email::account::backfill_token_encryption(&pool).await {
+        Ok(0) => {}
+        Ok(n) => info!(target: "startup", encrypted = n, "encrypted legacy mailbox tokens"),
+        Err(e) => {
+            error!(target: "startup", error = ?e, "mailbox token encryption backfill failed")
+        }
+    }
+
     // Seed the compose-typeahead contacts projection from existing mail. Gated on
     // an empty table, so this is a one-time cost on the first startup after the
     // projection ships; the sync path maintains it thereafter.
@@ -1161,19 +1178,18 @@ fn spawn_gmail_watch_renewer(pool: PgPool) {
 async fn renew_gmail_watches(pool: &PgPool) -> crate::prelude::Result<()> {
     use sqlx::Row;
     let rows = sqlx::query(
-        "SELECT id, refresh_token FROM email_accounts \
-          WHERE provider = 'google' AND access_token IS NOT NULL \
-            AND refresh_token IS NOT NULL AND refresh_token <> '' \
+        "SELECT id, refresh_token_iv, refresh_token_encrypted FROM email_accounts \
+          WHERE provider = 'google' AND token_expiry IS NOT NULL \
+            AND refresh_token_encrypted IS NOT NULL \
             AND (watch_expires_at IS NULL OR watch_expires_at < NOW() + INTERVAL '24 hours')",
     )
     .fetch_all(pool)
     .await?;
     for row in rows {
         let id: i32 = row.get("id");
-        let refresh_token: String = row.try_get("refresh_token").unwrap_or_default();
-        if refresh_token.trim().is_empty() {
+        let Some(refresh_token) = crate::email::account::open_refresh_token(&row) else {
             continue;
-        }
+        };
         match crate::email::provider::refresh_and_persist_email_token(
             pool,
             id,

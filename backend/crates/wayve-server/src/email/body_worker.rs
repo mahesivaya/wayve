@@ -58,14 +58,13 @@ async fn run_iteration(pool: &PgPool) -> Result<usize> {
     // `attachments_checked = false` (the attachment save errored or never ran).
     let accounts = sqlx::query(
         r#"
-        SELECT DISTINCT a.id, a.refresh_token
+        SELECT DISTINCT a.id, a.refresh_token_iv, a.refresh_token_encrypted
         FROM email_accounts a
         JOIN emails e ON e.account_id = a.id
         WHERE (e.body_encrypted = ''
             OR e.body_encrypted IS NULL
             OR e.attachments_checked = false)
-          AND a.refresh_token IS NOT NULL
-          AND a.refresh_token <> ''
+          AND a.refresh_token_encrypted IS NOT NULL
         LIMIT $1
         "#,
     )
@@ -93,7 +92,9 @@ async fn run_iteration(pool: &PgPool) -> Result<usize> {
         let client_id = client_id.clone();
         let client_secret = client_secret.clone();
         let account_id: i32 = row.get("id");
-        let refresh_token: String = row.get("refresh_token");
+        let Some(refresh_token) = crate::email::account::open_refresh_token(&row) else {
+            continue;
+        };
 
         handles.push(tokio::spawn(async move {
             process_account(
@@ -133,11 +134,7 @@ pub(crate) async fn process_account(
 ) -> Result<usize> {
     let token = refresh_access_token(client_id, client_secret, refresh_token).await?;
 
-    sqlx::query("UPDATE email_accounts SET access_token = $1 WHERE id = $2")
-        .bind(&token)
-        .bind(account_id)
-        .execute(pool)
-        .await?;
+    crate::email::account::store_access_token(pool, account_id, &token).await?;
 
     // Same predicate as `run_iteration`. Re-fetching a row that already has a
     // body costs one Gmail call and is the only way to back-fill attachments for
