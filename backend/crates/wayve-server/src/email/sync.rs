@@ -301,6 +301,15 @@ pub async fn sync_due_accounts(
     pool: &PgPool,
     schedule: &mut std::collections::HashMap<i32, std::time::Instant>,
 ) -> Result<()> {
+    // The loaders read only the encrypted token pair, so finish any plaintext
+    // the boot backfill missed first. Once every row is migrated this is one
+    // SELECT that matches nothing.
+    match crate::email::account::backfill_token_encryption(pool).await {
+        Ok(0) => {}
+        Ok(n) => info!(target: "worker", encrypted = n, "encrypted legacy mailbox tokens"),
+        Err(e) => error!(target: "worker", error = ?e, "mailbox token encryption backfill failed"),
+    }
+
     let accounts = load_syncable_email_accounts(pool).await?;
     let now = std::time::Instant::now();
 

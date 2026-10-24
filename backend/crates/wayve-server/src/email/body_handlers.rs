@@ -1,6 +1,7 @@
 use crate::prelude::*;
 
 use crate::cache::TtlCache;
+use crate::email::account::open_refresh_token;
 use crate::email::attachments::save_email_attachments;
 use crate::email::oauth::{HTTP_CLIENT, refresh_access_token, try_load_google_secrets};
 use crate::email::utils::{extract_attachments, extract_body};
@@ -104,7 +105,7 @@ pub async fn get_email_body(
             r#"
         SELECT e.id, e.gmail_id, e.source, e.account_id,
                e.body_encrypted, e.body_iv, e.attachments_checked,
-               a.refresh_token
+               a.refresh_token_iv, a.refresh_token_encrypted
         FROM emails e
         LEFT JOIN email_accounts a ON e.account_id = a.id
         LEFT JOIN shared_inbox_members m
@@ -186,7 +187,7 @@ pub async fn get_email_body(
 
     let gmail_id: Option<String> = row.get("gmail_id");
     let account_id: i32 = row.get("account_id");
-    let refresh_token: Option<String> = row.get("refresh_token");
+    let refresh_token = open_refresh_token(&row);
 
     let gmail_id = match gmail_id.filter(|value| !value.trim().is_empty()) {
         Some(value) => value,
@@ -256,11 +257,7 @@ pub async fn get_email_body(
         }
     };
 
-    let _ = sqlx::query("UPDATE email_accounts SET access_token = $1 WHERE id = $2")
-        .bind(&token)
-        .bind(account_id)
-        .execute(pool.get_ref())
-        .await;
+    let _ = crate::email::account::store_access_token(pool.get_ref(), account_id, &token).await;
 
     let url = format!(
         "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}?format=full",

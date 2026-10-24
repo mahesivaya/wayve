@@ -32,12 +32,17 @@ mod tests {
     async fn owner_mailbox(pool: &PgPool) -> (i32, String, i32) {
         let email = random_email();
         let user = insert_local_user(pool, &email, "password123").await;
+        let (iv, ciphertext) =
+            encrypt("fake-reply-test").unwrap_or_else(|e| panic!("seal refresh token: {e}"));
         let account: i32 = sqlx::query_scalar(
-            "INSERT INTO email_accounts (email, user_id, provider, refresh_token) \
-             VALUES ($1, $2, 'google', 'fake-reply-test') RETURNING id",
+            "INSERT INTO email_accounts \
+               (email, user_id, provider, refresh_token_iv, refresh_token_encrypted) \
+             VALUES ($1, $2, 'google', $3, $4) RETURNING id",
         )
         .bind(random_email())
         .bind(user)
+        .bind(iv)
+        .bind(ciphertext)
         .fetch_one(pool)
         .await
         .unwrap_or_else(|e| panic!("mailbox: {e}"));

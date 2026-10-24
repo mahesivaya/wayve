@@ -523,6 +523,8 @@ CREATE TABLE IF NOT EXISTS email_accounts (
     email TEXT NOT NULL,
     display_name TEXT,
     user_id INTEGER NOT NULL,
+    -- Legacy plaintext tokens, always NULL now; see the *_token_iv /
+    -- *_token_encrypted pairs below.
     access_token TEXT,
     refresh_token TEXT,
     token_expiry TIMESTAMP,
@@ -560,8 +562,9 @@ ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS last_message_at TIMESTAMP;
 -- Generic IMAP/SMTP connection details, used only when provider = 'imap'
 -- (any custom-domain mailbox not on Google/Microsoft). NULL for OAuth
 -- providers. The IMAP/SMTP password is stored encrypted (AES-256-GCM,
--- `<iv>.<cipher>`) in the existing `refresh_token` column — there's no OAuth
--- refresh token for these accounts. `mail_security` is 'ssl' (implicit TLS)
+-- `<iv>.<cipher>`) in the refresh-token slot (the `refresh_token_iv` /
+-- `refresh_token_encrypted` pair) — there's no OAuth refresh token for these
+-- accounts. `mail_security` is 'ssl' (implicit TLS)
 -- or 'starttls'. The IMAP MailSync impl loads these by account_id.
 ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS imap_host TEXT;
 ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS imap_port INTEGER;
@@ -578,6 +581,18 @@ ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS gmail_history_id BIGINT;
 -- up to. Separate from gmail_history_id, which a watch renewal overwrites.
 ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS label_history_id BIGINT;
 ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS watch_expires_at TIMESTAMPTZ;
+
+-- OAuth tokens encrypted at rest (AES-256-GCM via wayve_security::encryption,
+-- base64 nonce + base64 ciphertext), matching github_accounts / figma_accounts.
+-- The only place tokens are stored: the legacy plaintext `access_token` /
+-- `refresh_token` columns above are always NULL, and any value found there is
+-- moved into these pairs at startup (email::account::backfill_token_encryption).
+-- NULL when there is no token. For IMAP rows the refresh pair wraps the
+-- already-encrypted `<iv>.<cipher>` password.
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS access_token_iv TEXT;
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS access_token_encrypted TEXT;
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS refresh_token_iv TEXT;
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS refresh_token_encrypted TEXT;
 
 -- =========================================================================
 -- Shared inboxes (org + platform).

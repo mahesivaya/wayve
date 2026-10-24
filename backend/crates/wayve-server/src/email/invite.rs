@@ -6,6 +6,7 @@
 //! with no file name. Gmail's is parsed from iCalendar (`email::ical`);
 //! Outlook's comes structured, from the meeting message's event.
 
+use crate::email::account::open_refresh_token;
 use crate::email::attachments::fetch_gmail_attachment_bytes;
 use crate::email::ical::{Invite, https_url, parse_invite, video_link, windows_zone};
 use crate::email::oauth::HTTP_CLIENT;
@@ -29,7 +30,7 @@ pub async fn get_email_invite(
     // shared-inbox member, or the recipient of Fluxze mail.
     let Some(row) = sqlx::query(
         r#"
-        SELECT e.gmail_id, e.source, e.account_id, e.thread_id, a.provider, a.refresh_token
+        SELECT e.gmail_id, e.source, e.account_id, e.thread_id, a.provider, a.refresh_token_iv, a.refresh_token_encrypted
         FROM emails e
         LEFT JOIN email_accounts a ON e.account_id = a.id
         LEFT JOIN shared_inbox_members sm ON sm.account_id = a.id AND sm.user_id = $2
@@ -69,7 +70,7 @@ pub async fn get_email_invite(
         return Ok(no_invite());
     }
 
-    let refresh_token: Option<String> = row.try_get("refresh_token").ok().flatten();
+    let refresh_token = open_refresh_token(&row);
     let Some(refresh_token) = refresh_token
         .as_deref()
         .map(str::trim)

@@ -2,7 +2,7 @@
 //! meaning any provider without a first-class OAuth integration. The user
 //! supplies a host, port, and app password; it is verified with a real IMAP
 //! LOGIN and stored encrypted at rest (AES-256-GCM, `<iv>.<cipher>`) in
-//! `email_accounts.refresh_token`, with the connection settings in the
+//! the `email_accounts.refresh_token_*` pair, with the connection settings in the
 //! `imap_*`/`smtp_*`/`mail_security` columns.
 
 use crate::email::repo::{InsertEmail, upsert_one};
@@ -53,7 +53,7 @@ impl MailSecurity {
 }
 
 /// Encrypts the app password at rest into the `<iv>.<cipher>` blob stored in
-/// `email_accounts.refresh_token`.
+/// the `email_accounts.refresh_token_*` pair.
 pub fn encode_secret(password: &str) -> anyhow::Result<String> {
     let (iv, cipher) = encrypt(password)?;
     Ok(format!("{iv}.{cipher}"))
