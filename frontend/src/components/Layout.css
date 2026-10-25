@@ -41,9 +41,9 @@
   z-index: 1;
 }
 
-/* Sidebar toggle — always visible in the header next to the logo.
-   On wide screens toggles the icon-only rail; on narrow screens
-   opens/closes the sidebar overlay. Box-style outlined icon. */
+/* Narrow-screen sidebar toggle in the header next to the logo: expands the
+   icon rail to show labels, or collapses it back to icons. (Wide screens use
+   .header-collapse-btn.) Box-style outlined icon. */
 .sidebar-toggle-btn {
   width: 32px;
   height: 28px;
@@ -530,8 +530,8 @@
    📌 PRIMARY SIDEBAR (LEFT)
    Holds every app navigation entry: primary apps, optional Platform
    section for platform admins, and a secondary section (Pricing, Docs,
-   Developers, API Keys, About). Width is fixed on desktop; below 1100px
-   it collapses into an overlay panel toggled by the header hamburger.
+   Developers, API Keys, About). Icons always show; collapsing only hides the
+   labels. At 768px and below it is a 56px rail that expands over the content.
 ============================== */
 .sidebar {
   width: 200px;
@@ -1846,69 +1846,37 @@
   }
 }
 
-/* Below 768px (phones) the rail still steals too much width, so collapse it
-   into an off-canvas overlay revealed by the header sidebar-toggle button. */
+/* At 768px and below (phones, narrow windows) the icons stay on screen as the
+   collapsed 56px rail (the base .sidebar.collapsed rules). Expanding only adds
+   the labels: the rail widens OVER the content instead of pushing it, via a
+   negative right margin that keeps its footprint in the row at 56px. */
 @media (max-width: 768px) {
+  /* Anchors the scrim to the area below the header (and any banner). */
+  .body {
+    position: relative;
+  }
+
   .sidebar {
-    position: absolute;
-    top: 49px; /* header height + 1px border */
-    bottom: 0;
-    left: 0;
-    z-index: 200;
-    transform: translateX(-100%);
-    box-shadow: 6px 0 18px rgb(0, 0, 0, 0.12);
+    --rail-width: 56px;
+    --rail-expanded-width: 200px;
+    /* Width and margin move together, so the content never shifts. */
+    transition:
+      width 0.25s ease,
+      margin-right 0.25s ease;
   }
 
   .sidebar.open {
-    transform: translateX(0);
-  }
-
-  /* In overlay mode the collapsed-rail preference doesn't make sense —
-     the panel is already hidden offscreen, so when revealed it should
-     always show full labels (matching the new 156px desktop width). */
-  .sidebar.collapsed {
-    width: 156px;
-  }
-  .sidebar.collapsed .sidebar-label,
-  .sidebar.collapsed .sidebar-section-toggle > span:not(.sidebar-section-icon),
-  .sidebar.collapsed .sidebar-section-label > span:not(.sidebar-section-icon) {
-    position: static;
-    width: auto;
-    height: auto;
-    padding: 0;
-    margin: 0;
-    overflow: visible;
-    clip: auto;
-    white-space: nowrap;
-  }
-  /* Restore the full-label header layout (icon + text + trailing chevron) the
-     desktop rail collapses away. */
-  .sidebar.collapsed .sidebar-section-toggle,
-  .sidebar.collapsed .sidebar-section-label {
-    justify-content: flex-start;
-    gap: 8px;
-  }
-  .sidebar.collapsed .sidebar-section-chevron {
-    margin-left: auto;
-  }
-  .sidebar.collapsed .sidebar-section-label {
-    padding: 4px 10px 2px;
-  }
-  .sidebar.collapsed .sidebar-section-toggle {
-    padding: 0;
-  }
-  .sidebar.collapsed .sidebar-link {
-    justify-content: flex-start;
-    padding: 7px 10px;
+    position: relative;
+    z-index: 200;
+    width: var(--rail-expanded-width);
+    margin-right: calc(var(--rail-width) - var(--rail-expanded-width));
+    box-shadow: 6px 0 18px rgb(0, 0, 0, 0.12);
   }
 
   .sidebar-scrim {
     display: block;
     position: absolute;
-    top: 49px;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    inset: 0;
     background: rgb(0, 0, 0, 0.32);
     z-index: 150;
   }
@@ -1952,7 +1920,7 @@
   }
 
   .sidebar {
-    width: min(260px, 80vw);
+    --rail-expanded-width: min(260px, 80vw);
   }
 }
 

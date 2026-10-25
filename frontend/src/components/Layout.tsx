@@ -398,10 +398,13 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     });
   }, []);
 
+  // Narrow screens only: whether the icon rail is expanded to show labels.
+  // Starts collapsed so a phone opens on the content, not over it.
   const [navOpen, setNavOpen] = useState(false);
 
-  // At or below 768px the sidebar is an off-canvas overlay; above it, a
-  // permanent rail. Shared with SettingsShell — see useIsNarrow.
+  // At or below 768px the sidebar is a 56px icon rail that expands over the
+  // content on demand; above it, a rail whose width the user sets. Shared with
+  // SettingsShell — see useIsNarrow.
   const isNarrow = useIsNarrow();
 
   const sections = useSidebarSections();
@@ -481,6 +484,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       return false;
     }
   });
+
+  // Icons always show; collapsing only hides the labels. Narrow screens keep
+  // their own (unpersisted) expand state, so a wide-screen "expanded" preference
+  // doesn't open a phone with the labels covering the page.
+  const railCollapsed = isNarrow ? !navOpen : sidebarCollapsed;
 
   useEffect(() => {
     try {
@@ -1643,7 +1651,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       // accounts.
       visible: user.account_type !== "personal",
       onAdd:
-        (isOrgOwner || isPlatformOwner) && !sidebarCollapsed
+        (isOrgOwner || isPlatformOwner) && !railCollapsed
           ? () => {
               sections.setOpen("teams", true);
               setTeamCreateDraft("");
@@ -1895,16 +1903,16 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   </svg>
                 </button>
               )}
-              {/* This toggle is the mobile hamburger only. On wide screens the
-              show/hide control lives next to the brand above; the overlay has no
-              persistent divider to host it, so it needs the header button. */}
+              {/* Narrow-screen expand/collapse toggle. The icon rail is always
+              on screen; this only shows or hides the labels, expanding the
+              rail over the content rather than squeezing it. */}
               {isNarrow && !settingsTakeover && (
                 <button
                   type="button"
                   className="sidebar-toggle-btn"
                   onClick={() => setNavOpen((open) => !open)}
-                  data-tooltip={navOpen ? "Hide sidebar" : "Show sidebar"}
-                  aria-label={navOpen ? "Hide sidebar" : "Show sidebar"}
+                  data-tooltip={navOpen ? "Collapse sidebar" : "Expand sidebar"}
+                  aria-label={navOpen ? "Collapse sidebar" : "Expand sidebar"}
                   aria-expanded={navOpen}
                 >
                   <svg
@@ -1939,7 +1947,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           <div className="body">
             <nav
               ref={sidebarRef}
-              className={`sidebar ${navOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""} ${settingsTakeover ? "takeover-hidden" : ""}`.trim()}
+              className={`sidebar ${isNarrow && navOpen ? "open" : ""} ${railCollapsed ? "collapsed" : ""} ${settingsTakeover ? "takeover-hidden" : ""}`.trim()}
               style={
                 !sidebarCollapsed && !isNarrow
                   ? { width: `${sidebarWidth}px` }
@@ -2087,8 +2095,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               />
             )}
 
-            {/* Scrim catches taps outside the sidebar overlay on narrow screens. */}
-            {navOpen && (
+            {/* Scrim catches taps outside the expanded rail on narrow screens. */}
+            {isNarrow && navOpen && (
               <div
                 className="sidebar-scrim"
                 onClick={() => setNavOpen(false)}
