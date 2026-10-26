@@ -138,7 +138,17 @@ services:
     restart: always
 
   nginx:
-    image: nginx:1.27-alpine
+    # Edge proxy that terminates public TLS: nginx 1.31 with Alpine's
+    # latest patches on top (see nginx/Dockerfile). The stock image lags those
+    # patches, and the old 1.27 line had frozen at OpenSSL 3.3.3. Built on the
+    # box rather than pulled: `scripts/deploy.sh` rebuilds it with
+    # `--pull --no-cache` on every deploy, so `pull_policy: build` keeps
+    # `compose pull` from looking for it in a registry.
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    image: rwayve-nginx:prod
+    pull_policy: build
     container_name: rwayve_nginx_prod
     restart: always
     depends_on:

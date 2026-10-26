@@ -73,6 +73,13 @@ compose() {
   docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"
 }
 
+# The edge proxy is built here, not pulled (infra/nginx/Dockerfile: nginx 1.31
+# + `apk upgrade`). `--pull --no-cache` fetches the newest base and re-runs the
+# upgrade, so every deploy ships today's Alpine patches; it takes seconds. It
+# must exist before `up --no-build`, and `compose pull` skips it.
+echo "    Building the edge proxy (nginx + latest Alpine patches)..."
+compose build --pull --no-cache nginx
+
 if [ "$BUILD_ON_HOST" = "1" ]; then
   echo "    Building images on host..."
   compose up -d --build
@@ -103,11 +110,18 @@ else
   compose up -d --no-build
 fi
 
-# nginx uses a stock image with a bind-mounted template processed by
-# envsubst at container start. `up -d` doesn't recreate it on template
+# nginx's config is a bind-mounted template processed by envsubst at
+# container start. `up -d` doesn't recreate it on template
 # changes, so force-recreate every deploy. ~2s nginx restart, no data loss.
 echo "    Force-recreating nginx so envsubst picks up template changes..."
-compose up -d --force-recreate --no-deps nginx
+# `--no-build`: the image was built above; without it `pull_policy: build`
+# would rebuild it (from cache, to the same image) on every recreate.
+compose up -d --force-recreate --no-deps --no-build nginx
+
+# Each deploy's uncached nginx build leaves the previous image untagged.
+# Dangling images only: previous ECR tags stay, so a rollback can reuse them.
+echo "    Removing dangling images..."
+docker image prune -f
 
 echo "    Services:"
 compose ps

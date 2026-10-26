@@ -54,7 +54,16 @@ async-trait = "0.1"
 # S3 storage for user-uploaded files (drive, attachments, documents, avatars).
 # Off unless S3_BUCKET is set — see storage.rs and ENVIRONMENTS.md.
 aws-config = { version = "1", features = ["behavior-version-latest"] }
-aws-sdk-s3 = "1"
+# The default `rustls` feature enables the legacy hyper 0.14 / rustls 0.21
+# client, which pins rustls-webpki 0.101 (unpatched GHSA-82j2-j2ch-gfr8).
+# Keep every other default; `default-https-client` is the maintained
+# rustls 0.23 client that aws-config already uses.
+aws-sdk-s3 = { version = "1", default-features = false, features = [
+    "sigv4a",
+    "http-1x",
+    "default-https-client",
+    "rt-tokio",
+] }
 # Offline IP geolocation (GeoLite2-City .mmdb) for the User Logs page.
 maxminddb = "0.28"
 

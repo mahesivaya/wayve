@@ -39,6 +39,8 @@ FROM debian:bookworm-slim AS runtime
 # ca-certificates for outbound TLS; curl for the container healthcheck.
 # `apt-get upgrade` pulls the latest patches Debian has released for
 # the slim image's pinned packages (Trivy flags base-image CVEs here).
+# CI builds this stage with `no-cache-filters: runtime` so the upgrade
+# re-runs on every build instead of being replayed from a stale cached layer.
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends ca-certificates curl \
