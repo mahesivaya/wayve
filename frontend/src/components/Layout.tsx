@@ -2078,9 +2078,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               regardless of how many nav groups render above it. */}
               {/* The profile menu pinned to the sidebar bottom, in both
               runtimes. Wide screens get just Settings + Log out — Settings'
-              left rail (SettingsShell) carries Profile, Appearance and the
-              admin switch. Narrow screens drop that rail, so they keep the
-              full dropdown as the only way to reach those. */}
+              left rail (SettingsShell) carries Profile, Integrations and
+              Appearance. Narrow screens drop that rail, so the dropdown adds
+              Profile and Integrations back; Appearance is a card on the
+              General settings page there instead. */}
               <div className="sidebar-section sidebar-section-bottom">
                 <ProfileMenu placement="sidebar" minimal={!isNarrow} />
               </div>

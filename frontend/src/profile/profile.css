@@ -14,8 +14,12 @@
   justify-content: center;
 }
 
+/* No global box-sizing reset exists, so without border-box `width: 100%` + the
+   24px padding renders cards 50px wider than their column — a sideways scroll
+   on every settings page at narrow widths. */
 .profile-card,
 .settings-card {
+  box-sizing: border-box;
   width: 100%;
   max-width: 560px;
   background: var(--color-surface);
@@ -228,12 +232,6 @@
   min-width: 0;
   overflow-y: auto;
   padding: 24px 32px;
-  box-sizing: border-box;
-}
-
-/* No global box-sizing reset exists, so `width: 100%` + 24px padding renders
-   cards wider than their box; keep content cards inside their column. */
-.settings-page--split .settings-content .settings-card {
   box-sizing: border-box;
 }
 
@@ -817,4 +815,72 @@
 .settings-ticket-row--open:focus-visible {
   outline: 2px solid var(--color-primary-panel-border);
   outline-offset: 1px;
+}
+
+/* Appearance card: Light / Dark / Custom as one segmented row; the active
+   theme is outlined in the primary colour. */
+.settings-theme-modes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-theme-mode {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.settings-theme-mode:hover {
+  background: var(--color-surface-hover);
+}
+
+.settings-theme-mode.active {
+  border-color: var(--color-primary-action);
+  background: var(--color-primary-soft);
+}
+
+.settings-theme-mode:focus-visible {
+  outline: 2px solid var(--color-primary-panel-border);
+  outline-offset: 1px;
+}
+
+/* ================= NARROW SCREENS =================
+   At 768px and below (the breakpoint useIsNarrow shares with SettingsShell)
+   the page sits beside the 56px icon rail, so the desktop 32px page gutter and
+   24px card padding leave a phone under 200px for content. Tighten both. */
+@media (max-width: 768px) {
+  .settings-page {
+    padding: 16px;
+  }
+
+  .settings-card {
+    padding: 16px;
+  }
+
+  /* A row keeps its label and control side by side while they fit, and drops
+     the control onto its own line when they don't — so a short toggle stays
+     inline but a select no longer squeezes its label into a narrow column. */
+  .settings-usage-row {
+    flex-wrap: wrap;
+    column-gap: 12px;
+    row-gap: 6px;
+  }
+
+  .settings-usage-row > :first-child {
+    flex: 1 1 160px;
+    min-width: 0;
+  }
 }

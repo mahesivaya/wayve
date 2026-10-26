@@ -179,11 +179,16 @@
    it stays out of the way of the actual plan picker below. */
 .billing-section-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 12px;
   margin: 0 0 12px;
   position: relative;
+  /* Sized against itself, not the viewport: the card's width depends on the
+     sidebar and page padding, so only the row knows when the pinned AutoPay
+     control would run into the centered title. See the query below. */
+  container-type: inline-size;
 }
 
 .billing-section-head h2 {
@@ -202,6 +207,19 @@
   color: var(--color-text-muted);
   font-size: var(--text-xs);
   font-weight: 600;
+}
+
+/* Too narrow for the title and the pinned control side by side (the control is
+   ~214px either side of a centered title): put the control back in the flow,
+   on its own line under the title, instead of painting over it. */
+@container (max-width: 520px) {
+  .billing-section-head h2 {
+    flex-basis: 100%;
+  }
+
+  .billing-autopay {
+    position: static;
+  }
 }
 
 .billing-autopay select {

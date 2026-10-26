@@ -12,7 +12,9 @@ export default function ProfileMenu({
 }: {
   placement?: "header" | "sidebar";
   // Only Settings, the admin switch and Log out. For wide screens, where
-  // Settings' left rail (SettingsShell) already carries Profile and Appearance.
+  // Settings' left rail (SettingsShell) already carries Profile and Integrations.
+  // Appearance is never in this menu: it lives in Settings (the rail on wide
+  // screens, a card on the General page on narrow ones).
   minimal?: boolean;
 } = {}) {
   const { user, logout, switchMode } = useAuth();
@@ -124,20 +126,6 @@ export default function ProfileMenu({
             >
               <span className="profile-dropdown-icon">🔌</span>
               <span className="profile-dropdown-label">Integrations</span>
-            </button>
-          )}
-
-          {!minimal && (
-            <button
-              className="profile-dropdown-item"
-              title="Appearance"
-              onClick={() => {
-                setMenuOpen(false);
-                void navigate("/appearance");
-              }}
-            >
-              <span className="profile-dropdown-icon">🎨</span>
-              <span className="profile-dropdown-label">Appearance</span>
             </button>
           )}
 
