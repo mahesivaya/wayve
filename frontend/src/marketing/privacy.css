@@ -1,0 +1,126 @@
+/* Long-form legal page (Privacy Policy). Sits inside MarketingShell, so it
+   reads the public site's --hx-* tokens and tracks light/dark with it. */
+
+.legal-page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 48px 20px 24px;
+  color: var(--hx-ink);
+  font-size: 16px;
+  line-height: 1.7;
+  /* The marketing wrapper centres its text; legal copy reads left-aligned. */
+  text-align: left;
+}
+
+.legal-head {
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--hx-border);
+}
+
+.legal-eyebrow {
+  margin: 0 0 8px;
+  color: var(--hx-muted);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.legal-head h1 {
+  margin: 0;
+  font-size: clamp(32px, 6vw, 44px);
+  line-height: 1.15;
+}
+
+.legal-meta {
+  margin: 8px 0 0;
+  color: var(--hx-muted);
+}
+
+.legal-section {
+  margin-top: 36px;
+}
+
+.legal-section h2 {
+  margin: 0 0 12px;
+  font-size: 22px;
+  line-height: 1.3;
+}
+
+.legal-page p,
+.legal-page ul {
+  margin: 0 0 14px;
+}
+
+.legal-page ul {
+  padding-left: 22px;
+}
+
+.legal-page li {
+  margin-bottom: 8px;
+}
+
+.legal-page a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.legal-page code {
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+/* The verbatim Limited Use statement Google's reviewers look for. */
+.legal-callout {
+  padding: 16px 18px;
+  border: 1px solid var(--hx-border);
+  border-left-width: 4px;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+/* Scrolls on its own on narrow screens rather than widening the page. */
+.legal-table-wrap {
+  margin: 0 0 14px;
+  overflow-x: auto;
+}
+
+.legal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.legal-table th,
+.legal-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--hx-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.legal-table th {
+  color: var(--hx-muted);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.legal-table td:first-child {
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .legal-page {
+    padding-top: 32px;
+    font-size: 15px;
+  }
+
+  .legal-table td:first-child {
+    white-space: normal;
+  }
+}

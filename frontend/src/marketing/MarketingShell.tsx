@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BRAND_NAME } from "../config/brand";
 import BrandLogo from "../components/BrandLogo";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import "../home/home.css";
 import "./marketing.css";
@@ -142,6 +142,9 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
       <footer className="marketing-footer">
         <p className="marketing-footer-legal">
           © {new Date().getFullYear()} {BRAND_NAME}. All rights reserved.
+          <Link to="/privacy" className="legal-footer-link">
+            Privacy Policy
+          </Link>
         </p>
       </footer>
     </div>

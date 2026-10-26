@@ -2,7 +2,7 @@ import { useAuth } from "../auth/useAuth";
 import { HEADER_NAME } from "../config/brand";
 import BrandLogo from "../components/BrandLogo";
 import { BrandIcon } from "../integrations/BrandIcon";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import HeroMock from "./HeroMock";
 import DownloadApp from "./DownloadApp";
@@ -345,6 +345,9 @@ export default function Home() {
         <footer className="public-home-footer">
           <p className="public-home-footer-legal">
             © {HEADER_NAME} {new Date().getFullYear()}
+            <Link to="/privacy" className="legal-footer-link">
+              Privacy Policy
+            </Link>
           </p>
         </footer>
       </div>
