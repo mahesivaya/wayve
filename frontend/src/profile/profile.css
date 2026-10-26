@@ -817,6 +817,46 @@
   outline-offset: 1px;
 }
 
+/* Appearance card: Light / Dark / Custom as one segmented row; the active
+   theme is outlined in the primary colour. */
+.settings-theme-modes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-theme-mode {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.settings-theme-mode:hover {
+  background: var(--color-surface-hover);
+}
+
+.settings-theme-mode.active {
+  border-color: var(--color-primary-action);
+  background: var(--color-primary-soft);
+}
+
+.settings-theme-mode:focus-visible {
+  outline: 2px solid var(--color-primary-panel-border);
+  outline-offset: 1px;
+}
+
 /* ================= NARROW SCREENS =================
    At 768px and below (the breakpoint useIsNarrow shares with SettingsShell)
    the page sits beside the 56px icon rail, so the desktop 32px page gutter and

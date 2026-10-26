@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { BW_DARK_INPUT, BW_LIGHT_INPUT, isBwInput } from "./blackAndWhite";
 import ColorGrid from "./ColorGrid";
 import TickSlider from "./TickSlider";
 import {
@@ -133,32 +134,6 @@ const BACKGROUNDS: {
     input: { ...DEFAULT_INPUT, hue: 350, chroma: 0.12 },
   },
 ];
-
-// Inputs for the Contrast button's monochrome toggle. `chroma: 0` makes
-// generatePalette emit a fully greyscale palette; `saturation: 0` is what lets
-// isBwInput distinguish these from the colored swatches (saturation 1) —
-// including the chroma-0 "Ink" swatch.
-const BW_LIGHT_INPUT: PaletteInput = {
-  hue: 0,
-  chroma: 0,
-  saturation: 0,
-  contrast: 1,
-  // Positive depth is required for a clean white: at depth 0 the surfaces land
-  // at oklch 96%, which reads as flat gray. Depth only touches surfaces, so
-  // text and border contrast are unaffected.
-  depth: 0.04,
-};
-const BW_DARK_INPUT: PaletteInput = {
-  hue: 0,
-  chroma: 0,
-  saturation: 0,
-  contrast: 1,
-  depth: 0.05,
-};
-
-function isBwInput(input: PaletteInput): boolean {
-  return input.chroma === 0 && input.saturation === 0;
-}
 
 function RowSwatch({ input, mode }: { input: PaletteInput; mode: ThemeMode }) {
   const tokens = useMemo(() => generatePalette(input, mode), [input, mode]);

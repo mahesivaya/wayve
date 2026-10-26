@@ -31,6 +31,7 @@ import SupportTicketView from "../support/SupportTicketView";
 import { fmtDate, fmtShortDate } from "../utils/datetime";
 import { isDesktopApp } from "../utils/desktop";
 import SettingsShell from "./SettingsShell";
+import AppearanceCard from "./AppearanceCard";
 import { useIsNarrow } from "../components/useIsNarrow";
 import {
   desktopNotificationsEnabled,
@@ -461,6 +462,10 @@ export default function Settings({
             </div>
           </section>
         )}
+
+        {/* Narrow screens have no settings rail, so Appearance is reached from
+          here rather than from the profile menu. */}
+        {showGeneral && narrow && <AppearanceCard />}
 
         {showGeneral && (
           <>
