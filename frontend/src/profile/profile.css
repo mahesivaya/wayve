@@ -816,3 +816,31 @@
   outline: 2px solid var(--color-primary-panel-border);
   outline-offset: 1px;
 }
+
+/* ================= NARROW SCREENS =================
+   At 768px and below (the breakpoint useIsNarrow shares with SettingsShell)
+   the page sits beside the 56px icon rail, so the desktop 32px page gutter and
+   24px card padding leave a phone under 200px for content. Tighten both. */
+@media (max-width: 768px) {
+  .settings-page {
+    padding: 16px;
+  }
+
+  .settings-card {
+    padding: 16px;
+  }
+
+  /* A row keeps its label and control side by side while they fit, and drops
+     the control onto its own line when they don't — so a short toggle stays
+     inline but a select no longer squeezes its label into a narrow column. */
+  .settings-usage-row {
+    flex-wrap: wrap;
+    column-gap: 12px;
+    row-gap: 6px;
+  }
+
+  .settings-usage-row > :first-child {
+    flex: 1 1 160px;
+    min-width: 0;
+  }
+}
