@@ -94,6 +94,7 @@ const PlatformUserLogs = lazy(() => import("./platformTeam/PlatformUserLogs"));
 const PlatformVisitors = lazy(() => import("./platformTeam/PlatformVisitors"));
 const Pricing = lazy(() => import("./pricing/Pricing"));
 const Support = lazy(() => import("./marketing/Support"));
+const Privacy = lazy(() => import("./marketing/Privacy"));
 const BookDemo = lazy(() => import("./marketing/BookDemo"));
 const Developers = lazy(() => import("./marketing/Developers"));
 const Quotas = lazy(() => import("./marketing/Quotas"));
@@ -209,6 +210,9 @@ export default function App() {
             }
           />
           <Route path="/support" element={<Support />} />
+          {/* Public, for signed-in and signed-out visitors alike: Google's OAuth
+            verification links to it and requires the home page to as well. */}
+          <Route path="/privacy" element={<Privacy />} />
           <Route path="/book-demo" element={<BookDemo />} />
           {/* The whole /docs/* tree is public, so anyone can browse the API
             contract. Legacy paths (/developers, /developers/quotas,

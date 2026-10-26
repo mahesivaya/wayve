@@ -799,6 +799,15 @@
   text-align: center;
 }
 
+/* Privacy Policy link in the home and marketing footers. Google's OAuth
+   verification requires the home page to link to it. */
+.legal-footer-link {
+  margin-left: 16px;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* Legacy .dashboard-*, .card chrome (topbar/brand/header/grid/logout-btn)
    removed — they were styles for the previous signed-in Home layout, which
    has been replaced by the ActivityDashboard component. The dashboard's
