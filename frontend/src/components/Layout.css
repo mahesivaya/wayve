@@ -1133,7 +1133,13 @@
    Icon-only rail; labels and section headings are visually hidden but
    remain in the DOM for screen readers + native tooltips on hover.
 ============================== */
+/* Border-box so the rail is 56px in total. With the default content-box the
+   8px side padding and 1px border were added on top, making it 73px — 17px of
+   empty space around 22px icons, taken straight from the page. The expanded
+   sidebar stays content-box: the header's collapse toggle is placed against
+   its edge (see .header-collapse-btn). */
 .sidebar.collapsed {
+  box-sizing: border-box;
   width: 56px;
 }
 
@@ -1859,10 +1865,17 @@
   .sidebar {
     --rail-width: 56px;
     --rail-expanded-width: 200px;
+    /* Both states border-box, so the expanded rail's footprint (width plus the
+       negative margin) equals the collapsed rail's width exactly. */
+    box-sizing: border-box;
     /* Width and margin move together, so the content never shifts. */
     transition:
       width 0.25s ease,
       margin-right 0.25s ease;
+  }
+
+  .sidebar.collapsed {
+    width: var(--rail-width);
   }
 
   .sidebar.open {
@@ -1919,8 +1932,13 @@
     font-size: var(--text-lg);
   }
 
+  /* Phones: a 48px rail, with the side padding halved so the 22px icons keep
+     the same tap width (39px) they have in the 56px rail. */
   .sidebar {
+    --rail-width: 48px;
     --rail-expanded-width: min(260px, 80vw);
+    padding-left: 4px;
+    padding-right: 4px;
   }
 }
 
