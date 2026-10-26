@@ -114,7 +114,14 @@ fi
 # container start. `up -d` doesn't recreate it on template
 # changes, so force-recreate every deploy. ~2s nginx restart, no data loss.
 echo "    Force-recreating nginx so envsubst picks up template changes..."
-compose up -d --force-recreate --no-deps nginx
+# `--no-build`: the image was built above; without it `pull_policy: build`
+# would rebuild it (from cache, to the same image) on every recreate.
+compose up -d --force-recreate --no-deps --no-build nginx
+
+# Each deploy's uncached nginx build leaves the previous image untagged.
+# Dangling images only: previous ECR tags stay, so a rollback can reuse them.
+echo "    Removing dangling images..."
+docker image prune -f
 
 echo "    Services:"
 compose ps
