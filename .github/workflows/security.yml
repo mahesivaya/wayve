@@ -259,6 +259,11 @@ jobs:
           - name: frontend
             context: frontend
             dockerfile: frontend/Dockerfile.prod
+          # The edge proxy that terminates public TLS in prod (built on the
+          # box by scripts/deploy.sh, so not part of build-images.yml).
+          - name: edge
+            context: infra/nginx
+            dockerfile: infra/nginx/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -296,7 +301,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: [backend, frontend]
+        name: [backend, frontend, edge]
     steps:
       - uses: actions/checkout@v4
 
