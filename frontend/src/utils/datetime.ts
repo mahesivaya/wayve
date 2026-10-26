@@ -78,18 +78,18 @@ export function fmtTime(
   }).format(d);
 }
 
-// Inbox-row timestamp: show the time (e.g. "7:48 PM") for messages within
-// the last 24 hours, and a short date for anything older (e.g. "Jun 3", or
-// "Jun 3, 2024" when the year differs from now). Mirrors how mail clients
-// keep recent rows precise while older rows stay compact.
+// Inbox-row timestamp: show the time (e.g. "7:48 PM") for messages from today,
+// and a short date for anything earlier (e.g. "Jun 3", or "Jun 3, 2024" when
+// the year differs from now). "Today" is the viewer's local calendar day, as
+// in Gmail — not the last 24 hours, which kept yesterday evening's mail on
+// clock times and made the list disagree with Gmail's for the same messages.
 export function fmtListTimestamp(
   input: string | number | Date | null | undefined
 ): string {
   const d = toDate(input);
   if (!d) return FALLBACK;
   const now = new Date();
-  const withinDay = now.getTime() - d.getTime() < 24 * 60 * 60 * 1000;
-  if (withinDay) {
+  if (d.toDateString() === now.toDateString()) {
     return new Intl.DateTimeFormat(undefined, {
       hour: "numeric",
       minute: "2-digit",
