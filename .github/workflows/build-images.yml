@@ -104,6 +104,11 @@ jobs:
           # (potentially stale). Starting a fresh scope forces one clean rebuild.
           cache-from: type=gha,scope=${{ matrix.name }}-v2
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}-v2
+          # Never replay the final `runtime` stage from cache: its
+          # `apk upgrade` / `apt-get upgrade` must fetch today's OS patches,
+          # not the ones from whenever the layer was first cached. Builder
+          # stages stay cached, so this costs only a few seconds.
+          no-cache-filters: runtime
 
 # -----------------------------------------------------------------------------
 # ONE-TIME AWS SETUP (run once, then this workflow just works)

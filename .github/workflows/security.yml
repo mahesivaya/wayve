@@ -275,6 +275,9 @@ jobs:
           outputs: type=docker,dest=/tmp/rwayve-${{ matrix.name }}.tar
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,scope=${{ matrix.name }},mode=max
+          # Rebuild the final stage every time so Trivy scans freshly
+          # upgraded OS packages, not a stale cached upgrade layer.
+          no-cache-filters: runtime
 
       - name: Upload image tarball
         uses: actions/upload-artifact@v4

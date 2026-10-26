@@ -138,7 +138,11 @@ services:
     restart: always
 
   nginx:
-    image: nginx:1.27-alpine
+    # The 1.27 line is end-of-life: its last image froze at Alpine 3.21.3 /
+    # OpenSSL 3.3.3, on the container that terminates public TLS. Track the
+    # maintained 1.29 line (the frontend image's base); `scripts/deploy.sh`
+    # runs `compose pull`, so each deploy picks up the newest 1.29 rebuild.
+    image: nginx:1.29-alpine
     container_name: rwayve_nginx_prod
     restart: always
     depends_on:
