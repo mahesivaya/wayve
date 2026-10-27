@@ -13,6 +13,8 @@
   display: flex;
   align-items: center;
   gap: 14px;
+  /* Breathing room so the heading doesn't sit flush against the panel top. */
+  padding-top: 12px;
   margin-bottom: 10px;
 }
 
