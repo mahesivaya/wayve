@@ -29,7 +29,7 @@ fn encrypt_subject_for_storage(subject: &str) -> (String, String) {
     }
 }
 
-fn read_subject(row: &PgRow) -> Option<String> {
+pub(crate) fn read_subject(row: &PgRow) -> Option<String> {
     let enc: Option<String> = row.try_get("subject_encrypted").ok().flatten();
     let iv: Option<String> = row.try_get("subject_iv").ok().flatten();
     if let (Some(e), Some(i)) = (enc.as_deref(), iv.as_deref())

@@ -17,6 +17,7 @@ use tracing::{instrument, warn};
 use wayve_security::encryption::decrypt;
 use wayve_security::rbac::{Permission, require_org_access};
 
+use crate::email::repo::read_subject;
 use crate::organization::keys::{ensure_target_member, write_impersonation_audit};
 
 /// Undo the at-rest server-AES layer on a chat row, yielding either a
@@ -54,8 +55,8 @@ pub async fn list_member_emails(
     // The target owns an email either through their mailbox account or as the
     // recipient of a Wayve-internal message, so both sources must be unioned.
     let rows = sqlx::query(
-        "SELECT e.id, e.subject, e.sender, e.receiver, e.body_encrypted, e.body_iv,
-                e.created_at, COALESCE(e.source, 'imap') AS source
+        "SELECT e.id, e.subject, e.subject_iv, e.subject_encrypted, e.sender, e.receiver,
+                e.body_encrypted, e.body_iv, e.created_at, COALESCE(e.source, 'imap') AS source
          FROM emails e
          LEFT JOIN email_accounts a ON a.id = e.account_id
          WHERE a.user_id = $1 OR e.recipient_user_id = $1
@@ -82,7 +83,9 @@ pub async fn list_member_emails(
         .map(|row| {
             serde_json::json!({
                 "id": row.try_get::<i32, _>("id").unwrap_or_default(),
-                "subject": row.try_get::<Option<String>, _>("subject").ok().flatten(),
+                // Subjects are server-AES at rest and the plaintext column is
+                // NULLed by the backfill, so decrypt like the inbox does.
+                "subject": read_subject(&row),
                 "sender": row.try_get::<Option<String>, _>("sender").ok().flatten(),
                 "receiver": row.try_get::<Option<String>, _>("receiver").ok().flatten(),
                 "body_encrypted": row.try_get::<Option<String>, _>("body_encrypted").ok().flatten(),
