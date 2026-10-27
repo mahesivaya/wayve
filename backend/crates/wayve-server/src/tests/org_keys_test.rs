@@ -3,6 +3,7 @@
 // code the bootstrap, escrow and reset paths owe each class of caller.
 #[cfg(test)]
 mod tests {
+    use crate::organization::impersonate::list_member_emails;
     use crate::organization::keys::{
         add_key_holder_wrap, bootstrap_keys, get_keys, get_member_escrow, list_member_notes,
         read_audit_log, reset_member_password,
@@ -558,6 +559,67 @@ mod tests {
         assert_eq!(res.status(), StatusCode::FORBIDDEN);
 
         cleanup(&pool, &[caller_id], &[org_id]).await;
+    }
+
+    /// The admin email list decrypts the at-rest subject. The startup backfill
+    /// NULLs the plaintext `subject` column, so reading only that column would
+    /// render every row as "(no subject)".
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn list_member_emails_decrypts_subject() {
+        // SAFETY: env mutation is serialized by #[serial]; CI runs --test-threads=1.
+        unsafe {
+            std::env::set_var(
+                "AES_KEY",
+                "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+            )
+        };
+        let pool = test_pool().await;
+        let org_id = insert_org(&pool, &format!("OrgKeyListEmails-{}", random_email())).await;
+        let owner_email = random_email();
+        let owner_id = insert_local_user(&pool, &owner_email, "pw").await;
+        place_in_org(&pool, owner_id, org_id, "owner").await;
+
+        let member_email = random_email();
+        let member_id = insert_local_user(&pool, &member_email, "pw").await;
+        place_in_org(&pool, member_id, org_id, "member").await;
+
+        let (iv, ct) = wayve_security::encryption::encrypt("Quarterly numbers")
+            .unwrap_or_else(|e| panic!("encrypt subject: {e}"));
+        sqlx::query(
+            "INSERT INTO emails (gmail_id, subject, subject_iv, subject_encrypted,
+                                 source, recipient_user_id)
+             VALUES ($1, NULL, $2, $3, 'wayve', $4)",
+        )
+        .bind(format!("wayve:test:{member_id}"))
+        .bind(&iv)
+        .bind(&ct)
+        .bind(member_id)
+        .execute(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("seed email: {e}"));
+
+        let token = jwt_for(owner_id, &owner_email);
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(web::scope("/api").service(list_member_emails)),
+        )
+        .await;
+
+        let req = actix_test::TestRequest::get()
+            .uri(&format!(
+                "/api/organizations/{}/members/{}/emails",
+                org_id, member_id
+            ))
+            .insert_header(("Authorization", format!("Bearer {token}")))
+            .to_request();
+        let res = actix_test::call_service(&app, req).await;
+        assert_eq!(res.status(), StatusCode::OK);
+        let body: serde_json::Value = actix_test::read_body_json(res).await;
+        assert_eq!(body[0]["subject"], "Quarterly numbers");
+
+        cleanup(&pool, &[owner_id, member_id], &[org_id]).await;
     }
 
     // Holds imports reserved for follow-up tests so they do not trip the
