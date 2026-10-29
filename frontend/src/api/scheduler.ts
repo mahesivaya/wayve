@@ -57,7 +57,12 @@ export const updateMeetingApi = async (id: number, data: MeetingPayload) => {
 };
 
 export const createMeetingLinkApi = async (): Promise<{ join_url: string }> => {
-  const res = await apiFetch("/api/meetings/link", { method: "POST" });
+  // 503 means Zoom isn't configured on this server: hand it back instead of
+  // throwing, so the scheduler shows "not set up" rather than "try again".
+  const res = await apiFetch("/api/meetings/link", {
+    method: "POST",
+    preserve503: true,
+  });
   if (!res.ok)
     throw new Error(res.status === 503 ? "not_configured" : "failed");
   return res.json();

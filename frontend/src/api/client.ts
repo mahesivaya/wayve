@@ -29,10 +29,12 @@ type ApiOptions = RequestInit & {
   // Return the Response instead of throwing, so the caller can branch on the
   // status. Each covers a case where the status is a meaningful answer rather
   // than an error: 404 = "no recovery key on file yet", 410 = expired
-  // secure-message token, 403 = login rejected pending email verification.
+  // secure-message token, 403 = login rejected pending email verification,
+  // 503 = an optional integration (e.g. Zoom) is not configured on the server.
   preserve404?: boolean;
   preserve410?: boolean;
   preserve403?: boolean;
+  preserve503?: boolean;
 
   // Opt-in short-TTL cache for GET responses, in milliseconds. Off by default.
   // Any non-GET request clears the whole GET cache, so callers never see data
@@ -67,6 +69,7 @@ export async function apiFetch(path: string, options: ApiOptions = {}) {
     preserve404 = false,
     preserve410 = false,
     preserve403 = false,
+    preserve503 = false,
     cacheTtlMs,
     headers,
     ...rest
@@ -155,7 +158,8 @@ export async function apiFetch(path: string, options: ApiOptions = {}) {
     if (
       (response.status === 404 && preserve404) ||
       (response.status === 410 && preserve410) ||
-      (response.status === 403 && preserve403)
+      (response.status === 403 && preserve403) ||
+      (response.status === 503 && preserve503)
     ) {
       return response;
     }
