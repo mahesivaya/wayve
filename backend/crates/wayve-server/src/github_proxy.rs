@@ -8,13 +8,17 @@
 
 use crate::cache::TtlCache;
 use crate::email::oauth::HTTP_CLIENT;
-use actix_web::{HttpRequest, HttpResponse, Responder, get, post, put, web};
+use actix_web::{HttpMessage, HttpRequest, HttpResponse, Responder, get, post, put, web};
 use once_cell::sync::Lazy;
 use sqlx::PgPool;
 use std::time::Duration;
 use tracing::{info, instrument, warn};
+use wayve_security::api_key::ApiKeyPrincipal;
+use wayve_security::embed::middleware::EmbedPrincipal;
 use wayve_security::jwt::get_user_id_from_request;
-use wayve_security::rbac::{Role, Scope, resolve_role_context_moded};
+use wayve_security::rbac::{
+    Role, RoleContext, Scope, resolve_role_context, resolve_role_context_moded,
+};
 
 const CACHE_TTL_SECS: u64 = 60;
 const CACHE_MAX: u64 = 1_000;
@@ -298,6 +302,37 @@ fn is_project_admin(role: Role) -> bool {
     matches!(role, Role::Owner | Role::SuperAdmin | Role::Admin)
 }
 
+/// The role the Code Repo gates judge a platform or organization caller by. A
+/// caller who is a member in this session mode AND an owner, super_admin or
+/// admin of the same scope in the DB keeps that real role, so they reach the
+/// repos in either mode without a per-repo grant; everyone else is judged by the
+/// mode-downscoped role in `ctx`. Interactive sessions only: an API-key or embed
+/// principal stays downscoped, as `mode_from_request` intends. Approving and
+/// merging are not covered: `require_pr_owner` still wants an owner in admin mode.
+async fn code_repo_role(
+    req: &HttpRequest,
+    pool: &PgPool,
+    ctx: &RoleContext,
+) -> Result<Role, sqlx::Error> {
+    let programmatic = {
+        let ext = req.extensions();
+        ext.get::<ApiKeyPrincipal>().is_some() || ext.get::<EmbedPrincipal>().is_some()
+    };
+    if programmatic || ctx.scope == Scope::Personal || is_project_admin(ctx.role) {
+        return Ok(ctx.role);
+    }
+    let db_ctx = resolve_role_context(pool, ctx.user_id).await?;
+    if ctx.role == Role::Member
+        && db_ctx.scope == ctx.scope
+        && db_ctx.organization_id == ctx.organization_id
+        && is_project_admin(db_ctx.role)
+    {
+        Ok(db_ctx.role)
+    } else {
+        Ok(ctx.role)
+    }
+}
+
 /// Whether `user_id` has been granted `owner/repo` in `member_project_access`.
 /// Case-insensitive, as GitHub owner/repo names are, matching the link allowlists.
 async fn member_has_repo_grant(pool: &PgPool, user_id: i32, owner: &str, repo: &str) -> bool {
@@ -345,17 +380,26 @@ async fn authorize_github_access(
 
     match ctx.scope {
         Scope::Platform => {
+            // Platform admins are judged by their real role in either session mode.
+            let role = match code_repo_role(req, pool, &ctx).await {
+                Ok(role) => role,
+                Err(e) => {
+                    warn!(target: "auth", user_id, error = ?e,
+                          "github proxy: platform admin role lookup failed");
+                    return Err(HttpResponse::InternalServerError().finish());
+                }
+            };
             // The platform owner can disable the Code Repo viewer per role.
             match crate::feature_access::handler::is_allowed_platform(
                 pool,
                 "code_repo",
-                ctx.role.as_str(),
+                role.as_str(),
             )
             .await
             {
                 Ok(true) => {}
                 Ok(false) => {
-                    warn!(target: "auth", user_id, role = ctx.role.as_str(),
+                    warn!(target: "auth", user_id, role = role.as_str(),
                           "github proxy denied: code_repo disabled for platform role");
                     return Err(HttpResponse::Forbidden().json(serde_json::json!({
                         "message": "Your role doesn't have access to Code Repo"
@@ -369,11 +413,11 @@ async fn authorize_github_access(
             }
             // Restricted roles reach only granted repos. Repo tails only, so
             // `/user/repos` and other lists are unaffected.
-            if !is_project_admin(ctx.role)
+            if !is_project_admin(role)
                 && let Some((owner, repo)) = parse_repos_tail(tail)
                 && !member_has_repo_grant(pool, user_id, &owner, &repo).await
             {
-                warn!(target: "auth", user_id, role = ctx.role.as_str(), owner = %owner, repo = %repo,
+                warn!(target: "auth", user_id, role = role.as_str(), owner = %owner, repo = %repo,
                       "github proxy denied: repo not granted to platform member");
                 return Err(HttpResponse::Forbidden().json(serde_json::json!({
                     "message": "You don't have access to this project"
@@ -409,19 +453,28 @@ async fn authorize_github_access(
             let Some(org_id) = ctx.organization_id else {
                 return Err(HttpResponse::Forbidden().finish());
             };
+            // Org admins are judged by their real role in either session mode.
+            let role = match code_repo_role(req, pool, &ctx).await {
+                Ok(role) => role,
+                Err(e) => {
+                    warn!(target: "auth", user_id, error = ?e,
+                          "github proxy: org admin role lookup failed");
+                    return Err(HttpResponse::InternalServerError().finish());
+                }
+            };
             // The org owner can disable the Code Repo viewer per role, separately
             // from the per-repo allowlist below.
             match crate::feature_access::handler::is_allowed(
                 pool,
                 org_id,
                 "code_repo",
-                ctx.role.as_str(),
+                role.as_str(),
             )
             .await
             {
                 Ok(true) => {}
                 Ok(false) => {
-                    warn!(target: "auth", user_id, role = ctx.role.as_str(),
+                    warn!(target: "auth", user_id, role = role.as_str(),
                           "github proxy denied: code_repo disabled for role");
                     return Err(HttpResponse::Forbidden().json(serde_json::json!({
                         "message": "Your role doesn't have access to Code Repo"
@@ -457,10 +510,9 @@ async fn authorize_github_access(
                 })));
             }
             // Restricted org roles only reach granted repos.
-            if !is_project_admin(ctx.role)
-                && !member_has_repo_grant(pool, user_id, &owner, &repo).await
+            if !is_project_admin(role) && !member_has_repo_grant(pool, user_id, &owner, &repo).await
             {
-                warn!(target: "auth", user_id, role = ctx.role.as_str(), owner = %owner, repo = %repo,
+                warn!(target: "auth", user_id, role = role.as_str(), owner = %owner, repo = %repo,
                       "github proxy denied: repo not granted to org member");
                 return Err(HttpResponse::Forbidden().json(serde_json::json!({
                     "message": "You don't have access to this project"
@@ -1174,7 +1226,10 @@ pub async fn visible_projects(req: HttpRequest, pool: web::Data<PgPool>) -> Http
 
     let unrestricted = match ctx.as_ref() {
         Some(c) => match c.scope {
-            Scope::Platform | Scope::Organization => is_project_admin(c.role),
+            // Same rule as the proxy gate, so the list and the 403 agree.
+            Scope::Platform | Scope::Organization => code_repo_role(&req, pool.get_ref(), c)
+                .await
+                .is_ok_and(is_project_admin),
             // Connected personal accounts are not managed by this feature.
             Scope::Personal => true,
         },

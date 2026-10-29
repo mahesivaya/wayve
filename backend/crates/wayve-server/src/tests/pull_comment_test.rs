@@ -2,7 +2,7 @@
 // a mocked GitHub (wiremock via GITHUB_API_BASE). The comment goes to the PR's
 // issue comments; the cached conversation is dropped so the page's refetch
 // shows it; an empty body is refused; a platform owner outside admin mode is a
-// member, which platform Code Repo doesn't admit by default, so can't post. And
+// member AND an owner in the DB, so the repo gate still admits them. And
 // an org member who has access to the repo (Code Repo enabled for members plus
 // a repo grant) can read and comment on PRs but not approve them.
 #[cfg(test)]
@@ -124,19 +124,11 @@ mod tests {
             actix_test::call_service(&app, post(&admin, serde_json::json!({ "body": "  " }))).await;
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 
-        // Outside admin mode the owner is a member; platform Code Repo doesn't
-        // admit members by default, so the repo gate refuses.
+        // Outside admin mode the owner is a member, but still an owner in the
+        // DB, so the repo gate admits them and the comment posts, trimmed.
         let res = actix_test::call_service(
             &app,
-            post(&normal, serde_json::json!({ "body": "Looks good" })),
-        )
-        .await;
-        assert_eq!(res.status(), StatusCode::FORBIDDEN);
-
-        // In admin mode the comment posts, trimmed.
-        let res = actix_test::call_service(
-            &app,
-            post(&admin, serde_json::json!({ "body": "  Looks good \n" })),
+            post(&normal, serde_json::json!({ "body": "  Looks good \n" })),
         )
         .await;
         assert_eq!(res.status(), StatusCode::CREATED);
