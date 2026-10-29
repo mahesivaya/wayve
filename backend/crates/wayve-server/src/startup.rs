@@ -1075,6 +1075,14 @@ pub async fn connect_db_and_migrate(role: RuntimeRole) -> PgPool {
         }
     }
 
+    // Undo the old open-an-email downgrade: bodies stored server-readable though
+    // their owner has a key are re-wrapped to that key. Re-runs find nothing left.
+    match email::body_worker::reseal_server_aes_bodies(&pool).await {
+        Ok(0) => {}
+        Ok(n) => info!(target: "startup", resealed = n, "re-sealed server-readable email bodies"),
+        Err(e) => warn!(target: "startup", error = ?e, "email body reseal failed"),
+    }
+
     // Seed the compose-typeahead contacts projection from existing mail. Gated on
     // an empty table, so this is a one-time cost on the first startup after the
     // projection ships; the sync path maintains it thereafter.

@@ -52,7 +52,9 @@ const sortTime = (email: EmailItem) =>
 const listOrder =
   (folder: EmailFolder) =>
   (a: EmailItem, b: EmailItem): number =>
-    folder === "snoozed" ? sortTime(a) - sortTime(b) : sortTime(b) - sortTime(a);
+    folder === "snoozed"
+      ? sortTime(a) - sortTime(b)
+      : sortTime(b) - sortTime(a);
 
 // Folders that hide snoozed mail (repo::folder_snooze); elsewhere a snoozed
 // row stays listed.
@@ -369,6 +371,24 @@ export function useEmailInbox(
     }
   };
 
+  // The decrypted body that /emails/{id} left empty. A mailbox body sealed to
+  // this user's key normally decrypts here; one sealed to a key this browser
+  // lacks (set up on another device) falls back to a live provider fetch,
+  // which the server re-seals to the current key without storing it readable.
+  const loadBody = async (id: number): Promise<string> => {
+    const { body } = await getEmailBody(id);
+    try {
+      return await decryptWayveBodyIfNeeded(body || "", user_id);
+    } catch (err) {
+      logger.warn("Sealed body did not decrypt; refetching live", {
+        emailId: id,
+        err,
+      });
+      const live = await getEmailBody(id, { live: true });
+      return decryptWayveBodyIfNeeded(live.body || "", user_id);
+    }
+  };
+
   // One message with its decrypted body and attachments, for expanding an
   // earlier message of a conversation. Same steps and cache as openEmail.
   const fetchMessage = async (email: EmailItem): Promise<EmailItem> => {
@@ -376,7 +396,9 @@ export function useEmailInbox(
     if (cached?.body !== undefined && cached.body !== null) return cached;
     const data = await getEmail<EmailItem>(email.id);
     const base = { ...email, ...data };
-    const body = data.body ? data.body : (await getEmailBody(email.id)).body;
+    const body = data.body
+      ? await decryptWayveBodyIfNeeded(data.body, user_id)
+      : await loadBody(email.id);
     let attachments = await getEmailAttachments(email.id);
     if (data.body && !data.attachments_checked) {
       await getEmailBody(email.id);
@@ -384,7 +406,7 @@ export function useEmailInbox(
     }
     const full = {
       ...base,
-      body: await decryptWayveBodyIfNeeded(body || "", user_id),
+      body,
       attachments,
     };
     emailCache.current[email.id] = full;
@@ -465,11 +487,7 @@ export function useEmailInbox(
         if (stillShown()) setSelectedEmail(full);
       } else {
         setSelectedEmail({ ...emailWithListFields, _bodyLoading: true });
-        const { body } = await getEmailBody(email.id);
-        const decryptedBody = await decryptWayveBodyIfNeeded(
-          body || "",
-          user_id
-        );
+        const decryptedBody = await loadBody(email.id);
         const attachments = await getEmailAttachments(email.id);
         const merged = {
           ...emailWithListFields,
@@ -506,7 +524,8 @@ export function useEmailInbox(
     for (const id of ids) delete emailCache.current[id];
     const gone = row ? conversationKey(row) : null;
     const isGone = (email: EmailItem) =>
-      email.id === emailId || (gone !== null && conversationKey(email) === gone);
+      email.id === emailId ||
+      (gone !== null && conversationKey(email) === gone);
     const rows = emails.filter(isGone);
     setEmails((prev) => prev.filter((email) => !isGone(email)));
     setSelectedEmail((cur) => (cur && ids.includes(cur.id) ? null : cur));

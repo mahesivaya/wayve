@@ -3,13 +3,17 @@ use crate::prelude::*;
 use crate::cache::TtlCache;
 use crate::email::account::open_refresh_token;
 use crate::email::attachments::save_email_attachments;
+use crate::email::body_worker::seal_body_for_owner;
 use crate::email::oauth::{HTTP_CLIENT, refresh_access_token, try_load_google_secrets};
 use crate::email::utils::{extract_attachments, extract_body};
 use actix_web::{HttpResponse, get};
 use sqlx::PgPool;
 use tracing::{error, info, instrument, warn};
-use wayve_security::encryption::{decrypt, encrypt};
+use wayve_security::encryption::decrypt;
 use wayve_security::jwt::get_user_id_from_request;
+
+/// Prefix of a body sealed to its owner's public key (see `seal_body_for_owner`).
+const OWNER_SEALED_PREFIX: &str = "WAYVE_SECURE_V1";
 
 const EMAIL_BODY_CACHE_TTL_SECS: u64 = 300;
 const EMAIL_BODY_CACHE_MAX_CAPACITY: u64 = 10_000;
@@ -77,12 +81,20 @@ pub async fn get_email_by_id(
     })))
 }
 
+#[derive(Deserialize)]
+pub struct BodyQuery {
+    /// Refetch from Gmail even when an owner-sealed body is stored.
+    #[serde(default)]
+    live: bool,
+}
+
 #[get("/emails/{id}/body")]
-#[instrument(target = "gmail", skip(req, path, pool))]
+#[instrument(target = "gmail", skip(req, path, pool, query))]
 pub async fn get_email_body(
     req: HttpRequest,
     path: web::Path<i32>,
     pool: web::Data<PgPool>,
+    query: web::Query<BodyQuery>,
 ) -> AppResult {
     let user_id = match get_user_id_from_request(&req) {
         Some(id) => id,
@@ -92,7 +104,9 @@ pub async fn get_email_body(
     let email_id = path.into_inner();
     let cache_key = (user_id, email_id);
 
-    if let Some(body) = EMAIL_BODY_CACHE.get(&cache_key).await {
+    if !query.live
+        && let Some(body) = EMAIL_BODY_CACHE.get(&cache_key).await
+    {
         return Ok(HttpResponse::Ok().json(serde_json::json!({ "body": body })));
     }
 
@@ -159,7 +173,16 @@ pub async fn get_email_body(
     // refetch (an OAuth refresh token invalidated by a client rotation, say)
     // still serves the body instead of a hard 502.
     let mut stored_body: Option<String> = None;
-    if !body_encrypted.is_empty() && !body_iv.is_empty() {
+    if body_iv.is_empty() && body_encrypted.starts_with(OWNER_SEALED_PREFIX) {
+        // Sealed to the owner's public key on arrival: the server cannot read
+        // it, so hand the envelope to the browser to decrypt. `?live=true` is
+        // the browser's fallback when the envelope is sealed to a key it does
+        // not hold (another device's): refetch from Gmail and re-seal below.
+        if attachments_checked.unwrap_or(false) && !query.live {
+            return Ok(HttpResponse::Ok().json(serde_json::json!({ "body": body_encrypted })));
+        }
+        stored_body = Some(body_encrypted.clone());
+    } else if !body_encrypted.is_empty() && !body_iv.is_empty() {
         match decrypt(&body_iv, &body_encrypted) {
             Ok(body) => {
                 if attachments_checked.unwrap_or(false) {
@@ -290,7 +313,7 @@ pub async fn get_email_body(
         .unwrap_or_else(|| res["snippet"].as_str().unwrap_or("").to_string());
     let attachments = extract_attachments(&res["payload"]);
 
-    match encrypt(&body) {
+    match seal_body_for_owner(pool.get_ref(), account_id, email_id, &body).await {
         Ok((iv, encrypted)) => {
             if let Err(e) =
                 sqlx::query(

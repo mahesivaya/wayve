@@ -346,8 +346,12 @@ export const restoreEmail = async (id: number) => {
   });
 };
 
-export const getEmailBody = async (id: number) =>
-  apiFetchJson<{ body?: string }>(`/api/emails/${id}/body`);
+// `live` refetches from the provider even when a sealed body is stored, for a
+// body sealed to a key this browser does not hold.
+export const getEmailBody = async (id: number, opts?: { live?: boolean }) =>
+  apiFetchJson<{ body?: string }>(
+    `/api/emails/${id}/body${opts?.live ? "?live=true" : ""}`
+  );
 
 export const getEmailAttachments = async (emailId: number) =>
   apiFetchJson<EmailAttachment[]>(`/api/emails/${emailId}/attachments`);

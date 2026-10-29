@@ -3,7 +3,7 @@ use crate::prelude::*;
 use crate::email::attachments::save_email_attachments;
 use crate::email::oauth::{HTTP_CLIENT, load_google_secrets, refresh_access_token};
 use crate::email::utils::{AttachmentMeta, extract_attachments, extract_body};
-use wayve_security::encryption::{encrypt, encrypt_to_pubkey};
+use wayve_security::encryption::{decrypt, encrypt, encrypt_to_pubkey};
 
 use serde_json::Value;
 use tokio::time::{Duration, sleep};
@@ -255,12 +255,39 @@ async fn fetch_one(token: &str, account_id: i32, id: i32, gmail_id: &str) -> Res
 
 #[instrument(target = "db", skip(pool, body), fields(email_id = id))]
 async fn update_body(pool: &PgPool, account_id: i32, id: i32, body: &str) -> Result<()> {
-    // Encrypt on arrival, wrapping the body to the owner's RSA public key so the
-    // server never persists a copy it can decrypt. Two cases fall back to the
-    // server-AES at-rest layer: an owner with no public key on file, and an
-    // enterprise-tier owner whose org opts into server-readable encryption. Both
-    // shapes share the `body_encrypted` column, because
-    // frontend/src/emails/bodyUtils.ts sniffs for the WAYVE_SECURE_V1 prefix.
+    let (iv, encrypted) = seal_body_for_owner(pool, account_id, id, body).await?;
+
+    // Deliberately does not stamp `attachments_checked`. Setting it here would
+    // strand an email with the flag set and zero attachment rows whenever
+    // `save_email_attachments` failed, losing the attachments for good. Only
+    // `mark_attachments_checked`, after a successful save, may set it.
+    sqlx::query("UPDATE emails SET body_encrypted = $1, body_iv = $2 WHERE id = $3")
+        .bind(encrypted)
+        .bind(iv)
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
+/// Encrypt a fetched Gmail body for storage as `(body_iv, body_encrypted)`.
+/// Every path that persists a mailbox body must go through this, or the row
+/// ends up server-readable when the owner's mail is meant to be E2E.
+///
+/// The body is wrapped to the owner's RSA public key so the server never
+/// persists a copy it can decrypt; the returned `body_iv` is then empty. Two
+/// cases fall back to the server-AES at-rest layer: an owner with no public key
+/// on file, and an enterprise-tier owner whose org opts into server-readable
+/// encryption. Both shapes share the `body_encrypted` column, because
+/// frontend/src/emails/bodyUtils.ts sniffs for the WAYVE_SECURE_V1 prefix.
+#[instrument(target = "db", skip(pool, body), fields(email_id = id))]
+pub(crate) async fn seal_body_for_owner(
+    pool: &PgPool,
+    account_id: i32,
+    id: i32,
+    body: &str,
+) -> Result<(String, String)> {
     let (public_key_json, owner_is_enterprise): (Option<String>, bool) = sqlx::query_as(
         "SELECT
              u.public_key,
@@ -309,18 +336,76 @@ async fn update_body(pool: &PgPool, account_id: i32, id: i32, body: &str) -> Res
         }
     };
 
-    // Deliberately does not stamp `attachments_checked`. Setting it here would
-    // strand an email with the flag set and zero attachment rows whenever
-    // `save_email_attachments` failed, losing the attachments for good. Only
-    // `mark_attachments_checked`, after a successful save, may set it.
-    sqlx::query("UPDATE emails SET body_encrypted = $1, body_iv = $2 WHERE id = $3")
-        .bind(encrypted)
-        .bind(iv)
-        .bind(id)
-        .execute(pool)
-        .await?;
+    Ok((iv, encrypted))
+}
 
-    Ok(())
+/// Re-wraps mailbox bodies that were stored server-AES although their owner
+/// has a public key, the state the on-demand body fetch used to leave behind
+/// when an owner-sealed email was opened. Runs on every startup; idempotent,
+/// because a re-sealed row has an empty `body_iv` and stops matching. Rows the
+/// seal still routes to server-AES (enterprise orgs, unparseable keys) are
+/// skipped, and the keyset cursor keeps them from being revisited in one run.
+pub async fn reseal_server_aes_bodies(pool: &PgPool) -> Result<u64> {
+    const BATCH: i64 = 200;
+    let mut last_id: i32 = 0;
+    let mut resealed: u64 = 0;
+    loop {
+        let rows = sqlx::query(
+            "SELECT e.id, e.account_id, e.body_iv, e.body_encrypted
+             FROM emails e
+             JOIN email_accounts a ON a.id = e.account_id
+             JOIN users u ON u.id = a.user_id
+             WHERE e.id > $1
+               AND e.body_iv <> '' AND e.body_encrypted <> ''
+               AND COALESCE(e.source, 'imap') <> 'wayve'
+               AND a.provider = 'google'
+               AND u.public_key IS NOT NULL
+             ORDER BY e.id
+             LIMIT $2",
+        )
+        .bind(last_id)
+        .bind(BATCH)
+        .fetch_all(pool)
+        .await?;
+        let Some(last) = rows.last() else {
+            return Ok(resealed);
+        };
+        last_id = last.try_get("id")?;
+        let count = rows.len() as i64;
+
+        for row in rows {
+            let id: i32 = row.try_get("id")?;
+            let account_id: i32 = row.try_get("account_id")?;
+            let old_iv: String = row.try_get("body_iv")?;
+            let old_ct: String = row.try_get("body_encrypted")?;
+            let body = match decrypt(&old_iv, &old_ct) {
+                Ok(body) => body,
+                Err(e) => {
+                    tracing::warn!(target: "worker", email_id = id, error = %e, "reseal: stored body decrypt failed; skipping");
+                    continue;
+                }
+            };
+            let (iv, encrypted) = seal_body_for_owner(pool, account_id, id, &body).await?;
+            if !iv.is_empty() {
+                // Still server-AES by policy; leave the row as it is.
+                continue;
+            }
+            // Guarded on the old iv so a body rewritten meanwhile is not clobbered.
+            let done = sqlx::query(
+                "UPDATE emails SET body_encrypted = $1, body_iv = '' WHERE id = $2 AND body_iv = $3",
+            )
+            .bind(&encrypted)
+            .bind(id)
+            .bind(&old_iv)
+            .execute(pool)
+            .await?;
+            resealed += done.rows_affected();
+        }
+
+        if count < BATCH {
+            return Ok(resealed);
+        }
+    }
 }
 
 /// `users.public_key` holds a JSON byte array, as written by
