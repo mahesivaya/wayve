@@ -6,6 +6,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import HeroMock from "./HeroMock";
 import DownloadApp from "./DownloadApp";
+import PublicThemeToggle from "../components/PublicThemeToggle";
+import { usePublicTheme } from "../theme/usePublicTheme";
 import { reportVisit } from "../api/visits";
 import "./home.css";
 
@@ -16,6 +18,7 @@ const AIChat = lazy(() => import("../aichat/AIChat"));
 export default function Home() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { mode: publicTheme } = usePublicTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement | null>(null);
   const burgerRef = useRef<HTMLButtonElement | null>(null);
@@ -51,7 +54,7 @@ export default function Home() {
 
   if (!user) {
     return (
-      <div className="public-home">
+      <div className="public-home" data-public-theme={publicTheme}>
         <header className="public-home-nav">
           <button className="public-home-brand" onClick={() => navigate("/")}>
             <BrandLogo
@@ -80,6 +83,7 @@ export default function Home() {
             >
               Register
             </button>
+            <PublicThemeToggle />
           </div>
 
           {/* Mobile hamburger — collapses the links + actions at ≤1120px. */}
@@ -107,6 +111,7 @@ export default function Home() {
               >
                 Register
               </button>
+              <PublicThemeToggle labelled />
             </div>
           )}
         </header>

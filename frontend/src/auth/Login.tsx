@@ -14,6 +14,7 @@ import { unwrapAndCacheMemberKeys } from "../orgKeys/memberLogin";
 import { AuthDowngradeError } from "./authKey";
 import { HEADER_NAME } from "../config/brand";
 import "./login.css";
+import { usePublicTheme } from "../theme/usePublicTheme";
 
 // Error codes the backend SSO callback puts in the hash fragment, mapped so the
 // raw code is never shown to the user.
@@ -40,6 +41,7 @@ function parseSsoError(): string {
 }
 
 export default function Login() {
+  const { mode: publicTheme } = usePublicTheme();
   const [params] = useSearchParams();
   // The email-verification screen sends users back here as ?verified=1&email=...
   const verified = params.get("verified") === "1";
@@ -191,7 +193,10 @@ export default function Login() {
   };
 
   return (
-    <div className="login-page login-page--framed">
+    <div
+      className="login-page login-page--framed"
+      data-public-theme={publicTheme}
+    >
       {/* The public marketing header is for the web app; the desktop (Electron)
           shell has no marketing chrome, so hide it there. */}
       {!isDesktopApp() && <PublicHeader showActions={false} />}

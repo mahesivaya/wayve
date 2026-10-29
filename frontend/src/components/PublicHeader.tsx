@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { HEADER_NAME } from "../config/brand";
 import BrandLogo from "./BrandLogo";
+import PublicThemeToggle from "./PublicThemeToggle";
 import "../home/home.css";
 
 // Reusable public marketing header (brand + nav links + optional
 // Login/Register actions + mobile hamburger). Mirrors the landing header in
 // [Home.tsx](../home/Home.tsx) so the public surface feels like one site. Pass
 // `showActions={false}` on pages where the auth buttons are redundant (e.g. the
-// Login/Register pages themselves).
+// Login/Register pages themselves). The light/dark toggle shows either way.
 export default function PublicHeader({
   showActions = true,
 }: {
@@ -50,22 +51,25 @@ export default function PublicHeader({
           <button onClick={() => navigate("/support")}>Support</button>
         </nav>
 
-        {showActions && (
-          <div className="public-home-actions">
-            <button
-              className="home-login-btn"
-              onClick={() => navigate("/login")}
-            >
-              Login
-            </button>
-            <button
-              className="home-register-btn"
-              onClick={() => navigate("/pricing")}
-            >
-              Register
-            </button>
-          </div>
-        )}
+        <div className="public-home-actions">
+          {showActions && (
+            <>
+              <button
+                className="home-login-btn"
+                onClick={() => navigate("/login")}
+              >
+                Login
+              </button>
+              <button
+                className="home-register-btn"
+                onClick={() => navigate("/pricing")}
+              >
+                Register
+              </button>
+            </>
+          )}
+          <PublicThemeToggle />
+        </div>
 
         <button
           type="button"
@@ -95,6 +99,7 @@ export default function PublicHeader({
                 </button>
               </>
             )}
+            <PublicThemeToggle labelled />
           </div>
         )}
       </header>

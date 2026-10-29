@@ -508,3 +508,124 @@
   font-size: 0.9rem;
   line-height: 1.4;
 }
+
+/* ============================================================================
+   DARK (black) — the public light/dark toggle, default dark. Scoped to the
+   page's own `data-public-theme` (see usePublicTheme), never html[data-theme],
+   so it doesn't follow or change the signed-in app's theme.
+   ========================================================================== */
+.login-page[data-public-theme="dark"] {
+  --color-text-primary: #f5f7fa;
+  --color-text-secondary: #c9d1dc;
+  --color-text-generic-mid: #9aa3b2;
+  --color-text-generic-light: #8a93a3;
+  --color-text-generic-dark: #e5e7eb;
+  --color-border: rgba(255, 255, 255, 0.14);
+  --color-border-generic: rgba(255, 255, 255, 0.18);
+  --color-surface: #0d0d0d;
+  --color-surface-generic-pale: #1a1a1a;
+  --color-surface-generic-mid: rgba(255, 255, 255, 0.14);
+  background-color: #000000;
+  background-image:
+    radial-gradient(
+      900px 600px at 50% -8%,
+      rgba(56, 189, 248, 0.08),
+      transparent 60%
+    ),
+    radial-gradient(
+      760px 520px at 100% 112%,
+      rgba(37, 99, 235, 0.07),
+      transparent 55%
+    );
+}
+
+.login-page[data-public-theme="dark"] .login-card {
+  background: #0d0d0d;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #c9d1dc;
+  box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.9);
+}
+
+.login-page[data-public-theme="dark"] .login-card h2 {
+  color: #f5f7fa;
+}
+
+.login-page[data-public-theme="dark"] .subtitle {
+  color: #9aa3b2;
+}
+
+/* Card buttons draw their label in --color-surface, white on the light card;
+   that token is near-black here, so set the label explicitly. Gmail keeps its
+   own colors via the more specific rule below. */
+.login-page[data-public-theme="dark"] .login-card button {
+  color: #ffffff;
+}
+
+.login-page[data-public-theme="dark"] .login-card input {
+  background: #141414;
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #f5f7fa;
+}
+
+.login-page[data-public-theme="dark"] .login-card input::placeholder {
+  color: #7d8594;
+}
+
+.login-page[data-public-theme="dark"] .login-card input:hover {
+  border-color: rgba(96, 165, 250, 0.5);
+}
+
+.login-page[data-public-theme="dark"] .login-card input:focus {
+  border-color: #60a5fa;
+}
+
+.login-page[data-public-theme="dark"] .auth-divider {
+  color: #8a93a3;
+}
+
+.login-page[data-public-theme="dark"] .auth-divider::before,
+.login-page[data-public-theme="dark"] .auth-divider::after {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.login-page[data-public-theme="dark"] .switch-auth {
+  color: #c9d1dc;
+}
+
+.login-page[data-public-theme="dark"] .switch-auth a,
+.login-page[data-public-theme="dark"] .switch-auth span {
+  color: #60a5fa;
+}
+
+.login-page[data-public-theme="dark"] .login-card .google-btn {
+  background: #141414;
+  color: #e5e7eb;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.login-page[data-public-theme="dark"] .login-card .google-btn:hover {
+  background: #1f1f1f;
+}
+
+.login-page[data-public-theme="dark"] .error {
+  color: #f87171;
+}
+
+.login-page[data-public-theme="dark"] .login-card .recovery-mode-fieldset,
+.login-page[data-public-theme="dark"] .login-card .account-kind-fieldset {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.login-page[data-public-theme="dark"] .login-card legend,
+.login-page[data-public-theme="dark"] .login-card .recovery-mode-option,
+.login-page[data-public-theme="dark"] .login-card .account-kind-option,
+.login-page[data-public-theme="dark"] .login-card .recovery-mode-option strong,
+.login-page[data-public-theme="dark"] .login-card .account-kind-option strong {
+  color: #c9d1dc;
+}
+
+.login-page[data-public-theme="dark"] .login-card .recovery-mode-help,
+.login-page[data-public-theme="dark"] .login-card .recovery-mode-option small,
+.login-page[data-public-theme="dark"] .login-card .account-kind-option small {
+  color: #8a93a3;
+}
