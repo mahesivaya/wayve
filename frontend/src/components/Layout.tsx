@@ -2,9 +2,7 @@ import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { HEADER_NAME } from "../config/brand";
 import BrandLogo from "./BrandLogo";
 import { useAuth } from "../auth/useAuth";
-import { hasPermission, canViewIntegrationsNav } from "../auth/permissions";
-import { INTEGRATIONS } from "../integrations/catalog";
-import { useConnectedIntegrations } from "../integrations/useConnectedIntegrations";
+import { hasPermission } from "../auth/permissions";
 import { recordActivity } from "../api/activity";
 import {
   Suspense,
@@ -84,7 +82,6 @@ import {
   InsightsIcon,
   AssistantIcon,
   WorkspaceIcon,
-  IntegrationsIcon,
   PlatformIcon,
   OrganizationIcon,
   MembersIcon,
@@ -189,12 +186,11 @@ function loadPersistedSplit(): PersistedSplit {
 // Section expand state must live at module scope: `/docs*` pages mount their own
 // <Layout> instance (DocsShell), so per-instance state would snap every section
 // shut on navigation there. Not localStorage, so a full reload resets to these
-// defaults: Workspace, Integrations and Teams start expanded, every other
+// defaults: Workspace and Teams start expanded, every other
 // section collapsed. Collapsing a section still sticks for the rest of the
 // session (until a full reload) — these are starting positions, not locks.
 const persistedSidebarSections: Record<string, boolean> = {
   workspace: true,
-  integrations: true,
   teams: true,
 };
 
@@ -247,12 +243,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const chatUnreadCount = useChatUnreadCount(Boolean(user));
   const ticketsOpenCount = useTicketsOpenCount(Boolean(user));
   const userStoriesCount = useUserStoriesCount(Boolean(user));
-  // The Integrations group lists live connections only, so it needs the
-  // server's answer rather than the catalog's per-account visibility rules.
-  // Gated on the same predicate that renders the group, so accounts without it
-  // (personal ones) don't pay for a status call nothing reads.
-  const showIntegrationsNav = canViewIntegrationsNav(user);
-  const connectedIntegrations = useConnectedIntegrations(showIntegrationsNav);
 
   // Activity telemetry: a page view per route change and a click on every
   // button/link. Fire-and-forget; surfaced per-user on the User Audit page.
@@ -1444,72 +1434,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
   const displayTeams = teams.length ? teams : SAMPLE_TEAMS;
 
-  // The Integrations group: the services this account has actually connected
-  // and left enabled, each linking straight to its panel on the Integrations
-  // page. Names, icons and order come from the shared catalog (so the group and
-  // that page can't drift); which rows appear comes from the server's
-  // connection status, not from what the account is merely allowed to connect.
-  //
-  // It sits at the top level (not inside Workspace, which personal accounts
-  // don't get) and starts expanded — the point is seeing what's live at a
-  // glance. Personal accounts are excluded entirely; see the render site below.
-  const activeService =
-    location.pathname === "/integrations"
-      ? new URLSearchParams(location.search).get("service")
-      : null;
-
-  const connectedServices = INTEGRATIONS.filter((s) =>
-    connectedIntegrations.includes(s.key)
-  );
-
-  const integrationsGroup = (
-    <>
-      {renderSectionToggle(
-        "Integrations",
-        sections.isOpen("integrations"),
-        () => sections.toggle("integrations"),
-        undefined,
-        <IntegrationsIcon size={16} />
-      )}
-      {sections.isOpen("integrations") && (
-        <div className="sidebar-subitems">
-          {connectedServices.map((service) => (
-            <Link
-              key={service.key}
-              to={`/integrations?service=${service.key}`}
-              title={service.name}
-              className={`sidebar-project-label sidebar-integration-link${
-                activeService === service.key ? " active" : ""
-              }`}
-              onClick={() => setNavOpen(false)}
-            >
-              <span className="sidebar-integration-icon" aria-hidden="true">
-                {service.icon}
-              </span>
-              <span className="sidebar-integration-name">{service.name}</span>
-            </Link>
-          ))}
-          {/* Nothing connected (or the status call hasn't landed): a way in
-              still beats an empty group. */}
-          {connectedServices.length === 0 && (
-            <Link
-              to="/integrations"
-              title="Connect a service"
-              className={`sidebar-project-label${
-                location.pathname === "/integrations" && !activeService
-                  ? " active"
-                  : ""
-              }`}
-              onClick={() => setNavOpen(false)}
-            >
-              Connect a service
-            </Link>
-          )}
-        </div>
-      )}
-    </>
-  );
-
   const sectionDefs: SidebarSectionDef[] = [
     {
       key: "workspace",
@@ -2061,16 +1985,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               </div>
 
               {sectionDefs.map(renderSection)}
-
-              {/* Its own top-level group, not nested under Workspace, which
-              org/platform accounts alone get. Personal accounts are left out:
-              they connect a mailbox once and rarely revisit, so the group is
-              reached from the profile menu and Settings instead of holding a
-              permanent slot in their sidebar. The route and both menu entries
-              stay open to them — only this nav group is hidden. */}
-              {showIntegrationsNav && (
-                <div className="sidebar-section">{integrationsGroup}</div>
-              )}
 
               <div className="sidebar-spacer" />
 
