@@ -584,6 +584,106 @@ mod tests {
         cleanup(&pool, &[owner_id, admin_id], &[org_id]).await;
     }
 
+    // Real logins start in normal mode, which downscopes every org role to
+    // member. Org admins must still open the org's repos there, with no per-repo
+    // grant; a plain member in the same mode is still refused.
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn org_admin_reads_repo_in_normal_mode_without_grant() {
+        use crate::github_proxy;
+        use crate::test_support::jwt_for_mode;
+        use wayve_security::jwt::SessionMode;
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/repos/octocat/Hello-World"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "name": "Hello-World",
+                "private": false,
+                "owner": { "login": "octocat" }
+            })))
+            .mount(&mock)
+            .await;
+        // SAFETY: env mutation is serialized by #[serial]; CI runs --test-threads=1.
+        unsafe {
+            std::env::set_var("GITHUB_API_BASE", mock.uri());
+        }
+
+        let pool = test_pool().await;
+        let org_id = insert_org(&pool, &format!("WS Org {}", random_email())).await;
+        let project_id = insert_org_project(&pool, org_id, "Apollo").await;
+
+        let owner_email = random_email();
+        let owner_id = insert_local_user(&pool, &owner_email, "password123").await;
+        place_in_org(&pool, owner_id, org_id, "owner").await;
+        let admin_email = random_email();
+        let admin_id = insert_local_user(&pool, &admin_email, "password123").await;
+        place_in_org(&pool, admin_id, org_id, "admin").await;
+        let member_email = random_email();
+        let member_id = insert_local_user(&pool, &member_email, "password123").await;
+        place_in_org(&pool, member_id, org_id, "member").await;
+        // Let members past the feature gate, so the member is refused by the
+        // missing per-repo grant rather than by Code Repo being off. A saved set
+        // replaces the defaults, so admin must be listed too.
+        sqlx::query(
+            "INSERT INTO organization_feature_access (organization_id, feature_key, role) \
+             VALUES ($1, 'code_repo', 'member'), ($1, 'code_repo', 'admin') \
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(org_id)
+        .execute(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("seed org feature access: {e}"));
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(workspace::handler::link_project_repo)
+                .service(github_proxy::github_proxy),
+        )
+        .await;
+
+        let req = actix_test::TestRequest::patch()
+            .uri(&format!("/projects/{project_id}/repo"))
+            .insert_header((
+                "Authorization",
+                format!("Bearer {}", jwt_for(owner_id, &owner_email)),
+            ))
+            .set_json(serde_json::json!({ "repo_url": "https://github.com/octocat/Hello-World" }))
+            .to_request();
+        assert_eq!(
+            actix_test::call_service(&app, req).await.status(),
+            StatusCode::OK
+        );
+
+        for (user_id, email, expected) in [
+            (owner_id, &owner_email, StatusCode::OK),
+            (admin_id, &admin_email, StatusCode::OK),
+            (member_id, &member_email, StatusCode::FORBIDDEN),
+        ] {
+            let bearer = format!(
+                "Bearer {}",
+                jwt_for_mode(user_id, email, SessionMode::Normal)
+            );
+            let req = actix_test::TestRequest::get()
+                .uri("/github/repos/octocat/Hello-World")
+                .insert_header(("Authorization", bearer))
+                .to_request();
+            assert_eq!(
+                actix_test::call_service(&app, req).await.status(),
+                expected,
+                "user {user_id}"
+            );
+        }
+
+        unsafe {
+            std::env::remove_var("GITHUB_API_BASE");
+        }
+        cleanup(&pool, &[owner_id, admin_id, member_id], &[org_id]).await;
+    }
+
     #[actix_web::test]
     async fn personal_account_sees_empty_lists() {
         let pool = test_pool().await;

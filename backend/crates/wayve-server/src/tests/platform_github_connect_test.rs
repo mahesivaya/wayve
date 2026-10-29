@@ -187,7 +187,13 @@ mod tests {
                 .await;
         assert_eq!(normal_choice, None);
         assert_ne!(
-            get_status(format!("/github/repos/{own_repo}"), normal_bearer).await,
+            get_status(format!("/github/repos/{own_repo}"), normal_bearer.clone()).await,
+            StatusCode::OK
+        );
+        // A member in normal mode AND an owner in the DB still opens the repos
+        // the shared token sees, with no per-repo grant.
+        assert_eq!(
+            get_status(format!("/github/repos/{shared_repo}"), normal_bearer).await,
             StatusCode::OK
         );
 
