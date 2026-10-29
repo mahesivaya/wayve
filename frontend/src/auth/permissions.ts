@@ -216,22 +216,6 @@ export function canViewIntegrations(
   return false;
 }
 
-/**
- * Whether the Integrations group belongs in the left sidebar. Deliberately
- * narrower than `canViewIntegrations`: a personal account keeps full access to
- * /integrations, but reaches it from the profile menu and Settings rather than
- * from a permanent nav group, so their sidebar stays the apps they use daily.
- *
- * Anyone this returns false for can still open the page — use
- * `canViewIntegrations` for route and menu gating.
- */
-export function canViewIntegrationsNav(
-  user: ScopedUser | null | undefined
-): boolean {
-  if (!canViewIntegrations(user)) return false;
-  return resolveScope(user as ScopedUser) !== "personal";
-}
-
 type PermissionHolder = { permissions?: string[] | null } | null | undefined;
 
 export function hasPermission(

@@ -21,7 +21,6 @@ import {
   canManageMcp as viewerCanManageMcp,
   type IntegrationKey,
 } from "./catalog";
-import { INTEGRATIONS_CHANGED_EVENT } from "./useConnectedIntegrations";
 import SettingsShell from "../profile/SettingsShell";
 import "./integrations.css";
 
@@ -155,24 +154,8 @@ export default function Integrations() {
     };
   }, [canConnectMailbox]);
 
-  // The sidebar lists connected services only, so tell it to re-check whenever
-  // something here connects or disconnects. (The first probes fire this too;
-  // it's one cached request.)
-  useEffect(() => {
-    window.dispatchEvent(new Event(INTEGRATIONS_CHANGED_EVENT));
-  }, [
-    gmailConnected,
-    jiraConnected,
-    githubConnected,
-    slackConnected,
-    gitlabConnected,
-    figmaConnected,
-    mcpConnected,
-  ]);
-
-  // The sidebar's Integrations group links to /integrations?service=<key>, so
-  // picking a service there lands with that panel already open instead of on a
-  // wall of tiles. Panels are independent toggles, so this only ever opens one
+  // A link to /integrations?service=<key> lands with that panel already open
+  // instead of on a wall of tiles. Panels are independent toggles, so this only ever opens one
   // — closing it again (or opening others) is left to the tiles.
   const [searchParams] = useSearchParams();
   const requestedService = searchParams.get("service");
