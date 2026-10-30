@@ -548,6 +548,11 @@
   padding: 12px 8px;
   flex-shrink: 0;
   overflow-y: auto;
+  /* Unstyled, Chromium draws its classic ~15px bar wherever overlay scrollbars
+     are off (the Electron desktop shell, or macOS "Show scroll bars: Always"),
+     which swallows most of the 56px collapsed rail. Keep it thin and on-theme. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
   transition:
     transform 0.2s ease,
     width 0.25s ease;
