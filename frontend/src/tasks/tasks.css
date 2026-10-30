@@ -1598,6 +1598,14 @@
   cursor: pointer;
 }
 
+/* The select's own colours are inline (statusSelectStyle) and a completed
+   status paints a white label on a solid fill; keep the opened list's
+   options on the normal surface so that white never reaches the menu. */
+.task-status-select option {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
 .task-status-select:focus {
   outline: 2px solid var(--color-primary-panel-border);
   border-color: var(--color-primary-action);

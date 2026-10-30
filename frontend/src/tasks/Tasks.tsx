@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   FormEvent,
   useCallback,
   useEffect,
@@ -168,6 +169,19 @@ const UNKNOWN_STATUS = (slug: string): TaskStatusRow => ({
   position: 0,
   task_count: 0,
 });
+
+// The status <select>'s colours, from the status row so custom statuses look
+// like built-in ones: a completed status is a solid fill with a white label,
+// every other status a tint of its colour.
+function statusSelectStyle(row: TaskStatusRow): CSSProperties {
+  return row.category === "completed"
+    ? { borderColor: row.color, color: "#fff", backgroundColor: row.color }
+    : {
+        borderColor: row.color,
+        color: row.color,
+        backgroundColor: `${row.color}1a`,
+      };
+}
 
 // Linear-style assignee dropdown: the list of assignable users shows
 // immediately, with a "No assignee" row on top and a checkmark on the current
@@ -1872,11 +1886,7 @@ export default function Tasks({
           <TaskStatusIcon category={st.category} color={st.color} />
           <select
             className="task-status-select"
-            style={{
-              borderColor: st.color,
-              color: st.color,
-              backgroundColor: `${st.color}1a`,
-            }}
+            style={statusSelectStyle(st)}
             value={task.status}
             onChange={(event) =>
               void changeStatus(task, event.target.value as TaskStatus)
@@ -2928,11 +2938,9 @@ export default function Tasks({
                                 the same way the built-in ones are. */}
                               <select
                                 className="task-status-select"
-                                style={{
-                                  borderColor: lookupStatus(task.status).color,
-                                  color: lookupStatus(task.status).color,
-                                  backgroundColor: `${lookupStatus(task.status).color}1a`,
-                                }}
+                                style={statusSelectStyle(
+                                  lookupStatus(task.status)
+                                )}
                                 value={task.status}
                                 onChange={(event) =>
                                   void changeStatus(
