@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-export const IDLE_LIMIT_MS = 15 * 60 * 1000;
+export const IDLE_LIMIT_MS = 30 * 60 * 1000;
 
 // Shared across tabs so activity in any tab keeps the whole session alive. The
 // auth token is shared, so one tab timing out would otherwise end the session

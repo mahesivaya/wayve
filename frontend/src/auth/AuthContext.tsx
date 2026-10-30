@@ -638,7 +638,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  // Auto sign-out after 15 minutes of inactivity, shared across tabs.
+  // Auto sign-out after IDLE_LIMIT_MS (30 minutes) of inactivity, shared across tabs.
   useIdleLogout(!!user, () => logout("idle"));
 
   // Apply the caller's resolved font (own > org > platform default) once the
