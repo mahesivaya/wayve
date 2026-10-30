@@ -150,3 +150,42 @@
   justify-content: center;
   flex-wrap: wrap;
 }
+
+/* Public light/dark (see usePublicTheme): Book a Demo opts in through
+   MarketingShell `themeable`. Monochrome submit, matching the pricing and
+   support buttons. */
+[data-public-theme] .book-demo-submit {
+  border-color: #0a0a0a;
+  background: #0a0a0a;
+  color: #fff;
+}
+[data-public-theme] .book-demo-submit:hover {
+  border-color: #262626;
+  background: #262626;
+}
+[data-public-theme="dark"] .book-demo-submit {
+  border-color: #fff;
+  background: #fff;
+  color: #0a0a0a;
+}
+[data-public-theme="dark"] .book-demo-submit:hover {
+  border-color: #e5e5e5;
+  background: #e5e5e5;
+}
+[data-public-theme="dark"] .book-demo-card,
+[data-public-theme="dark"] .book-demo-success {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+/* `color-scheme` gives the date picker a light calendar icon and popup. */
+[data-public-theme="dark"] .book-demo-input {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: #141414;
+  color-scheme: dark;
+}
+[data-public-theme="dark"] .book-demo-input:focus {
+  border-color: #60a5fa;
+}
+[data-public-theme="dark"] .book-demo-secondary {
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #f5f7fa;
+}

@@ -92,7 +92,7 @@ export default function BookDemo() {
     });
 
   return (
-    <MarketingShell>
+    <MarketingShell themeable>
       <section className="book-demo">
         <div className="book-demo-intro">
           <p className="marketing-eyebrow">Book a demo</p>
@@ -141,7 +141,6 @@ export default function BookDemo() {
                   className="book-demo-input"
                   value={form.firstName}
                   onChange={set("firstName")}
-                  placeholder="Ada"
                   autoComplete="given-name"
                   required
                 />
@@ -152,7 +151,6 @@ export default function BookDemo() {
                   className="book-demo-input"
                   value={form.lastName}
                   onChange={set("lastName")}
-                  placeholder="Lovelace"
                   autoComplete="family-name"
                   required
                 />
@@ -166,7 +164,6 @@ export default function BookDemo() {
                 className="book-demo-input"
                 value={form.email}
                 onChange={set("email")}
-                placeholder="ada@example.com"
                 autoComplete="email"
                 required
               />
@@ -179,7 +176,6 @@ export default function BookDemo() {
                 className="book-demo-input"
                 value={form.workEmail}
                 onChange={set("workEmail")}
-                placeholder="ada@company.com"
                 autoComplete="email"
                 required
               />

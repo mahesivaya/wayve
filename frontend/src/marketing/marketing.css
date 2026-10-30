@@ -437,6 +437,21 @@
 }
 
 /* ---- Footer ---- */
+/* Sticky footer: the shell is its own 100svh scroll container, so as a column
+   whose main grows into the spare height, a short page (e.g. /pricing) still
+   ends with the footer at the bottom of the screen, and a long page pushes it
+   below the content as usual. */
+.marketing-shell {
+  display: flex;
+  flex-direction: column;
+}
+.marketing-shell > .public-home-main {
+  flex: 1 0 auto;
+}
+.marketing-shell > .marketing-footer {
+  flex-shrink: 0;
+}
+
 .marketing-footer {
   margin-top: 4rem;
   background: var(--color-surface-deep-navy);
@@ -620,15 +635,6 @@
 [data-public-theme="dark"] .marketing-hero-copy .marketing-eyebrow {
   color: #60a5fa;
 }
-[data-public-theme="dark"] .marketing-hero-actions button + button {
-  background: transparent;
-  color: #93c5fd;
-  border-color: rgba(255, 255, 255, 0.18);
-}
-[data-public-theme="dark"] .marketing-hero-actions button + button:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: #60a5fa;
-}
 [data-public-theme="dark"] .marketing-hero-card {
   background: #0d0d0d;
   border-color: rgba(255, 255, 255, 0.12);
@@ -652,4 +658,41 @@
 }
 [data-public-theme="dark"] .marketing-footer-legal {
   border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Monochrome hero buttons on the opt-in public pages, matching the pricing
+   plan buttons: solid black on light / white on dark, with a neutral outline
+   for the secondary action. `[data-public-theme]` is only on themeable pages,
+   so other marketing pages keep their blue. */
+[data-public-theme] .marketing-hero-actions button:first-child {
+  background: #0a0a0a;
+  color: #fff;
+}
+[data-public-theme] .marketing-hero-actions button:first-child:hover {
+  background: #262626;
+  box-shadow: none;
+}
+[data-public-theme] .marketing-hero-actions button + button {
+  background: transparent;
+  color: #0a0a0a;
+  border: 1px solid rgba(10, 10, 10, 0.25);
+}
+[data-public-theme] .marketing-hero-actions button + button:hover {
+  background: rgba(10, 10, 10, 0.05);
+  border-color: #0a0a0a;
+}
+[data-public-theme="dark"] .marketing-hero-actions button:first-child {
+  background: #fff;
+  color: #0a0a0a;
+}
+[data-public-theme="dark"] .marketing-hero-actions button:first-child:hover {
+  background: #e5e5e5;
+}
+[data-public-theme="dark"] .marketing-hero-actions button + button {
+  color: #f5f7fa;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+[data-public-theme="dark"] .marketing-hero-actions button + button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: #f5f7fa;
 }
