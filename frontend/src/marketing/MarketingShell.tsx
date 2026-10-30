@@ -50,7 +50,7 @@ export default function MarketingShell({
 
   return (
     <div
-      className="public-home"
+      className="public-home marketing-shell"
       data-public-theme={themeable ? publicTheme : undefined}
     >
       <header className="public-home-nav">

@@ -150,3 +150,97 @@
   justify-content: center;
   flex-wrap: wrap;
 }
+
+/* Public light/dark (see usePublicTheme): Book a Demo opts in through
+   MarketingShell `themeable`. Monochrome submit, matching the pricing and
+   support buttons. */
+[data-public-theme] .book-demo-submit {
+  border-color: #0a0a0a;
+  background: #0a0a0a;
+  color: #fff;
+}
+[data-public-theme] .book-demo-submit:hover {
+  border-color: #262626;
+  background: #262626;
+}
+[data-public-theme="dark"] .book-demo-submit {
+  border-color: #fff;
+  background: #fff;
+  color: #0a0a0a;
+}
+[data-public-theme="dark"] .book-demo-submit:hover {
+  border-color: #e5e5e5;
+  background: #e5e5e5;
+}
+[data-public-theme="dark"] .book-demo-card,
+[data-public-theme="dark"] .book-demo-success {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+/* `color-scheme` gives the date picker a light calendar icon and popup. */
+[data-public-theme="dark"] .book-demo-input {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: #141414;
+  color-scheme: dark;
+}
+[data-public-theme="dark"] .book-demo-input:focus {
+  border-color: #60a5fa;
+}
+[data-public-theme="dark"] .book-demo-secondary {
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #f5f7fa;
+}
+
+/* Preferred date & time: a date picker plus 24-hour HH : MM selects. */
+.book-demo-slot {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.book-demo-slot > legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+.book-demo-slot-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.book-demo-slot-row > input[type="date"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.book-demo-time {
+  flex: 0 0 76px;
+  width: 76px;
+  cursor: pointer;
+}
+.book-demo-period {
+  flex-basis: 98px;
+  width: 98px;
+}
+/* Phones: the date takes its own line, HH : MM AM/PM sits below it. */
+@media (max-width: 480px) {
+  .book-demo-slot-row {
+    flex-wrap: wrap;
+  }
+  .book-demo-slot-row > input[type="date"] {
+    flex-basis: 100%;
+  }
+  .book-demo-time {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+  }
+  .book-demo-period {
+    flex-grow: 1.4;
+  }
+}
+.book-demo-time-sep {
+  font-weight: 600;
+  color: var(--color-text-secondary, inherit);
+}
+[data-public-theme="dark"] .book-demo-time option {
+  background: #141414;
+  color: #f5f7fa;
+}

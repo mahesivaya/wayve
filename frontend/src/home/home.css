@@ -2280,19 +2280,22 @@
   position: relative;
   max-width: 1180px;
   margin: 56px auto 0;
-  /* Always-dark "app screenshot" island on the light page. Re-scope the hx
-     tokens to DARK values so internal elements (which read var(--hx-ink) /
-     --hx-muted / --hx-border / --hx-line / --hx-glass) keep full contrast, and
-     use a SOLID background so the white page can't bleed through and wash it out. */
+  /* The "app screenshot" island. Re-scope the hx tokens so internal elements
+     (which read var(--hx-ink) / --hx-muted / --hx-border / --hx-line /
+     --hx-glass) keep full contrast, and use a SOLID background so the page
+     can't bleed through. These are the navy defaults; the --hx-mock-* hooks
+     (surfaces, text, event labels, and the --hx-mock-tint RGB behind every
+     white tint) are re-pointed per public theme at the end of this file. */
   --hx-ink: #f2f6ff;
   --hx-muted: #9fb2d6;
   --hx-border: rgba(125, 165, 235, 0.22);
   --hx-line: rgba(120, 160, 230, 0.18);
-  --hx-glass: rgba(255, 255, 255, 0.05);
-  --hx-glass-strong: rgba(255, 255, 255, 0.08);
+  --hx-glass: rgba(var(--hx-mock-tint), 0.05);
+  --hx-glass-strong: rgba(var(--hx-mock-tint), 0.08);
+  --hx-mock-tint: 255, 255, 255;
   border-radius: 16px;
   border: 1px solid var(--hx-border);
-  background: #0e1d40;
+  background: var(--hx-mock-bg, #0e1d40);
   box-shadow:
     0 40px 80px -34px rgba(15, 23, 42, 0.45),
     0 0 70px -26px rgba(56, 189, 248, 0.45);
@@ -2304,7 +2307,7 @@
   gap: 8px;
   padding: 11px 16px;
   border-bottom: 1px solid var(--hx-border);
-  background: rgba(7, 13, 30, 0.9);
+  background: var(--hx-mock-bar, rgba(7, 13, 30, 0.9));
 }
 .hx-dot {
   width: 11px;
@@ -2324,8 +2327,8 @@
 .hx-mock-url {
   margin-left: 14px;
   font-size: 0.78rem;
-  color: #6f82a8;
-  background: rgba(8, 16, 34, 0.7);
+  color: var(--hx-mock-faint, #6f82a8);
+  background: var(--hx-mock-url-bg, rgba(8, 16, 34, 0.7));
   border: 1px solid var(--hx-border);
   border-radius: 7px;
   padding: 3px 12px;
@@ -2338,7 +2341,7 @@
 .hx-mock-side {
   border-right: 1px solid var(--hx-border);
   padding: 16px 12px;
-  background: rgba(7, 13, 30, 0.55);
+  background: var(--hx-mock-side, rgba(7, 13, 30, 0.55));
 }
 .hx-mock-logo {
   font-weight: 700;
@@ -2366,11 +2369,11 @@
     color 0.2s ease;
 }
 .hx-mock-nav:hover {
-  color: #dbeafe;
+  color: var(--hx-mock-strong, #dbeafe);
 }
 .hx-mock-nav.is-active {
   background: rgba(56, 189, 248, 0.14);
-  color: #dbeafe;
+  color: var(--hx-mock-strong, #dbeafe);
 }
 .hx-mock-navdot {
   width: 8px;
@@ -2396,7 +2399,7 @@
   width: 56%;
   height: 30px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--hx-mock-tint), 0.05);
   border: 1px solid var(--hx-border);
   display: flex;
   align-items: center;
@@ -2427,7 +2430,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #bcd0f5;
+  color: var(--hx-mock-text, #bcd0f5);
   font-size: 12px;
   font-weight: 600;
 }
@@ -2441,7 +2444,7 @@
 .hx-mock-from {
   font-size: 13px;
   font-weight: 600;
-  color: #d4def2;
+  color: var(--hx-mock-strong, #d4def2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2649,7 +2652,7 @@
   background: rgba(56, 189, 248, 0.14);
 }
 .hx-mock-conv.is-active .hx-mock-conv-name {
-  color: #dbeafe;
+  color: var(--hx-mock-strong, #dbeafe);
 }
 .hx-mock-conv-hash {
   width: 22px;
@@ -2663,7 +2666,7 @@
   height: 22px;
   border-radius: 50%;
   background: rgba(96, 165, 250, 0.25);
-  color: #bcd0f5;
+  color: var(--hx-mock-text, #bcd0f5);
   font-size: 10px;
   font-weight: 600;
   display: flex;
@@ -2674,7 +2677,7 @@
 .hx-mock-conv-name {
   flex: 1;
   min-width: 0;
-  color: #c9d6ef;
+  color: var(--hx-mock-text, #c9d6ef);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2714,7 +2717,7 @@
   gap: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: #d4def2;
+  color: var(--hx-mock-strong, #d4def2);
 }
 .hx-mock-chat-pavatar {
   width: 26px;
@@ -2725,7 +2728,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #bcd0f5;
+  color: var(--hx-mock-text, #bcd0f5);
   font-size: 11px;
   font-weight: 600;
 }
@@ -2738,7 +2741,7 @@
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--hx-mock-tint), 0.06);
   border: 1px solid var(--hx-border);
   display: flex;
   align-items: center;
@@ -2746,7 +2749,7 @@
   color: var(--hx-muted);
 }
 .hx-mock-chat-call:hover {
-  color: #dbeafe;
+  color: var(--hx-mock-strong, #dbeafe);
 }
 .hx-mock-chat-stream {
   display: flex;
@@ -2765,8 +2768,8 @@
 }
 .hx-mock-bubble.them {
   align-self: flex-start;
-  background: rgba(255, 255, 255, 0.06);
-  color: #c9d6ef;
+  background: rgba(var(--hx-mock-tint), 0.06);
+  color: var(--hx-mock-text, #c9d6ef);
   border-bottom-left-radius: 4px;
 }
 .hx-mock-bubble.me {
@@ -2783,13 +2786,13 @@
   padding: 9px 12px;
   border-radius: 11px;
   border: 1px solid var(--hx-border);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--hx-mock-tint), 0.05);
 }
 .hx-mock-chat-input {
   flex: 1;
   min-width: 0;
   font-size: 12.5px;
-  color: #6f82a8;
+  color: var(--hx-mock-faint, #6f82a8);
 }
 .hx-mock-chat-send {
   width: 28px;
@@ -2837,7 +2840,7 @@
   padding: 7px 10px;
   border-radius: 7px;
   border: 1px solid var(--hx-border);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--hx-mock-tint), 0.05);
   color: var(--hx-ink);
   font-weight: 600;
 }
@@ -2873,7 +2876,7 @@
   color: var(--hx-muted);
 }
 .hx-mock-repo-navitem.is-active {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(var(--hx-mock-tint), 0.07);
   color: var(--hx-ink);
 }
 .hx-mock-repo-navico {
@@ -2894,7 +2897,7 @@
   height: 16px;
   padding: 0 5px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--hx-mock-tint), 0.1);
   color: var(--hx-muted);
   font-size: 10px;
   font-weight: 600;
@@ -2932,7 +2935,7 @@
   color: var(--hx-muted);
 }
 .hx-mock-repo-file.is-active {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--hx-mock-tint), 0.06);
 }
 .hx-mock-repo-chev {
   flex: 0 0 auto;
@@ -2991,7 +2994,7 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
   line-height: 1.55;
-  color: #c9d6ef;
+  color: var(--hx-mock-text, #c9d6ef);
   white-space: pre;
 }
 
@@ -2999,7 +3002,7 @@
 .hx-mock-cal-title {
   font-size: 15px;
   font-weight: 700;
-  color: #d4def2;
+  color: var(--hx-mock-strong, #d4def2);
 }
 
 /* Meet — week scheduler */
@@ -3026,7 +3029,7 @@
   border: 1px solid transparent;
 }
 .hx-mock-week-views span.is-active {
-  color: #dbeafe;
+  color: var(--hx-mock-strong, #dbeafe);
   background: rgba(56, 189, 248, 0.14);
   border-color: var(--hx-border);
 }
@@ -3049,7 +3052,7 @@
 .hx-mock-week-dayhead span {
   font-size: 15px;
   font-weight: 600;
-  color: #d4def2;
+  color: var(--hx-mock-strong, #d4def2);
 }
 .hx-mock-week-body {
   display: grid;
@@ -3109,22 +3112,22 @@
 .hx-mock-event.blue {
   background: rgba(37, 99, 235, 0.34);
   border-left: 3px solid #2563eb;
-  color: #dbe7ff;
+  color: var(--hx-mock-ev-blue, #dbe7ff);
 }
 .hx-mock-event.green {
   background: rgba(34, 197, 94, 0.26);
   border-left: 3px solid #22c55e;
-  color: #d7f7e3;
+  color: var(--hx-mock-ev-green, #d7f7e3);
 }
 .hx-mock-event.purple {
   background: rgba(167, 139, 250, 0.3);
   border-left: 3px solid #a78bfa;
-  color: #ece6ff;
+  color: var(--hx-mock-ev-purple, #ece6ff);
 }
 .hx-mock-event.amber {
   background: rgba(245, 158, 11, 0.26);
   border-left: 3px solid #f59e0b;
-  color: #ffe9c7;
+  color: var(--hx-mock-ev-amber, #ffe9c7);
 }
 
 /* Drive */
@@ -3140,7 +3143,7 @@
   padding: 12px;
   border-radius: 11px;
   border: 1px solid var(--hx-border);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--hx-mock-tint), 0.03);
   min-width: 0;
 }
 .hx-mock-fico {
@@ -3155,7 +3158,7 @@
 }
 .hx-mock-fname {
   font-size: 12.5px;
-  color: #d4def2;
+  color: var(--hx-mock-strong, #d4def2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3178,17 +3181,17 @@
   padding: 14px;
   border-radius: 11px;
   border: 1px solid var(--hx-border);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--hx-mock-tint), 0.03);
 }
 .hx-mock-note strong {
   font-size: 13px;
-  color: #e2e9f7;
+  color: var(--hx-mock-strong, #e2e9f7);
   font-weight: 600;
 }
 .hx-mock-noteline {
   height: 7px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(var(--hx-mock-tint), 0.07);
   width: 90%;
 }
 .hx-mock-noteline:last-child {
@@ -3220,7 +3223,7 @@
 }
 .hx-mock-tasklabel {
   font-size: 13px;
-  color: #cdd8ef;
+  color: var(--hx-mock-text, #cdd8ef);
 }
 .hx-mock-tasklabel.is-done {
   color: var(--hx-muted);
@@ -3249,9 +3252,9 @@
   padding: 11px 14px;
   border-radius: 13px;
   border-bottom-left-radius: 4px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--hx-mock-tint), 0.06);
   border: 1px solid var(--hx-border);
-  color: #c9d6ef;
+  color: var(--hx-mock-text, #c9d6ef);
   font-size: 13px;
   line-height: 1.45;
 }
@@ -3265,7 +3268,7 @@
   flex: 1;
   height: 34px;
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--hx-mock-tint), 0.05);
   border: 1px solid var(--hx-border);
   display: flex;
   align-items: center;
@@ -3844,4 +3847,46 @@
 /* The mark is a black PNG; flip it to white on the black surface. */
 [data-public-theme="dark"] .public-home-nav .brand-logo {
   filter: invert(1);
+}
+
+/* Product mockup follows the public light/dark mode: black panels in dark,
+   white panels with dark ink in light. Only the hooks change; the navy values
+   in .hx-mock stay as the fallback. */
+.public-home[data-public-theme="dark"] .hx-mock {
+  --hx-ink: #f5f7fa;
+  --hx-muted: #9aa3b2;
+  --hx-border: rgba(255, 255, 255, 0.12);
+  --hx-line: rgba(255, 255, 255, 0.08);
+  --hx-mock-tint: 255, 255, 255;
+  --hx-mock-bg: #0a0a0a;
+  --hx-mock-bar: #050505;
+  --hx-mock-url-bg: #141414;
+  --hx-mock-side: #050505;
+  --hx-mock-strong: #f5f7fa;
+  --hx-mock-text: #c9d1dc;
+  --hx-mock-faint: #7d8594;
+  box-shadow:
+    0 40px 80px -34px rgba(0, 0, 0, 0.8),
+    0 0 70px -26px rgba(56, 189, 248, 0.3);
+}
+.public-home[data-public-theme="light"] .hx-mock {
+  --hx-ink: #141a26;
+  --hx-muted: #5b6678;
+  --hx-border: rgba(20, 40, 90, 0.12);
+  --hx-line: rgba(20, 40, 90, 0.08);
+  --hx-mock-tint: 20, 40, 90;
+  --hx-mock-bg: #ffffff;
+  --hx-mock-bar: #f4f6fa;
+  --hx-mock-url-bg: #ffffff;
+  --hx-mock-side: #f8f9fc;
+  --hx-mock-strong: #141a26;
+  --hx-mock-text: #2b3344;
+  --hx-mock-faint: #6b7689;
+  --hx-mock-ev-blue: #1e3a8a;
+  --hx-mock-ev-green: #14532d;
+  --hx-mock-ev-purple: #4c1d95;
+  --hx-mock-ev-amber: #78350f;
+  box-shadow:
+    0 40px 80px -34px rgba(20, 40, 90, 0.28),
+    0 0 70px -26px rgba(56, 189, 248, 0.3);
 }

@@ -23,7 +23,7 @@ export type PlanTier = {
 export const PLAN_CATALOG: PlanTier[] = [
   {
     code: "basic_user",
-    name: "Free Personal",
+    name: "Personal",
     audience: "personal",
     tier: "personal",
     price: "Free",
@@ -51,11 +51,11 @@ export const PLAN_CATALOG: PlanTier[] = [
       "1,000 encrypt/decrypt ops per day",
       "Priority email sync",
     ],
-    cta: "Choose plan",
+    cta: "Get started",
   },
   {
     code: "business_startups",
-    name: "Free Organization",
+    name: "Organization",
     audience: "organization",
     tier: "startups",
     price: "Free",
@@ -83,7 +83,7 @@ export const PLAN_CATALOG: PlanTier[] = [
       "SSO + role-based access",
       "Audit logs & priority support",
     ],
-    cta: "Choose plan",
+    cta: "Get started",
   },
   {
     code: "enterprise",
@@ -99,7 +99,7 @@ export const PLAN_CATALOG: PlanTier[] = [
       "Custom onboarding & SLA",
       "SSO, SCIM & advanced security",
     ],
-    cta: "Choose plan",
+    cta: "Contact sales",
   },
 ];
 
