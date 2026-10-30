@@ -3,11 +3,15 @@ import type { FormEvent } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { verifyEmail, resendVerification } from "../api/Auth";
 import "./login.css";
+import { usePublicTheme } from "../theme/usePublicTheme";
+import PublicHeader from "../components/PublicHeader";
+import { isDesktopApp } from "../utils/desktop";
 
 // Code-entry screen reached from register, or from a login blocked as unverified,
 // with the address passed as `?email=`. On success it hands off to /login, whose
 // first successful sign-in is what sets up the E2E keys.
 export default function VerifyEmail() {
+  const { mode: publicTheme } = usePublicTheme();
   const [params] = useSearchParams();
   const email = params.get("email") ?? "";
   const [code, setCode] = useState("");
@@ -56,48 +60,55 @@ export default function VerifyEmail() {
   };
 
   return (
-    <div className="login-page">
-      <form className="login-card" onSubmit={submit}>
-        <h2>Verify your email</h2>
+    <div
+      className="login-page login-page--framed"
+      data-public-theme={publicTheme}
+    >
+      {/* No marketing chrome in the desktop (Electron) shell, as on Login. */}
+      {!isDesktopApp() && <PublicHeader showActions={false} />}
+      <div className="login-page-body">
+        <form className="login-card" onSubmit={submit}>
+          <h2>Verify your email</h2>
 
-        {status === "done" ? (
-          <p className="subtitle">Verified! Redirecting to login…</p>
-        ) : (
-          <>
-            <p className="subtitle">
-              Enter the 6-digit code sent to <strong>{email}</strong>.
-            </p>
-            <input
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              placeholder="6-digit code"
-              value={code}
-              maxLength={6}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-              required
-              autoFocus
-            />
-            <button type="submit" disabled={status === "verifying"}>
-              {status === "verifying" ? "Verifying…" : "Verify"}
-            </button>
-            <button
-              type="button"
-              className="link-button"
-              onClick={resend}
-              disabled={!email}
-            >
-              Resend code
-            </button>
-            {info && <p className="subtitle">{info}</p>}
-            {error && <p className="error">{error}</p>}
-          </>
-        )}
+          {status === "done" ? (
+            <p className="subtitle">Verified! Redirecting to login…</p>
+          ) : (
+            <>
+              <p className="subtitle">
+                Enter the 6-digit code sent to <strong>{email}</strong>.
+              </p>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="6-digit code"
+                value={code}
+                maxLength={6}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                required
+                autoFocus
+              />
+              <button type="submit" disabled={status === "verifying"}>
+                {status === "verifying" ? "Verifying…" : "Verify"}
+              </button>
+              <button
+                type="button"
+                className="link-button"
+                onClick={resend}
+                disabled={!email}
+              >
+                Resend code
+              </button>
+              {info && <p className="subtitle">{info}</p>}
+              {error && <p className="error">{error}</p>}
+            </>
+          )}
 
-        <p className="switch-auth">
-          <Link to="/login">Back to login</Link>
-        </p>
-      </form>
+          <p className="switch-auth">
+            <Link to="/login">Back to login</Link>
+          </p>
+        </form>
+      </div>
     </div>
   );
 }

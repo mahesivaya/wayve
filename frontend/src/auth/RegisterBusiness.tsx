@@ -3,11 +3,13 @@ import type { FormEvent } from "react";
 import { registerBusiness } from "../api/Auth";
 import { useNavigate, Link } from "react-router-dom";
 import PublicHeader from "../components/PublicHeader";
+import { usePublicTheme } from "../theme/usePublicTheme";
 import "./login.css"; // reuse auth-card styles
 
 // Direct business signup: creates the organization and its owner account (as
 // organization_admin) in one step. No payment here; billing is added later.
 export default function RegisterBusiness() {
+  const { mode: publicTheme } = usePublicTheme();
   const [orgName, setOrgName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -46,7 +48,10 @@ export default function RegisterBusiness() {
   };
 
   return (
-    <div className="login-page login-page--framed">
+    <div
+      className="login-page login-page--framed"
+      data-public-theme={publicTheme}
+    >
       <PublicHeader showActions={false} />
       <div className="login-page-body">
         <form className="login-card" onSubmit={handleSubmit}>

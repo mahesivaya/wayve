@@ -128,7 +128,7 @@ function PlanCard({
 // dynamic plan picker logged-in users see.
 function PublicPricing() {
   return (
-    <MarketingShell>
+    <MarketingShell themeable>
       <PublicPricingContent />
     </MarketingShell>
   );

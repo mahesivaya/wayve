@@ -3714,3 +3714,134 @@
     font-size: 9px;
   }
 }
+
+/* ============================================================================
+   PUBLIC LIGHT / DARK — landing, login, register and forgot-password only.
+   The pages set `data-public-theme` on their root from usePublicTheme (dark, a
+   black background, by default). Scoped to that attribute, never to
+   html[data-theme], so the signed-in app's theme is untouched.
+   ========================================================================== */
+
+/* Sun / moon toggle beside Register (and in the mobile menu, with a label). */
+.public-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--hx-border, rgba(20, 40, 90, 0.12));
+  border-radius: 9px;
+  background: transparent;
+  color: var(--hx-ink, #141a26);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.public-theme-toggle:hover {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: var(--hx-glass-strong, rgba(20, 40, 90, 0.05));
+}
+.public-theme-toggle-icon {
+  font-size: 1.05rem;
+}
+.public-home-mobile-menu .public-theme-toggle--labelled {
+  justify-content: flex-start;
+  width: 100%;
+  height: auto;
+  border: 0;
+}
+
+/* Header tokens for the auth pages, whose PublicHeader sits outside
+   .public-home (the landing page sets them on .public-home below). */
+.login-page[data-public-theme="dark"] {
+  --hx-line: rgba(255, 255, 255, 0.08);
+  --hx-glass: rgba(255, 255, 255, 0.03);
+  --hx-glass-strong: rgba(255, 255, 255, 0.07);
+  --hx-border: rgba(255, 255, 255, 0.14);
+  --hx-ink: #f5f7fa;
+  --hx-muted: #9aa3b2;
+}
+
+.public-home[data-public-theme="dark"] {
+  background:
+    radial-gradient(
+      1200px 720px at 18% -8%,
+      rgba(56, 189, 248, 0.08),
+      transparent 60%
+    ),
+    radial-gradient(
+      1000px 680px at 100% 4%,
+      rgba(37, 99, 235, 0.07),
+      transparent 55%
+    ),
+    #000000;
+  color: #c9d1dc;
+  --hx-line: rgba(255, 255, 255, 0.08);
+  --hx-glass: rgba(255, 255, 255, 0.03);
+  --hx-glass-strong: rgba(255, 255, 255, 0.07);
+  --hx-border: rgba(255, 255, 255, 0.14);
+  --hx-ink: #f5f7fa;
+  --hx-muted: #9aa3b2;
+
+  /* Re-pin the shared tokens the light block pins, to dark values. */
+  --color-surface: #0d0d0d;
+  --color-surface-soft: #141414;
+  --color-surface-hover: #1a1a1a;
+  --color-surface-cool-pale: #0d0d0d;
+  --color-surface-tint-cloud: rgba(255, 255, 255, 0.08);
+  --color-text-primary: #f5f7fa;
+  --color-text-secondary: #c9d1dc;
+  --color-text-slate-deep: #b4bcc8;
+  --color-text-slate-medium: #9aa3b2;
+  --color-text-muted: #8a93a3;
+}
+
+.public-home[data-public-theme="dark"]::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+.public-home[data-public-theme="dark"]::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: #0a0a0a;
+}
+.public-home[data-public-theme="dark"]::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+[data-public-theme="dark"] .public-home-nav {
+  background: rgba(0, 0, 0, 0.78);
+}
+[data-public-theme="dark"] .public-home-links button,
+[data-public-theme="dark"] .services-trigger {
+  color: #b4bcc8;
+}
+[data-public-theme="dark"] .public-home-links button:hover,
+[data-public-theme="dark"] .services-trigger:hover,
+[data-public-theme="dark"] .services-trigger.active {
+  color: var(--hx-ink);
+}
+[data-public-theme="dark"] .public-home-mobile-menu {
+  background: rgba(10, 10, 10, 0.98);
+}
+[data-public-theme="dark"] .services-dropdown-panel {
+  background: rgba(10, 10, 10, 0.97);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+[data-public-theme="dark"] .hx-download-menu {
+  background: rgba(12, 12, 12, 0.99);
+  box-shadow: 0 28px 64px -28px rgba(0, 0, 0, 0.9);
+}
+[data-public-theme="dark"] .hx-download-check {
+  color: #60a5fa;
+}
+[data-public-theme="dark"] .hx-chip {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+/* The mark is a black PNG; flip it to white on the black surface. */
+[data-public-theme="dark"] .public-home-nav .brand-logo {
+  filter: invert(1);
+}

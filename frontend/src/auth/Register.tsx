@@ -4,9 +4,11 @@ import { register } from "../api/Auth";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { getApiBase } from "../config";
 import PublicHeader from "../components/PublicHeader";
+import { usePublicTheme } from "../theme/usePublicTheme";
 import "./login.css"; // ✅ reuse styles
 
 export default function Register() {
+  const { mode: publicTheme } = usePublicTheme();
   const [params] = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -46,7 +48,10 @@ export default function Register() {
   };
 
   return (
-    <div className="login-page login-page--framed">
+    <div
+      className="login-page login-page--framed"
+      data-public-theme={publicTheme}
+    >
       <PublicHeader showActions={false} />
       <div className="login-page-body">
         <form className="login-card" onSubmit={handleRegister}>

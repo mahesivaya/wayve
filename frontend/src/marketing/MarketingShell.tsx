@@ -3,13 +3,23 @@ import { BRAND_NAME } from "../config/brand";
 import BrandLogo from "../components/BrandLogo";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import PublicThemeToggle from "../components/PublicThemeToggle";
+import { usePublicTheme } from "../theme/usePublicTheme";
 import "../home/home.css";
 import "./marketing.css";
 
 // Shared chrome for public marketing pages. Logged-in visitors see Home/Logout
-// instead of Login/Register.
-export default function MarketingShell({ children }: { children: ReactNode }) {
+// instead of Login/Register. `themeable` opts a page into the public light/dark
+// mode (black by default) and shows its toggle; other pages stay light.
+export default function MarketingShell({
+  children,
+  themeable = false,
+}: {
+  children: ReactNode;
+  themeable?: boolean;
+}) {
   const navigate = useNavigate();
+  const { mode: publicTheme } = usePublicTheme();
   const { user, logout } = useAuth();
   // Docs are internal/platform-only: hide the link from personal accounts,
   // organizations, and logged-out visitors (the public main page).
@@ -39,7 +49,10 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="public-home">
+    <div
+      className="public-home"
+      data-public-theme={themeable ? publicTheme : undefined}
+    >
       <header className="public-home-nav">
         <button className="public-home-brand" onClick={() => navigate("/")}>
           <BrandLogo
@@ -87,6 +100,7 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
               </button>
             </>
           )}
+          {themeable && <PublicThemeToggle />}
         </div>
 
         <button
@@ -133,6 +147,7 @@ export default function MarketingShell({ children }: { children: ReactNode }) {
                 </button>
               </>
             )}
+            {themeable && <PublicThemeToggle labelled />}
           </div>
         )}
       </header>

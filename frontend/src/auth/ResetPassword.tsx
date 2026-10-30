@@ -3,8 +3,12 @@ import type { FormEvent } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { resetPassword } from "../api/Auth";
 import "./login.css";
+import { usePublicTheme } from "../theme/usePublicTheme";
+import PublicHeader from "../components/PublicHeader";
+import { isDesktopApp } from "../utils/desktop";
 
 export default function ResetPassword() {
+  const { mode: publicTheme } = usePublicTheme();
   const [params] = useSearchParams();
   const token = params.get("token") ?? "";
   const [password, setPassword] = useState("");
@@ -42,39 +46,46 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="login-page">
-      <form className="login-card" onSubmit={submit}>
-        <h2>Set a new password</h2>
+    <div
+      className="login-page login-page--framed"
+      data-public-theme={publicTheme}
+    >
+      {/* No marketing chrome in the desktop (Electron) shell, as on Login. */}
+      {!isDesktopApp() && <PublicHeader showActions={false} />}
+      <div className="login-page-body">
+        <form className="login-card" onSubmit={submit}>
+          <h2>Set a new password</h2>
 
-        {status === "done" ? (
-          <p className="subtitle">Password updated. Redirecting to login…</p>
-        ) : (
-          <>
-            <input
-              type="password"
-              placeholder="New password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-            <input
-              type="password"
-              placeholder="Confirm new password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              required
-            />
-            <button type="submit" disabled={status === "saving"}>
-              {status === "saving" ? "Saving…" : "Update password"}
-            </button>
-            {error && <p className="error">{error}</p>}
-          </>
-        )}
+          {status === "done" ? (
+            <p className="subtitle">Password updated. Redirecting to login…</p>
+          ) : (
+            <>
+              <input
+                type="password"
+                placeholder="New password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              <input
+                type="password"
+                placeholder="Confirm new password"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                required
+              />
+              <button type="submit" disabled={status === "saving"}>
+                {status === "saving" ? "Saving…" : "Update password"}
+              </button>
+              {error && <p className="error">{error}</p>}
+            </>
+          )}
 
-        <p className="switch-auth">
-          <Link to="/login">Back to login</Link>
-        </p>
-      </form>
+          <p className="switch-auth">
+            <Link to="/login">Back to login</Link>
+          </p>
+        </form>
+      </div>
     </div>
   );
 }
