@@ -1,5 +1,10 @@
 .ticket-detail {
-  max-width: 760px;
+  /* `width: 100%` matters: as a flex child of `.split-pane` (a column), the
+     auto margins below would otherwise shrink the page to its content width
+     instead of filling up to max-width. */
+  width: 100%;
+  max-width: 960px;
+  box-sizing: border-box;
   margin: 0 auto;
   padding: 24px 20px 48px;
   /* The page renders inside `.split-pane`, which is `overflow: hidden`, so the
