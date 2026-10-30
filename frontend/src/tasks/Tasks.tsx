@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   FormEvent,
   useCallback,
   useEffect,
@@ -168,6 +169,26 @@ const UNKNOWN_STATUS = (slug: string): TaskStatusRow => ({
   position: 0,
   task_count: 0,
 });
+
+// The status <select>'s colours, from the status row so custom statuses look
+// like built-in ones: a solid fill in the status's colour, labelled in white,
+// or in near-black when the fill is too light for white to read (e.g. amber).
+function statusSelectStyle(row: TaskStatusRow): CSSProperties {
+  const label = relativeLuminance(row.color) > 0.4 ? "#111827" : "#fff";
+  return { borderColor: row.color, color: label, backgroundColor: row.color };
+}
+
+// WCAG relative luminance of a #rrggbb colour, 0 (black) to 1 (white). An
+// unparseable value reads as dark, so it keeps the white label.
+function relativeLuminance(hex: string): number {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return 0;
+  const channel = (i: number) => {
+    const c = parseInt(m[1].slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+}
 
 // Linear-style assignee dropdown: the list of assignable users shows
 // immediately, with a "No assignee" row on top and a checkmark on the current
@@ -1872,11 +1893,7 @@ export default function Tasks({
           <TaskStatusIcon category={st.category} color={st.color} />
           <select
             className="task-status-select"
-            style={{
-              borderColor: st.color,
-              color: st.color,
-              backgroundColor: `${st.color}1a`,
-            }}
+            style={statusSelectStyle(st)}
             value={task.status}
             onChange={(event) =>
               void changeStatus(task, event.target.value as TaskStatus)
@@ -2928,11 +2945,9 @@ export default function Tasks({
                                 the same way the built-in ones are. */}
                               <select
                                 className="task-status-select"
-                                style={{
-                                  borderColor: lookupStatus(task.status).color,
-                                  color: lookupStatus(task.status).color,
-                                  backgroundColor: `${lookupStatus(task.status).color}1a`,
-                                }}
+                                style={statusSelectStyle(
+                                  lookupStatus(task.status)
+                                )}
                                 value={task.status}
                                 onChange={(event) =>
                                   void changeStatus(

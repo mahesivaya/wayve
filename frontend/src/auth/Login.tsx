@@ -15,6 +15,7 @@ import { AuthDowngradeError } from "./authKey";
 import { HEADER_NAME } from "../config/brand";
 import "./login.css";
 import { usePublicTheme } from "../theme/usePublicTheme";
+import { IDLE_LIMIT_MS } from "./useIdleLogout";
 
 // Error codes the backend SSO callback puts in the hash fragment, mapped so the
 // raw code is never shown to the user.
@@ -64,7 +65,7 @@ export default function Login() {
     try {
       if (sessionStorage.getItem("wayve-logout-reason") === "idle") {
         sessionStorage.removeItem("wayve-logout-reason");
-        return "You were signed out after 15 minutes of inactivity. Please sign in again.";
+        return `You were signed out after ${IDLE_LIMIT_MS / 60_000} minutes of inactivity. Please sign in again.`;
       }
     } catch {
       /* ignore */
