@@ -1050,8 +1050,6 @@
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.02em;
-  color: var(--color-on-primary);
-  background: var(--color-text-slate-light);
 }
 
 /* Color-coded inline priority dropdown, pinned to the card's top-right corner.
@@ -1061,10 +1059,7 @@
   flex: 0 0 auto;
   margin-left: auto;
   padding: 2px 8px;
-  border: none;
   border-radius: 4px;
-  color: var(--color-on-primary);
-  background: var(--color-text-slate-light);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.02em;
@@ -1085,29 +1080,13 @@
 
 /* P1 is the most urgent, so it carries the hottest colour and the ramp cools
    down to the muted P5. */
-.task-priority-badge.priority-1,
-.task-priority-select.priority-1 {
-  background: var(--color-danger-hover);
-}
-
-.task-priority-badge.priority-2,
-.task-priority-select.priority-2 {
-  background: var(--color-task-urgent);
-}
-
-.task-priority-badge.priority-3,
-.task-priority-select.priority-3 {
-  background: var(--color-warning-deep);
-}
-
-.task-priority-badge.priority-4,
-.task-priority-select.priority-4 {
-  background: var(--color-primary-action);
-}
-
-.task-priority-badge.priority-5,
-.task-priority-select.priority-5 {
-  background: var(--color-text-slate-light);
+/* Every priority uses the plain button look (surface, hairline border, normal
+   ink); the P1–P5 label carries the priority, not a colour. */
+.task-priority-badge,
+.task-priority-select {
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  background: var(--color-surface);
 }
 
 /* Friendly per-user task number (#12) — a muted, monospace pill sitting next
