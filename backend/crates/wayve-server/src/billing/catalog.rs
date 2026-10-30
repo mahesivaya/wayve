@@ -28,7 +28,7 @@ pub struct PlanDef {
 pub const PLAN_CATALOG: &[PlanDef] = &[
     PlanDef {
         code: "basic_user",
-        name: "Free Personal",
+        name: "Personal",
         description: "Free plan for individual accounts.",
         audience: "personal",
         tier: "personal",
@@ -64,7 +64,7 @@ pub const PLAN_CATALOG: &[PlanDef] = &[
     },
     PlanDef {
         code: "business_startups",
-        name: "Free Organization",
+        name: "Organization",
         description: "Free plan for small teams to evaluate org features.",
         audience: "organization",
         tier: "startups",
