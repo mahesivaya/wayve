@@ -556,9 +556,14 @@
 
 /* Card buttons draw their label in --color-surface, white on the light card;
    that token is near-black here, so set the label explicitly. Gmail keeps its
-   own colors via the more specific rule below. */
-.login-page[data-public-theme="dark"] .login-card button {
+   own colors via the more specific rule below; text-style link buttons (e.g.
+   "Resend code") stay blue. */
+.login-page[data-public-theme="dark"] .login-card button:not(.link-button) {
   color: #ffffff;
+}
+
+.login-page[data-public-theme="dark"] .login-card .link-button {
+  color: #60a5fa;
 }
 
 .login-page[data-public-theme="dark"] .login-card input {

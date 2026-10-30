@@ -601,3 +601,55 @@
 :root[data-theme="dark"] .marketing-footer-inner button {
   color: var(--color-input-border);
 }
+
+/* ============================================================
+   Public light/dark (see usePublicTheme) — /pricing and /support opt in via
+   MarketingShell `themeable`. Scoped to the shell's `data-public-theme`, not
+   html[data-theme], so the signed-in app is unaffected.
+   ============================================================ */
+[data-public-theme="dark"] .marketing-hero {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.16) 0%, #0a0a0a 60%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+[data-public-theme="dark"] .marketing-hero-copy h1 {
+  color: #f5f7fa;
+}
+[data-public-theme="dark"] .marketing-hero-copy p.lead {
+  color: #b4bcc8;
+}
+[data-public-theme="dark"] .marketing-hero-copy .marketing-eyebrow {
+  color: #60a5fa;
+}
+[data-public-theme="dark"] .marketing-hero-actions button + button {
+  background: transparent;
+  color: #93c5fd;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+[data-public-theme="dark"] .marketing-hero-actions button + button:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: #60a5fa;
+}
+[data-public-theme="dark"] .marketing-hero-card {
+  background: #0d0d0d;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+[data-public-theme="dark"] .marketing-hero-card-row {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+[data-public-theme="dark"] .marketing-hero-card-text {
+  color: #e5e7eb;
+}
+[data-public-theme="dark"] .marketing-hero-card-meta {
+  color: #8a93a3;
+}
+[data-public-theme="dark"] .marketing-hero-card-icon {
+  background: rgba(96, 165, 250, 0.12);
+}
+[data-public-theme="dark"] .marketing-footer {
+  background: #050505;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+[data-public-theme="dark"] .marketing-footer-legal {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}

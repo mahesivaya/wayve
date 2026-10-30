@@ -7,7 +7,7 @@ export default function Support() {
   const { user } = useAuth();
 
   return (
-    <MarketingShell>
+    <MarketingShell themeable>
       <section className="marketing-hero">
         <div className="marketing-hero-copy">
           <p className="marketing-eyebrow">Support</p>
