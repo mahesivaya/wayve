@@ -1,11 +1,13 @@
 // Creating a team from the sidebar's ＋ opens the new team's page, instead of
 // leaving the owner on whatever page they were on (often a sample team, which
-// looked like "it opened another team").
-import { describe, expect, it, vi } from "vitest";
+// looked like "it opened another team"). The Teams section itself only shows
+// in admin mode.
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 
+const session = vi.hoisted(() => ({ mode: "admin" as "admin" | "normal" }));
 vi.mock("../../auth/useAuth", () => ({
   useAuth: () => ({
     user: {
@@ -14,7 +16,7 @@ vi.mock("../../auth/useAuth", () => ({
       account_type: "organization_admin",
       scope: "organization",
       effective_role: "owner",
-      mode: "admin",
+      mode: session.mode,
       can_switch_admin: true,
       permissions: [],
     },
@@ -59,6 +61,10 @@ function CurrentPath() {
 }
 
 describe("Layout team creation", () => {
+  beforeEach(() => {
+    session.mode = "admin";
+  });
+
   it("navigates to the team it just created", async () => {
     createTeam.mockResolvedValue({
       id: 7,
@@ -88,5 +94,26 @@ describe("Layout team creation", () => {
     expect((await screen.findByText("/teams/platform")).textContent).toBe(
       "/teams/platform"
     );
+  });
+
+  it("shows the Teams section in admin mode only", () => {
+    const renderLayout = () =>
+      render(
+        <MemoryRouter initialEntries={["/home"]}>
+          <Layout>
+            <Routes>
+              <Route path="*" element={<CurrentPath />} />
+            </Routes>
+          </Layout>
+        </MemoryRouter>
+      );
+
+    const admin = renderLayout();
+    expect(screen.getByText("Teams")).toBeTruthy();
+    admin.unmount();
+
+    session.mode = "normal";
+    renderLayout();
+    expect(screen.queryByText("Teams")).toBeNull();
   });
 });

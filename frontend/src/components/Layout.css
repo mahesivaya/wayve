@@ -534,7 +534,7 @@
    labels. At 768px and below it is a 56px rail that expands over the content.
 ============================== */
 .sidebar {
-  width: 200px;
+  width: 220px;
   /* Track the themeable soft surface so the sidebar matches the active theme's
      background in every theme. The old --color-surface-cool-faint aliases the
      non-themeable --color-canvas (#0a1730 navy), so on a near-black custom
@@ -1834,7 +1834,7 @@
 
   .sidebar {
     --rail-width: 56px;
-    --rail-expanded-width: 200px;
+    --rail-expanded-width: 220px;
     /* Both states border-box, so the expanded rail's footprint (width plus the
        negative margin) equals the collapsed rail's width exactly. */
     box-sizing: border-box;

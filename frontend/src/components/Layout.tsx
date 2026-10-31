@@ -494,8 +494,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const sidebarRef = useRef<HTMLElement | null>(null);
   const { width: sidebarWidth, startResize: startSidebarResize } =
     useResizableWidth({
-      storageKey: "rwayve.sidebar.width",
-      defaultWidth: 200,
+      // useResizableWidth persists the width on first render, so every
+      // existing user already holds the old 200px default under the previous
+      // key. Bump the key whenever the default changes, or they never see it.
+      storageKey: "rwayve.sidebar.width.v2",
+      defaultWidth: 220,
       min: 132,
       max: 360,
     });
@@ -1572,8 +1575,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       label: "Teams",
       icon: <TeamsIcon size={16} />,
       // Teams are org-scoped, so the section would always be empty for personal
-      // accounts.
-      visible: user.account_type !== "personal",
+      // accounts, and they're managed from the admin dashboard: shown only in
+      // admin mode (an owner who switched to it), not in normal mode.
+      visible: user.account_type !== "personal" && user.mode === "admin",
       onAdd:
         (isOrgOwner || isPlatformOwner) && !railCollapsed
           ? () => {
