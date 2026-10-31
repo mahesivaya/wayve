@@ -494,8 +494,11 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const sidebarRef = useRef<HTMLElement | null>(null);
   const { width: sidebarWidth, startResize: startSidebarResize } =
     useResizableWidth({
-      storageKey: "rwayve.sidebar.width",
-      defaultWidth: 200,
+      // useResizableWidth persists the width on first render, so every
+      // existing user already holds the old 200px default under the previous
+      // key. Bump the key whenever the default changes, or they never see it.
+      storageKey: "rwayve.sidebar.width.v2",
+      defaultWidth: 220,
       min: 132,
       max: 360,
     });
