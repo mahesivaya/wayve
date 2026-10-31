@@ -100,8 +100,8 @@ export default function Chat() {
   const [lastResetFor, setLastResetFor] = useState<Conversation | null>(
     selectedConversation
   );
-  // Send failures shown inline above the composer, typically a channel member who
-  // hasn't finished encryption setup. Distinct from `settingsError`.
+  // Send failures shown inline above the composer, typically a DM recipient who
+  // hasn't set up encryption yet. Distinct from `settingsError`.
   const [composeError, setComposeError] = useState("");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
@@ -116,6 +116,12 @@ export default function Chat() {
   }
 
   const [channelSettingsOpen, setChannelSettingsOpen] = useState(false);
+  // The channel whose header "+ Add member" dropdown is open. Keyed by id so
+  // switching channels closes it without extra bookkeeping.
+  const [addMemberChannelId, setAddMemberChannelId] = useState<number | null>(
+    null
+  );
+  const [addMemberError, setAddMemberError] = useState("");
   const [settingsError, setSettingsError] = useState("");
   const [subjectDraft, setSubjectDraft] = useState("");
   const [visibilityDraft, setVisibilityDraft] =
@@ -594,29 +600,27 @@ export default function Chat() {
         keys.set(conversation.user.id, conversation.user.public_key);
       } else {
         throw new Error(
-          `${conversation.user.email} has no chat encryption key`
+          `Can't send — ${conversation.user.email} hasn't set up encryption yet. ` +
+            `They just need to open Wayve once.`
         );
       }
       return keys;
     }
 
-    const missingEmails: string[] = [];
+    // Members without a published key (never opened Wayve, or not in this user's
+    // directory) are skipped rather than blocking the whole channel. Their envelope
+    // has no entry for them, so they see a "sent before you set up encryption"
+    // placeholder for these messages.
     for (const memberId of conversation.channel.member_ids) {
       if (memberId === user.id) continue;
       const member = users.find((candidate) => candidate.id === memberId);
       if (member?.public_key?.length) {
         keys.set(memberId, member.public_key);
       } else {
-        missingEmails.push(member?.email ?? `user #${memberId}`);
+        logger.info(
+          `Channel member ${member?.email ?? `#${memberId}`} has no encryption key; skipping`
+        );
       }
-    }
-
-    if (missingEmails.length > 0) {
-      const list = missingEmails.join(", ");
-      throw new Error(
-        `Can't send — ${list} ${missingEmails.length === 1 ? "hasn't" : "haven't"} ` +
-          `finished encryption setup. Ask them to log out and back in once.`
-      );
     }
 
     return keys;
@@ -832,6 +836,28 @@ export default function Chat() {
     }
   };
 
+  // The header dropdown always invites as a plain member; making someone an
+  // admin stays in channel settings.
+  const inviteFromHeader = async () => {
+    if (!selectedChannel) return;
+    setAddMemberError("");
+
+    try {
+      await addChatChannelUsers(
+        selectedChannel.id,
+        "user",
+        parseEmails(addUserEmails)
+      );
+      setAddUserEmails("");
+      setAddMemberChannelId(null);
+      await refreshChannels(selectedChannel.id);
+    } catch (err) {
+      setAddMemberError(
+        err instanceof Error ? err.message : "Failed to add users"
+      );
+    }
+  };
+
   const deleteUser = async (email: string) => {
     if (!selectedChannel) return;
     setSettingsError("");
@@ -1019,6 +1045,24 @@ export default function Chat() {
           callDisabled={callDisabled}
           onBack={() => setSelectedConversation(null)}
           onToggleSettings={() => setChannelSettingsOpen((open) => !open)}
+          addMember={
+            selectedChannel && isSelectedChannelAdmin
+              ? {
+                  open: addMemberChannelId === selectedChannel.id,
+                  emails: addUserEmails,
+                  error: addMemberError,
+                  onToggle: () => {
+                    setAddMemberError("");
+                    setAddMemberChannelId((id) =>
+                      id === selectedChannel.id ? null : selectedChannel.id
+                    );
+                  },
+                  onEmailsChange: setAddUserEmails,
+                  onAdd: () => void inviteFromHeader(),
+                  onClose: () => setAddMemberChannelId(null),
+                }
+              : null
+          }
           onJoinChannel={joinChannel}
         />
 
@@ -1112,6 +1156,7 @@ export default function Chat() {
               onDelete={deleteChannel}
               onAddUsers={addUsers}
               onApproveJoinRequest={approveJoinRequest}
+              onClose={() => setChannelSettingsOpen(false)}
             />
           )}
         </div>

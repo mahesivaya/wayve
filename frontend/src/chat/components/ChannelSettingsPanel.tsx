@@ -28,6 +28,7 @@ type Props = {
   onDelete: () => void;
   onAddUsers: () => void;
   onApproveJoinRequest: (userId: number) => void;
+  onClose: () => void;
 };
 
 export default function ChannelSettingsPanel({
@@ -52,6 +53,7 @@ export default function ChannelSettingsPanel({
   onDelete,
   onAddUsers,
   onApproveJoinRequest,
+  onClose,
 }: Props) {
   const pendingRequests: JoinRequest[] = channel.pending_join_requests ?? [];
 
@@ -76,8 +78,7 @@ export default function ChannelSettingsPanel({
     member.role === "Admin" && adminCount <= 1;
   // The same rule keeps the last admin from leaving (the server refuses it),
   // so they are offered Delete channel instead of a Leave that would fail.
-  const iAmLastAdmin =
-    channel.current_user_role === "admin" && adminCount <= 1;
+  const iAmLastAdmin = channel.current_user_role === "admin" && adminCount <= 1;
 
   const setVisibility = (value: ChannelVisibility) => {
     onVisibilityDraftChange(value);
@@ -86,6 +87,14 @@ export default function ChannelSettingsPanel({
 
   return (
     <aside className="channel-settings-panel" aria-label="Channel settings">
+      <button
+        type="button"
+        className="channel-settings-close"
+        onClick={onClose}
+        aria-label="Close channel settings"
+      >
+        ×
+      </button>
       {/* Name — auto-saves on blur / Enter, no button. */}
       <div className="channel-settings-section">
         <span className="channel-settings-label">Name</span>
@@ -313,8 +322,8 @@ export default function ChannelSettingsPanel({
           </button>
           <div className="channel-settings-note">
             You're the only admin, so you can't leave. Deleting removes the
-            channel, its messages and files for everyone. To leave instead,
-            make another member an admin first.
+            channel, its messages and files for everyone. To leave instead, make
+            another member an admin first.
           </div>
         </>
       )}

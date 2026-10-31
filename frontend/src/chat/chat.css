@@ -140,7 +140,15 @@
   border: 1px solid var(--color-input-border);
   border-radius: var(--radius-sm);
   font-size: var(--text-lg);
+  /* Set the ink with the surface: without it the browser's default black text
+     sat on the dark surface in dark mode, so typed names were invisible. */
+  color: var(--color-text-primary);
   background: var(--color-surface);
+}
+
+.channel-field input::placeholder,
+.channel-field textarea::placeholder {
+  color: var(--color-text-muted);
 }
 
 .channel-field textarea {
@@ -165,6 +173,9 @@
   border: 1px solid var(--color-input-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
+  /* Without an explicit color a <button> falls back to the UA's black
+     ButtonText, which vanished on the dark theme's black surface. */
+  color: var(--color-text-primary);
   padding: 7px 10px;
   cursor: pointer;
 }
@@ -561,6 +572,27 @@
   gap: 4px;
 }
 
+/* Channel name doubles as the settings entry point; keep it looking like the
+   heading it sits in. */
+.chat-header-title-btn {
+  max-width: 100%;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chat-header-title-btn:hover,
+.chat-header-title-btn.active {
+  text-decoration: underline;
+}
+
 .chat-header-copy span {
   color: var(--color-text-slate-light);
   font-size: var(--text-sm);
@@ -569,23 +601,61 @@
   white-space: nowrap;
 }
 
-.channel-settings-btn {
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
-  border: 1px solid var(--color-input-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text-slate);
-  font-size: 17px;
-  line-height: 1;
-  cursor: pointer;
-}
-
 .chat-header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* Opens the invite dropdown (AddMemberPopover) below it. */
+.channel-add-member-btn {
+  height: 36px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  padding: 0 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* Anchors the dropdown under the button. */
+.channel-add-member {
+  position: relative;
+}
+
+.channel-add-member-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  width: min(340px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-pane);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  padding: 12px;
+}
+
+.channel-add-member-popover .channel-settings-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.channel-add-member-popover .channel-settings-primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.channel-add-member-btn.active,
+.channel-add-member-btn:hover {
+  border-color: var(--color-primary-action);
+  background: var(--color-primary-panel);
+  color: var(--color-accent-blue-deep);
 }
 
 .channel-header-join {
@@ -603,13 +673,6 @@
   background: var(--color-surface-tint-slate);
   color: var(--color-text-slate-light);
   cursor: default;
-}
-
-.channel-settings-btn:hover,
-.channel-settings-btn.active {
-  border-color: var(--color-primary-action);
-  background: var(--color-primary-panel);
-  color: var(--color-accent-blue-deep);
 }
 
 /* Audio / video call entry points in the chat header (top-right of a DM). */
@@ -734,6 +797,25 @@
   border-left: 1px solid var(--color-border);
   background: var(--color-pane);
   padding: 16px;
+  position: relative;
+}
+
+/* Top-right ×, styled like the thread panel's close. */
+.channel-settings-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  border: none;
+  background: none;
+  padding: 2px 6px;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.channel-settings-close:hover {
+  color: var(--color-text-primary);
 }
 
 .channel-settings-section {

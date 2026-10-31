@@ -26,6 +26,7 @@ const renderPanel = (ch: ChatChannel, isAdmin: boolean) => {
     onLeave: vi.fn(),
     onDelete: vi.fn(),
     onDeleteUser: vi.fn(),
+    onClose: vi.fn(),
   };
   render(
     <ChannelSettingsPanel
@@ -68,7 +69,9 @@ describe("ChannelSettingsPanel roles and leaving", () => {
     expect(demote).toHaveLength(2);
     await userEvent.click(demote[1]);
     expect(onChangeRole).toHaveBeenCalledWith("b@x.test", "user");
-    await userEvent.click(screen.getByRole("button", { name: "Remove b@x.test" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Remove b@x.test" })
+    );
     expect(onDeleteUser).toHaveBeenCalledWith("b@x.test");
   });
 
@@ -77,7 +80,9 @@ describe("ChannelSettingsPanel roles and leaving", () => {
     const { onDelete, onLeave } = renderPanel(channel(), true);
     expect(screen.queryByRole("button", { name: "Leave channel" })).toBeNull();
     expect(screen.getByText(/You're the only admin/)).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "Delete channel" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete channel" })
+    );
     expect(onDelete).toHaveBeenCalled();
     expect(onLeave).not.toHaveBeenCalled();
   });
@@ -89,7 +94,9 @@ describe("ChannelSettingsPanel roles and leaving", () => {
     );
     expect(screen.queryByText(/You're the only admin/)).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete channel" })).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Leave channel" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Leave channel" })
+    );
     expect(onLeave).toHaveBeenCalled();
   });
 
@@ -97,10 +104,14 @@ describe("ChannelSettingsPanel roles and leaving", () => {
     // a@x.test is the only admin: the server would refuse both.
     renderPanel(channel(), true);
     expect(screen.queryByRole("button", { name: "Make member" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Remove a@x.test" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Remove a@x.test" })
+    ).toBeNull();
     // Members keep their controls.
     expect(screen.getByRole("button", { name: "Make admin" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Remove b@x.test" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Remove b@x.test" })
+    ).toBeTruthy();
   });
 
   it("gives a regular member Leave but no role controls", async () => {
@@ -147,5 +158,15 @@ describe("isChannelAdmin", () => {
         me
       )
     ).toBe(false);
+  });
+});
+
+describe("ChannelSettingsPanel close", () => {
+  it("closes from the × button", async () => {
+    const { onClose } = renderPanel(channel(), false);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Close channel settings" })
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
