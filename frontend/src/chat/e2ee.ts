@@ -189,8 +189,12 @@ export async function decryptChatContent(
   const privateKey = await loadPrivateKey(currentUserId);
   const encryptedKey = envelope.keys[String(currentUserId)];
 
-  if (!privateKey || !encryptedKey) {
+  if (!privateKey) {
     return "[encrypted message unavailable on this device]";
+  }
+  // The sender skipped this user because they had no published key yet.
+  if (!encryptedKey) {
+    return "[sent before you set up encryption]";
   }
 
   try {
