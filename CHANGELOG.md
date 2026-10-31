@@ -3,6 +3,20 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [8.1.0](https://github.com/mahesivaya/wayve/releases/tag/v8.1.0) - 2026-10-31
+
+### 🚀 Features
+
+- **chat:** "+ Add member" dropdown, channel name opens settings, dark-mode form fixes ([#204](https://github.com/mahesivaya/wayve/issues/204))
+
+### 🐛 Bug Fixes
+
+- **sidebar:** Wider nav, Teams only in admin mode, Hadal Mail tab title ([#203](https://github.com/mahesivaya/wayve/issues/203))
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v8.0.0 [skip ci]
+
 ## [8.0.0](https://github.com/mahesivaya/wayve/releases/tag/v8.0.0) - 2026-10-30
 
 ### 🚀 Features
