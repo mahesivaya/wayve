@@ -116,6 +116,12 @@ export default function Chat() {
   }
 
   const [channelSettingsOpen, setChannelSettingsOpen] = useState(false);
+  // The channel whose header "+ Add member" dropdown is open. Keyed by id so
+  // switching channels closes it without extra bookkeeping.
+  const [addMemberChannelId, setAddMemberChannelId] = useState<number | null>(
+    null
+  );
+  const [addMemberError, setAddMemberError] = useState("");
   const [settingsError, setSettingsError] = useState("");
   const [subjectDraft, setSubjectDraft] = useState("");
   const [visibilityDraft, setVisibilityDraft] =
@@ -830,6 +836,28 @@ export default function Chat() {
     }
   };
 
+  // The header dropdown always invites as a plain member; making someone an
+  // admin stays in channel settings.
+  const inviteFromHeader = async () => {
+    if (!selectedChannel) return;
+    setAddMemberError("");
+
+    try {
+      await addChatChannelUsers(
+        selectedChannel.id,
+        "user",
+        parseEmails(addUserEmails)
+      );
+      setAddUserEmails("");
+      setAddMemberChannelId(null);
+      await refreshChannels(selectedChannel.id);
+    } catch (err) {
+      setAddMemberError(
+        err instanceof Error ? err.message : "Failed to add users"
+      );
+    }
+  };
+
   const deleteUser = async (email: string) => {
     if (!selectedChannel) return;
     setSettingsError("");
@@ -1017,6 +1045,24 @@ export default function Chat() {
           callDisabled={callDisabled}
           onBack={() => setSelectedConversation(null)}
           onToggleSettings={() => setChannelSettingsOpen((open) => !open)}
+          addMember={
+            selectedChannel && isSelectedChannelAdmin
+              ? {
+                  open: addMemberChannelId === selectedChannel.id,
+                  emails: addUserEmails,
+                  error: addMemberError,
+                  onToggle: () => {
+                    setAddMemberError("");
+                    setAddMemberChannelId((id) =>
+                      id === selectedChannel.id ? null : selectedChannel.id
+                    );
+                  },
+                  onEmailsChange: setAddUserEmails,
+                  onAdd: () => void inviteFromHeader(),
+                  onClose: () => setAddMemberChannelId(null),
+                }
+              : null
+          }
           onJoinChannel={joinChannel}
         />
 
@@ -1110,6 +1156,7 @@ export default function Chat() {
               onDelete={deleteChannel}
               onAddUsers={addUsers}
               onApproveJoinRequest={approveJoinRequest}
+              onClose={() => setChannelSettingsOpen(false)}
             />
           )}
         </div>

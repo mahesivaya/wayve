@@ -1,6 +1,7 @@
 import type { ChatChannel } from "../../api/chat";
 import type { PresenceInfo } from "../hooks/usePresence";
 import { relativeTime } from "../utils";
+import AddMemberPopover from "./AddMemberPopover";
 
 type Props = {
   title: string;
@@ -16,7 +17,20 @@ type Props = {
   callDisabled?: boolean;
   onBack: () => void;
   onToggleSettings: () => void;
+  // The "+ Add member" invite dropdown. Null hides the button: only channel
+  // admins can invite.
+  addMember: AddMemberControl | null;
   onJoinChannel: (channel: ChatChannel) => void;
+};
+
+export type AddMemberControl = {
+  open: boolean;
+  emails: string;
+  error: string;
+  onToggle: () => void;
+  onEmailsChange: (value: string) => void;
+  onAdd: () => void;
+  onClose: () => void;
 };
 
 export default function ChatHeader({
@@ -30,6 +44,7 @@ export default function ChatHeader({
   callDisabled,
   onBack,
   onToggleSettings,
+  addMember,
   onJoinChannel,
 }: Props) {
   const showCallButtons = !selectedChannel && (onAudioCall || onVideoCall);
@@ -51,7 +66,22 @@ export default function ChatHeader({
           ‹
         </button>
         <div className="chat-header-copy">
-          <h3>{title}</h3>
+          <h3>
+            {selectedChannel?.is_member ? (
+              // The channel name is the settings toggle; there is no gear.
+              <button
+                type="button"
+                className={`chat-header-title-btn${settingsOpen ? " active" : ""}`}
+                onClick={onToggleSettings}
+                aria-expanded={settingsOpen}
+                data-tooltip="Channel settings"
+              >
+                {title}
+              </button>
+            ) : (
+              title
+            )}
+          </h3>
           {showPresence && (
             <span className="chat-presence-line">
               <span
@@ -149,16 +179,26 @@ export default function ChatHeader({
                     : "Request"}
               </button>
             )}
-            {selectedChannel.is_member && (
-              <button
-                type="button"
-                className={`channel-settings-btn ${settingsOpen ? "active" : ""}`}
-                onClick={onToggleSettings}
-                data-tooltip="Channel settings"
-                aria-label="Channel settings"
-              >
-                ⚙
-              </button>
+            {selectedChannel.is_member && addMember && (
+              <div className="channel-add-member">
+                <button
+                  type="button"
+                  className={`channel-add-member-btn${addMember.open ? " active" : ""}`}
+                  onClick={addMember.onToggle}
+                  aria-expanded={addMember.open}
+                >
+                  + Add member
+                </button>
+                {addMember.open && (
+                  <AddMemberPopover
+                    emails={addMember.emails}
+                    error={addMember.error}
+                    onEmailsChange={addMember.onEmailsChange}
+                    onAdd={addMember.onAdd}
+                    onClose={addMember.onClose}
+                  />
+                )}
+              </div>
             )}
           </div>
         )}
