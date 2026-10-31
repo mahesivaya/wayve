@@ -1575,8 +1575,9 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       label: "Teams",
       icon: <TeamsIcon size={16} />,
       // Teams are org-scoped, so the section would always be empty for personal
-      // accounts.
-      visible: user.account_type !== "personal",
+      // accounts, and they're managed from the admin dashboard: shown only in
+      // admin mode (an owner who switched to it), not in normal mode.
+      visible: user.account_type !== "personal" && user.mode === "admin",
       onAdd:
         (isOrgOwner || isPlatformOwner) && !railCollapsed
           ? () => {
