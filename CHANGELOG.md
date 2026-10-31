@@ -3,6 +3,190 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [8.0.0](https://github.com/mahesivaya/wayve/releases/tag/v8.0.0) - 2026-10-30
+
+### 🚀 Features
+
+- **tasks:** Neutral priority pill instead of a colour per priority ([#201](https://github.com/mahesivaya/wayve/issues/201))
+- 30-minute idle sign-out, solid task status selects, squarer priority pill ([#200](https://github.com/mahesivaya/wayve/issues/200))
+- **public:** Pricing labels, monochrome buttons, Book a Demo time picker, themed mockup ([#198](https://github.com/mahesivaya/wayve/issues/198))
+- **public:** Black dark mode with a light/dark toggle on the public pages ([#197](https://github.com/mahesivaya/wayve/issues/197))
+- **privacy:** Add a public privacy policy page at /privacy ([#187](https://github.com/mahesivaya/wayve/issues/187))
+- **settings:** Appearance in Settings, plus narrow-screen layout fixes ([#186](https://github.com/mahesivaya/wayve/issues/186))
+- **chat:** Attachment button before the message box ([#179](https://github.com/mahesivaya/wayve/issues/179))
+- **github:** PR comments in Code Repo, open to members; harden GitHub writes ([#178](https://github.com/mahesivaya/wayve/issues/178))
+- **github:** Code Repo — every open PR, tab counts, platform owners connect their GitHub ([#177](https://github.com/mahesivaya/wayve/issues/177))
+- **sidebar:** Admin switch in the profile menu, between Settings and Log out ([#176](https://github.com/mahesivaya/wayve/issues/176))
+- **brand:** Show Hadal Mail on login, public header and home footer ([#174](https://github.com/mahesivaya/wayve/issues/174))
+- **chat:** Delete a channel; keep the last admin ([#169](https://github.com/mahesivaya/wayve/issues/169))
+- **sidebar:** Profile button opens a Settings / Log out menu
+- **settings:** Open Settings directly and split out Usage and Billing
+- **emails:** Snooze from each row, with a Snoozed folder
+- **emails:** Drop the Docs entry from the folder list
+- **sidebar:** Rename Messages to Chat
+- **emails:** Gmail-style stars on every row, with a Starred folder
+- **emails:** Delete from each row to Trash, with Undo and Restore
+- **emails:** Forward an email with its attachments ([#160](https://github.com/mahesivaya/wayve/issues/160))
+- **brand:** Show "Hadal Mail" in the page header ([#158](https://github.com/mahesivaya/wayve/issues/158))
+- **emails:** Reply all, with the Cc header stored for every provider ([#157](https://github.com/mahesivaya/wayve/issues/157))
+- **emails:** Gmail-style conversations and threaded replies ([#154](https://github.com/mahesivaya/wayve/issues/154))
+- **teams:** Delete teams, save team members, open new teams on create ([#153](https://github.com/mahesivaya/wayve/issues/153))
+- **auth:** Stop sending users' passwords to the server ([#152](https://github.com/mahesivaya/wayve/issues/152))
+- **emails:** Add Fluxze-only send that never falls back to SMTP ([#143](https://github.com/mahesivaya/wayve/issues/143))
+- **emails:** Collapse mobile email rows to a single line
+- **emails:** Force list view inside a split pane, and hide the toggle
+- **emails:** Align the list rows into Gmail-style columns
+- **emails:** Recipient chips, Cc/Bcc rows, and highlighted mentions
+- **emails:** Deliver Bcc recipients
+- **emails:** Give the reply composer To and Subject fields
+- **teams:** Give the sample teams rosters, and show only members
+- **theme:** Default new users to the light surface
+- **emails:** Escape cancels the open composer
+- **emails:** Copy or filter by sender from the open message
+- **emails:** Mark the selected sidebar row with a check glyph
+- **emails:** Auto-page the inbox on scroll, drop the load-more button
+- **emails:** Add R/F/D/Esc shortcuts to the reading pane
+- **sidebar:** Keep the Integrations group out of personal sidebars
+- **sidebar:** List connected integrations in their own group
+- **sidebar:** Register Requests as a split-pane app
+- **emails:** Real Google profile photos in recipient avatars (People API)
+- **emails:** Avatars in suggestion menus; drop @ label; robust address parse
+- **emails:** Reply @mention searches inbox contacts; split recipient lists
+- **emails:** Compose To-field typeahead over inbox contacts
+- **emails:** Reply-box @mention that Cc's the picked user
+- **storage:** Store uploaded files in S3 when S3_BUCKET is set
+- **platform:** An API card on the platform home listing every endpoint
+- **tasks:** Drag column headers to resize list-view columns
+- **aifix:** Review and edit the diff inline, and run the fixer on P5 stories
+- **tickets:** Invert priority scale to P1-highest and offer AI fix on P4/P5
+- **tickets:** Drop the Design (Figma) section from the ticket editor
+- **userstories:** Drop the Design section from the story editor
+- **sidebar:** Rule between Calendar and Drive
+- **sidebar:** Label the scheduler "Calendar"
+- **emails:** PR notifications into Reviews, and a two-pane attachments view
+- **emails:** Give Attachments the docs icon, add a Docs entry under Sent
+- **sidebar:** Start the Teams section expanded
+- **settings:** Move Developers out of the sidebar into its own settings page
+- **support:** Open a filed ticket read-only from Settings
+- **integrations:** Connect Slack over OAuth, and add Figma
+- **ui:** Gate every Save button on the form having actually changed
+- **tasks:** Only enable Save when the form has actually changed
+- **user-stories:** Colour each bar by the statuses it passed through
+- **user-stories:** Plain bars, numbered rows, title on hover
+- **user-stories:** Drag the timeline to any date range
+- **user-stories:** Make the summary card a sprint timeline
+- **tickets:** Add a user-settable Type column to the tickets board
+- **chat:** Polish the message composer
+- **ci:** Email the owner on every PR opened (not just AI-fix)
+- **workspace:** Open item detail in a right-side drawer, Edit opens full page
+- **tickets:** Email the actor when an AI-fix PR is opened
+- **tasks:** Table list view with sortable columns and multi-select status filter
+- **ai:** Platform AI usage dashboard shows site-wide, per-tenant breakdown
+- **tickets:** File attachments on ticket creation ([#93](https://github.com/mahesivaya/wayve/issues/93))
+- **tickets:** Limit AI fix to P5 tickets instead of P1
+- **tickets:** P1-only AI fix with in-app Commit → Push → Create PR
+- **tickets:** Ticket detail page + AI-fix review flow
+- **workspace:** Skills page with a Claude-skills catalog
+- **tickets:** Phase 2 AI-fix pipeline — recall past fixes, CI fixer, capture
+- **tickets:** AI-detect duplicate & similar tickets (on-demand)
+- **workspace:** Status count strip on Tickets and User Stories boards
+- **dashboard:** Widen the user-stories burnup card and show more dates
+- **tickets:** Triage on the platform AI (Claude), default AI to Claude
+- **tickets:** Category badges and AI priority triage
+- **tickets:** Mirror reported bugs onto the Workspace Tickets board
+
+### 🐛 Bug Fixes
+
+- **tickets:** Let the story and ticket detail pages use the pane width ([#202](https://github.com/mahesivaya/wayve/issues/202))
+- **sidebar:** Thin, themed scrollbar on the nav rail ([#199](https://github.com/mahesivaya/wayve/issues/199))
+- **code-repo:** Let owners and admins read repos in normal mode ([#196](https://github.com/mahesivaya/wayve/issues/196))
+- **scheduler:** Say "not set up" when Zoom isn't configured ([#194](https://github.com/mahesivaya/wayve/issues/194))
+- **emails:** Keep mailbox bodies sealed to the owner's key when opened ([#193](https://github.com/mahesivaya/wayve/issues/193))
+- **deps:** Drop distrusted emSign roots (RUSTSEC-2026-0381/0382) ([#192](https://github.com/mahesivaya/wayve/issues/192))
+- **teams:** Add a gap above the Members heading ([#190](https://github.com/mahesivaya/wayve/issues/190))
+- **recovery:** Decrypt email subjects in the admin member-email list ([#191](https://github.com/mahesivaya/wayve/issues/191))
+- **emails:** Show a date, not a time, for yesterday's mail in the inbox ([#189](https://github.com/mahesivaya/wayve/issues/189))
+- **security:** Clear Trivy HIGH/CRITICAL findings and harden the edge proxy ([#188](https://github.com/mahesivaya/wayve/issues/188))
+- **sidebar:** Keep the icon rail visible on narrow screens ([#185](https://github.com/mahesivaya/wayve/issues/185))
+- **email:** Encrypt mailbox OAuth tokens at rest ([#184](https://github.com/mahesivaya/wayve/issues/184))
+- **scheduler:** Import Google events in the user's zone; "Today" uses the viewer's day ([#183](https://github.com/mahesivaya/wayve/issues/183))
+- **observability:** Keep request headers out of tracing logs; one log file per process ([#181](https://github.com/mahesivaya/wayve/issues/181))
+- **emails:** Snooze per person, so a shared inbox's snooze hides mail from the snoozer only ([#171](https://github.com/mahesivaya/wayve/issues/171))
+- **settings:** Send personal /pricing visitors to Settings › Billing ([#170](https://github.com/mahesivaya/wayve/issues/170))
+- **emails:** Theme colours for the Files list
+- **emails:** Keep a snooze when a delete is undone
+- **emails:** Restore Gmail mail to the inbox, not All Mail
+- **emails:** Don't log users out over mailbox errors on delete and send
+- **emails:** Let a Fluxze-to-Fluxze email be marked read and unread ([#159](https://github.com/mahesivaya/wayve/issues/159))
+- **emails:** Gmail-accurate Inbox, all-mail search, and Gmail-style conversation rows ([#156](https://github.com/mahesivaya/wayve/issues/156))
+- Sign out on failed key unwrap; sidebar profile tooltip ([#151](https://github.com/mahesivaya/wayve/issues/151))
+- **profile:** Create-password flow for Google signups; Code Repo opt-in for personal accounts ([#149](https://github.com/mahesivaya/wayve/issues/149))
+- **auth:** Refresh /api/me on cookie-only sessions ([#148](https://github.com/mahesivaya/wayve/issues/148))
+- **chat:** Deliver to every tab and device; one pane per app; tighter chat spacing ([#147](https://github.com/mahesivaya/wayve/issues/147))
+- **security:** Stop clients choosing the IP they're rate-limited as ([#146](https://github.com/mahesivaya/wayve/issues/146))
+- **chat:** Keep every channel with members under an admin ([#144](https://github.com/mahesivaya/wayve/issues/144))
+- **backend:** Consistent error shapes, bounded upload memory, synced attachment limit
+- **emails:** Stop the list from repeatedly reloading
+- **emails:** Drop "None" from the bulk-select dropdown
+- **emails:** Clean up mobile row chrome and fix avatar initial
+- **emails:** Close the gap above the mobile list bulk bar
+- **emails:** Restore the list scroll position when Back closes an email
+- **emails:** Let @ filter contacts by full email address
+- **emails:** Stop the composer fields overhanging their box
+- **emails:** Show sender results immediately, without a Back press
+- **emails:** Stop the inbox stalling with rows left to load
+- **emails:** Make the selected sidebar row visibly marked
+- **emails:** Drop the Esc shortcut from the reading pane
+- **chat:** Scope channels and user directory per personal account
+- **scheduler:** Unclip the time dropdown and accept any minute
+- **reminders:** Stack columns on pane width, not viewport width
+- **slack:** Surface a rejected bot token as a 400, not a 401
+- **layout:** Keep the page mounted when a pane splits
+- **emails:** Backfill uses parse_contacts so historical contacts get clean names
+- **tasks:** Keep the default column layout until a grip is dragged
+- **aifix:** Create the story ai_fix columns at startup
+- **aifix:** Show the reviewed diff without requiring admin session mode
+- **tasks:** Stop the Ticket and Type columns overlapping in list view
+- **emails:** Honour the list/split toggle in the Docs view
+- **ci:** Green the test jobs, and run them on main
+- **nginx:** Route the Slack and Figma OAuth callbacks to the backend
+- **db:** Create ticket_attachments after the table it references
+- **ui:** Stop the shared page shell scrolling sideways
+- **ci:** Flush pre-fix backend layer cache (scope -> v2)
+- **ci:** Don't persist cargo target dir — SHA-tagged backend image could be stale
+- **ci:** Tag ECR images with the full commit SHA, not the short abbreviation
+- **ticket:** #7 Change button name in notes page ([#94](https://github.com/mahesivaya/wayve/issues/94))
+- **tickets:** Make the ticket detail page scroll so long AI-fix diffs are reachable
+- **ci:** Grant the AI fixer edit+bash tools so it can actually change code
+- **tickets:** Explain AI-fix no_change/error outcomes on the ticket page
+- **tickets:** Restrict bug-ticket management to the Platform scope
+- **support:** Drop orphaned divider and relabel Done to Close in ticket-submitted dialog
+
+### 🧹 Maintenance
+
+- **sidebar:** Remove the Integrations group from the admin sidebar ([#195](https://github.com/mahesivaya/wayve/issues/195))
+- **deps:** Drop the unused lazy_static dependency ([#182](https://github.com/mahesivaya/wayve/issues/182))
+- Bulk trash/restore in one request; channel files deleted in the background ([#173](https://github.com/mahesivaya/wayve/issues/173))
+- **chat:** Delete a channel's attachment files in the background ([#172](https://github.com/mahesivaya/wayve/issues/172))
+- **frontend:** Update dependencies within their ranges, fixing 20 advisories ([#161](https://github.com/mahesivaya/wayve/issues/161))
+- **organization:** Pin the user-stories timeline test's clock
+- Fix clippy 1.99 break on main; fix(layout): hidden panes swallowing taps on narrow screens ([#150](https://github.com/mahesivaya/wayve/issues/150))
+- **notes:** Drop the unused encryption columns
+- **notes:** Store notes in the clear
+- **sidebar:** Hide the Reminders row behind a flag
+- **scheduler:** Reorder the meeting form fields
+- **sidebar:** Fold Test Access and Access Requests into one Requests page
+- **tasks:** Drive the status filter as the multi-select it now is
+- **deploy:** Build images in CI, push to ECR, pull on prod ([#95](https://github.com/mahesivaya/wayve/issues/95))
+- **changelog:** Update for v7.10.0 [skip ci]
+
+### Other Changes
+
+- **chat:** Prettier-format channel settings changes ([#145](https://github.com/mahesivaya/wayve/issues/145))
+- **emails:** Pad the email body frame so text doesn't hug the card edge
+- **docs:** Left-align and uncap the Swagger UI docs page
+- **aifix:** Let the diff and file editor be dragged taller
+
 ## [7.10.0](https://github.com/mahesivaya/wayve/releases/tag/v7.10.0) - 2026-07-22
 
 ### 🚀 Features
