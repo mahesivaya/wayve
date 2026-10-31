@@ -173,6 +173,9 @@
   border: 1px solid var(--color-input-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
+  /* Without an explicit color a <button> falls back to the UA's black
+     ButtonText, which vanished on the dark theme's black surface. */
+  color: var(--color-text-primary);
   padding: 7px 10px;
   cursor: pointer;
 }
@@ -585,7 +588,9 @@
   border-radius: var(--radius-md);
   background: var(--color-surface);
   color: var(--color-text-slate);
-  font-size: 17px;
+  /* The text ⚙ glyph draws well inside its em box, so at 17px it read as a
+     speck in the 36px button; 24px fills it without touching the border. */
+  font-size: 24px;
   line-height: 1;
   cursor: pointer;
 }
