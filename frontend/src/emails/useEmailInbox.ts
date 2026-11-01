@@ -127,6 +127,10 @@ export function useEmailInbox(
   // from a `refreshTick` bump on the same view (merge) — see there for why
   // that distinction matters.
   const loadedKeyRef = useRef<string | null>(null);
+  // The same key, but set only once that list's rows are actually in
+  // `emails` — so a caller can tell the rows it sees belong to the view it
+  // asked for, not the one before a folder/account/search switch.
+  const [loadedListKey, setLoadedListKey] = useState<string | null>(null);
 
   useEffect(() => {
     const key = `${activeAccount ?? "all"}|${activeFolder}|${normalizedSearchQuery}`;
@@ -153,6 +157,7 @@ export function useEmailInbox(
 
       if (isFreshLoad) {
         setEmails(data);
+        setLoadedListKey(key);
         // The backend's `hasMore` reflects DB state only; it doesn't know the
         // provider may still hold older messages we haven't synced. Assume
         // more might exist whenever the list is non-empty, so the user can
@@ -884,6 +889,7 @@ export function useEmailInbox(
     setActiveFolder,
     hasMore,
     total,
+    loadedListKey,
     loadingMore,
     viewMode,
     setViewMode,

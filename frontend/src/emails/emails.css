@@ -2004,6 +2004,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  /* Stays right-aligned when there's no Back to its left (split view). */
+  margin-left: auto;
 }
 
 .email-detail-back,

@@ -55,6 +55,7 @@ export default function Emails() {
     setActiveFolder,
     hasMore,
     total,
+    loadedListKey,
     loadingMore,
     viewMode,
     setViewMode,
@@ -488,6 +489,22 @@ export default function Emails() {
     (effectiveLayout === "list" && selectedEmail !== null) ||
     (effectiveLayout === "split" &&
       (!useSingleColumn || selectedEmail !== null));
+  // Side-by-side split view opens the first email of a freshly loaded list,
+  // so the reading pane isn't left on "Select an email". Once per list: after
+  // ✕ closes an email the pane stays empty until the folder, account or
+  // search changes. Opening marks the email read, as clicking it would.
+  const sideBySide =
+    viewMode === "email" && effectiveLayout === "split" && !useSingleColumn;
+  const autoOpenedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sideBySide || loadedListKey === null) return;
+    if (autoOpenedKeyRef.current === loadedListKey) return;
+    autoOpenedKeyRef.current = loadedListKey;
+    if (selectedEmail === null && emails.length > 0) void openEmail(emails[0]);
+    // openEmail is re-created every render; the key alone decides when.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sideBySide, loadedListKey, selectedEmail, emails]);
+
   const showEmailListResizer =
     viewMode === "email" && showList && showDetail && !useSingleColumn;
 
@@ -912,6 +929,7 @@ export default function Emails() {
             {showDetail && viewMode === "email" && (
               <EmailDetail
                 selectedEmail={selectedEmail}
+                showBack={!(showList && showDetail)}
                 viewMode={viewMode}
                 onBack={() => {
                   setViewMode("email");
