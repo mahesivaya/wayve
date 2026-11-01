@@ -39,7 +39,6 @@ const TeamPage = lazy(() => import("./teams/TeamPage"));
 const DomainVerification = lazy(
   () => import("./orgDomains/DomainVerification")
 );
-const ComingSoon = lazy(() => import("./components/ComingSoon"));
 const NotFound = lazy(() => import("./components/NotFound"));
 const Reminders = lazy(() => import("./reminders/Reminders"));
 const TicketDetail = lazy(() => import("./tickets/TicketDetail"));
@@ -371,10 +370,6 @@ export default function App() {
                     <Navigate to={accountHome} replace />
                   )
                 }
-              />
-              <Route
-                path="/coming-soon"
-                element={<ComingSoon feature="Domains" />}
               />
               {/* Asking for access and reviewing requests are two tabs of one
                 page now. The old paths still resolve — they were linked from
