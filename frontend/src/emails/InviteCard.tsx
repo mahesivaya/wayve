@@ -25,7 +25,9 @@ export function InviteCard({ emailId }: { emailId: number }) {
           setState({
             status: "error",
             message:
-              err instanceof Error ? err.message : "Couldn't load the invitation",
+              err instanceof Error
+                ? err.message
+                : "Couldn't load the invitation",
           })
       );
     return () => {
