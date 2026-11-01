@@ -990,7 +990,7 @@
 
 /* ================= EMAIL ITEM ================= */
 .email-item {
-  min-height: 30px;
+  min-height: 40px;
   padding: 0 7px;
   border-bottom: 1px solid var(--color-overlay-border);
   cursor: pointer;
@@ -1362,11 +1362,9 @@
 }
 
 .main.email-list-view .email-item {
-  /* Compact-but-readable rows: tall enough to hold the bold sender +
-     subject pair without squeezing, but tight enough to show ~20 emails
-     per typical viewport. Halfway between the original 30px density
-     and the personal-home preview row. */
-  min-height: 34px;
+  /* Full-width list view: compact rows, a touch above the original 34px.
+     (The narrower split-view list gets the roomier 40px from .email-item.) */
+  min-height: 36px;
   align-items: stretch;
   padding: 4px 10px;
 }
@@ -2783,9 +2781,7 @@ img.email-mention-avatar {
 }
 
 /* ================= SCROLLBAR ================= */
-/* Wider scrollbar on the inbox list so the thumb visibly shrinks as
-   more emails get appended via load-more — gives users a clear cue
-   that pagination did add rows even when the viewport is full. */
+/* Wider scrollbar on the inbox list. */
 .email-list::-webkit-scrollbar {
   width: 12px;
 }
@@ -2981,10 +2977,6 @@ img.email-mention-avatar {
     font-size: 11px;
     font-weight: 700;
     white-space: nowrap;
-  }
-
-  .load-more-wrap {
-    margin: 12px 0;
   }
 }
 

@@ -1,0 +1,47 @@
+/* ================= PAGER =================
+   "1–20 ‹ ›" at the bottom of the .email-list scroll container, Gmail-style.
+   Sticky so it stays reachable on a page taller than the pane; that needs a
+   bounded .email-list height (it has one — see emails.css). */
+
+.email-pager {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.email-pager-range {
+  margin-right: 8px;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.email-pager-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-text-primary);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.email-pager-btn:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.email-pager-btn:disabled {
+  color: var(--color-text-muted);
+  opacity: 0.5;
+  cursor: default;
+}

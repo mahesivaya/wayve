@@ -1,43 +1,16 @@
-import { act, cleanup, render } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { EmailList } from "../../emails/EmailList";
+import { EMAIL_PAGE_SIZE, EmailList } from "../../emails/EmailList";
 import type { EmailItem } from "../../emails/types";
 
-// jsdom ships no IntersectionObserver. The stub mirrors the one behaviour the
-// paging logic depends on: observing a target always delivers an initial
-// callback describing its current intersection.
-let intersecting = true;
-
-class StubIntersectionObserver implements IntersectionObserver {
-  readonly root = null;
-  readonly rootMargin = "";
-  readonly thresholds: ReadonlyArray<number> = [];
-  private readonly callback: IntersectionObserverCallback;
-
-  constructor(callback: IntersectionObserverCallback) {
-    this.callback = callback;
-  }
-
-  observe() {
-    this.callback(
-      [{ isIntersecting: intersecting } as IntersectionObserverEntry],
-      this
-    );
-  }
-
-  unobserve() {}
-  disconnect() {}
-  takeRecords(): IntersectionObserverEntry[] {
-    return [];
-  }
-}
-
-// Controls whether the post-load geometry check in `triggerLoadMore` (see
-// EmailList.tsx) reports the sentinel as still within the load margin. `near`
-// makes every element's rect report a 0px gap; flipping it to `false` reports
-// a 1000px gap, matching a pane that's now been filled.
-let near = true;
+// The inbox shows EMAIL_PAGE_SIZE rows per page with ‹ / › buttons, and
+// keeps one row past the current page loaded via `loadMore`. Counts below are
+// written in terms of the page size so they hold whatever it is set to.
+const P = EMAIL_PAGE_SIZE;
+const range = (from: number, to: number) => `${from}–${to}`;
+const subject = (n: number) => `Subject ${n}`;
 
 function makeEmails(count: number): EmailItem[] {
   return Array.from({ length: count }, (_, index) => ({
@@ -52,97 +25,129 @@ function makeEmails(count: number): EmailItem[] {
 function renderList(props: {
   emails: EmailItem[];
   hasMore: boolean;
-  loadMore: () => void | Promise<void>;
+  loadMore?: () => void | Promise<void>;
   loadingMore?: boolean;
+  scrollKey?: string;
 }) {
-  return render(
+  const element = (p: typeof props) => (
     <EmailList
-      emails={props.emails}
+      emails={p.emails}
       selectedEmailId={null}
       onOpenEmail={() => {}}
-      hasMore={props.hasMore}
-      loadMore={props.loadMore}
-      loadingMore={props.loadingMore ?? false}
+      hasMore={p.hasMore}
+      loadMore={p.loadMore ?? vi.fn()}
+      loadingMore={p.loadingMore ?? false}
       activeFolder="inbox"
+      scrollKey={p.scrollKey ?? "paging-test"}
     />
   );
+  const utils = render(element(props));
+  return {
+    ...utils,
+    rerenderWith: (next: typeof props) => utils.rerender(element(next)),
+  };
 }
 
-describe("EmailList paging", () => {
-  beforeEach(() => {
-    intersecting = true;
-    near = true;
-    vi.stubGlobal("IntersectionObserver", StubIntersectionObserver);
-    // Run rAF callbacks synchronously so the post-load geometry check (which
-    // real browsers defer to the next paint) resolves within `act()`.
-    vi.stubGlobal(
-      "requestAnimationFrame",
-      (cb: FrameRequestCallback): number => {
-        cb(0);
-        return 0;
-      }
-    );
-    // jsdom performs no real layout, so every element's rect is zeros by
-    // default — that already reads as "near" (a 0px gap). Overriding it lets
-    // tests flip to "far" once a page should stop the cascade.
-    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
-      () =>
-        ({
-          top: near ? 0 : 1000,
-          bottom: 0,
-          left: 0,
-          right: 0,
-          width: 0,
-          height: 0,
-          x: 0,
-          y: 0,
-          toJSON() {},
-        }) as DOMRect
-    );
-  });
+const older = () => screen.getByRole("button", { name: "Older" });
+const newer = () => screen.getByRole("button", { name: "Newer" });
 
+describe("EmailList pages", () => {
   afterEach(() => {
     cleanup();
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
   });
 
-  it("keeps paging on its own while the pane is still short", async () => {
-    // The regression this guards: a page lands but doesn't fill the visible
-    // pane (sentinel still within the load margin) and nothing else asks
-    // again — the list stalls with rows outstanding. `triggerLoadMore`'s
-    // post-load geometry check must re-trigger itself without needing the
-    // parent to hand back a bigger `emails` array.
-    const loadMore = vi.fn(async () => {
-      // Second page fills the pane — matches a real fetch's result changing
-      // what geometry looks like once rendered.
-      if (loadMore.mock.calls.length >= 2) near = false;
+  it("shows a page of rows at a time and steps through them", async () => {
+    renderList({
+      emails: makeEmails(2 * P + 5),
+      hasMore: false,
+      scrollKey: "steps",
     });
-    renderList({ emails: makeEmails(2), hasMore: true, loadMore });
 
+    expect(screen.getByText(range(1, P))).toBeTruthy();
+    expect(screen.getAllByText(subject(P)).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(subject(P + 1))).toHaveLength(0);
+    expect((newer() as HTMLButtonElement).disabled).toBe(true);
+
+    await userEvent.click(older());
+    expect(screen.getByText(range(P + 1, 2 * P))).toBeTruthy();
+    expect(screen.getAllByText(subject(P + 1)).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(subject(P))).toHaveLength(0);
+
+    await userEvent.click(older());
+    expect(screen.getByText(range(2 * P + 1, 2 * P + 5))).toBeTruthy();
+    expect((older() as HTMLButtonElement).disabled).toBe(true);
+
+    await userEvent.click(newer());
+    expect(screen.getByText(range(P + 1, 2 * P))).toBeTruthy();
+  });
+
+  it("loads ahead until it knows whether a next page exists", async () => {
+    const loadMore = vi.fn();
+    renderList({ emails: makeEmails(P), hasMore: true, loadMore });
     await act(async () => {});
-    expect(loadMore).toHaveBeenCalledTimes(2);
+    expect(loadMore).toHaveBeenCalledTimes(1);
+    // Nothing loaded past this page yet, so Older can't be offered.
+    expect((older() as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("doesn't load when the next page is already there", async () => {
+    const loadMore = vi.fn();
+    renderList({ emails: makeEmails(P + 1), hasMore: true, loadMore });
+    await act(async () => {});
+    expect(loadMore).not.toHaveBeenCalled();
+    expect((older() as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("asks once per cursor, so an empty de-duped batch can't loop", async () => {
+    const loadMore = vi.fn();
+    const emails = makeEmails(P);
+    const { rerenderWith } = renderList({ emails, hasMore: true, loadMore });
+    await act(async () => {});
+    rerenderWith({ emails, hasMore: true, loadMore, loadingMore: true });
+    rerenderWith({ emails, hasMore: true, loadMore, loadingMore: false });
+    await act(async () => {});
+    expect(loadMore).toHaveBeenCalledTimes(1);
   });
 
   it("stops asking once the server says there is nothing left", async () => {
-    const loadMore = vi.fn(async () => {});
-    renderList({ emails: makeEmails(2), hasMore: false, loadMore });
-
+    const loadMore = vi.fn();
+    renderList({ emails: makeEmails(5), hasMore: false, loadMore });
     await act(async () => {});
     expect(loadMore).not.toHaveBeenCalled();
   });
 
-  it("recovers when the parent rejects a load without flipping loadingMore", async () => {
-    // `useEmailInbox.loadMore` returns early on its own guards, leaving
-    // `loadingMore` false. The in-flight guard must not stay latched, or paging
-    // is dead for the rest of the mount.
-    const loadMore = vi.fn(() => {
-      if (loadMore.mock.calls.length >= 2) near = false;
-      return undefined;
+  it("returns to the same page after the list remounts", async () => {
+    const first = renderList({
+      emails: makeEmails(2 * P + 5),
+      hasMore: false,
+      scrollKey: "remount",
     });
-    renderList({ emails: makeEmails(2), hasMore: true, loadMore });
+    await userEvent.click(older());
+    first.unmount();
 
-    await act(async () => {});
-    expect(loadMore).toHaveBeenCalledTimes(2);
+    renderList({
+      emails: makeEmails(2 * P + 5),
+      hasMore: false,
+      scrollKey: "remount",
+    });
+    expect(screen.getByText(range(P + 1, 2 * P))).toBeTruthy();
+  });
+
+  it("falls back to the last page when rows leave it", async () => {
+    const { rerenderWith } = renderList({
+      emails: makeEmails(2 * P + 5),
+      hasMore: false,
+      scrollKey: "shrink",
+    });
+    await userEvent.click(older());
+    await userEvent.click(older());
+    expect(screen.getByText(range(2 * P + 1, 2 * P + 5))).toBeTruthy();
+
+    rerenderWith({
+      emails: makeEmails(2 * P - 2),
+      hasMore: false,
+      scrollKey: "shrink",
+    });
+    expect(screen.getByText(range(P + 1, 2 * P - 2))).toBeTruthy();
   });
 });

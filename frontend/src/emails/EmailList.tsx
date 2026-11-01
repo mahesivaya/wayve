@@ -90,6 +90,13 @@ const STUB_FOLDER_LABELS: Record<string, string> = {
   drafts: "Drafts",
 };
 
+export const EMAIL_PAGE_SIZE = 50;
+
+// The page each list (account + folder + search) was on. Module state for the
+// same reason as useListScrollMemory: in list view, opening an email unmounts
+// the list, and Back should return to the same page, not page one.
+const savedPages = new Map<string, number>();
+
 function formatMobileTime(value: string) {
   const date = new Date(value);
   const now = new Date();
@@ -157,10 +164,23 @@ export const EmailList: React.FC<EmailListProps> = ({
   const [checkedIds, setCheckedIds] = useState<Set<number>>(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkHint, setBulkHint] = useState<string | null>(null);
-  // Everything loaded, in load order. This used to be filtered by an unread-only
-  // toggle in the toolbar; with that icon gone there is nothing to narrow by, so
-  // the list shows what it was given.
-  const visibleEmails = emails;
+  // Gmail-style pages of EMAIL_PAGE_SIZE rows over the rows loaded so far. The
+  // server still hands out keyset batches (`loadMore`); the effect below keeps
+  // one row beyond this page loaded, so Next knows whether there is a next
+  // page and is instant when there is.
+  const listKey = `${scrollKey}|${searchQuery}`;
+  const [pageState, setPageState] = useState(() => ({
+    key: listKey,
+    page: savedPages.get(listKey) ?? 0,
+  }));
+  const requestedPage =
+    pageState.key === listKey ? pageState.page : (savedPages.get(listKey) ?? 0);
+  const lastPage = Math.max(0, Math.ceil(emails.length / EMAIL_PAGE_SIZE) - 1);
+  // Clamped: rows can leave (delete, snooze) and empty the last page.
+  const page = Math.min(requestedPage, lastPage);
+  const pageStart = page * EMAIL_PAGE_SIZE;
+  const visibleEmails = emails.slice(pageStart, pageStart + EMAIL_PAGE_SIZE);
+  const hasNextPage = emails.length > pageStart + EMAIL_PAGE_SIZE;
 
   useEffect(() => {
     if (!bulkHint) return;
@@ -353,83 +373,39 @@ export const EmailList: React.FC<EmailListProps> = ({
     }
   };
 
-  // Infinite scroll. The observer binds once and reads through refs, because
-  // `loadMore` is re-created every parent render and would churn it. `inFlightRef`
-  // guards duplicates: the callback can fire again before React commits the
-  // resulting state, so `loadingMore` alone is not enough.
   const listScrollRef = useRef<HTMLDivElement | null>(null);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const inFlightRef = useRef(false);
-  const hasMoreRef = useRef(hasMore);
-  const loadingMoreRef = useRef(loadingMore);
-  const loadMoreRef = useRef(loadMore);
-  useEffect(() => {
-    hasMoreRef.current = hasMore;
-  }, [hasMore]);
-  useEffect(() => {
-    loadingMoreRef.current = loadingMore;
-    if (!loadingMore) inFlightRef.current = false;
-  }, [loadingMore]);
-  useEffect(() => {
-    loadMoreRef.current = loadMore;
-  }, [loadMore]);
 
-  const triggerLoadMore = () => {
-    if (inFlightRef.current) return;
-    if (!hasMoreRef.current || loadingMoreRef.current) return;
-    inFlightRef.current = true;
-    // `loadMore` has guards of its own (no rows yet, a fetch already running)
-    // and returns silently when they reject the call — `loadingMore` never
-    // flips, so the effect above never clears this flag and paging would stay
-    // wedged for the rest of the mount. Clearing it when the call settles makes
-    // a rejected attempt cost one no-op instead of the whole feature.
-    void Promise.resolve(loadMoreRef.current()).finally(() => {
-      inFlightRef.current = false;
-      // A short pane (few rows, or rows shorter than the viewport) can still
-      // leave the sentinel within the trigger margin after this page lands,
-      // and nothing else will ask again — so check once, against real
-      // post-paint geometry, rather than relying on the observer firing its
-      // own "initial state" callback (see the effect below for why that used
-      // to cause a runaway fetch cascade once rows got shorter).
-      requestAnimationFrame(() => {
-        const root = listScrollRef.current;
-        const target = sentinelRef.current;
-        if (!root || !target) return;
-        const stillNear =
-          target.getBoundingClientRect().top -
-            root.getBoundingClientRect().bottom <
-          400;
-        if (stillNear) triggerLoadMore();
-      });
-    });
+  const goToPage = (next: number) => {
+    savedPages.set(listKey, next);
+    setPageState({ key: listKey, page: next });
+    // Selection is per page, as in Gmail: a checked row on another page would
+    // be acted on unseen.
+    setCheckedIds(new Set());
+    if (listScrollRef.current) listScrollRef.current.scrollTop = 0;
   };
 
-  // Paging is driven by a sentinel below the last row: whenever it comes within
-  // 400px of the bottom of the pane, the next page is fetched. The observer
-  // covers scroll-driven intersection changes; `triggerLoadMore` above covers
-  // the "pane isn't full yet" case explicitly, so this only needs to bind
-  // once per folder rather than re-arm on every row-count change — recreating
-  // it per page used to fire IntersectionObserver's implicit initial callback
-  // on every fetch, and once rows got shorter (denser mobile rows, tighter
-  // padding) the sentinel was often still in range, cascading into rapid
-  // repeated fetches ("emails loading again and again").
+  // Keep rows loaded up to one past this page: that fills a short page and
+  // tells Next whether a next page exists. A batch the parent de-dups to
+  // nothing leaves `emails.length` unchanged, and asking again from the same
+  // cursor would return the same batch forever, so each (list, length) is
+  // asked for at most once.
+  const lastAskedRef = useRef<string | null>(null);
   useEffect(() => {
-    const root = listScrollRef.current;
-    const target = sentinelRef.current;
-    if (!root || !target) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) triggerLoadMore();
-      },
-      { root, rootMargin: "400px" }
-    );
-    observer.observe(target);
-    return () => observer.disconnect();
-    // `triggerLoadMore` reads hasMore/loadingMore/loadMore through refs, so no
-    // further dependency is needed beyond the folder switch, which swaps the
-    // sentinel's containing list and warrants a fresh observer.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStubFolder]);
+    if (isStubFolder || !hasMore || loadingMore || emails.length === 0) return;
+    if (emails.length > pageStart + EMAIL_PAGE_SIZE) return;
+    const ask = `${listKey}|${emails.length}`;
+    if (lastAskedRef.current === ask) return;
+    lastAskedRef.current = ask;
+    void loadMore();
+  }, [
+    isStubFolder,
+    hasMore,
+    loadingMore,
+    emails.length,
+    pageStart,
+    listKey,
+    loadMore,
+  ]);
 
   // Opening an email unmounts this pane in list view, so the offset has to be
   // kept outside the component and put back when Back mounts a fresh one.
@@ -858,7 +834,9 @@ export const EmailList: React.FC<EmailListProps> = ({
                         onClick={(event) => {
                           const anchor = event.currentTarget;
                           setSnoozeFor((cur) =>
-                            cur?.id === email.id ? null : { id: email.id, anchor }
+                            cur?.id === email.id
+                              ? null
+                              : { id: email.id, anchor }
                           );
                         }}
                       >
@@ -957,24 +935,32 @@ export const EmailList: React.FC<EmailListProps> = ({
         />
       )}
 
-      {/* Rendered whenever the folder can page, even while a fetch is in flight,
-          so the observer above keeps a stable target across renders. */}
-      {!isStubFolder && (
-        <div
-          ref={sentinelRef}
-          className="load-more-sentinel"
-          aria-hidden="true"
-        />
-      )}
-      {!isStubFolder && hasMore && loadingMore && (
-        <div className="load-more-wrap">
-          <span className="load-more-status">Loading more…</span>
-        </div>
-      )}
-      {!isStubFolder && !hasMore && emails.length > 0 && (
-        <div className="load-more-wrap load-more-wrap--end">
-          <span className="load-more-status is-end">No more emails.</span>
-        </div>
+      {!isStubFolder && !showNoAccounts && visibleEmails.length > 0 && (
+        <nav className="email-pager" aria-label="Pages">
+          <span className="email-pager-range">
+            {pageStart + 1}–{pageStart + visibleEmails.length}
+          </span>
+          <button
+            type="button"
+            className="email-pager-btn"
+            onClick={() => goToPage(page - 1)}
+            disabled={page === 0}
+            aria-label="Newer"
+            data-tooltip="Newer"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            className="email-pager-btn"
+            onClick={() => goToPage(page + 1)}
+            disabled={!hasNextPage}
+            aria-label="Older"
+            data-tooltip={loadingMore && !hasNextPage ? "Loading…" : "Older"}
+          >
+            ›
+          </button>
+        </nav>
       )}
     </div>
   );

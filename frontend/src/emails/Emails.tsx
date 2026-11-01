@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import "./emails.css";
-import "./loadMore.css";
+import "./pager.css";
 import "../files/emailFiles.css";
 import SendEmail from "./SendEmail";
 import Modal from "../components/Modal";
