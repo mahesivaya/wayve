@@ -214,7 +214,9 @@ describe("useEmailInbox with conversations", () => {
   beforeEach(() => {
     getEmails.mockReset();
     getEmailThread.mockReset();
-    trashEmails.mockReset().mockImplementation(async (ids: number[]) => ({ done: ids, failed: [] }));
+    trashEmails
+      .mockReset()
+      .mockImplementation(async (ids: number[]) => ({ done: ids, failed: [] }));
     markEmailRead.mockReset().mockResolvedValue(undefined);
     getEmails.mockResolvedValue({ emails: [row], hasMore: false });
     getEmailThread.mockResolvedValue(thread);

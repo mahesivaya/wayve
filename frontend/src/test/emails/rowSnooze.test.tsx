@@ -160,8 +160,9 @@ describe("the row's Snooze action", () => {
   it("sits at the end of the row's actions", () => {
     const { container } = list({ onSnooze: vi.fn() });
     const labels = Array.from(
-      container.querySelector(".email-row-actions")?.querySelectorAll("button") ??
-        []
+      container
+        .querySelector(".email-row-actions")
+        ?.querySelectorAll("button") ?? []
     ).map((b) => b.getAttribute("aria-label"));
     expect(labels).toEqual(["Delete", "Mark as unread", "Snooze"]);
   });
@@ -318,8 +319,12 @@ describe("useEmailInbox: snooze", () => {
   it("Undo of a delete in Snoozed puts the row back, still soonest-back first", async () => {
     // The server keeps a snooze through a delete and its Undo (a restore), so
     // the row belongs back in Snoozed.
-    trashEmails.mockReset().mockImplementation(async (ids: number[]) => ({ done: ids, failed: [] }));
-    restoreEmails.mockReset().mockImplementation(async (ids: number[]) => ({ done: ids, failed: [] }));
+    trashEmails
+      .mockReset()
+      .mockImplementation(async (ids: number[]) => ({ done: ids, failed: [] }));
+    restoreEmails
+      .mockReset()
+      .mockImplementation(async (ids: number[]) => ({ done: ids, failed: [] }));
     const soon = {
       ...single,
       id: 50,
@@ -391,7 +396,9 @@ describe("formatSnoozeTime", () => {
   });
 
   it("says Tomorrow for tomorrow", () => {
-    expect(formatSnoozeTime(at(17, 8), now)).toBe(`Tomorrow ${time(at(17, 8))}`);
+    expect(formatSnoozeTime(at(17, 8), now)).toBe(
+      `Tomorrow ${time(at(17, 8))}`
+    );
   });
 
   it("names the weekday within the week, and the date after that", () => {
