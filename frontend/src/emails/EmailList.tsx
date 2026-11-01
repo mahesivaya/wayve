@@ -83,6 +83,9 @@ interface EmailListProps {
   // Where the "1–50 ‹ ›" pager renders: the page toolbar's slot when there is
   // one, otherwise inline at the bottom of the list.
   pagerSlot?: HTMLElement | null;
+  // Same idea for the select-all checkbox + its ▾ menu: the page toolbar's
+  // slot (before the view buttons) when there is one, else the bulk bar.
+  selectSlot?: HTMLElement | null;
   // Rows in this whole view, from the server, for "page / pages". Null when
   // unknown; the pager then shows only the page number.
   total?: number | null;
@@ -154,6 +157,7 @@ export const EmailList: React.FC<EmailListProps> = ({
   onShowAttachments,
   scrollKey = "emails",
   pagerSlot = null,
+  selectSlot = null,
   total = null,
   ownAddresses = [],
 }) => {
@@ -576,6 +580,88 @@ export const EmailList: React.FC<EmailListProps> = ({
     </nav>
   );
 
+  // Rows can be ticked in list view, and in split view too once the page
+  // toolbar hosts select-all (with nowhere to put it, split view stays a
+  // plain reading list).
+  const selectable = isListView || !!selectSlot;
+  const showSelect = selectable && showChrome && !showNoAccounts;
+  // With select-all moved to the toolbar, the bar only shows when it has
+  // something left to show: a selection, folder tabs, or a hint.
+  const bulkBarBusy =
+    checkedIds.size > 0 || (showFolderTabs && !!onSelectFolder) || !!bulkHint;
+  const selectControl = (
+    <div className="email-select" ref={selectMenuRef}>
+      <input
+        type="checkbox"
+        className="email-bulk-master"
+        checked={allChecked}
+        ref={(el) => {
+          if (el) el.indeterminate = someChecked;
+        }}
+        onChange={toggleAll}
+        aria-label={allChecked ? "Clear selection" : "Select all emails"}
+      />
+      <button
+        type="button"
+        className="email-select-caret"
+        aria-haspopup="menu"
+        aria-expanded={selectMenuOpen}
+        aria-label="Selection options"
+        onClick={() => setSelectMenuOpen((open) => !open)}
+      >
+        ▾
+      </button>
+      {selectMenuOpen && (
+        <div className="email-select-menu" role="menu">
+          <button
+            type="button"
+            role="menuitem"
+            className="email-select-item"
+            onClick={() => selectBy(() => true)}
+          >
+            All
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="email-select-item"
+            onClick={() => selectBy((e) => !isUnread(e))}
+          >
+            Read
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="email-select-item"
+            onClick={() => selectBy((e) => isUnread(e))}
+          >
+            Unread
+          </button>
+          {onToggleStar && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                className="email-select-item"
+                onClick={() => selectBy((e) => isStarred(e))}
+              >
+                Starred
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="email-select-item"
+                onClick={() => selectBy((e) => !isStarred(e))}
+              >
+                Unstarred
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div
       ref={listScrollRef}
@@ -585,82 +671,13 @@ export const EmailList: React.FC<EmailListProps> = ({
       {/* No mobile search bar / "Inbox" caption here: the page toolbar above
           already carries Compose and the global search box, so a second search
           field plus a label only pushed the bulk bar ~90px down the screen. */}
-      {isListView && showChrome && !showNoAccounts && (
+      {showSelect && (!selectSlot || bulkBarBusy) && (
         <div
           className="email-bulk-bar"
           role="toolbar"
           aria-label="Bulk email selection"
         >
-          <div className="email-select" ref={selectMenuRef}>
-            <input
-              type="checkbox"
-              className="email-bulk-master"
-              checked={allChecked}
-              ref={(el) => {
-                if (el) el.indeterminate = someChecked;
-              }}
-              onChange={toggleAll}
-              aria-label={allChecked ? "Clear selection" : "Select all emails"}
-            />
-            <button
-              type="button"
-              className="email-select-caret"
-              aria-haspopup="menu"
-              aria-expanded={selectMenuOpen}
-              aria-label="Selection options"
-              onClick={() => setSelectMenuOpen((open) => !open)}
-            >
-              ▾
-            </button>
-            {selectMenuOpen && (
-              <div className="email-select-menu" role="menu">
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="email-select-item"
-                  onClick={() => selectBy(() => true)}
-                >
-                  All
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="email-select-item"
-                  onClick={() => selectBy((e) => !isUnread(e))}
-                >
-                  Read
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="email-select-item"
-                  onClick={() => selectBy((e) => isUnread(e))}
-                >
-                  Unread
-                </button>
-                {onToggleStar && (
-                  <>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="email-select-item"
-                      onClick={() => selectBy((e) => isStarred(e))}
-                    >
-                      Starred
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="email-select-item"
-                      onClick={() => selectBy((e) => !isStarred(e))}
-                    >
-                      Unstarred
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+          {!selectSlot && selectControl}
           {checkedIds.size > 0 && (
             <span className="email-bulk-count">{checkedIds.size} selected</span>
           )}
@@ -716,6 +733,7 @@ export const EmailList: React.FC<EmailListProps> = ({
           )}
         </div>
       )}
+      {showSelect && selectSlot && createPortal(selectControl, selectSlot)}
 
       {rowError && (
         <div className="email-row-error" role="alert">
@@ -781,7 +799,7 @@ export const EmailList: React.FC<EmailListProps> = ({
               onClick={() => onOpenEmail(email)}
             >
               <div className="email-top">
-                {isListView && (
+                {selectable && (
                   // The envelope icon and the checkbox share a spot and cross-fade
                   // on hover. stopPropagation so ticking the checkbox doesn't also
                   // open the email.

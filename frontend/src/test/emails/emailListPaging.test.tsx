@@ -346,3 +346,64 @@ describe("EmailList page menu scroll hint", () => {
     expect(container.querySelector(".email-pager-menu-more")).toBeNull();
   });
 });
+
+describe("EmailList select-all placement", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("puts select-all in the toolbar slot and shows the bulk bar only for a selection", async () => {
+    const slot = document.createElement("div");
+    document.body.appendChild(slot);
+    const { container } = render(
+      <EmailList
+        emails={makeEmails(3)}
+        selectedEmailId={null}
+        onOpenEmail={() => {}}
+        hasMore={false}
+        loadMore={vi.fn()}
+        loadingMore={false}
+        activeFolder="inbox"
+        isListView
+        scrollKey="select-slot"
+        selectSlot={slot}
+        onBulkDelete={vi.fn()}
+      />
+    );
+    expect(slot.querySelector(".email-bulk-master")).not.toBeNull();
+    expect(container.querySelector(".email-bulk-bar")).toBeNull();
+
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Select all emails" })
+    );
+    expect(container.querySelector(".email-bulk-bar")).not.toBeNull();
+    expect(screen.getByText("3 selected")).toBeTruthy();
+    slot.remove();
+  });
+
+  it("offers select-all and row checkboxes in split view too", async () => {
+    const slot = document.createElement("div");
+    document.body.appendChild(slot);
+    render(
+      <EmailList
+        emails={makeEmails(3)}
+        selectedEmailId={null}
+        onOpenEmail={() => {}}
+        hasMore={false}
+        loadMore={vi.fn()}
+        loadingMore={false}
+        activeFolder="inbox"
+        isListView={false}
+        scrollKey="select-split"
+        selectSlot={slot}
+        onBulkDelete={vi.fn()}
+      />
+    );
+    expect(slot.querySelector(".email-bulk-master")).not.toBeNull();
+    const rowBoxes = screen.getAllByRole("checkbox", { name: /Select email/ });
+    expect(rowBoxes).toHaveLength(3);
+    await userEvent.click(rowBoxes[0]);
+    expect(screen.getByText("1 selected")).toBeTruthy();
+    slot.remove();
+  });
+});

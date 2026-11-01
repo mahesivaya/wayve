@@ -99,6 +99,20 @@
   background: var(--color-canvas);
 }
 
+/* EmailList portals its select-all checkbox here, ahead of the view buttons.
+   Empty outside list view (or before the list mounts), and an empty slot
+   would still take a toolbar gap, so it's hidden then. */
+.emails-toolbar-select {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.emails-toolbar-select:empty,
+.emails-toolbar-pager:empty {
+  display: none;
+}
+
 /* Compose sits at the far left; the search row flexes to fill the rest but
    left-aligns its contents, so the view toggles + search box cluster right
    after Compose instead of drifting to the far right. Drop the row's own

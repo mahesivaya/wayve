@@ -322,6 +322,8 @@ export default function Emails() {
   // The toolbar spot EmailList renders its pager into (null until mounted, or
   // when the toolbar is hidden — then the pager stays at the list's bottom).
   const [pagerSlot, setPagerSlot] = useState<HTMLDivElement | null>(null);
+  // Likewise for the select-all checkbox, ahead of the view buttons.
+  const [selectSlot, setSelectSlot] = useState<HTMLDivElement | null>(null);
   const [accountNameOverrides, setAccountNameOverrides] = useState<
     Record<number, string>
   >(() => {
@@ -781,6 +783,9 @@ export default function Emails() {
                   filesActive={viewMode === "files"}
                 />
               )}
+              {/* EmailList portals its select-all checkbox in here, ahead of
+                  SearchBar's list / split view buttons. */}
+              <div className="emails-toolbar-select" ref={setSelectSlot} />
               <SearchBar />
               {/* EmailList portals its "1–50 ‹ ›" pager in here. */}
               <div className="emails-toolbar-pager" ref={setPagerSlot} />
@@ -826,6 +831,7 @@ export default function Emails() {
                 isListView={effectiveLayout === "list"}
                 scrollKey={`${activeAccount ?? "all"}:${activeFolder}`}
                 pagerSlot={pagerSlot}
+                selectSlot={selectSlot}
                 total={total}
                 ownAddresses={ownAddresses}
                 onBulkMarkRead={bulkMarkRead}
