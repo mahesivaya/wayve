@@ -74,19 +74,11 @@ import {
   ApiKeysIcon,
   GitLogoIcon,
   BugReportIcon,
-  PlusIcon,
-  CanvasIcon,
-  FormsIcon,
-  AutomationsIcon,
-  WhiteboardIcon,
-  InsightsIcon,
-  AssistantIcon,
   WorkspaceIcon,
   PlatformIcon,
   OrganizationIcon,
   MembersIcon,
 } from "../icons";
-import Modal from "./Modal";
 
 function appKeyFromPath(pathname: string): AppKey {
   const match = SPLIT_APPS.find((app) => {
@@ -109,39 +101,6 @@ const SPLIT_STORAGE_KEY = "rwayve.layout.split";
 // Everything else reminder-related (the popup alerts, the page itself) is
 // unaffected.
 const SHOW_REMINDERS_NAV = false;
-
-// Opt-in apps a personal account can add to its sidebar. Entries without a
-// `path` are placeholders that route to the Coming Soon page.
-const PERSONAL_APPS_STORAGE_KEY = "rwayve.layout.personalApps";
-const ADDABLE_PERSONAL_APPS: {
-  key: string;
-  label: string;
-  icon: ReactNode;
-  path?: string;
-}[] = [
-  // Code Repo is opt-in: hidden by default, added from here. Most personal
-  // accounts never link a repository, so it no longer takes a permanent slot.
-  {
-    key: "github",
-    label: "Code Repo",
-    icon: <GitLogoIcon size={22} />,
-    path: "/github",
-  },
-  { key: "canvas", label: "Canvas", icon: <CanvasIcon size={22} /> },
-  { key: "forms", label: "Forms", icon: <FormsIcon size={22} /> },
-  {
-    key: "automations",
-    label: "Automations",
-    icon: <AutomationsIcon size={22} />,
-  },
-  {
-    key: "whiteboard",
-    label: "Whiteboard",
-    icon: <WhiteboardIcon size={22} />,
-  },
-  { key: "insights", label: "Insights", icon: <InsightsIcon size={22} /> },
-  { key: "assistant", label: "Assistant", icon: <AssistantIcon size={22} /> },
-];
 
 function isValidAppKey(value: unknown): value is AppKey {
   return typeof value === "string" && SPLIT_APPS.some((a) => a.key === value);
@@ -358,35 +317,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       // Storage quota / private mode — the split just won't persist.
     }
   }, [middleView, rightView, splitTarget]);
-
-  // Personal accounts have no Workspace section, so extra apps are opt-in via a
-  // "+" under the main nav. The chosen keys persist per-browser.
-  const [personalApps, setPersonalApps] = useState<string[]>(() => {
-    try {
-      const raw = localStorage.getItem(PERSONAL_APPS_STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed)
-        ? parsed.filter((k) => typeof k === "string")
-        : [];
-    } catch {
-      return [];
-    }
-  });
-  const [addAppOpen, setAddAppOpen] = useState(false);
-
-  const togglePersonalApp = useCallback((key: string) => {
-    setPersonalApps((prev) => {
-      const next = prev.includes(key)
-        ? prev.filter((k) => k !== key)
-        : [...prev, key];
-      try {
-        localStorage.setItem(PERSONAL_APPS_STORAGE_KEY, JSON.stringify(next));
-      } catch {
-        // Storage quota / private mode — non-fatal, just won't persist.
-      }
-      return next;
-    });
-  }, []);
 
   // Narrow screens only: whether the icon rail is expanded to show labels.
   // Starts collapsed so a phone opens on the content, not over it.
@@ -1659,12 +1589,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           visible: canAccessPlatformAnalytics,
         },
         {
-          path: "/coming-soon",
-          label: "Domains",
-          icon: <DomainsIcon size={16} />,
-          visible: isPlatformOwner,
-        },
-        {
           path: "/platform/secrets",
           label: "Secrets",
           icon: <SecretsIcon size={16} />,
@@ -1931,59 +1855,16 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   "Tasks",
                   <TasksIcon size={18} />
                 )}
-                {/* Code Repo is no longer a permanent item here: personal
-                accounts add it from the "Add" list below (workspace users get
-                it inside the Workspace section). */}
-                {user.account_type === "personal" && (
-                  <>
-                    {ADDABLE_PERSONAL_APPS.filter((a) =>
-                      personalApps.includes(a.key)
-                    ).map((a) =>
-                      a.path ? (
-                        renderSidebarItem(
-                          a.path,
-                          a.key as AppKey,
-                          a.label,
-                          a.icon
-                        )
-                      ) : (
-                        // Placeholder app: no real route yet, so it lands on the
-                        // shared Coming Soon page carrying its label.
-                        <button
-                          key={a.key}
-                          type="button"
-                          className="sidebar-link sidebar-link-placeholder"
-                          data-tooltip={`${a.label} (coming soon)`}
-                          onClick={() =>
-                            navigate(
-                              `/coming-soon?feature=${encodeURIComponent(a.label)}`
-                            )
-                          }
-                        >
-                          <span className="sidebar-icon" aria-hidden="true">
-                            {a.icon}
-                          </span>
-                          <span className="sidebar-label">{a.label}</span>
-                        </button>
-                      )
-                    )}
-                    {ADDABLE_PERSONAL_APPS.some(
-                      (a) => !personalApps.includes(a.key)
-                    ) && (
-                      <button
-                        type="button"
-                        className="sidebar-link sidebar-add-app-btn"
-                        data-tooltip="Add app"
-                        onClick={() => setAddAppOpen(true)}
-                      >
-                        <span className="sidebar-icon" aria-hidden="true">
-                          <PlusIcon size={18} />
-                        </span>
-                        <span className="sidebar-label">Add</span>
-                      </button>
-                    )}
-                  </>
-                )}
+                {/* Always on for personal accounts; workspace users get it
+                inside the Workspace section instead. */}
+                {user.account_type === "personal" &&
+                  user.effective_role !== "guest" &&
+                  renderSidebarItem(
+                    "/github",
+                    "github",
+                    "Code Repo",
+                    <GitLogoIcon size={18} />
+                  )}
                 {/* Test Access and Access Requests moved into the Workspace
                     section below. */}
               </div>
@@ -2186,35 +2067,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             </div>
           </div>
         </SearchProvider>
-
-        <Modal
-          isOpen={addAppOpen}
-          onClose={() => setAddAppOpen(false)}
-          title="Add to sidebar"
-        >
-          <div className="add-app-grid">
-            {ADDABLE_PERSONAL_APPS.map((a) => {
-              const checked = personalApps.includes(a.key);
-              return (
-                <button
-                  key={a.key}
-                  type="button"
-                  className={`add-app-card${checked ? " checked" : ""}`}
-                  aria-pressed={checked}
-                  onClick={() => togglePersonalApp(a.key)}
-                >
-                  <span className="add-app-checkbox" aria-hidden="true">
-                    {checked ? "✓" : ""}
-                  </span>
-                  <span className="add-app-icon" aria-hidden="true">
-                    {a.icon}
-                  </span>
-                  <span className="add-app-label">{a.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </Modal>
       </div>
     </SplitControlContext.Provider>
   );

@@ -1,8 +1,8 @@
-// Code Repo in the sidebar. For personal accounts it is opt-in: hidden by
-// default and added (or removed again) from the sidebar's "Add" list. Workspace
-// (organization / platform) accounts keep it in their Workspace section.
+// Code Repo in the sidebar. Personal accounts always have it; the old opt-in
+// "+ Add" button is gone. Workspace (organization / platform) accounts keep it
+// in their Workspace section.
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
@@ -66,27 +66,44 @@ describe("Code Repo sidebar entry", () => {
     window.localStorage.clear();
   });
 
-  it("is hidden for personal accounts until added from the Add list", async () => {
+  it("is always shown for personal accounts, with no Add button", () => {
     authState.user = {
       id: 1,
       email: "u@test.local",
       account_type: "personal",
       effective_role: "owner",
     };
-    const user = userEvent.setup();
     renderLayout();
 
-    expect(screen.queryByRole("link", { name: "Code Repo" })).toBeNull();
+    expect(screen.getAllByRole("link", { name: "Code Repo" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
+  });
 
-    await user.click(screen.getByRole("button", { name: "Add" }));
-    const dialog = screen.getByRole("dialog");
-    await user.click(within(dialog).getByRole("button", { name: /Code Repo/ }));
-
-    expect(screen.getByRole("link", { name: "Code Repo" })).toBeTruthy();
-    // The choice is remembered for this browser.
-    expect(window.localStorage.getItem("rwayve.layout.personalApps")).toContain(
-      "github"
+  it("ignores apps opted into before the Add button was removed", () => {
+    window.localStorage.setItem(
+      "rwayve.layout.personalApps",
+      JSON.stringify(["github", "canvas"])
     );
+    authState.user = {
+      id: 1,
+      email: "u@test.local",
+      account_type: "personal",
+      effective_role: "owner",
+    };
+    renderLayout();
+    expect(screen.getAllByRole("link", { name: "Code Repo" })).toHaveLength(1);
+    expect(screen.queryByText("Canvas")).toBeNull();
+  });
+
+  it("is hidden for a personal guest", () => {
+    authState.user = {
+      id: 3,
+      email: "g@test.local",
+      account_type: "personal",
+      effective_role: "guest",
+    };
+    renderLayout();
+    expect(screen.queryByRole("link", { name: "Code Repo" })).toBeNull();
   });
 
   it("stays in the Workspace section for organization accounts", async () => {
