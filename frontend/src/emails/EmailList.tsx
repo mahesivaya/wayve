@@ -1120,6 +1120,28 @@ export const EmailList: React.FC<EmailListProps> = ({
 
       {showPager && !pagerSlot && pager}
       {showPager && pagerSlot && createPortal(pager, pagerSlot)}
+      {/* With the pager up in the toolbar, the end of each page gets its own
+          Previous / Next, so moving on doesn't mean scrolling back up. */}
+      {showPager && pagerSlot && (page > 0 || hasNextPage) && (
+        <nav className="email-page-footer" aria-label="Page navigation">
+          <button
+            type="button"
+            className="email-page-footer-btn"
+            onClick={() => goToPage(page - 1)}
+            disabled={page === 0}
+          >
+            ‹ Previous
+          </button>
+          <button
+            type="button"
+            className="email-page-footer-btn"
+            onClick={() => goToPage(page + 1)}
+            disabled={!hasNextPage}
+          >
+            Next ›
+          </button>
+        </nav>
+      )}
     </div>
   );
 };

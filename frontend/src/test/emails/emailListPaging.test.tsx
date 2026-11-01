@@ -407,3 +407,62 @@ describe("EmailList select-all placement", () => {
     slot.remove();
   });
 });
+
+describe("EmailList page footer", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("puts Previous / Next after the rows when the pager is in the toolbar", async () => {
+    const slot = document.createElement("div");
+    document.body.appendChild(slot);
+    render(
+      <EmailList
+        emails={makeEmails(2 * P)}
+        selectedEmailId={null}
+        onOpenEmail={() => {}}
+        hasMore={false}
+        loadMore={vi.fn()}
+        loadingMore={false}
+        activeFolder="inbox"
+        scrollKey="footer"
+        pagerSlot={slot}
+        total={2 * P}
+      />
+    );
+    const previous = screen.getByRole("button", { name: "‹ Previous" });
+    const next = screen.getByRole("button", { name: "Next ›" });
+    expect((previous as HTMLButtonElement).disabled).toBe(true);
+
+    await userEvent.click(next);
+    expect(label("2/2")).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Next ›" }) as HTMLButtonElement)
+        .disabled
+    ).toBe(true);
+    await userEvent.click(screen.getByRole("button", { name: "‹ Previous" }));
+    expect(label("1/2")).toBeTruthy();
+    slot.remove();
+  });
+
+  it("is left out when there's only one page", () => {
+    const slot = document.createElement("div");
+    document.body.appendChild(slot);
+    render(
+      <EmailList
+        emails={makeEmails(5)}
+        selectedEmailId={null}
+        onOpenEmail={() => {}}
+        hasMore={false}
+        loadMore={vi.fn()}
+        loadingMore={false}
+        activeFolder="inbox"
+        scrollKey="footer-one"
+        pagerSlot={slot}
+        total={5}
+      />
+    );
+    expect(screen.queryByRole("button", { name: "Next ›" })).toBeNull();
+    slot.remove();
+  });
+});

@@ -175,3 +175,36 @@
   opacity: 0.5;
   cursor: default;
 }
+
+/* "‹ Previous   Next ›" after the last row of a page, when the pager itself
+   lives in the toolbar. Inline (not sticky): it's what you reach at the end. */
+.email-page-footer {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 12px 20px;
+}
+
+.email-page-footer-btn {
+  min-width: 112px;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.email-page-footer-btn:hover:not(:disabled) {
+  border-color: var(--color-input-border);
+  background: var(--color-surface-hover);
+}
+
+.email-page-footer-btn:disabled {
+  color: var(--color-text-muted);
+  opacity: 0.5;
+  cursor: default;
+}
