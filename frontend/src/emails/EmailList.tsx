@@ -178,15 +178,25 @@ export const EmailList: React.FC<EmailListProps> = ({
   // one row beyond this page loaded, so Next knows whether there is a next
   // page and is instant when there is.
   const listKey = `${scrollKey}|${searchQuery}`;
-  const [pageState, setPageState] = useState(() => ({
-    key: listKey,
-    page: savedPages.get(listKey) ?? 0,
-  }));
-  const requestedPage =
-    pageState.key === listKey ? pageState.page : (savedPages.get(listKey) ?? 0);
+  // `from` is the page on screen when a jump was asked for: a far page (picked
+  // from the page menu) has to be loaded first, and the list stays where it
+  // was until then instead of flicking through the pages in between.
+  const [pageState, setPageState] = useState(() => {
+    const saved = savedPages.get(listKey) ?? 0;
+    return { key: listKey, page: saved, from: saved };
+  });
+  const sameList = pageState.key === listKey;
+  const requestedPage = sameList
+    ? pageState.page
+    : (savedPages.get(listKey) ?? 0);
   const lastPage = Math.max(0, Math.ceil(emails.length / EMAIL_PAGE_SIZE) - 1);
+  const loadingPage =
+    hasMore && emails.length <= requestedPage * EMAIL_PAGE_SIZE;
   // Clamped: rows can leave (delete, snooze) and empty the last page.
-  const page = Math.min(requestedPage, lastPage);
+  const page = Math.min(
+    loadingPage && sameList ? pageState.from : requestedPage,
+    lastPage
+  );
   const pageStart = page * EMAIL_PAGE_SIZE;
   const visibleEmails = emails.slice(pageStart, pageStart + EMAIL_PAGE_SIZE);
   const hasNextPage = emails.length > pageStart + EMAIL_PAGE_SIZE;
@@ -386,22 +396,26 @@ export const EmailList: React.FC<EmailListProps> = ({
 
   const goToPage = (next: number) => {
     savedPages.set(listKey, next);
-    setPageState({ key: listKey, page: next });
+    setPageState({ key: listKey, page: next, from: page });
+    setPageMenuOpen(false);
     // Selection is per page, as in Gmail: a checked row on another page would
     // be acted on unseen.
     setCheckedIds(new Set());
     if (listScrollRef.current) listScrollRef.current.scrollTop = 0;
   };
 
-  // Keep rows loaded up to one past this page: that fills a short page and
-  // tells Next whether a next page exists. A batch the parent de-dups to
+  // Keep rows loaded up to one past the requested page: that fills a short
+  // page, tells Next whether a next page exists, and walks forward batch by
+  // batch to a page picked from the menu. A batch the parent de-dups to
   // nothing leaves `emails.length` unchanged, and asking again from the same
   // cursor would return the same batch forever, so each (list, length) is
   // asked for at most once.
+  const loadTarget =
+    Math.max(requestedPage, page) * EMAIL_PAGE_SIZE + EMAIL_PAGE_SIZE;
   const lastAskedRef = useRef<string | null>(null);
   useEffect(() => {
     if (isStubFolder || !hasMore || loadingMore || emails.length === 0) return;
-    if (emails.length > pageStart + EMAIL_PAGE_SIZE) return;
+    if (emails.length > loadTarget) return;
     const ask = `${listKey}|${emails.length}`;
     if (lastAskedRef.current === ask) return;
     lastAskedRef.current = ask;
@@ -411,7 +425,7 @@ export const EmailList: React.FC<EmailListProps> = ({
     hasMore,
     loadingMore,
     emails.length,
-    pageStart,
+    loadTarget,
     listKey,
     loadMore,
   ]);
@@ -419,6 +433,39 @@ export const EmailList: React.FC<EmailListProps> = ({
   // Opening an email unmounts this pane in list view, so the offset has to be
   // kept outside the component and put back when Back mounts a fresh one.
   useListScrollMemory(listScrollRef, `${scrollKey}|${searchQuery}`);
+
+  // The page menu under "1/27". Closes on Escape or a click outside the pager.
+  const [pageMenuOpen, setPageMenuOpen] = useState(false);
+  // Whether the open menu has more pages below its scroll edge, for the ▾
+  // hint pinned to its bottom. Measured when it mounts and on every scroll.
+  const [pageMenuMore, setPageMenuMore] = useState(false);
+  const measurePageMenu = (el: HTMLElement | null) => {
+    if (!el) return;
+    const more = el.scrollHeight - el.scrollTop - el.clientHeight > 1;
+    setPageMenuMore((prev) => (prev === more ? prev : more));
+  };
+  const pagerRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!pageMenuOpen) return;
+    const onPointer = (event: MouseEvent) => {
+      if (
+        pagerRef.current &&
+        event.target instanceof Node &&
+        !pagerRef.current.contains(event.target)
+      ) {
+        setPageMenuOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPageMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [pageMenuOpen]);
 
   // Pages in the whole view. The server total counts synced mail only, and
   // rows can sync in before the next count, so never show fewer pages than
@@ -430,10 +477,17 @@ export const EmailList: React.FC<EmailListProps> = ({
           Math.ceil(total / EMAIL_PAGE_SIZE),
           page + (hasNextPage ? 2 : 1)
         );
+  // What the menu offers: every page when the total is known, otherwise the
+  // pages loaded so far (plus the next one, if it's there).
+  const menuPages =
+    pageCount ??
+    lastPage + 1 + (emails.length > (lastPage + 1) * EMAIL_PAGE_SIZE ? 1 : 0);
+  const shownPage = loadingPage ? requestedPage : page;
   const showPager =
     !isStubFolder && !showNoAccounts && visibleEmails.length > 0;
   const pager = (
     <nav
+      ref={pagerRef}
       className={`email-pager${pagerSlot ? " email-pager--toolbar" : ""}`}
       aria-label="Pages"
     >
@@ -450,9 +504,65 @@ export const EmailList: React.FC<EmailListProps> = ({
       >
         ‹
       </button>
-      <span className="email-pager-range" aria-live="polite">
-        {pageCount === null ? page + 1 : `${page + 1}/${pageCount}`}
-      </span>
+      <div className="email-pager-menu-anchor">
+        <button
+          type="button"
+          className={`email-pager-range${loadingPage ? " is-loading" : ""}`}
+          onClick={() => setPageMenuOpen((open) => !open)}
+          aria-haspopup="listbox"
+          aria-expanded={pageMenuOpen}
+          aria-busy={loadingPage}
+          aria-label={`Page ${shownPage + 1}${
+            pageCount === null ? "" : ` of ${pageCount}`
+          }, choose a page`}
+        >
+          {pageCount === null ? shownPage + 1 : `${shownPage + 1}/${pageCount}`}
+        </button>
+        {pageMenuOpen && (
+          <ul
+            ref={measurePageMenu}
+            className="email-pager-menu"
+            role="listbox"
+            aria-label="Go to page"
+            onScroll={(event) => measurePageMenu(event.currentTarget)}
+          >
+            {Array.from({ length: menuPages }, (_, n) => (
+              <li key={n}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={n === shownPage}
+                  className={`email-pager-menu-item${
+                    n === shownPage ? " is-current" : ""
+                  }`}
+                  onClick={() => goToPage(n)}
+                >
+                  <span>{n + 1}</span>
+                  {n === shownPage && (
+                    <span className="email-pager-menu-check" aria-hidden="true">
+                      ✓
+                    </span>
+                  )}
+                </button>
+              </li>
+            ))}
+            {pageMenuMore && (
+              <li className="email-pager-menu-more" aria-hidden="true">
+                <svg viewBox="0 0 10 6">
+                  <path
+                    d="M1 1l4 4 4-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </li>
+            )}
+          </ul>
+        )}
+      </div>
       <button
         type="button"
         className="email-pager-btn"

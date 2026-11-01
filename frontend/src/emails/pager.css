@@ -42,8 +42,7 @@
 }
 
 .email-pager--toolbar .email-pager-range {
-  min-width: 0;
-  padding: 0 2px;
+  margin: 0 2px;
 }
 
 /* "1–50" before the buttons: which emails this page shows. */
@@ -56,13 +55,103 @@
 }
 
 /* "1/5" between the ‹ › buttons. */
+/* A button: it opens the page menu. */
 .email-pager-range {
-  min-width: 36px;
-  padding: 0 4px;
+  min-width: 44px;
+  height: 28px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-hover);
   text-align: center;
   color: var(--color-text-primary);
+  font: inherit;
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.email-pager-range:hover,
+.email-pager-range[aria-expanded="true"] {
+  background: var(--color-border);
+}
+
+/* Walking forward to a page picked from the menu. */
+.email-pager-range.is-loading {
+  opacity: 0.5;
+}
+
+/* Anchors the menu under the "1/27" button. */
+.email-pager-menu-anchor {
+  position: relative;
+}
+
+.email-pager-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  /* Fits its widest row (the current page with its ✓), so the tick sits
+     close to the number instead of across a fixed-width menu. */
+  width: max-content;
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-pane);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.email-pager-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  border: none;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--text-md);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  cursor: pointer;
+}
+
+.email-pager-menu-item:hover {
+  background: var(--color-surface-hover);
+}
+
+/* ▾ pinned to the menu's bottom while more pages lie below its scroll edge.
+   Purely a hint (the list scrolls as usual), so it ignores the pointer. */
+.email-pager-menu-more {
+  position: sticky;
+  bottom: -4px;
+  display: flex;
+  justify-content: center;
+  padding: 6px 0 4px;
+  background: linear-gradient(to bottom, transparent, var(--color-pane) 60%);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.email-pager-menu-more svg {
+  width: 12px;
+  height: 8px;
+}
+
+/* The current page: filled with the accent colour, ✓ at the right. */
+.email-pager-menu-item.is-current {
+  background: var(--color-primary-action);
+  color: var(--color-surface);
+}
+
+.email-pager-menu-check {
+  font-size: var(--text-sm);
 }
 
 .email-pager-btn {

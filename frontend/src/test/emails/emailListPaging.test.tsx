@@ -225,3 +225,124 @@ describe("EmailList pager placement", () => {
     slot.remove();
   });
 });
+
+describe("EmailList page menu", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  const openMenu = () =>
+    userEvent.click(screen.getByRole("button", { name: /choose a page/ }));
+
+  it("lists every page and jumps to the one picked", async () => {
+    render(
+      <EmailList
+        emails={makeEmails(2 * P + 5)}
+        selectedEmailId={null}
+        onOpenEmail={() => {}}
+        hasMore={false}
+        loadMore={vi.fn()}
+        loadingMore={false}
+        activeFolder="inbox"
+        scrollKey="menu-pick"
+        total={2 * P + 5}
+      />
+    );
+    await openMenu();
+    const options = screen.getAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual(["1✓", "2", "3"]);
+
+    await userEvent.click(options[2]);
+    expect(label("3/3")).toBeTruthy();
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("closes on Escape", async () => {
+    render(
+      <EmailList
+        emails={makeEmails(P + 1)}
+        selectedEmailId={null}
+        onOpenEmail={() => {}}
+        hasMore={false}
+        loadMore={vi.fn()}
+        loadingMore={false}
+        activeFolder="inbox"
+        scrollKey="menu-escape"
+        total={P + 1}
+      />
+    );
+    await openMenu();
+    expect(screen.getByRole("listbox")).toBeTruthy();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("stays on the current page while a far page loads, then shows it", async () => {
+    const loadMore = vi.fn();
+    const props = {
+      selectedEmailId: null,
+      onOpenEmail: () => {},
+      loadMore,
+      loadingMore: false,
+      activeFolder: "inbox" as const,
+      scrollKey: "menu-far",
+      total: 4 * P,
+    };
+    const { rerender } = render(
+      <EmailList {...props} emails={makeEmails(P + 1)} hasMore />
+    );
+    await openMenu();
+    await userEvent.click(screen.getAllByRole("option")[3]);
+
+    // Page 4 isn't loaded yet: rows of page 1 stay, the label says where
+    // it's going, and loading walks forward.
+    expect(screen.getAllByText(subject(1)).length).toBeGreaterThan(0);
+    expect(label("4/4")).toBeTruthy();
+    await act(async () => {});
+    expect(loadMore).toHaveBeenCalled();
+
+    rerender(
+      <EmailList {...props} emails={makeEmails(4 * P)} hasMore={false} />
+    );
+    expect(screen.getAllByText(subject(3 * P + 1)).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(subject(1))).toHaveLength(0);
+    expect(label("4/4")).toBeTruthy();
+  });
+});
+
+describe("EmailList page menu scroll hint", () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it("shows ▾ while pages lie below the menu's edge, and drops it at the end", async () => {
+    // jsdom does no layout: fake a menu taller than its viewport.
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(600);
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(300);
+    const { container } = render(
+      <EmailList
+        emails={makeEmails(P + 1)}
+        selectedEmailId={null}
+        onOpenEmail={() => {}}
+        hasMore={false}
+        loadMore={vi.fn()}
+        loadingMore={false}
+        activeFolder="inbox"
+        scrollKey="menu-hint"
+        total={27 * P}
+      />
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /choose a page/ })
+    );
+    expect(container.querySelector(".email-pager-menu-more")).not.toBeNull();
+
+    const menu = screen.getByRole("listbox");
+    menu.scrollTop = 300;
+    await act(async () => {
+      menu.dispatchEvent(new Event("scroll"));
+    });
+    expect(container.querySelector(".email-pager-menu-more")).toBeNull();
+  });
+});
