@@ -62,7 +62,8 @@ export const inviteWhen = (invite: EmailInvite): string | null => {
       : `${dateText(start)} · All day`;
   }
   const exact = invite.start ? new Date(invite.start) : null;
-  const start = exact ?? (invite.start_local ? wallTime(invite.start_local) : null);
+  const start =
+    exact ?? (invite.start_local ? wallTime(invite.start_local) : null);
   if (!start) return null;
   const end = invite.end
     ? new Date(invite.end)

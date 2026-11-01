@@ -858,7 +858,9 @@ export const EmailList: React.FC<EmailListProps> = ({
                         onClick={(event) => {
                           const anchor = event.currentTarget;
                           setSnoozeFor((cur) =>
-                            cur?.id === email.id ? null : { id: email.id, anchor }
+                            cur?.id === email.id
+                              ? null
+                              : { id: email.id, anchor }
                           );
                         }}
                       >

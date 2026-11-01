@@ -198,8 +198,12 @@ describe("the row's Delete and Restore actions", () => {
 describe("useEmailInbox: delete to Trash and Undo", () => {
   beforeEach(() => {
     getEmails.mockReset();
-    trashEmails.mockReset().mockImplementation(async (ids: number[]) => ({ done: ids, failed: [] }));
-    restoreEmails.mockReset().mockImplementation(async (ids: number[]) => ({ done: ids, failed: [] }));
+    trashEmails
+      .mockReset()
+      .mockImplementation(async (ids: number[]) => ({ done: ids, failed: [] }));
+    restoreEmails
+      .mockReset()
+      .mockImplementation(async (ids: number[]) => ({ done: ids, failed: [] }));
     getEmails.mockResolvedValue({
       emails: [conversation, single],
       hasMore: false,

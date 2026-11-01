@@ -831,7 +831,9 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
                 setDeleteError(null);
                 onSnooze(until).catch((err: unknown) =>
                   setDeleteError(
-                    err instanceof Error ? err.message : "Failed to snooze email"
+                    err instanceof Error
+                      ? err.message
+                      : "Failed to snooze email"
                   )
                 );
               }}

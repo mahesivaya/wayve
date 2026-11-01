@@ -254,7 +254,7 @@ export default function MessageComposer({
           </>
         )}
         {/* Border + background live on this wrapper so the emoji icon sits
-            *inside* the textbox; the textarea itself is borderless. */}
+         *inside* the textbox; the textarea itself is borderless. */}
         <div className="chat-input-field">
           <textarea
             ref={textareaRef}

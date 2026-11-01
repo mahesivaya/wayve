@@ -3320,15 +3320,44 @@ function PersonalRepoManager() {
       .catch(() => setGhConn({ connected: false }));
   }, []);
 
+  const runImport = useCallback((existing: Project[]) => {
+    setImporting(true);
+    setImportCount(0);
+    setErr("");
+    void importAllRepos(existing, setImportCount)
+      .then((created) => {
+        if (created.length === 0) {
+          setErr("No new repositories to import.");
+          return;
+        }
+        setProjects((prev) => [...created, ...(prev ?? [])]);
+        setSelectedId(created[0].id);
+        setAdding(false);
+      })
+      .catch((e) =>
+        setErr(
+          e instanceof Error
+            ? e.message
+            : "Couldn't reach GitHub — check the connection."
+        )
+      )
+      .finally(() => setImporting(false));
+  }, []);
+
   // Re-check after the OAuth redirect, which bounces back to
-  // /github#connected=true.
+  // /github#connected=true. A first connect with no repos yet imports them
+  // straight away, so the user lands on their code rather than an empty panel.
   useEffect(() => {
     refreshConnection();
     if (window.location.hash.includes("connected=true")) {
       history.replaceState(null, "", window.location.pathname);
-      refreshConnection();
+      void Promise.all([getGithubConnection(), listProjects()])
+        .then(([conn, rows]) => {
+          if (conn.connected && rows.length === 0) runImport(rows);
+        })
+        .catch(() => {});
     }
-  }, [refreshConnection]);
+  }, [refreshConnection, runImport]);
 
   const connectGithub = () => {
     setErr("");
@@ -3354,27 +3383,7 @@ function PersonalRepoManager() {
   // Adds every accessible repo in one click, instead of pasting URLs one by one.
   const importAll = () => {
     if (busy || importing) return;
-    setImporting(true);
-    setImportCount(0);
-    setErr("");
-    void importAllRepos(projects ?? [], setImportCount)
-      .then((created) => {
-        if (created.length === 0) {
-          setErr("No new repositories to import.");
-          return;
-        }
-        setProjects((prev) => [...created, ...(prev ?? [])]);
-        setSelectedId(created[0].id);
-        setAdding(false);
-      })
-      .catch((e) =>
-        setErr(
-          e instanceof Error
-            ? e.message
-            : "Couldn't reach GitHub — check the connection."
-        )
-      )
-      .finally(() => setImporting(false));
+    runImport(projects ?? []);
   };
 
   // No synchronous setState here; it would trip react-hooks/set-state-in-effect.
