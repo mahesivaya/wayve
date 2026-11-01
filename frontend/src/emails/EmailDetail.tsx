@@ -33,6 +33,9 @@ interface EmailDetailProps {
   selectedEmail: EmailItem | null;
   viewMode: "email" | "files";
   onBack: () => void;
+  // The top-left Back. Off in split view, where the list is already beside
+  // the email; the ✕ still closes it.
+  showBack?: boolean;
   onDeleteEmail: (emailId: number) => Promise<void>;
   // The open conversation's star, as on its list row. Omit to hide it.
   starred?: boolean;
@@ -60,6 +63,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   selectedEmail,
   viewMode,
   onBack,
+  showBack = true,
   onDeleteEmail,
   starred = false,
   onToggleStar,
@@ -721,22 +725,24 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   return (
     <div className="email-detail" ref={detailRef} tabIndex={-1}>
       <div className="email-detail-header">
-        <button
-          type="button"
-          className="email-detail-back-top"
-          onClick={onBack}
-          data-tooltip="Back to list"
-          aria-label="Back to list"
-        >
-          <svg
-            className="email-detail-back-top-icon"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
+        {showBack && (
+          <button
+            type="button"
+            className="email-detail-back-top"
+            onClick={onBack}
+            data-tooltip="Back to list"
+            aria-label="Back to list"
           >
-            <path d="M15 6l-6 6 6 6" />
-          </svg>
-          <span>Back</span>
-        </button>
+            <svg
+              className="email-detail-back-top-icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path d="M15 6l-6 6 6 6" />
+            </svg>
+            <span>Back</span>
+          </button>
+        )}
         <div className="email-detail-actions">
           <button
             className="email-detail-reply"
