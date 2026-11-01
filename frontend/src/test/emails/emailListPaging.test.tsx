@@ -9,7 +9,12 @@ import type { EmailItem } from "../../emails/types";
 // keeps one row past the current page loaded via `loadMore`. Counts below are
 // written in terms of the page size so they hold whatever it is set to.
 const P = EMAIL_PAGE_SIZE;
-const range = (from: number, to: number) => `${from}–${to}`;
+// The pager's label: the page number, or "page/pages" when a total is known.
+// "1–50" before the arrows: the emails this page shows (no total).
+const emailsLabel = (text: string) =>
+  screen.getByText(text, { selector: ".email-pager-emails" });
+const label = (text: string) =>
+  screen.getByText(text, { selector: ".email-pager-range" });
 const subject = (n: number) => `Subject ${n}`;
 
 function makeEmails(count: number): EmailItem[] {
@@ -63,22 +68,22 @@ describe("EmailList pages", () => {
       scrollKey: "steps",
     });
 
-    expect(screen.getByText(range(1, P))).toBeTruthy();
+    expect(label("1")).toBeTruthy();
     expect(screen.getAllByText(subject(P)).length).toBeGreaterThan(0);
     expect(screen.queryAllByText(subject(P + 1))).toHaveLength(0);
     expect((newer() as HTMLButtonElement).disabled).toBe(true);
 
     await userEvent.click(older());
-    expect(screen.getByText(range(P + 1, 2 * P))).toBeTruthy();
+    expect(label("2")).toBeTruthy();
     expect(screen.getAllByText(subject(P + 1)).length).toBeGreaterThan(0);
     expect(screen.queryAllByText(subject(P))).toHaveLength(0);
 
     await userEvent.click(older());
-    expect(screen.getByText(range(2 * P + 1, 2 * P + 5))).toBeTruthy();
+    expect(label("3")).toBeTruthy();
     expect((older() as HTMLButtonElement).disabled).toBe(true);
 
     await userEvent.click(newer());
-    expect(screen.getByText(range(P + 1, 2 * P))).toBeTruthy();
+    expect(label("2")).toBeTruthy();
   });
 
   it("loads ahead until it knows whether a next page exists", async () => {
@@ -130,7 +135,7 @@ describe("EmailList pages", () => {
       hasMore: false,
       scrollKey: "remount",
     });
-    expect(screen.getByText(range(P + 1, 2 * P))).toBeTruthy();
+    expect(label("2")).toBeTruthy();
   });
 
   it("falls back to the last page when rows leave it", async () => {
@@ -141,13 +146,82 @@ describe("EmailList pages", () => {
     });
     await userEvent.click(older());
     await userEvent.click(older());
-    expect(screen.getByText(range(2 * P + 1, 2 * P + 5))).toBeTruthy();
+    expect(label("3")).toBeTruthy();
 
     rerenderWith({
       emails: makeEmails(2 * P - 2),
       hasMore: false,
       scrollKey: "shrink",
     });
-    expect(screen.getByText(range(P + 1, 2 * P - 2))).toBeTruthy();
+    expect(label("2")).toBeTruthy();
+  });
+});
+
+describe("EmailList page count", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  const withTotal = (emails: EmailItem[], total: number | null) =>
+    render(
+      <EmailList
+        emails={emails}
+        selectedEmailId={null}
+        onOpenEmail={() => {}}
+        hasMore={false}
+        loadMore={vi.fn()}
+        loadingMore={false}
+        activeFolder="inbox"
+        scrollKey={`total-${total}`}
+        total={total}
+      />
+    );
+
+  it("shows page/pages between the arrows when the total is known", async () => {
+    withTotal(makeEmails(P + 1), 2 * P + 5);
+    expect(label("1/3")).toBeTruthy();
+    expect(emailsLabel(`1–${P}`)).toBeTruthy();
+    await userEvent.click(older());
+    expect(label("2/3")).toBeTruthy();
+    expect(emailsLabel(`${P + 1}–${P + 1}`)).toBeTruthy();
+  });
+
+  it("never shows fewer pages than are already loaded", () => {
+    // Rows synced in after the server counted.
+    withTotal(makeEmails(P + 1), P);
+    expect(label("1/2")).toBeTruthy();
+  });
+
+  it("shows just the page number without a total", () => {
+    withTotal(makeEmails(5), null);
+    expect(label("1")).toBeTruthy();
+    expect(emailsLabel("1–5")).toBeTruthy();
+  });
+});
+
+describe("EmailList pager placement", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("renders the pager into the toolbar slot when one is given", () => {
+    const slot = document.createElement("div");
+    document.body.appendChild(slot);
+    const { container } = render(
+      <EmailList
+        emails={makeEmails(P + 1)}
+        selectedEmailId={null}
+        onOpenEmail={() => {}}
+        hasMore={false}
+        loadMore={vi.fn()}
+        loadingMore={false}
+        activeFolder="inbox"
+        scrollKey="slot"
+        pagerSlot={slot}
+      />
+    );
+    expect(slot.querySelector(".email-pager")).not.toBeNull();
+    expect(container.querySelector(".email-pager")).toBeNull();
+    slot.remove();
   });
 });

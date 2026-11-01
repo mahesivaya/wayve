@@ -38,6 +38,9 @@ export type EmailListParams = {
 export type EmailListResult<T = unknown> = {
   emails: T[];
   hasMore: boolean;
+  // Rows across every page of this view; sent with the first page only, so
+  // null on later pages (or if the server couldn't count).
+  total: number | null;
 };
 
 export type EmailComposeAttachment = {
@@ -249,9 +252,13 @@ export const getEmails = async <T = unknown>(
   const res = await apiFetch(emailListPath(params));
   const emails = (await res.json()) as T[];
 
+  const totalHeader = res.headers.get("x-total-count");
+  const total = totalHeader === null ? NaN : Number(totalHeader);
+
   return {
     emails,
     hasMore: res.headers.get("x-has-more") === "true",
+    total: Number.isFinite(total) ? total : null,
   };
 };
 

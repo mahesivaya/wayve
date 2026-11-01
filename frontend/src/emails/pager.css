@@ -17,9 +17,50 @@
   background: var(--color-surface);
 }
 
-.email-pager-range {
+/* The page toolbar's slot for it: pinned to the right end of the search row. */
+.emails-toolbar-pager {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+
+/* In the toolbar it's just part of the row: no sticky bar, border or fill. */
+.email-pager.email-pager--toolbar {
+  position: static;
+  margin-top: 0;
+  padding: 0;
+  border-top: none;
+  background: none;
+  gap: 0;
+}
+
+/* Narrow buttons and a snug label keep "‹ 1/27 ›" tight together. */
+.email-pager--toolbar .email-pager-btn {
+  width: 22px;
+  height: 28px;
+}
+
+.email-pager--toolbar .email-pager-range {
+  min-width: 0;
+  padding: 0 2px;
+}
+
+/* "1–50" before the buttons: which emails this page shows. */
+.email-pager-emails {
   margin-right: 8px;
   color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* "1/5" between the ‹ › buttons. */
+.email-pager-range {
+  min-width: 36px;
+  padding: 0 4px;
+  text-align: center;
+  color: var(--color-text-primary);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }

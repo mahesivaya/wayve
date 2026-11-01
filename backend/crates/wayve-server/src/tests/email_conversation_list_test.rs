@@ -847,4 +847,62 @@ mod tests {
 
         cleanup(&pool, &[me.user, stranger.user]).await;
     }
+
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn count_matches_the_list_per_email_and_per_conversation() {
+        let pool = test_pool().await;
+        let me = mailbox(&pool).await;
+        let t = thread(&pool, me.account).await;
+        // One conversation of two inbox messages, one lone email, and a
+        // trashed email that no inbox view lists.
+        email(
+            &pool,
+            me.account,
+            Some(t),
+            "Alice <alice@x.com>",
+            &["INBOX"],
+            "2026-07-19 10:00",
+        )
+        .await;
+        email(
+            &pool,
+            me.account,
+            Some(t),
+            "Alice <alice@x.com>",
+            &["INBOX"],
+            "2026-07-20 10:00",
+        )
+        .await;
+        email(
+            &pool,
+            me.account,
+            None,
+            "Bob <bob@x.com>",
+            &["INBOX"],
+            "2026-07-21 10:00",
+        )
+        .await;
+        email(
+            &pool,
+            me.account,
+            None,
+            "Carol <carol@x.com>",
+            &["INBOX", "TRASH"],
+            "2026-07-22 10:00",
+        )
+        .await;
+
+        for grouped in [true, false] {
+            let f = filters(me.user, me.account, "inbox", grouped);
+            let rows = list(&pool, f.clone()).await;
+            let total = repo::count(&pool, &f)
+                .await
+                .unwrap_or_else(|e| panic!("count: {e}"));
+            assert_eq!(total as usize, rows.len(), "grouped = {grouped}");
+            assert_eq!(total, if grouped { 2 } else { 3 }, "grouped = {grouped}");
+        }
+
+        cleanup(&pool, &[me.user]).await;
+    }
 }

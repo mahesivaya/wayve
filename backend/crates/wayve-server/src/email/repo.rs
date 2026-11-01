@@ -608,41 +608,74 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
         qb.push_bind(query_limit);
     }
 
-    // `emails` is RLS-enabled, so the read runs under the restricted role with
-    // the caller's GUC and the row policy engages as defense in depth behind the
-    // WHERE clause. Inlined rather than calling db::apply_rls_user because this
-    // fn returns sqlx::Result. `user_id` is an i32, so there is no injection
-    // surface in the formatted statement below.
-    let mut tx = pool.begin().await?;
-    let uid = filters.user_id;
-    sqlx::raw_sql(&format!(
-        "SELECT set_config('app.user_id', '{uid}', true); SET LOCAL ROLE wayve_app;"
-    ))
-    .execute(&mut *tx)
-    .await?;
+    let mut tx = begin_as_user(pool, filters.user_id).await?;
     let raw = qb.build().fetch_all(&mut *tx).await?;
     tx.commit().await?;
     Ok(raw.into_iter().map(map_list_row).collect())
 }
 
-/// One row per conversation, the way Gmail lists mail.
-///
-/// 1. `matched`: the conversations with at least one email in this view, using
-///    exactly the per-email filters. Signal and Noise instead judge each
-///    conversation by its newest *incoming* email still in the inbox, so a
-///    reply of yours can't pull a conversation into Signal and the two chips
-///    stay disjoint.
-/// 2. `conv`: every email of those conversations the caller can see (trash,
-///    spam and drafts aside), so your own sent reply counts as the newest
-///    message and the conversation sorts by it, as in Gmail.
-/// 3. The newest email of each conversation is its row, with the count, the
-///    unread count, any attachment, every message id (for bulk actions) and
-///    the unread ones (so marking read touches only those).
-fn push_grouped_list(
-    qb: &mut QueryBuilder<'_, sqlx::Postgres>,
-    filters: &EmailListFilters,
-    query_limit: i64,
-) {
+/// `emails` is RLS-enabled, so list reads run under the restricted role with
+/// the caller's GUC and the row policy engages as defense in depth behind the
+/// WHERE clause. Inlined rather than calling db::apply_rls_user because callers
+/// return sqlx::Result. `user_id` is an i32, so there is no injection surface
+/// in the formatted statement below.
+async fn begin_as_user(
+    pool: &PgPool,
+    uid: i32,
+) -> sqlx::Result<sqlx::Transaction<'static, sqlx::Postgres>> {
+    let mut tx = pool.begin().await?;
+    sqlx::raw_sql(&format!(
+        "SELECT set_config('app.user_id', '{uid}', true); SET LOCAL ROLE wayve_app;"
+    ))
+    .execute(&mut *tx)
+    .await?;
+    Ok(tx)
+}
+
+/// How many rows `list` would return across every page of this view: emails,
+/// or conversations when grouped. The cursor and page size are ignored. It
+/// counts synced mail only, so it can grow as older provider mail syncs in.
+pub async fn count(pool: &PgPool, filters: &EmailListFilters) -> sqlx::Result<i64> {
+    let mut qb = QueryBuilder::new("");
+    if filters.group_threads && folder_groups_threads(filters.folder.as_deref()) {
+        // The same conversations as `push_grouped_list`, each judged by its
+        // newest message's snooze, without building the rows themselves.
+        push_matched(&mut qb, filters);
+        qb.push(", conv AS (SELECT ");
+        qb.push(CONV_KEY);
+        qb.push(" AS conv_key, e.id, e.created_at, zs.snoozed_until");
+        push_scope(&mut qb, filters.user_id);
+        qb.push(" AND ");
+        qb.push(CONV_KEY);
+        qb.push(
+            r#" IN (SELECT conv_key FROM matched)
+              AND NOT ('TRASH' = ANY(e.labels))
+              AND NOT ('SPAM' = ANY(e.labels))
+              AND NOT ('DRAFT' = ANY(e.labels))),
+        latest AS (
+            SELECT DISTINCT ON (conv_key) * FROM conv
+            ORDER BY conv_key, created_at DESC, id DESC)
+        SELECT COUNT(*) FROM latest l WHERE TRUE"#,
+        );
+        push_latest_snooze(&mut qb, filters);
+    } else {
+        qb.push("SELECT COUNT(*)");
+        push_scope(&mut qb, filters.user_id);
+        push_account_and_status(&mut qb, filters);
+        push_folder(&mut qb, filters, true);
+        push_search(&mut qb, filters);
+    }
+
+    let mut tx = begin_as_user(pool, filters.user_id).await?;
+    let total: i64 = qb.build_query_scalar().fetch_one(&mut *tx).await?;
+    tx.commit().await?;
+    Ok(total)
+}
+
+/// `WITH matched AS (…)`: the conversations with at least one email in this
+/// view (step 1 of `push_grouped_list`). Shared with `count`, so the total and
+/// the list can never disagree on which conversations a view holds.
+fn push_matched(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFilters) {
     qb.push("WITH matched AS (");
     if matches!(filters.folder.as_deref(), Some("signal" | "noise")) {
         qb.push("SELECT e.conv_key FROM (SELECT DISTINCT ON (");
@@ -668,8 +701,30 @@ fn push_grouped_list(
         push_folder(qb, filters, false);
         push_search(qb, filters);
     }
+    qb.push(")");
+}
+
+/// One row per conversation, the way Gmail lists mail.
+///
+/// 1. `matched`: the conversations with at least one email in this view, using
+///    exactly the per-email filters. Signal and Noise instead judge each
+///    conversation by its newest *incoming* email still in the inbox, so a
+///    reply of yours can't pull a conversation into Signal and the two chips
+///    stay disjoint.
+/// 2. `conv`: every email of those conversations the caller can see (trash,
+///    spam and drafts aside), so your own sent reply counts as the newest
+///    message and the conversation sorts by it, as in Gmail.
+/// 3. The newest email of each conversation is its row, with the count, the
+///    unread count, any attachment, every message id (for bulk actions) and
+///    the unread ones (so marking read touches only those).
+fn push_grouped_list(
+    qb: &mut QueryBuilder<'_, sqlx::Postgres>,
+    filters: &EmailListFilters,
+    query_limit: i64,
+) {
+    push_matched(qb, filters);
     let order = list_order(filters.folder.as_deref());
-    qb.push("), conv AS (SELECT ");
+    qb.push(", conv AS (SELECT ");
     qb.push(LIST_COLUMNS);
     qb.push(format!(", {} AS sort_at, ", order.per_message));
     qb.push(CONV_KEY);
@@ -729,18 +784,7 @@ fn push_grouped_list(
         FROM latest l JOIN agg g USING (conv_key) JOIN senders p USING (conv_key)
         WHERE TRUE"#,
     );
-    // A conversation's snooze is its newest message's (see `push_folder`).
-    match folder_snooze(filters.folder.as_deref()) {
-        Some(SnoozeView::Hide) => {
-            qb.push(format!(
-                " AND (l.snoozed_until IS NULL OR l.snoozed_until <= {NOW_UTC})"
-            ));
-        }
-        Some(SnoozeView::Only) => {
-            qb.push(format!(" AND l.snoozed_until > {NOW_UTC}"));
-        }
-        None => {}
-    }
+    push_latest_snooze(qb, filters);
     let (dir, past) = order.direction();
     if let Some((before_ms, before_id)) = filters.before {
         // Millisecond precision, as the cursor has (see `list`).
@@ -754,6 +798,22 @@ fn push_grouped_list(
     }
     qb.push(format!(" ORDER BY g.sort_at {dir}, l.id {dir} LIMIT "));
     qb.push_bind(query_limit);
+}
+
+/// A conversation's snooze is its newest message's (see `push_folder`); `l` is
+/// that message. Used by both the grouped list and its count.
+fn push_latest_snooze(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFilters) {
+    match folder_snooze(filters.folder.as_deref()) {
+        Some(SnoozeView::Hide) => {
+            qb.push(format!(
+                " AND (l.snoozed_until IS NULL OR l.snoozed_until <= {NOW_UTC})"
+            ));
+        }
+        Some(SnoozeView::Only) => {
+            qb.push(format!(" AND l.snoozed_until > {NOW_UTC}"));
+        }
+        None => {}
+    }
 }
 
 fn map_list_row(row: PgRow) -> EmailListRow {

@@ -1,4 +1,5 @@
 import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { EmailFolder, EmailItem, STUB_EMAIL_FOLDERS } from "./types";
 import { FolderChips } from "./FolderChips";
 import {
@@ -79,6 +80,12 @@ interface EmailListProps {
   // restored on remount belongs to the rows being shown. Omitting it keeps the
   // memory per-search-term only, which is right for a lone embedded list.
   scrollKey?: string;
+  // Where the "1–50 ‹ ›" pager renders: the page toolbar's slot when there is
+  // one, otherwise inline at the bottom of the list.
+  pagerSlot?: HTMLElement | null;
+  // Rows in this whole view, from the server, for "page / pages". Null when
+  // unknown; the pager then shows only the page number.
+  total?: number | null;
   // Your mailbox addresses, shown as "me" among a conversation's senders.
   ownAddresses?: string[];
 }
@@ -146,6 +153,8 @@ export const EmailList: React.FC<EmailListProps> = ({
   onSelectFolder,
   onShowAttachments,
   scrollKey = "emails",
+  pagerSlot = null,
+  total = null,
   ownAddresses = [],
 }) => {
   const isStubFolder = activeFolder
@@ -410,6 +419,52 @@ export const EmailList: React.FC<EmailListProps> = ({
   // Opening an email unmounts this pane in list view, so the offset has to be
   // kept outside the component and put back when Back mounts a fresh one.
   useListScrollMemory(listScrollRef, `${scrollKey}|${searchQuery}`);
+
+  // Pages in the whole view. The server total counts synced mail only, and
+  // rows can sync in before the next count, so never show fewer pages than
+  // are already loaded or reachable.
+  const pageCount =
+    total === null
+      ? null
+      : Math.max(
+          Math.ceil(total / EMAIL_PAGE_SIZE),
+          page + (hasNextPage ? 2 : 1)
+        );
+  const showPager =
+    !isStubFolder && !showNoAccounts && visibleEmails.length > 0;
+  const pager = (
+    <nav
+      className={`email-pager${pagerSlot ? " email-pager--toolbar" : ""}`}
+      aria-label="Pages"
+    >
+      <span className="email-pager-emails">
+        {pageStart + 1}–{pageStart + visibleEmails.length}
+      </span>
+      <button
+        type="button"
+        className="email-pager-btn"
+        onClick={() => goToPage(page - 1)}
+        disabled={page === 0}
+        aria-label="Newer"
+        data-tooltip="Newer"
+      >
+        ‹
+      </button>
+      <span className="email-pager-range" aria-live="polite">
+        {pageCount === null ? page + 1 : `${page + 1}/${pageCount}`}
+      </span>
+      <button
+        type="button"
+        className="email-pager-btn"
+        onClick={() => goToPage(page + 1)}
+        disabled={!hasNextPage}
+        aria-label="Older"
+        data-tooltip={loadingMore && !hasNextPage ? "Loading…" : "Older"}
+      >
+        ›
+      </button>
+    </nav>
+  );
 
   return (
     <div
@@ -935,33 +990,8 @@ export const EmailList: React.FC<EmailListProps> = ({
         />
       )}
 
-      {!isStubFolder && !showNoAccounts && visibleEmails.length > 0 && (
-        <nav className="email-pager" aria-label="Pages">
-          <span className="email-pager-range">
-            {pageStart + 1}–{pageStart + visibleEmails.length}
-          </span>
-          <button
-            type="button"
-            className="email-pager-btn"
-            onClick={() => goToPage(page - 1)}
-            disabled={page === 0}
-            aria-label="Newer"
-            data-tooltip="Newer"
-          >
-            ‹
-          </button>
-          <button
-            type="button"
-            className="email-pager-btn"
-            onClick={() => goToPage(page + 1)}
-            disabled={!hasNextPage}
-            aria-label="Older"
-            data-tooltip={loadingMore && !hasNextPage ? "Loading…" : "Older"}
-          >
-            ›
-          </button>
-        </nav>
-      )}
+      {showPager && !pagerSlot && pager}
+      {showPager && pagerSlot && createPortal(pager, pagerSlot)}
     </div>
   );
 };
