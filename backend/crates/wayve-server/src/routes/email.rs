@@ -285,9 +285,20 @@ pub async fn get_emails(
         .collect();
 
     info!(target: "http", user_id, count = emails.len(), "Fetched emails");
-    Ok(HttpResponse::Ok()
-        .append_header(("x-has-more", has_more.to_string()))
-        .json(emails))
+    let mut resp = HttpResponse::Ok();
+    resp.append_header(("x-has-more", has_more.to_string()));
+    // The total, for the inbox's "page / pages" pager. Only on the first page:
+    // later pages don't need it, and it costs a second scan of the view.
+    if filters.before.is_none() {
+        match repo::count(pool.get_ref(), &filters).await {
+            Ok(total) => {
+                resp.append_header(("x-total-count", total.to_string()));
+            }
+            // The list itself is fine; the pager just shows no total.
+            Err(e) => warn!(target: "db", user_id, error = ?e, "email count failed"),
+        }
+    }
+    Ok(resp.json(emails))
 }
 
 /// Which way `move_email` moves an email: into Trash, which is what Delete

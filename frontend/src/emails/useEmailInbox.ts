@@ -85,6 +85,8 @@ export function useEmailInbox(
   const [activeAccount, setActiveAccount] = useState<number | null>(null);
   const [activeFolder, setActiveFolder] = useState<EmailFolder>("inbox");
   const [hasMore, setHasMore] = useState(true);
+  // Server-side total for the current view (first-page fetches carry it).
+  const [total, setTotal] = useState<number | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
   const [viewMode, setViewMode] = useState<"email" | "files">("email");
@@ -134,14 +136,20 @@ export function useEmailInbox(
     const fetchInitialEmails = async () => {
       // Signal (important) and Noise (social + promotions) are resolved
       // server-side in email/repo.rs, so the raw folder is sent as-is.
-      const { emails: data, hasMore: hasMorePage } = await getEmails<EmailItem>(
-        {
-          folder: listFolder(activeFolder, normalizedSearchQuery),
-          accountId: activeAccount,
-          query: normalizedSearchQuery,
-          threads: true,
-        }
-      );
+      const {
+        emails: data,
+        hasMore: hasMorePage,
+        total: viewTotal,
+      } = await getEmails<EmailItem>({
+        folder: listFolder(activeFolder, normalizedSearchQuery),
+        accountId: activeAccount,
+        query: normalizedSearchQuery,
+        threads: true,
+      });
+
+      // Every first-page fetch (fresh load or the refresh poll) re-counts, so
+      // the total tracks new mail, deletes and snoozes within a poll.
+      setTotal(viewTotal);
 
       if (isFreshLoad) {
         setEmails(data);
@@ -875,6 +883,7 @@ export function useEmailInbox(
     activeFolder,
     setActiveFolder,
     hasMore,
+    total,
     loadingMore,
     viewMode,
     setViewMode,

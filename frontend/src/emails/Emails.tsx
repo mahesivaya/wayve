@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import "./emails.css";
-import "./loadMore.css";
+import "./pager.css";
 import "../files/emailFiles.css";
 import SendEmail from "./SendEmail";
 import Modal from "../components/Modal";
@@ -54,6 +54,7 @@ export default function Emails() {
     activeFolder,
     setActiveFolder,
     hasMore,
+    total,
     loadingMore,
     viewMode,
     setViewMode,
@@ -318,6 +319,11 @@ export default function Emails() {
   }, [selectedEmail?.id, searchParams, setSearchParams]);
 
   const [composeOpen, setComposeOpen] = useState(false);
+  // The toolbar spot EmailList renders its pager into (null until mounted, or
+  // when the toolbar is hidden — then the pager stays at the list's bottom).
+  const [pagerSlot, setPagerSlot] = useState<HTMLDivElement | null>(null);
+  // Likewise for the select-all checkbox, ahead of the view buttons.
+  const [selectSlot, setSelectSlot] = useState<HTMLDivElement | null>(null);
   const [accountNameOverrides, setAccountNameOverrides] = useState<
     Record<number, string>
   >(() => {
@@ -668,42 +674,6 @@ export default function Emails() {
 
   return (
     <div className="emails-root">
-      {showToolbar && (
-        <div className="emails-page-toolbar">
-          {/* Personal accounts keep a single Compose button in the email
-            sidebar — the toolbar copy used to also render for personal scope
-            (meant to appear only below 700px, once the sidebar hides) but
-            showed up duplicated alongside the sidebar's own button, so it's
-            dropped here entirely. */}
-          {!isPersonalScope && (
-            <button
-              className="compose-btn compose-btn--toolbar"
-              onClick={() => setComposeOpen(true)}
-              data-tooltip="Compose"
-            >
-              Compose
-            </button>
-          )}
-          {/* Split (pane or list+detail layout): the folder menu sits next to
-            Compose (the list header that normally hosts it is too cramped). */}
-          {chipsInToolbar && !isPersonalScope && (
-            <FolderChips
-              activeFolder={viewMode === "email" ? activeFolder : null}
-              onSelectFolder={(f) => {
-                setViewMode("email");
-                setSelectedEmail(null);
-                setActiveFolder(f);
-              }}
-              // The attachments view rides inside the chip group as "Docs" next
-              // to Sent, the same as in the list header — it used to be a
-              // separate "Attachments" button tacked on after Reviews.
-              onShowAttachments={showFiles}
-              filesActive={viewMode === "files"}
-            />
-          )}
-          <SearchBar />
-        </div>
-      )}
       <div
         ref={mainRef}
         className={[
@@ -776,160 +746,213 @@ export default function Emails() {
           </>
         )}
 
-        {showList && viewMode === "files" && (
-          <EmailFilesList
-            files={visibleFiles}
-            filesLoading={filesLoading}
-            filesError={filesError}
-            emptyMessage={filesEmptyMessage}
-            progressNote={filesProgressNote}
-            selectedFileId={selectedFile?.id ?? null}
-            onSelectFile={setSelectedFile}
-            width={
-              useSingleColumn || filesInListView ? undefined : emailListWidth
-            }
-            onSelectFolder={
-              !isPersonalScope && !chipsInToolbar
-                ? (f) => {
+        {/* The toolbar (view toggles + search, and org Compose) heads only
+            the list/detail column, so the sidebar's Compose and folders run
+            from the very top instead of starting below a full-width bar. */}
+        <div className="emails-content">
+          {showToolbar && (
+            <div className="emails-page-toolbar">
+              {/* Personal accounts keep a single Compose button in the email
+                sidebar — the toolbar copy used to also render for personal scope
+                (meant to appear only below 700px, once the sidebar hides) but
+                showed up duplicated alongside the sidebar's own button, so it's
+                dropped here entirely. */}
+              {!isPersonalScope && (
+                <button
+                  className="compose-btn compose-btn--toolbar"
+                  onClick={() => setComposeOpen(true)}
+                  data-tooltip="Compose"
+                >
+                  Compose
+                </button>
+              )}
+              {/* Split (pane or list+detail layout): the folder menu sits next to
+                Compose (the list header that normally hosts it is too cramped). */}
+              {chipsInToolbar && !isPersonalScope && (
+                <FolderChips
+                  activeFolder={viewMode === "email" ? activeFolder : null}
+                  onSelectFolder={(f) => {
                     setViewMode("email");
-                    setSelectedFile(null);
+                    setSelectedEmail(null);
                     setActiveFolder(f);
-                  }
-                : undefined
-            }
-            onShowAttachments={showFiles}
-          />
-        )}
-
-        {showList && viewMode === "email" && (
-          <EmailList
-            emails={emails}
-            selectedEmailId={selectedEmail?.id ?? null}
-            onOpenEmail={openEmail}
-            hasMore={hasMore}
-            loadMore={loadMore}
-            loadingMore={loadingMore}
-            width={showEmailListResizer ? emailListWidth : undefined}
-            isListView={effectiveLayout === "list"}
-            scrollKey={`${activeAccount ?? "all"}:${activeFolder}`}
-            ownAddresses={ownAddresses}
-            onBulkMarkRead={bulkMarkRead}
-            onBulkDelete={inTrash ? undefined : bulkDeleteWithUndo}
-            onBulkRestore={inTrash ? bulkRestoreWithNotice : undefined}
-            onMarkRead={markRead}
-            onMarkUnread={markUnread}
-            onDelete={deleteWithUndo}
-            onRestore={restoreEmail}
-            onToggleStar={toggleStar}
-            onSnooze={snoozeWithUndo}
-            onUnsnooze={unsnoozeRow}
-            activeFolder={activeFolder}
-            hasAccounts={accounts.length > 0}
-            accountsLoaded={accountsLoaded}
-            showChrome={showToolbar}
-            canAddAccount={canConnectOwnMailbox}
-            onAddAccount={() => setAddAccountOpen(true)}
-            showFolderTabs={!isPersonalScope && !chipsInToolbar}
-            onSelectFolder={(f) => {
-              setViewMode("email");
-              setActiveFolder(f);
-            }}
-            onShowAttachments={showFiles}
-          />
-        )}
-
-        {showEmailListResizer && (
-          <div
-            className="email-list-resizer"
-            onMouseDown={startEmailListResize}
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize email list"
-            data-tooltip="Drag to resize email list"
-          />
-        )}
-
-        {/* Mounted only while open, so its state is fresh each time and needs no
-            reset-on-close. */}
-        {canConnectOwnMailbox && addAccountOpen && (
-          <ProviderPicker
-            onClose={() => setAddAccountOpen(false)}
-            onSelect={(provider) => {
-              setAddAccountOpen(false);
-              addProvider(provider);
-            }}
-            onConnected={() => {
-              // IMAP connect succeeded with no redirect, so refresh here.
-              setAddAccountOpen(false);
-              void fetchAccounts();
-              setRefreshTick((tick) => tick + 1);
-            }}
-          />
-        )}
-
-        <Modal
-          isOpen={composeOpen && composeAccountId !== null}
-          onClose={() => setComposeOpen(false)}
-          title="New Message"
-        >
-          {composeAccountId !== null && (
-            <SendEmail
-              accountId={composeAccountId}
-              accounts={displayedAccounts}
-              onClose={() => setComposeOpen(false)}
-            />
+                  }}
+                  // The attachments view rides inside the chip group as "Docs" next
+                  // to Sent, the same as in the list header — it used to be a
+                  // separate "Attachments" button tacked on after Reviews.
+                  onShowAttachments={showFiles}
+                  filesActive={viewMode === "files"}
+                />
+              )}
+              {/* EmailList portals its select-all checkbox in here, ahead of
+                  SearchBar's list / split view buttons. */}
+              <div className="emails-toolbar-select" ref={setSelectSlot} />
+              <SearchBar />
+              {/* EmailList portals its "1–50 ‹ ›" pager in here. */}
+              <div className="emails-toolbar-pager" ref={setPagerSlot} />
+            </div>
           )}
-        </Modal>
+          <div className="emails-panes">
+            {showList && viewMode === "files" && (
+              <EmailFilesList
+                files={visibleFiles}
+                filesLoading={filesLoading}
+                filesError={filesError}
+                emptyMessage={filesEmptyMessage}
+                progressNote={filesProgressNote}
+                selectedFileId={selectedFile?.id ?? null}
+                onSelectFile={setSelectedFile}
+                width={
+                  useSingleColumn || filesInListView
+                    ? undefined
+                    : emailListWidth
+                }
+                onSelectFolder={
+                  !isPersonalScope && !chipsInToolbar
+                    ? (f) => {
+                        setViewMode("email");
+                        setSelectedFile(null);
+                        setActiveFolder(f);
+                      }
+                    : undefined
+                }
+                onShowAttachments={showFiles}
+              />
+            )}
 
-        {showDetail && viewMode === "files" && (
-          <EmailFileDetail
-            file={selectedFile}
-            onBack={() => setSelectedFile(null)}
-          />
-        )}
+            {showList && viewMode === "email" && (
+              <EmailList
+                emails={emails}
+                selectedEmailId={selectedEmail?.id ?? null}
+                onOpenEmail={openEmail}
+                hasMore={hasMore}
+                loadMore={loadMore}
+                loadingMore={loadingMore}
+                width={showEmailListResizer ? emailListWidth : undefined}
+                isListView={effectiveLayout === "list"}
+                scrollKey={`${activeAccount ?? "all"}:${activeFolder}`}
+                pagerSlot={pagerSlot}
+                selectSlot={selectSlot}
+                total={total}
+                ownAddresses={ownAddresses}
+                onBulkMarkRead={bulkMarkRead}
+                onBulkDelete={inTrash ? undefined : bulkDeleteWithUndo}
+                onBulkRestore={inTrash ? bulkRestoreWithNotice : undefined}
+                onMarkRead={markRead}
+                onMarkUnread={markUnread}
+                onDelete={deleteWithUndo}
+                onRestore={restoreEmail}
+                onToggleStar={toggleStar}
+                onSnooze={snoozeWithUndo}
+                onUnsnooze={unsnoozeRow}
+                activeFolder={activeFolder}
+                hasAccounts={accounts.length > 0}
+                accountsLoaded={accountsLoaded}
+                showChrome={showToolbar}
+                canAddAccount={canConnectOwnMailbox}
+                onAddAccount={() => setAddAccountOpen(true)}
+                showFolderTabs={!isPersonalScope && !chipsInToolbar}
+                onSelectFolder={(f) => {
+                  setViewMode("email");
+                  setActiveFolder(f);
+                }}
+                onShowAttachments={showFiles}
+              />
+            )}
 
-        {showDetail && viewMode === "email" && (
-          <EmailDetail
-            selectedEmail={selectedEmail}
-            viewMode={viewMode}
-            onBack={() => {
-              setViewMode("email");
-              setSelectedEmail(null);
-            }}
-            onDeleteEmail={deleteWithUndo}
-            starred={selectedRow ? isStarred(selectedRow) : false}
-            onToggleStar={
-              selectedRow ? () => toggleStar(selectedRow.id) : undefined
-            }
-            onSnooze={
-              selectedRow && canSnoozeIn(activeFolder)
-                ? (until) => snoozeWithUndo(selectedRow.id, until)
-                : undefined
-            }
-            onMarkNoise={markSenderNoise}
-            conversation={
-              conversation && conversation.rowId === selectedEmail?.id
-                ? conversation.messages
-                : null
-            }
-            onLoadMessage={fetchMessage}
-            ownAddresses={ownAddresses}
-            onFilterBySender={(address) => {
-              // Leave the current folder: the sender's mail is spread across
-              // Sent, Reviews and the category folders, and the inbox query
-              // drops both noise senders and PR notifications.
-              setActiveFolder("all");
-              setSearchQuery(address);
-              // Close the message so the results are on screen immediately. In
-              // list layout (and narrow split) `showList` is gated on
-              // `selectedEmail === null`, so leaving it set would render the
-              // detail over the very list the user just asked to see, forcing a
-              // Back press. Closing also avoids stranding the pane on a message
-              // that may not be in the filtered results.
-              setSelectedEmail(null);
-            }}
-          />
-        )}
+            {showEmailListResizer && (
+              <div
+                className="email-list-resizer"
+                onMouseDown={startEmailListResize}
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize email list"
+                data-tooltip="Drag to resize email list"
+              />
+            )}
+
+            {/* Mounted only while open, so its state is fresh each time and needs no
+            reset-on-close. */}
+            {canConnectOwnMailbox && addAccountOpen && (
+              <ProviderPicker
+                onClose={() => setAddAccountOpen(false)}
+                onSelect={(provider) => {
+                  setAddAccountOpen(false);
+                  addProvider(provider);
+                }}
+                onConnected={() => {
+                  // IMAP connect succeeded with no redirect, so refresh here.
+                  setAddAccountOpen(false);
+                  void fetchAccounts();
+                  setRefreshTick((tick) => tick + 1);
+                }}
+              />
+            )}
+
+            <Modal
+              isOpen={composeOpen && composeAccountId !== null}
+              onClose={() => setComposeOpen(false)}
+              title="New Message"
+            >
+              {composeAccountId !== null && (
+                <SendEmail
+                  accountId={composeAccountId}
+                  accounts={displayedAccounts}
+                  onClose={() => setComposeOpen(false)}
+                />
+              )}
+            </Modal>
+
+            {showDetail && viewMode === "files" && (
+              <EmailFileDetail
+                file={selectedFile}
+                onBack={() => setSelectedFile(null)}
+              />
+            )}
+
+            {showDetail && viewMode === "email" && (
+              <EmailDetail
+                selectedEmail={selectedEmail}
+                viewMode={viewMode}
+                onBack={() => {
+                  setViewMode("email");
+                  setSelectedEmail(null);
+                }}
+                onDeleteEmail={deleteWithUndo}
+                starred={selectedRow ? isStarred(selectedRow) : false}
+                onToggleStar={
+                  selectedRow ? () => toggleStar(selectedRow.id) : undefined
+                }
+                onSnooze={
+                  selectedRow && canSnoozeIn(activeFolder)
+                    ? (until) => snoozeWithUndo(selectedRow.id, until)
+                    : undefined
+                }
+                onMarkNoise={markSenderNoise}
+                conversation={
+                  conversation && conversation.rowId === selectedEmail?.id
+                    ? conversation.messages
+                    : null
+                }
+                onLoadMessage={fetchMessage}
+                ownAddresses={ownAddresses}
+                onFilterBySender={(address) => {
+                  // Leave the current folder: the sender's mail is spread across
+                  // Sent, Reviews and the category folders, and the inbox query
+                  // drops both noise senders and PR notifications.
+                  setActiveFolder("all");
+                  setSearchQuery(address);
+                  // Close the message so the results are on screen immediately. In
+                  // list layout (and narrow split) `showList` is gated on
+                  // `selectedEmail === null`, so leaving it set would render the
+                  // detail over the very list the user just asked to see, forcing a
+                  // Back press. Closing also avoids stranding the pane on a message
+                  // that may not be in the filtered results.
+                  setSelectedEmail(null);
+                }}
+              />
+            )}
+          </div>
+        </div>
       </div>
       {notice && notice.view === currentView && (
         <div className="email-trash-notice" role="status">

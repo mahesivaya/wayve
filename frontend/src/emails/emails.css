@@ -99,6 +99,20 @@
   background: var(--color-canvas);
 }
 
+/* EmailList portals its select-all checkbox here, ahead of the view buttons.
+   Empty outside list view (or before the list mounts), and an empty slot
+   would still take a toolbar gap, so it's hidden then. */
+.emails-toolbar-select {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.emails-toolbar-select:empty,
+.emails-toolbar-pager:empty {
+  display: none;
+}
+
 /* Compose sits at the far left; the search row flexes to fill the rest but
    left-aligns its contents, so the view toggles + search box cluster right
    after Compose instead of drifting to the far right. Drop the row's own
@@ -114,12 +128,19 @@
   border-bottom: none;
 }
 
-/* Keep the search box from expanding so it hugs the toggles rather than
-   stretching across the toolbar; and shrink its height with the rest. */
+/* The search box grows with the toolbar but stops at a comfortable width
+   rather than spanning a wide list/detail column; slim height to match. */
 .emails-page-toolbar .global-search-box {
-  flex: 0 1 280px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 420px;
   height: 28px;
-  border: none;
+  /* A faint outline so the box's extent reads against the toolbar. */
+  border: 1px solid var(--color-border);
+}
+
+.emails-page-toolbar .global-search-box:focus-within {
+  border-color: var(--color-input-border);
 }
 
 .emails-page-toolbar .global-search-box input {
@@ -160,6 +181,23 @@
 .emails-root > .main {
   flex: 1;
   min-height: 0;
+}
+
+/* Right of the email sidebar: the page toolbar on top, then the list/detail
+   panes filling the rest. */
+.emails-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.emails-panes {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
 }
 
 /* ================= MAIN (FIXED HEIGHT ISSUE) ================= */
@@ -990,7 +1028,7 @@
 
 /* ================= EMAIL ITEM ================= */
 .email-item {
-  min-height: 30px;
+  min-height: 40px;
   padding: 0 7px;
   border-bottom: 1px solid var(--color-overlay-border);
   cursor: pointer;
@@ -1362,11 +1400,9 @@
 }
 
 .main.email-list-view .email-item {
-  /* Compact-but-readable rows: tall enough to hold the bold sender +
-     subject pair without squeezing, but tight enough to show ~20 emails
-     per typical viewport. Halfway between the original 30px density
-     and the personal-home preview row. */
-  min-height: 34px;
+  /* Full-width list view: compact rows, a touch above the original 34px.
+     (The narrower split-view list gets the roomier 40px from .email-item.) */
+  min-height: 36px;
   align-items: stretch;
   padding: 4px 10px;
 }
@@ -2783,9 +2819,7 @@ img.email-mention-avatar {
 }
 
 /* ================= SCROLLBAR ================= */
-/* Wider scrollbar on the inbox list so the thumb visibly shrinks as
-   more emails get appended via load-more — gives users a clear cue
-   that pagination did add rows even when the viewport is full. */
+/* Wider scrollbar on the inbox list. */
 .email-list::-webkit-scrollbar {
   width: 12px;
 }
@@ -2981,10 +3015,6 @@ img.email-mention-avatar {
     font-size: 11px;
     font-weight: 700;
     white-space: nowrap;
-  }
-
-  .load-more-wrap {
-    margin: 12px 0;
   }
 }
 

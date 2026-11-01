@@ -1,4 +1,5 @@
 import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { EmailFolder, EmailItem, STUB_EMAIL_FOLDERS } from "./types";
 import { FolderChips } from "./FolderChips";
 import {
@@ -79,6 +80,15 @@ interface EmailListProps {
   // restored on remount belongs to the rows being shown. Omitting it keeps the
   // memory per-search-term only, which is right for a lone embedded list.
   scrollKey?: string;
+  // Where the "1–50 ‹ ›" pager renders: the page toolbar's slot when there is
+  // one, otherwise inline at the bottom of the list.
+  pagerSlot?: HTMLElement | null;
+  // Same idea for the select-all checkbox + its ▾ menu: the page toolbar's
+  // slot (before the view buttons) when there is one, else the bulk bar.
+  selectSlot?: HTMLElement | null;
+  // Rows in this whole view, from the server, for "page / pages". Null when
+  // unknown; the pager then shows only the page number.
+  total?: number | null;
   // Your mailbox addresses, shown as "me" among a conversation's senders.
   ownAddresses?: string[];
 }
@@ -89,6 +99,13 @@ const STUB_FOLDER_LABELS: Record<string, string> = {
   spam: "Spam",
   drafts: "Drafts",
 };
+
+export const EMAIL_PAGE_SIZE = 50;
+
+// The page each list (account + folder + search) was on. Module state for the
+// same reason as useListScrollMemory: in list view, opening an email unmounts
+// the list, and Back should return to the same page, not page one.
+const savedPages = new Map<string, number>();
 
 function formatMobileTime(value: string) {
   const date = new Date(value);
@@ -139,6 +156,9 @@ export const EmailList: React.FC<EmailListProps> = ({
   onSelectFolder,
   onShowAttachments,
   scrollKey = "emails",
+  pagerSlot = null,
+  selectSlot = null,
+  total = null,
   ownAddresses = [],
 }) => {
   const isStubFolder = activeFolder
@@ -157,10 +177,33 @@ export const EmailList: React.FC<EmailListProps> = ({
   const [checkedIds, setCheckedIds] = useState<Set<number>>(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkHint, setBulkHint] = useState<string | null>(null);
-  // Everything loaded, in load order. This used to be filtered by an unread-only
-  // toggle in the toolbar; with that icon gone there is nothing to narrow by, so
-  // the list shows what it was given.
-  const visibleEmails = emails;
+  // Gmail-style pages of EMAIL_PAGE_SIZE rows over the rows loaded so far. The
+  // server still hands out keyset batches (`loadMore`); the effect below keeps
+  // one row beyond this page loaded, so Next knows whether there is a next
+  // page and is instant when there is.
+  const listKey = `${scrollKey}|${searchQuery}`;
+  // `from` is the page on screen when a jump was asked for: a far page (picked
+  // from the page menu) has to be loaded first, and the list stays where it
+  // was until then instead of flicking through the pages in between.
+  const [pageState, setPageState] = useState(() => {
+    const saved = savedPages.get(listKey) ?? 0;
+    return { key: listKey, page: saved, from: saved };
+  });
+  const sameList = pageState.key === listKey;
+  const requestedPage = sameList
+    ? pageState.page
+    : (savedPages.get(listKey) ?? 0);
+  const lastPage = Math.max(0, Math.ceil(emails.length / EMAIL_PAGE_SIZE) - 1);
+  const loadingPage =
+    hasMore && emails.length <= requestedPage * EMAIL_PAGE_SIZE;
+  // Clamped: rows can leave (delete, snooze) and empty the last page.
+  const page = Math.min(
+    loadingPage && sameList ? pageState.from : requestedPage,
+    lastPage
+  );
+  const pageStart = page * EMAIL_PAGE_SIZE;
+  const visibleEmails = emails.slice(pageStart, pageStart + EMAIL_PAGE_SIZE);
+  const hasNextPage = emails.length > pageStart + EMAIL_PAGE_SIZE;
 
   useEffect(() => {
     if (!bulkHint) return;
@@ -353,87 +396,271 @@ export const EmailList: React.FC<EmailListProps> = ({
     }
   };
 
-  // Infinite scroll. The observer binds once and reads through refs, because
-  // `loadMore` is re-created every parent render and would churn it. `inFlightRef`
-  // guards duplicates: the callback can fire again before React commits the
-  // resulting state, so `loadingMore` alone is not enough.
   const listScrollRef = useRef<HTMLDivElement | null>(null);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const inFlightRef = useRef(false);
-  const hasMoreRef = useRef(hasMore);
-  const loadingMoreRef = useRef(loadingMore);
-  const loadMoreRef = useRef(loadMore);
-  useEffect(() => {
-    hasMoreRef.current = hasMore;
-  }, [hasMore]);
-  useEffect(() => {
-    loadingMoreRef.current = loadingMore;
-    if (!loadingMore) inFlightRef.current = false;
-  }, [loadingMore]);
-  useEffect(() => {
-    loadMoreRef.current = loadMore;
-  }, [loadMore]);
 
-  const triggerLoadMore = () => {
-    if (inFlightRef.current) return;
-    if (!hasMoreRef.current || loadingMoreRef.current) return;
-    inFlightRef.current = true;
-    // `loadMore` has guards of its own (no rows yet, a fetch already running)
-    // and returns silently when they reject the call — `loadingMore` never
-    // flips, so the effect above never clears this flag and paging would stay
-    // wedged for the rest of the mount. Clearing it when the call settles makes
-    // a rejected attempt cost one no-op instead of the whole feature.
-    void Promise.resolve(loadMoreRef.current()).finally(() => {
-      inFlightRef.current = false;
-      // A short pane (few rows, or rows shorter than the viewport) can still
-      // leave the sentinel within the trigger margin after this page lands,
-      // and nothing else will ask again — so check once, against real
-      // post-paint geometry, rather than relying on the observer firing its
-      // own "initial state" callback (see the effect below for why that used
-      // to cause a runaway fetch cascade once rows got shorter).
-      requestAnimationFrame(() => {
-        const root = listScrollRef.current;
-        const target = sentinelRef.current;
-        if (!root || !target) return;
-        const stillNear =
-          target.getBoundingClientRect().top -
-            root.getBoundingClientRect().bottom <
-          400;
-        if (stillNear) triggerLoadMore();
-      });
-    });
+  const goToPage = (next: number) => {
+    savedPages.set(listKey, next);
+    setPageState({ key: listKey, page: next, from: page });
+    setPageMenuOpen(false);
+    // Selection is per page, as in Gmail: a checked row on another page would
+    // be acted on unseen.
+    setCheckedIds(new Set());
+    if (listScrollRef.current) listScrollRef.current.scrollTop = 0;
   };
 
-  // Paging is driven by a sentinel below the last row: whenever it comes within
-  // 400px of the bottom of the pane, the next page is fetched. The observer
-  // covers scroll-driven intersection changes; `triggerLoadMore` above covers
-  // the "pane isn't full yet" case explicitly, so this only needs to bind
-  // once per folder rather than re-arm on every row-count change — recreating
-  // it per page used to fire IntersectionObserver's implicit initial callback
-  // on every fetch, and once rows got shorter (denser mobile rows, tighter
-  // padding) the sentinel was often still in range, cascading into rapid
-  // repeated fetches ("emails loading again and again").
+  // Keep rows loaded up to one past the requested page: that fills a short
+  // page, tells Next whether a next page exists, and walks forward batch by
+  // batch to a page picked from the menu. A batch the parent de-dups to
+  // nothing leaves `emails.length` unchanged, and asking again from the same
+  // cursor would return the same batch forever, so each (list, length) is
+  // asked for at most once.
+  const loadTarget =
+    Math.max(requestedPage, page) * EMAIL_PAGE_SIZE + EMAIL_PAGE_SIZE;
+  const lastAskedRef = useRef<string | null>(null);
   useEffect(() => {
-    const root = listScrollRef.current;
-    const target = sentinelRef.current;
-    if (!root || !target) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) triggerLoadMore();
-      },
-      { root, rootMargin: "400px" }
-    );
-    observer.observe(target);
-    return () => observer.disconnect();
-    // `triggerLoadMore` reads hasMore/loadingMore/loadMore through refs, so no
-    // further dependency is needed beyond the folder switch, which swaps the
-    // sentinel's containing list and warrants a fresh observer.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isStubFolder]);
+    if (isStubFolder || !hasMore || loadingMore || emails.length === 0) return;
+    if (emails.length > loadTarget) return;
+    const ask = `${listKey}|${emails.length}`;
+    if (lastAskedRef.current === ask) return;
+    lastAskedRef.current = ask;
+    void loadMore();
+  }, [
+    isStubFolder,
+    hasMore,
+    loadingMore,
+    emails.length,
+    loadTarget,
+    listKey,
+    loadMore,
+  ]);
 
   // Opening an email unmounts this pane in list view, so the offset has to be
   // kept outside the component and put back when Back mounts a fresh one.
   useListScrollMemory(listScrollRef, `${scrollKey}|${searchQuery}`);
+
+  // The page menu under "1/27". Closes on Escape or a click outside the pager.
+  const [pageMenuOpen, setPageMenuOpen] = useState(false);
+  // Whether the open menu has more pages below its scroll edge, for the ▾
+  // hint pinned to its bottom. Measured when it mounts and on every scroll.
+  const [pageMenuMore, setPageMenuMore] = useState(false);
+  const measurePageMenu = (el: HTMLElement | null) => {
+    if (!el) return;
+    const more = el.scrollHeight - el.scrollTop - el.clientHeight > 1;
+    setPageMenuMore((prev) => (prev === more ? prev : more));
+  };
+  const pagerRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!pageMenuOpen) return;
+    const onPointer = (event: MouseEvent) => {
+      if (
+        pagerRef.current &&
+        event.target instanceof Node &&
+        !pagerRef.current.contains(event.target)
+      ) {
+        setPageMenuOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPageMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [pageMenuOpen]);
+
+  // Pages in the whole view. The server total counts synced mail only, and
+  // rows can sync in before the next count, so never show fewer pages than
+  // are already loaded or reachable.
+  const pageCount =
+    total === null
+      ? null
+      : Math.max(
+          Math.ceil(total / EMAIL_PAGE_SIZE),
+          page + (hasNextPage ? 2 : 1)
+        );
+  // What the menu offers: every page when the total is known, otherwise the
+  // pages loaded so far (plus the next one, if it's there).
+  const menuPages =
+    pageCount ??
+    lastPage + 1 + (emails.length > (lastPage + 1) * EMAIL_PAGE_SIZE ? 1 : 0);
+  const shownPage = loadingPage ? requestedPage : page;
+  const showPager =
+    !isStubFolder && !showNoAccounts && visibleEmails.length > 0;
+  const pager = (
+    <nav
+      ref={pagerRef}
+      className={`email-pager${pagerSlot ? " email-pager--toolbar" : ""}`}
+      aria-label="Pages"
+    >
+      <span className="email-pager-emails">
+        {pageStart + 1}–{pageStart + visibleEmails.length}
+      </span>
+      <button
+        type="button"
+        className="email-pager-btn"
+        onClick={() => goToPage(page - 1)}
+        disabled={page === 0}
+        aria-label="Newer"
+        data-tooltip="Newer"
+      >
+        ‹
+      </button>
+      <div className="email-pager-menu-anchor">
+        <button
+          type="button"
+          className={`email-pager-range${loadingPage ? " is-loading" : ""}`}
+          onClick={() => setPageMenuOpen((open) => !open)}
+          aria-haspopup="listbox"
+          aria-expanded={pageMenuOpen}
+          aria-busy={loadingPage}
+          aria-label={`Page ${shownPage + 1}${
+            pageCount === null ? "" : ` of ${pageCount}`
+          }, choose a page`}
+        >
+          {pageCount === null ? shownPage + 1 : `${shownPage + 1}/${pageCount}`}
+        </button>
+        {pageMenuOpen && (
+          <ul
+            ref={measurePageMenu}
+            className="email-pager-menu"
+            role="listbox"
+            aria-label="Go to page"
+            onScroll={(event) => measurePageMenu(event.currentTarget)}
+          >
+            {Array.from({ length: menuPages }, (_, n) => (
+              <li key={n}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={n === shownPage}
+                  className={`email-pager-menu-item${
+                    n === shownPage ? " is-current" : ""
+                  }`}
+                  onClick={() => goToPage(n)}
+                >
+                  <span>{n + 1}</span>
+                  {n === shownPage && (
+                    <span className="email-pager-menu-check" aria-hidden="true">
+                      ✓
+                    </span>
+                  )}
+                </button>
+              </li>
+            ))}
+            {pageMenuMore && (
+              <li className="email-pager-menu-more" aria-hidden="true">
+                <svg viewBox="0 0 10 6">
+                  <path
+                    d="M1 1l4 4 4-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </li>
+            )}
+          </ul>
+        )}
+      </div>
+      <button
+        type="button"
+        className="email-pager-btn"
+        onClick={() => goToPage(page + 1)}
+        disabled={!hasNextPage}
+        aria-label="Older"
+        data-tooltip={loadingMore && !hasNextPage ? "Loading…" : "Older"}
+      >
+        ›
+      </button>
+    </nav>
+  );
+
+  // Rows can be ticked in list view, and in split view too once the page
+  // toolbar hosts select-all (with nowhere to put it, split view stays a
+  // plain reading list).
+  const selectable = isListView || !!selectSlot;
+  const showSelect = selectable && showChrome && !showNoAccounts;
+  // With select-all moved to the toolbar, the bar only shows when it has
+  // something left to show: a selection, folder tabs, or a hint.
+  const bulkBarBusy =
+    checkedIds.size > 0 || (showFolderTabs && !!onSelectFolder) || !!bulkHint;
+  const selectControl = (
+    <div className="email-select" ref={selectMenuRef}>
+      <input
+        type="checkbox"
+        className="email-bulk-master"
+        checked={allChecked}
+        ref={(el) => {
+          if (el) el.indeterminate = someChecked;
+        }}
+        onChange={toggleAll}
+        aria-label={allChecked ? "Clear selection" : "Select all emails"}
+      />
+      <button
+        type="button"
+        className="email-select-caret"
+        aria-haspopup="menu"
+        aria-expanded={selectMenuOpen}
+        aria-label="Selection options"
+        onClick={() => setSelectMenuOpen((open) => !open)}
+      >
+        ▾
+      </button>
+      {selectMenuOpen && (
+        <div className="email-select-menu" role="menu">
+          <button
+            type="button"
+            role="menuitem"
+            className="email-select-item"
+            onClick={() => selectBy(() => true)}
+          >
+            All
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="email-select-item"
+            onClick={() => selectBy((e) => !isUnread(e))}
+          >
+            Read
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="email-select-item"
+            onClick={() => selectBy((e) => isUnread(e))}
+          >
+            Unread
+          </button>
+          {onToggleStar && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                className="email-select-item"
+                onClick={() => selectBy((e) => isStarred(e))}
+              >
+                Starred
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="email-select-item"
+                onClick={() => selectBy((e) => !isStarred(e))}
+              >
+                Unstarred
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div
@@ -444,82 +671,13 @@ export const EmailList: React.FC<EmailListProps> = ({
       {/* No mobile search bar / "Inbox" caption here: the page toolbar above
           already carries Compose and the global search box, so a second search
           field plus a label only pushed the bulk bar ~90px down the screen. */}
-      {isListView && showChrome && !showNoAccounts && (
+      {showSelect && (!selectSlot || bulkBarBusy) && (
         <div
           className="email-bulk-bar"
           role="toolbar"
           aria-label="Bulk email selection"
         >
-          <div className="email-select" ref={selectMenuRef}>
-            <input
-              type="checkbox"
-              className="email-bulk-master"
-              checked={allChecked}
-              ref={(el) => {
-                if (el) el.indeterminate = someChecked;
-              }}
-              onChange={toggleAll}
-              aria-label={allChecked ? "Clear selection" : "Select all emails"}
-            />
-            <button
-              type="button"
-              className="email-select-caret"
-              aria-haspopup="menu"
-              aria-expanded={selectMenuOpen}
-              aria-label="Selection options"
-              onClick={() => setSelectMenuOpen((open) => !open)}
-            >
-              ▾
-            </button>
-            {selectMenuOpen && (
-              <div className="email-select-menu" role="menu">
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="email-select-item"
-                  onClick={() => selectBy(() => true)}
-                >
-                  All
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="email-select-item"
-                  onClick={() => selectBy((e) => !isUnread(e))}
-                >
-                  Read
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="email-select-item"
-                  onClick={() => selectBy((e) => isUnread(e))}
-                >
-                  Unread
-                </button>
-                {onToggleStar && (
-                  <>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="email-select-item"
-                      onClick={() => selectBy((e) => isStarred(e))}
-                    >
-                      Starred
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="email-select-item"
-                      onClick={() => selectBy((e) => !isStarred(e))}
-                    >
-                      Unstarred
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+          {!selectSlot && selectControl}
           {checkedIds.size > 0 && (
             <span className="email-bulk-count">{checkedIds.size} selected</span>
           )}
@@ -575,6 +733,7 @@ export const EmailList: React.FC<EmailListProps> = ({
           )}
         </div>
       )}
+      {showSelect && selectSlot && createPortal(selectControl, selectSlot)}
 
       {rowError && (
         <div className="email-row-error" role="alert">
@@ -640,7 +799,7 @@ export const EmailList: React.FC<EmailListProps> = ({
               onClick={() => onOpenEmail(email)}
             >
               <div className="email-top">
-                {isListView && (
+                {selectable && (
                   // The envelope icon and the checkbox share a spot and cross-fade
                   // on hover. stopPropagation so ticking the checkbox doesn't also
                   // open the email.
@@ -959,24 +1118,29 @@ export const EmailList: React.FC<EmailListProps> = ({
         />
       )}
 
-      {/* Rendered whenever the folder can page, even while a fetch is in flight,
-          so the observer above keeps a stable target across renders. */}
-      {!isStubFolder && (
-        <div
-          ref={sentinelRef}
-          className="load-more-sentinel"
-          aria-hidden="true"
-        />
-      )}
-      {!isStubFolder && hasMore && loadingMore && (
-        <div className="load-more-wrap">
-          <span className="load-more-status">Loading more…</span>
-        </div>
-      )}
-      {!isStubFolder && !hasMore && emails.length > 0 && (
-        <div className="load-more-wrap load-more-wrap--end">
-          <span className="load-more-status is-end">No more emails.</span>
-        </div>
+      {showPager && !pagerSlot && pager}
+      {showPager && pagerSlot && createPortal(pager, pagerSlot)}
+      {/* With the pager up in the toolbar, the end of each page gets its own
+          Previous / Next, so moving on doesn't mean scrolling back up. */}
+      {showPager && pagerSlot && (page > 0 || hasNextPage) && (
+        <nav className="email-page-footer" aria-label="Page navigation">
+          <button
+            type="button"
+            className="email-page-footer-btn"
+            onClick={() => goToPage(page - 1)}
+            disabled={page === 0}
+          >
+            ‹ Previous
+          </button>
+          <button
+            type="button"
+            className="email-page-footer-btn"
+            onClick={() => goToPage(page + 1)}
+            disabled={!hasNextPage}
+          >
+            Next ›
+          </button>
+        </nav>
       )}
     </div>
   );
