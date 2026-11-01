@@ -3,6 +3,22 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [9.0.0](https://github.com/mahesivaya/wayve/releases/tag/v9.0.0) - 2026-11-01
+
+### 🚀 Features
+
+- **emails:** Split view opens the first email; no Back beside the list ([#209](https://github.com/mahesivaya/wayve/issues/209))
+- **emails:** Paged inbox (50/page) with toolbar pager, page menu and select-all ([#208](https://github.com/mahesivaya/wayve/issues/208))
+- **github:** Import repos automatically on first GitHub connect ([#207](https://github.com/mahesivaya/wayve/issues/207))
+
+### 🐛 Bug Fixes
+
+- **billing:** Readable empty-usage and payment-status boxes on dark themes ([#206](https://github.com/mahesivaya/wayve/issues/206))
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v8.2.0 [skip ci]
+
 ## [8.2.0](https://github.com/mahesivaya/wayve/releases/tag/v8.2.0) - 2026-11-01
 
 ### 🚀 Features
