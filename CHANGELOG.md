@@ -3,6 +3,16 @@
 All notable changes to this project are documented here.
 This file is generated from Conventional Commits by [git-cliff](https://git-cliff.org).
 
+## [8.2.0](https://github.com/mahesivaya/wayve/releases/tag/v8.2.0) - 2026-11-01
+
+### 🚀 Features
+
+- **sidebar:** Code Repo always on for personal accounts; drop "+ Add" and coming-soon ([#205](https://github.com/mahesivaya/wayve/issues/205))
+
+### 🧹 Maintenance
+
+- **changelog:** Update for v8.1.0 [skip ci]
+
 ## [8.1.0](https://github.com/mahesivaya/wayve/releases/tag/v8.1.0) - 2026-10-31
 
 ### 🚀 Features
