@@ -29,9 +29,11 @@ import "./githubRepo.css";
 import {
   CommitDiffBody,
   CommitSplitPatch,
+  DiffSettingsMenu,
   RawUnifiedDiff,
   ChevronIcon,
 } from "./commitDiff";
+import { useDiffPrefs } from "./diffPrefs";
 import {
   useCommitDiffs,
   githubJson,
@@ -628,6 +630,7 @@ export function GitHubRepoViewer({
   // The per-repo Access panel is for a scope owner or anyone with members:manage.
   const canManageAccess = isOwner || hasPermission(user, "members:manage");
   const [repo, setRepo] = useState<Repo | null>(null);
+  const [diffPrefs, setDiffPrefs] = useDiffPrefs();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branch, setBranch] = useState("main");
   // A custom dropdown rather than a native <select> so the list reliably opens
@@ -1949,7 +1952,10 @@ export function GitHubRepoViewer({
             <div className="github-panel">
               <div className="github-panel-head">
                 <h2>Commits</h2>
-                <span>{commitsTotal ?? commits.length}</span>
+                <span className="github-panel-head-trail">
+                  <span>{commitsTotal ?? commits.length}</span>
+                  <DiffSettingsMenu prefs={diffPrefs} onChange={setDiffPrefs} />
+                </span>
               </div>
               {commits.map((commit) => {
                 const isOpen = diffs.expandedShas.has(commit.sha);
@@ -2010,7 +2016,11 @@ export function GitHubRepoViewer({
 
                     {isOpen && (
                       <div className="github-commit-diff">
-                        <CommitDiffBody sha={commit.sha} diffs={diffs} />
+                        <CommitDiffBody
+                          sha={commit.sha}
+                          diffs={diffs}
+                          prefs={diffPrefs}
+                        />
                         {!diffs.loadingShas.has(commit.sha) &&
                           !diffs.errorBySha[commit.sha] &&
                           detail && (
