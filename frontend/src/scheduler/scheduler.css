@@ -47,6 +47,9 @@
 
 /* ================= LAYOUT ================= */
 .scheduler {
+  /* The meeting form opens over this box, and its layers stay inside it. */
+  position: relative;
+  isolation: isolate;
   display: flex;
   height: 100%;
   width: 100%;
