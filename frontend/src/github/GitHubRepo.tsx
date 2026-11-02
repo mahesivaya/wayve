@@ -1967,7 +1967,6 @@ export function GitHubRepoViewer({
             <div className="github-panel">
               <div className="github-panel-head">
                 <h2>Commits</h2>
-                <span>{commitsTotal ?? commits.length}</span>
               </div>
               {commits.map((commit) => {
                 const isOpen = diffs.expandedShas.has(commit.sha);
