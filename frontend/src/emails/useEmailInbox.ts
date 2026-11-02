@@ -67,7 +67,9 @@ const HIDES_SNOOZED: ReadonlyArray<EmailFolder> = [
 
 export function useEmailInbox(
   user_id: number | undefined,
-  normalizedSearchQuery: string
+  normalizedSearchQuery: string,
+  // The view to start on when reopening an email left open earlier.
+  initialView?: { account: number | null; folder: EmailFolder } | null
 ) {
   const [accounts, setAccounts] = useState<EmailAccount[]>([]);
   // Flips true after the first /api/accounts response, success or failure, so
@@ -82,8 +84,12 @@ export function useEmailInbox(
     rowId: number;
     messages: EmailItem[];
   } | null>(null);
-  const [activeAccount, setActiveAccount] = useState<number | null>(null);
-  const [activeFolder, setActiveFolder] = useState<EmailFolder>("inbox");
+  const [activeAccount, setActiveAccount] = useState<number | null>(
+    initialView?.account ?? null
+  );
+  const [activeFolder, setActiveFolder] = useState<EmailFolder>(
+    initialView?.folder ?? "inbox"
+  );
   const [hasMore, setHasMore] = useState(true);
   // Server-side total for the current view (first-page fetches carry it).
   const [total, setTotal] = useState<number | null>(null);
@@ -134,6 +140,7 @@ export function useEmailInbox(
 
   useEffect(() => {
     const key = `${activeAccount ?? "all"}|${activeFolder}|${normalizedSearchQuery}`;
+    const isFirstLoad = loadedKeyRef.current === null;
     const isFreshLoad = loadedKeyRef.current !== key;
     loadedKeyRef.current = key;
 
@@ -168,14 +175,16 @@ export function useEmailInbox(
         // `refreshTick` every 2s after a mailbox is connected, and each tick
         // would otherwise clobber the open email. Clear it only when the
         // email genuinely left the list (account switch, folder change,
-        // delete).
+        // delete). Not on the page's first load: nothing has switched, and an
+        // email reopened from the URL or session may simply be past page one.
         setSelectedEmail((cur) =>
-          cur &&
-          data.some(
-            (email) =>
-              email.id === cur.id ||
-              conversationKey(email) === conversationKey(cur)
-          )
+          isFirstLoad ||
+          (cur &&
+            data.some(
+              (email) =>
+                email.id === cur.id ||
+                conversationKey(email) === conversationKey(cur)
+            ))
             ? cur
             : null
         );
@@ -229,7 +238,12 @@ export function useEmailInbox(
         return newAtTop.length > 0 ? [...newAtTop, ...merged] : merged;
       });
     };
-    void fetchInitialEmails();
+    void fetchInitialEmails().catch((err) => {
+      logger.error("Fetch emails failed", err);
+      // Still report the first load as finished, so an email waiting to reopen
+      // falls back to fetching itself rather than waiting forever.
+      if (isFirstLoad) setLoadedListKey(key);
+    });
   }, [activeAccount, activeFolder, refreshTick, normalizedSearchQuery]);
 
   const loadMore = async () => {
