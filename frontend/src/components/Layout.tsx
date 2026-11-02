@@ -14,6 +14,7 @@ import {
   useRef,
   type ReactNode,
   type DragEvent as ReactDragEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
@@ -880,6 +881,28 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     setPaneTarget(null);
   }, []);
 
+  // Loads an app into the focused pane/half. False means the routed left column
+  // is the target (or nothing is split), so the caller has to navigate instead.
+  const placeInFocusedPane = useCallback(
+    (app: AppKey): boolean => {
+      if (!routeToFocusedPane) return false;
+      if (focusHalf === "bottom" && subSplit[splitTarget]) {
+        setSubBottomView((v) => ({ ...v, [splitTarget]: app }));
+        return true;
+      }
+      if (splitTarget === "center") {
+        setMiddleView(app);
+        return true;
+      }
+      if (splitTarget === "right") {
+        setRightView(app);
+        return true;
+      }
+      return false;
+    },
+    [routeToFocusedPane, focusHalf, subSplit, splitTarget]
+  );
+
   // Open an app in whichever pane/half currently has focus, mirroring a sidebar
   // item's click. Controls that aren't sidebar <Link>s (e.g. the Reminders bell)
   // call this so they honor the focused pane instead of always routing the left
@@ -887,30 +910,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // (route-driven) pane is focused.
   const openInFocusedPane = useCallback(
     (app: AppKey) => {
-      if (focusIfOpen(app)) return;
-      const path = SPLIT_APPS.find((a) => a.key === app)?.path ?? "/";
-      if (!routeToFocusedPane) {
-        void navigate(path);
-        return;
-      }
-      if (focusHalf === "bottom" && subSplit[splitTarget]) {
-        setSubBottomView((v) => ({ ...v, [splitTarget]: app }));
-      } else if (splitTarget === "center") {
-        setMiddleView(app);
-      } else if (splitTarget === "right") {
-        setRightView(app);
-      } else {
-        void navigate(path); // left = the route-driven column
-      }
+      if (focusIfOpen(app) || placeInFocusedPane(app)) return;
+      void navigate(SPLIT_APPS.find((a) => a.key === app)?.path ?? "/");
     },
-    [
-      routeToFocusedPane,
-      focusHalf,
-      subSplit,
-      splitTarget,
-      navigate,
-      focusIfOpen,
-    ]
+    [navigate, focusIfOpen, placeInFocusedPane]
   );
 
   const splitControl = useMemo(
@@ -1085,7 +1088,27 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
   // With the split open, a sidebar click loads the app into whichever pane (and
   // sub-split half) the user last clicked — never the others. When closed, the
-  // link navigates normally.
+  // link navigates normally. Every split app's link shares these props, in the
+  // top-level list and the Workspace section alike, so none of them can fall back
+  // to always replacing the left pane.
+  const splitAppLinkProps = useCallback(
+    (app: AppKey) => ({
+      // Drag any app onto a pane to open it exactly where you drop it.
+      draggable: true,
+      onDragStart: (e: ReactDragEvent) =>
+        beginPaneDrag(e, { kind: "app", app }),
+      onDragEnd: () => setPaneDrag(null),
+      onClick: (e: ReactMouseEvent) => {
+        setNavOpen(false);
+        // Already open in a pane: highlight it instead of a second copy. Else
+        // load it into the focused pane; when that's the routed left pane (or
+        // nothing is split), let the Link navigate.
+        if (focusIfOpen(app) || placeInFocusedPane(app)) e.preventDefault();
+      },
+    }),
+    [beginPaneDrag, focusIfOpen, placeInFocusedPane]
+  );
+
   const renderSidebarItem = useCallback(
     (
       path: string,
@@ -1108,35 +1131,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           to={path}
           title={label}
           className={`sidebar-link ${isLeftActive ? "active" : ""} ${isMiddleActive || isRightActive ? "active-split" : ""}`.trim()}
-          // Drag any app onto a pane to open it exactly where you drop it. One
-          // handler here covers every split app in the sidebar.
-          draggable
-          onDragStart={(e) => beginPaneDrag(e, { kind: "app", app })}
-          onDragEnd={() => setPaneDrag(null)}
-          onClick={(e) => {
-            setNavOpen(false);
-            // Already open in a pane: highlight it instead of a second copy.
-            if (focusIfOpen(app)) {
-              e.preventDefault();
-              return;
-            }
-            // No split, or the focused pane is hidden on a narrow screen:
-            // navigate normally.
-            if (!routeToFocusedPane) return;
-            // Route the click to the focused pane / half only.
-            if (focusHalf === "bottom" && subSplit[splitTarget]) {
-              e.preventDefault();
-              setSubBottomView((v) => ({ ...v, [splitTarget]: app }));
-            } else if (splitTarget === "center") {
-              e.preventDefault();
-              setMiddleView(app);
-            } else if (splitTarget === "right") {
-              e.preventDefault();
-              setRightView(app);
-            }
-            // splitTarget === "left" (top): let the Link navigate, which changes
-            // the routed left pane.
-          }}
+          {...splitAppLinkProps(app)}
         >
           <span className="sidebar-icon" aria-hidden="true">
             {icon}
@@ -1150,17 +1145,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         </Link>
       );
     },
-    [
-      location.pathname,
-      middleView,
-      rightView,
-      splitTarget,
-      routeToFocusedPane,
-      focusHalf,
-      subSplit,
-      beginPaneDrag,
-      focusIfOpen,
-    ]
+    [location.pathname, middleView, rightView, splitAppLinkProps]
   );
 
   const renderSidebarLink = (
@@ -1367,6 +1352,18 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
   const displayTeams = teams.length ? teams : SAMPLE_TEAMS;
 
+  // A Workspace row's class: lit as active in the routed left pane, or as
+  // active-split when it's open in another column.
+  const workspaceLinkClass = (app: AppKey, path: string, extra = "") =>
+    [
+      "sidebar-project-label",
+      extra,
+      location.pathname === path ? "active" : "",
+      middleView === app || rightView === app ? "active-split" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
   const sectionDefs: SidebarSectionDef[] = [
     {
       key: "workspace",
@@ -1378,10 +1375,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           <Link
             to="/documents"
             title="Library"
-            className={`sidebar-project-label${
-              location.pathname === "/documents" ? " active" : ""
-            }`}
-            onClick={() => setNavOpen(false)}
+            className={workspaceLinkClass("documents", "/documents")}
+            {...splitAppLinkProps("documents")}
           >
             📄 Library
           </Link>
@@ -1390,10 +1385,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           <Link
             to="/user-stories"
             title="User Stories"
-            className={`sidebar-project-label sidebar-project-label--badged${
-              location.pathname === "/user-stories" ? " active" : ""
-            }`}
-            onClick={() => setNavOpen(false)}
+            className={workspaceLinkClass(
+              "userstories",
+              "/user-stories",
+              "sidebar-project-label--badged"
+            )}
+            {...splitAppLinkProps("userstories")}
           >
             <span>📖 User Stories</span>
             {userStoriesCount > 0 && (
@@ -1408,10 +1405,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           <Link
             to="/tickets"
             title="Tickets"
-            className={`sidebar-project-label sidebar-project-label--badged${
-              location.pathname === "/tickets" ? " active" : ""
-            }`}
-            onClick={() => setNavOpen(false)}
+            className={workspaceLinkClass(
+              "tickets",
+              "/tickets",
+              "sidebar-project-label--badged"
+            )}
+            {...splitAppLinkProps("tickets")}
           >
             <span>🎫 Tickets</span>
             {ticketsOpenCount > 0 && (
@@ -1427,10 +1426,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             <Link
               to="/skills"
               title="Skills"
-              className={`sidebar-project-label${
-                location.pathname === "/skills" ? " active" : ""
-              }`}
-              onClick={() => setNavOpen(false)}
+              className={workspaceLinkClass("skills", "/skills")}
+              {...splitAppLinkProps("skills")}
             >
               🧠 Skills
             </Link>
@@ -1439,27 +1436,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             <Link
               to="/github"
               title="Code Repo"
-              className={`sidebar-project-label${
-                location.pathname === "/github" ? " active" : ""
-              }`}
-              onClick={(e) => {
-                setNavOpen(false);
-                if (focusIfOpen("github")) {
-                  e.preventDefault();
-                  return;
-                }
-                if (!routeToFocusedPane) return;
-                if (focusHalf === "bottom" && subSplit[splitTarget]) {
-                  e.preventDefault();
-                  setSubBottomView((v) => ({ ...v, [splitTarget]: "github" }));
-                } else if (splitTarget === "center") {
-                  e.preventDefault();
-                  setMiddleView("github");
-                } else if (splitTarget === "right") {
-                  e.preventDefault();
-                  setRightView("github");
-                }
-              }}
+              className={workspaceLinkClass("github", "/github")}
+              {...splitAppLinkProps("github")}
             >
               <GitLogoIcon size={14} /> Code Repo
             </Link>
@@ -1467,33 +1445,12 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           {/* Moved down here from the top-level app list — a workspace tool, not
               a personal app. Test Access and Access Requests are one page now,
               so one entry covers both; it needs no gate of its own, since the
-              section's `visible` is the same scope test Test Access carried.
-              Split-aware onClick (mirrors Code Repo) so it opens in the focused
-              pane, not always the left column. */}
+              section's `visible` is the same scope test Test Access carried. */}
           <Link
             to="/requests"
             title="Requests"
-            className={`sidebar-project-label${
-              location.pathname === "/requests" ? " active" : ""
-            }`}
-            onClick={(e) => {
-              setNavOpen(false);
-              if (focusIfOpen("requests")) {
-                e.preventDefault();
-                return;
-              }
-              if (!routeToFocusedPane) return;
-              if (focusHalf === "bottom" && subSplit[splitTarget]) {
-                e.preventDefault();
-                setSubBottomView((v) => ({ ...v, [splitTarget]: "requests" }));
-              } else if (splitTarget === "center") {
-                e.preventDefault();
-                setMiddleView("requests");
-              } else if (splitTarget === "right") {
-                e.preventDefault();
-                setRightView("requests");
-              }
-            }}
+            className={workspaceLinkClass("requests", "/requests")}
+            {...splitAppLinkProps("requests")}
           >
             <AccessRequestsIcon size={16} /> Requests
           </Link>
