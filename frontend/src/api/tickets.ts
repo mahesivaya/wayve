@@ -2,6 +2,7 @@ import { apiFetch, apiFetchJson } from "./client";
 import type { Task, SaveTaskPayload, TaskAttachment } from "./tasks";
 import { getApiBase } from "../config/env";
 import { getAuthToken } from "../auth/token";
+import { announceChange } from "../utils/crossTabEvents";
 
 // Workspace tickets are a second Tasks-style board, independent of user stories.
 // They reuse the Task record shape (task_number carries the per-owner ticket
@@ -11,14 +12,11 @@ import { getAuthToken } from "../auth/token";
 // differs — so only these four are re-pointed at /api/workspace-tickets.
 
 // Fired after any ticket write so a mounted sidebar badge refreshes its
-// open-count immediately instead of waiting for the next poll.
+// open-count immediately instead of waiting for the next poll, in this tab and
+// (via crossTabEvents) every other open tab.
 export const TICKETS_CHANGED_EVENT = "rwayve:tickets-changed";
 
-const emitTicketsChanged = () => {
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event(TICKETS_CHANGED_EVENT));
-  }
-};
+const emitTicketsChanged = () => announceChange(TICKETS_CHANGED_EVENT);
 
 export const getTickets = async () =>
   apiFetchJson<Task[]>("/api/workspace-tickets");

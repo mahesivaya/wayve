@@ -1,42 +1,15 @@
-import { useEffect, useState } from "react";
-import { getUserStories } from "../api/userStories";
+import { useLiveCount } from "../components/useLiveCount";
+import { getUserStories, USER_STORIES_CHANGED_EVENT } from "../api/userStories";
+
+// Reuses the list endpoint (no dedicated count route), counting the rows it
+// already returns.
+const fetchStoryCount = () =>
+  getUserStories().then((stories) => stories.length);
 
 // Number of user stories in the owner's backlog, for the Workspace sidebar
-// badge. Mirrors useTicketsOpenCount: `enabled` gates the fetch on auth state so
-// it never fires a 401 during logout, it polls on an interval, and refreshes
-// when the tab becomes visible. Reuses the existing list endpoint (no dedicated
-// count route), counting the rows it already returns.
+// badge. Refreshes on any story write in any open tab
+// (USER_STORIES_CHANGED_EVENT), on focus/visibility, and on a short poll for
+// changes made elsewhere — see useLiveCount.
 export function useUserStoriesCount(enabled: boolean = true): number {
-  const [count, setCount] = useState<number>(0);
-
-  useEffect(() => {
-    if (!enabled) return;
-    let cancelled = false;
-
-    const refresh = () => {
-      getUserStories()
-        .then((stories) => {
-          if (!cancelled) setCount(stories.length);
-        })
-        .catch(() => {
-          // Keep previous count on transient failure; the next poll retries.
-        });
-    };
-
-    refresh();
-    const interval = window.setInterval(refresh, 60_000);
-
-    const onVisible = () => {
-      if (document.visibilityState === "visible") refresh();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [enabled]);
-
-  return count;
+  return useLiveCount(fetchStoryCount, USER_STORIES_CHANGED_EVENT, enabled);
 }

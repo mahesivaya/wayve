@@ -1,5 +1,6 @@
 import { apiFetch, apiFetchJson } from "./client";
 import type { Task, SaveTaskPayload } from "./tasks";
+import { announceChange } from "../utils/crossTabEvents";
 
 // Workspace user stories reuse the Task record shape (task_number carries the
 // per-owner story number; the Jira/GitLab fields are always null) and the
@@ -8,15 +9,11 @@ import type { Task, SaveTaskPayload } from "./tasks";
 // endpoints as tasks — only the CRUD surface differs — so only these four are
 // re-pointed at /api/user-stories.
 
-// Fired after any story mutation so live views (e.g. the admin-dashboard burnup)
-// can refetch immediately instead of waiting for a reload. Same-document only —
-// listeners pair it with a visibility/focus refetch to catch other-tab edits.
+// Fired after any story mutation so live views (e.g. the admin-dashboard burnup,
+// the sidebar badge) can refetch immediately instead of waiting for a reload.
+// Reaches other open tabs too, via crossTabEvents.
 export const USER_STORIES_CHANGED_EVENT = "rwayve:userstories-changed";
-const emitUserStoriesChanged = () => {
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event(USER_STORIES_CHANGED_EVENT));
-  }
-};
+const emitUserStoriesChanged = () => announceChange(USER_STORIES_CHANGED_EVENT);
 
 export const getUserStories = async () =>
   apiFetchJson<Task[]>("/api/user-stories");
