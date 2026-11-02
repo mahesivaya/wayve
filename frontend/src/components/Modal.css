@@ -9,6 +9,17 @@
   backdrop-filter: blur(2px);
 }
 
+/* Doubled up to outrank scheduler.css, which also styles `.modal-overlay`. */
+.modal-overlay.modal-overlay--contained {
+  position: absolute;
+  z-index: 50;
+}
+
+.modal-overlay--contained .modal-content {
+  max-width: 90%;
+  max-height: 90%;
+}
+
 .modal-content {
   background: var(--color-surface);
   border-radius: var(--radius-lg);

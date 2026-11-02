@@ -1046,6 +1046,7 @@ export default function Scheduler() {
       </div>
 
       <Modal
+        contained
         isOpen={showModal}
         onClose={resetModal}
         title={editingEvent ? "Edit Meeting" : "Schedule Meeting"}

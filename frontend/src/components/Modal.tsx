@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import "./Modal.css";
 
 interface ModalProps {
@@ -6,6 +6,9 @@ interface ModalProps {
   onClose: () => void;
   title?: string;
   children: React.ReactNode;
+  // Opens over the nearest positioned ancestor rather than the whole window, which
+  // leaves the rest of the app (and the other split pane) usable.
+  contained?: boolean;
 }
 
 export default function Modal({
@@ -13,34 +16,49 @@ export default function Modal({
   onClose,
   title,
   children,
+  contained = false,
 }: ModalProps) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+
   // Handle ESC key and scroll locking
   useEffect(() => {
     if (!isOpen) return;
 
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      // Escape pressed elsewhere on the page isn't meant for a contained modal.
+      const target = e.target;
+      if (
+        contained &&
+        target instanceof Node &&
+        target !== document.body &&
+        !overlayRef.current?.contains(target)
+      ) {
+        return;
+      }
+      onClose();
     };
 
     window.addEventListener("keydown", handleEsc);
     // Prevent background scrolling when modal is open
     const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    if (!contained) document.body.style.overflow = "hidden";
 
     return () => {
       window.removeEventListener("keydown", handleEsc);
-      document.body.style.overflow = originalOverflow;
+      if (!contained) document.body.style.overflow = originalOverflow;
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, contained]);
 
   if (!isOpen) return null;
 
   return (
     <div
-      className="modal-overlay"
+      ref={overlayRef}
+      className={`modal-overlay${contained ? " modal-overlay--contained" : ""}`}
       onClick={onClose}
       role="dialog"
-      aria-modal="true"
+      aria-modal={!contained}
     >
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
