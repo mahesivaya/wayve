@@ -29,6 +29,7 @@ import {
 } from "../theme/platformFonts";
 import { runtimeConfig } from "../config/runtimeConfig";
 import { clearHomeCache } from "../home/dashboard/useCardData";
+import { forgetOpenChat } from "../chat/openChatSession";
 import { forgetOpenEmail } from "../emails/openEmailSession";
 import { logger } from "../utils/logger";
 import { isDesktopApp } from "../utils/desktop";
@@ -587,6 +588,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // expiry within the tab, so drop them before anyone else can sign in.
       clearHomeCache();
       forgetOpenEmail();
+      forgetOpenChat();
       setUser(null);
       setNeedsRecovery(false);
     };
@@ -602,6 +604,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // senders, and sessionStorage survives a logout within the same tab.
     clearHomeCache();
     forgetOpenEmail();
+    forgetOpenChat();
     // Drop the cached per-user font so the next user starts from the platform
     // default rather than this one's resolved font.
     clearFontCache();

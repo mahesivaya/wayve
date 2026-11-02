@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { normalizeAccountType } from "../auth/accountHome";
 import {
@@ -12,6 +12,7 @@ import {
   joinChatChannel,
   leaveChatChannel,
   deleteChatChannel,
+  findChatUserByEmail,
   reactionFrame,
   removeChatChannelUser,
   setChatChannelMemberRole,
@@ -51,6 +52,13 @@ import {
 import { loadPublicKey } from "../crypto/keyStore";
 import CallOverlays from "../call/CallOverlays";
 import { useCallSession } from "../call/useCallSession";
+import {
+  forgetOpenChat,
+  readChatDraft,
+  readOpenChat,
+  rememberChatDraft,
+  rememberOpenChat,
+} from "./openChatSession";
 import type { ChannelRole, ChannelVisibility, Conversation } from "./types";
 import {
   getChannelAdmins,
@@ -67,12 +75,29 @@ export default function Chat() {
   // The open conversation is mirrored into the URL (`?c=<channelId>` / `?dm=<userId>`)
   // so a refresh restores it.
   const [searchParams, setSearchParams] = useSearchParams();
+  // Only the routed /chat page owns those params. In a split pane the URL belongs
+  // to the routed pane, so a pane reopens from the session alone.
+  const ownsUrl = useLocation().pathname === "/chat";
+  const cParam = ownsUrl ? searchParams.get("c") : null;
+  const dmParam = ownsUrl ? searchParams.get("dm") : null;
+  const urlKey = cParam ? `c:${cParam}` : dmParam ? `dm:${dmParam}` : null;
+
+  // The window left open when this page last unmounted. A URL naming another
+  // conversation wins.
+  const [restored] = useState(() => {
+    const saved = readOpenChat(user?.id);
+    return saved && (urlKey === null || urlKey === saved.key) ? saved : null;
+  });
+  const [restoredDraft] = useState(() =>
+    restored ? readChatDraft(user?.id, restored.key) : null
+  );
 
   const {
     users,
     addUser,
     channels,
     setChannels,
+    conversationsLoaded,
     refreshChannels: fetchChannels,
     summary,
     refreshSummary,
@@ -83,7 +108,7 @@ export default function Chat() {
 
   const userIds = useMemo(() => users.map((u) => u.id), [users]);
   const { presence, applyPresenceEvent } = usePresence(userIds);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(restoredDraft?.text ?? "");
   const [isNarrow, setIsNarrow] = useState(false);
 
   const [creatingChannel, setCreatingChannel] = useState(false);
@@ -137,6 +162,8 @@ export default function Chat() {
   // is appended like an inbound one.
   const localClientIds = useRef<Set<string>>(new Set());
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const messageListRef = useRef<HTMLDivElement | null>(null);
+  const scrollTopRef = useRef(restored?.scrollTop ?? 0);
 
   const { width: sidebarWidth, startResize: startSidebarDrag } =
     useResizableWidth({
@@ -523,13 +550,15 @@ export default function Chat() {
         ? `dm:${selectedConversation.user.id}`
         : null;
 
-  // Restore the conversation named in the URL. Each param is applied at most once,
-  // so the sync effect below can rewrite the URL without triggering a reload here.
+  // Restore the conversation named in the URL, or else the one left open. Each is
+  // applied at most once, so the sync effect below can rewrite the URL without
+  // triggering a reload here. The saved one stops being a candidate as soon as any
+  // conversation opens, or closing that one would bring it back.
   const deepLinkAppliedRef = useRef<string | null>(null);
+  const restorePendingRef = useRef(restored?.key ?? null);
   useEffect(() => {
-    const cParam = searchParams.get("c");
-    const dmParam = searchParams.get("dm");
-    const key = cParam ? `c:${cParam}` : dmParam ? `dm:${dmParam}` : null;
+    if (conversationKey) restorePendingRef.current = null;
+    const key = urlKey ?? restorePendingRef.current;
     if (!key) {
       // Reset the guard so re-opening the same conversation works.
       deepLinkAppliedRef.current = null;
@@ -541,14 +570,52 @@ export default function Chat() {
     }
     if (deepLinkAppliedRef.current === key) return;
 
-    const channel = cParam
-      ? channels.find((c) => String(c.id) === cParam)
+    const channel = key.startsWith("c:")
+      ? channels.find((c) => `c:${c.id}` === key)
       : undefined;
-    const otherUser = dmParam
-      ? users.find((u) => String(u.id) === dmParam)
+    const otherUser = key.startsWith("dm:")
+      ? users.find((u) => `dm:${u.id}` === key)
       : undefined;
-    // Not in the loaded lists yet. Leave the guard unset so a later load retries.
-    if (!channel && !otherUser) return;
+    if (!channel && !otherUser) {
+      // Not in the loaded lists yet. Leave the guard unset so a later load retries.
+      if (!conversationsLoaded || restored?.key !== key) return;
+
+      // The saved conversation isn't listed: a DM peer outside the directory, or
+      // something since deleted. Only a definite miss forgets it, so a failed
+      // request just tries again on the next visit.
+      deepLinkAppliedRef.current = key;
+      void (async () => {
+        let found: ChatUser | null = null;
+        if (restored.email) {
+          try {
+            found = await findChatUserByEmail(restored.email);
+          } catch (err) {
+            logger.warn("restoring chat conversation failed", { key, err });
+            return;
+          }
+        }
+        if (deepLinkAppliedRef.current !== key) return;
+        if (found && `dm:${found.id}` === key) {
+          addUser(found);
+          await loadUserMessages(found);
+          return;
+        }
+        restorePendingRef.current = null;
+        forgetOpenChat();
+        if (urlKey === key) {
+          setSearchParams(
+            (prev) => {
+              const next = new URLSearchParams(prev);
+              next.delete("c");
+              next.delete("dm");
+              return next;
+            },
+            { replace: true }
+          );
+        }
+      })();
+      return;
+    }
 
     deepLinkAppliedRef.current = key;
     // Defer the load out of the effect body since it sets state.
@@ -560,14 +627,19 @@ export default function Chat() {
     // loadChannelMessages/loadUserMessages are recreated each render, so depending
     // on them would loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, channels, users, conversationKey]);
+  }, [urlKey, channels, users, conversationKey, conversationsLoaded]);
 
   // Mirror the open conversation back into the URL. The ref guard stops the initial
   // null→null render from clearing a `?c=…` param before the effect above reads it.
   const prevConversationKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (conversationKey === prevConversationKeyRef.current) return;
+    const had = prevConversationKeyRef.current;
     prevConversationKeyRef.current = conversationKey;
+    // Closed on purpose (leaving the page doesn't get here), so a later visit
+    // starts on an empty window.
+    if (conversationKey === null && had !== null) forgetOpenChat();
+    if (!ownsUrl) return;
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -582,7 +654,76 @@ export default function Chat() {
       },
       { replace: true }
     );
-  }, [conversationKey, selectedConversation, setSearchParams]);
+  }, [conversationKey, ownsUrl, selectedConversation, setSearchParams]);
+
+  // Keep the session's copy current.
+  const userId = user?.id;
+  const selectedUserEmail = selectedUser?.email ?? null;
+  const activeThreadId = activeThread?.message_id ?? null;
+  useEffect(() => {
+    if (conversationKey === null || userId === undefined) return;
+    rememberOpenChat({
+      userId,
+      key: conversationKey,
+      email: selectedUserEmail,
+      threadParentId: activeThreadId,
+      settingsOpen: channelSettingsOpen,
+      scrollTop: scrollTopRef.current,
+    });
+  }, [
+    conversationKey,
+    userId,
+    selectedUserEmail,
+    activeThreadId,
+    channelSettingsOpen,
+  ]);
+  useEffect(() => {
+    if (conversationKey === null || userId === undefined) return;
+    rememberChatDraft({
+      userId,
+      key: conversationKey,
+      text: input,
+      files: pendingFiles,
+    });
+  }, [conversationKey, userId, input, pendingFiles]);
+
+  const onMessageListScroll = (scrollTop: number) => {
+    scrollTopRef.current = scrollTop;
+    if (conversationKey === null || userId === undefined) return;
+    rememberOpenChat({
+      userId,
+      key: conversationKey,
+      email: selectedUserEmail,
+      threadParentId: activeThreadId,
+      settingsOpen: channelSettingsOpen,
+      scrollTop,
+    });
+  };
+
+  // Put the window back the way it was once the saved conversation has opened.
+  // Opening it resets these, so this has to run afterwards.
+  const viewRestoredRef = useRef(false);
+  useEffect(() => {
+    if (!restored || viewRestoredRef.current) return;
+    if (conversationKey !== restored.key) return;
+    // Defer out of the effect body since it sets state.
+    const handle = window.setTimeout(() => {
+      viewRestoredRef.current = true;
+      if (messageListRef.current) {
+        messageListRef.current.scrollTop = restored.scrollTop;
+      }
+      if (restoredDraft?.files.length) setPendingFiles(restoredDraft.files);
+      setChannelSettingsOpen(restored.settingsOpen);
+      const parent = messages.find(
+        (m) => m.message_id === restored.threadParentId
+      );
+      if (parent) void openThread(parent);
+    }, 0);
+    return () => window.clearTimeout(handle);
+    // openThread is recreated each render, and `messages` arrives in the same
+    // commit as the conversation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationKey]);
 
   const recipientPublicKeysFor = async (conversation: Conversation) => {
     if (!user) return null;
@@ -1087,6 +1228,8 @@ export default function Chat() {
                 selectedChannel ? (msg) => void openThread(msg) : null
               }
               onToggleReaction={toggleReaction}
+              listRef={messageListRef}
+              onListScroll={onMessageListScroll}
             />
 
             <MessageComposer
