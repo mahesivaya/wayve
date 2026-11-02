@@ -28,6 +28,8 @@ import { useShortcuts } from "../shared/useShortcuts";
 import ContactAvatar from "../shared/ContactAvatar";
 import RecipientChips from "./RecipientChips";
 import { splitMentions } from "./mentionHighlight";
+import type { EmailDraft } from "../api/emailDrafts";
+import { draftStatusText, useDraftAutosave } from "./useDraftAutosave";
 
 interface EmailDetailProps {
   selectedEmail: EmailItem | null;
@@ -57,6 +59,10 @@ interface EmailDetailProps {
   // The user's connected mailbox addresses. Replying to one of your own
   // messages goes to its recipients, not back to you.
   ownAddresses?: string[];
+  // Saved drafts, to reopen the composer on the email one belongs to. `draftsLoaded`
+  // says the list has arrived; until then, no draft can be ruled out.
+  drafts?: EmailDraft[];
+  draftsLoaded?: boolean;
 }
 
 export const EmailDetail: React.FC<EmailDetailProps> = ({
@@ -73,6 +79,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   conversation,
   onLoadMessage,
   ownAddresses,
+  drafts,
+  draftsLoaded = false,
 }) => {
   const { user } = useAuth();
   const [deleting, setDeleting] = useState(false);
@@ -115,6 +123,9 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   const [forwardOpen, setForwardOpen] = useState(false);
   const [forwardTo, setForwardTo] = useState("");
   const [forwardBody, setForwardBody] = useState("");
+  // The quoted original the forward box opened with. A forward isn't worth keeping
+  // until something other than that is in it.
+  const [forwardSeed, setForwardSeed] = useState("");
   const [forwardSending, setForwardSending] = useState(false);
   const [forwardError, setForwardError] = useState<string | null>(null);
   // Reply and forward attachments always send via the connected mailbox, so
@@ -167,6 +178,39 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   // after the forward box opens.
   const [forwardDropped, setForwardDropped] = useState<number[]>([]);
   const forwardFileRef = useRef<HTMLInputElement>(null);
+
+  // Autosave for the two composers. They run above the early return below, so
+  // what's unsaved still goes out when the email is closed or changed.
+  const replyDraft = useDraftAutosave({
+    kind: "reply",
+    sourceEmailId: selectedEmail?.id ?? null,
+    accountId: selectedEmail?.account_id ?? null,
+    content: {
+      to: replyToList.join(", "),
+      cc: replyCc.join(", "),
+      bcc: replyBcc.join(", "),
+      subject: replySubject,
+      body: replyBody,
+    },
+    hasContent: replyBody.trim() !== "",
+    enabled: replyOpen && !!selectedEmail,
+  });
+  const forwardDraft = useDraftAutosave({
+    kind: "forward",
+    sourceEmailId: selectedEmail?.id ?? null,
+    accountId: selectedEmail?.account_id ?? null,
+    content: {
+      to: forwardTo,
+      cc: "",
+      bcc: "",
+      subject: selectedEmail ? forwardSubjectFor(selectedEmail) : "",
+      body: forwardBody,
+    },
+    hasContent:
+      forwardTo.trim() !== "" ||
+      (forwardBody.trim() !== "" && forwardBody !== forwardSeed),
+    enabled: forwardOpen && !!selectedEmail,
+  });
   const [reconnecting, setReconnecting] = useState(false);
   const [reconnectError, setReconnectError] = useState<string | null>(null);
 
@@ -232,6 +276,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       setForwardOpen(false);
       setForwardTo("");
       setForwardBody("");
+      setForwardSeed("");
       setForwardError(null);
       setForwardDropped([]);
       // Otherwise the menu lingers over the next message, showing the previous
@@ -241,6 +286,52 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     }, 0);
     return () => window.clearTimeout(timer);
   }, [selectedEmail?.id]);
+
+  // Reopen a saved reply or forward when its email opens. After the reset above
+  // (timers run in order), and once per email, so a later save can't overwrite
+  // what's being typed. A draft may name an older message of the conversation
+  // this email's row now stands for.
+  const restoredForRef = useRef<number | null>(null);
+  const restoreEmailId = selectedEmail?.id ?? null;
+  useEffect(() => {
+    // Closed: the composer was reset, so opening this email again must restore.
+    if (restoreEmailId === null) restoredForRef.current = null;
+    if (!draftsLoaded || restoreEmailId === null) return;
+    if (restoredForRef.current === restoreEmailId) return;
+    const covered = new Set([
+      restoreEmailId,
+      ...(selectedEmail?.message_ids ?? []),
+    ]);
+    const saved = (drafts ?? []).filter(
+      (d) => d.source_email_id !== null && covered.has(d.source_email_id)
+    );
+    const timer = window.setTimeout(() => {
+      restoredForRef.current = restoreEmailId;
+      const reply = saved.find((d) => d.kind === "reply");
+      const forward = saved.find((d) => d.kind === "forward");
+      if (reply) {
+        replyDraft.adopt(reply);
+        setReplyToList(splitAddresses(reply.to));
+        setReplyCc(splitAddresses(reply.cc));
+        setReplyBcc(splitAddresses(reply.bcc));
+        setCcOpen(reply.cc !== "");
+        setBccOpen(reply.bcc !== "");
+        setReplySubject(reply.subject);
+        setReplyBody(reply.body);
+      }
+      if (forward) {
+        forwardDraft.adopt(forward);
+        setForwardTo(forward.to);
+        setForwardBody(forward.body);
+      }
+      // `saved` is newest first, so the one last worked on is the one that opens.
+      setReplyOpen(saved[0]?.kind === "reply");
+      setForwardOpen(saved[0]?.kind === "forward");
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // Keyed on the email and the list's arrival alone: each save changes `drafts`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restoreEmailId, draftsLoaded]);
 
   // Move focus to the reading pane when an email opens, so the very first wheel
   // or arrow-key scroll acts on this scroll container rather than the list row
@@ -444,7 +535,9 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     setReplyError(null);
     setForwardOpen(next);
     if (next && !forwardBody.trim()) {
-      setForwardBody(buildForwardBody(selectedEmail));
+      const seed = buildForwardBody(selectedEmail);
+      setForwardBody(seed);
+      setForwardSeed(seed);
     }
     setForwardError(null);
   };
@@ -464,6 +557,31 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     setForwardOpen(false);
     setForwardError(null);
     detailRef.current?.focus({ preventScroll: true });
+  };
+
+  // Cancel only closes the composer, keeping the draft. This is the way to lose it.
+  const discardReply = () => {
+    void replyDraft.discard();
+    setReplyToList([]);
+    setReplySubject("");
+    setReplyBody("");
+    setReplyAttachments([]);
+    setReplyBcc([]);
+    setCcOpen(false);
+    setBccOpen(false);
+    setReplyAll(false);
+    ccPendingRef.current = null;
+    cancelReply();
+  };
+
+  const discardForward = () => {
+    void forwardDraft.discard();
+    setForwardTo("");
+    setForwardBody("");
+    setForwardSeed("");
+    setForwardAttachments([]);
+    setForwardDropped([]);
+    cancelForward();
   };
 
   // Gmail-style shortcuts for the open message: fixed bindings, no remapping.
@@ -536,10 +654,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     }
   };
 
-  const originalSubject = displaySubject(selectedEmail);
-  const forwardSubject = originalSubject.toLowerCase().startsWith("fwd:")
-    ? originalSubject
-    : `Fwd: ${originalSubject}`;
+  const forwardSubject = forwardSubjectFor(selectedEmail);
 
   const handleReply = async () => {
     const body = replyBody.trim();
@@ -583,6 +698,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         attachments,
         reply_to_email_id: selectedEmail.id,
       });
+      void replyDraft.discard();
       setReplyToList([]);
       setReplySubject("");
       setReplyBody("");
@@ -652,8 +768,10 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             ? forwardOriginals.map((attachment) => attachment.id)
             : undefined,
       });
+      void forwardDraft.discard();
       setForwardTo("");
       setForwardBody("");
+      setForwardSeed("");
       setForwardAttachments([]);
       setForwardDropped([]);
       setForwardOpen(false);
@@ -1269,6 +1387,19 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             >
               Cancel
             </button>
+            <button
+              type="button"
+              className="email-reply-cancel"
+              onClick={discardReply}
+            >
+              Discard
+            </button>
+            <span className="email-draft-status" role="status">
+              {draftStatusText(replyDraft.status)}
+              {replyDraft.status !== "idle" &&
+                replyAttachments.length > 0 &&
+                " (attachments aren't saved)"}
+            </span>
           </div>
         </div>
       )}
@@ -1340,6 +1471,19 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             >
               Cancel
             </button>
+            <button
+              type="button"
+              className="email-reply-cancel"
+              onClick={discardForward}
+            >
+              Discard
+            </button>
+            <span className="email-draft-status" role="status">
+              {draftStatusText(forwardDraft.status)}
+              {forwardDraft.status !== "idle" &&
+                forwardAttachments.length > 0 &&
+                " (attachments aren't saved)"}
+            </span>
           </div>
         </div>
       )}
@@ -1390,6 +1534,19 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
 
 function displaySubject(email: EmailItem): string {
   return email.subject?.trim() || "(No Subject)";
+}
+
+function forwardSubjectFor(email: EmailItem): string {
+  const subject = displaySubject(email);
+  return subject.toLowerCase().startsWith("fwd:") ? subject : `Fwd: ${subject}`;
+}
+
+// The comma-joined form a draft stores address lists in.
+function splitAddresses(value: string): string[] {
+  return value
+    .split(",")
+    .map((address) => address.trim())
+    .filter(Boolean);
 }
 
 // `prev` plus whichever of `add` it doesn't already hold, ignoring case.

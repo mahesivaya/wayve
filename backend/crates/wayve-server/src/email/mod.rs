@@ -5,6 +5,7 @@ pub mod body_worker;
 pub mod cc_backfill;
 pub mod complete;
 pub mod contacts;
+pub mod drafts;
 pub mod gmail_push;
 pub mod handler;
 pub mod ical;
@@ -38,6 +39,10 @@ use actix_web::web;
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(crate::routes::email::get_emails)
         .service(crate::routes::email::get_unread_count)
+        .service(drafts::list_drafts)
+        .service(drafts::create_draft)
+        .service(drafts::update_draft)
+        .service(drafts::delete_draft)
         .service(crate::routes::email::search_contacts)
         // Before the `/emails/{id}` routes, so `trash` / `restore` are never read as an id.
         .service(crate::routes::email::trash_emails)

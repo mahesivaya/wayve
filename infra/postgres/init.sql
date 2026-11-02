@@ -3034,3 +3034,41 @@ CREATE POLICY email_contacts_rls ON email_contacts
         current_setting('app.bypass', true) = 'on'
         OR user_id = nullif(current_setting('app.user_id', true), '')::int
     );
+
+-- ============================================================================
+-- Half-written emails, autosaved as the user types (email::drafts). Separate from
+-- the Drafts folder's rows in `emails`, which are read-only copies synced from
+-- Gmail/Outlook. Recipients, subject and body are sealed together as one JSON
+-- blob. A reply or forward has one draft per source email; a new email has no
+-- source, and NULLs never collide, so it can have any number.
+-- SET NULL rather than CASCADE: losing the original must not lose what was written.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS email_drafts (
+    id                SERIAL PRIMARY KEY,
+    user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind              TEXT NOT NULL CHECK (kind IN ('compose', 'reply', 'forward')),
+    source_email_id   INTEGER REFERENCES emails(id) ON DELETE SET NULL,
+    account_id        INTEGER REFERENCES email_accounts(id) ON DELETE SET NULL,
+    content_iv        TEXT NOT NULL,
+    content_encrypted TEXT NOT NULL,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, kind, source_email_id)
+);
+CREATE INDEX IF NOT EXISTS idx_email_drafts_user_updated
+    ON email_drafts (user_id, updated_at DESC);
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON email_drafts TO wayve_app;
+GRANT USAGE ON SEQUENCE email_drafts_id_seq TO wayve_app;
+ALTER TABLE email_drafts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE email_drafts FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS email_drafts_rls ON email_drafts;
+CREATE POLICY email_drafts_rls ON email_drafts
+    USING (
+        current_setting('app.bypass', true) = 'on'
+        OR user_id = nullif(current_setting('app.user_id', true), '')::int
+    )
+    WITH CHECK (
+        current_setting('app.bypass', true) = 'on'
+        OR user_id = nullif(current_setting('app.user_id', true), '')::int
+    );

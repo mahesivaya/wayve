@@ -70,6 +70,8 @@ interface EmailListProps {
   // the empty state without a CTA.
   canAddAccount?: boolean;
   onAddAccount?: () => void;
+  // Rendered above the rows, inside the list's scroll area.
+  topContent?: React.ReactNode;
   // Folder tabs inline in the bulk bar, for org/platform pages that hide the email
   // sidebar but still need to reach Sent.
   showFolderTabs?: boolean;
@@ -152,6 +154,7 @@ export const EmailList: React.FC<EmailListProps> = ({
   showChrome = true,
   canAddAccount = false,
   onAddAccount,
+  topContent,
   showFolderTabs = false,
   onSelectFolder,
   onShowAttachments,
@@ -746,6 +749,8 @@ export const EmailList: React.FC<EmailListProps> = ({
           Searching all mail
         </div>
       )}
+
+      {topContent}
 
       {showNoAccounts && canAddAccount ? (
         <div className="email-folder-placeholder" role="status">

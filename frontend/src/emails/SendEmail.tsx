@@ -20,6 +20,8 @@ import { sealSecureMessage } from "./secureSend";
 import { formatFileSize } from "./renderUtils";
 import ContactAvatar from "../shared/ContactAvatar";
 import type { EmailAccount } from "./types";
+import type { EmailDraft } from "../api/emailDrafts";
+import { draftStatusText, useDraftAutosave } from "./useDraftAutosave";
 
 import { useState, useEffect, useRef, type ChangeEvent } from "react";
 
@@ -31,6 +33,8 @@ type SendEmailProps = {
   accounts?: EmailAccount[];
   onClose?: () => void;
   onSent?: () => void;
+  // A saved draft to carry on with. Fixed at mount: mount with a `key` per draft.
+  draft?: EmailDraft | null;
 };
 
 // Same fallback chain EmailSidebar uses for its account rows, so the two
@@ -70,6 +74,7 @@ export default function SendEmail({
   accounts,
   onClose,
   onSent,
+  draft: initialDraft = null,
 }: SendEmailProps) {
   const { user } = useAuth();
   // Which connected mailbox external (SMTP) sends go out from. Defaults to
@@ -78,8 +83,16 @@ export default function SendEmail({
   // below). The Fluxze-native and secure-link channels are accountless — see
   // the `sendInternalEmail`/`sendSecureEmail` calls below — so this only
   // affects the external-recipient path.
-  const [fromAccountId, setFromAccountId] = useState(accountId);
-  const [to, setTo] = useState("");
+  const [fromAccountId, setFromAccountId] = useState(() =>
+    accounts?.some((account) => account.id === initialDraft?.account_id)
+      ? (initialDraft?.account_id ?? accountId)
+      : accountId
+  );
+  // This form has one recipient field. Cc only reaches it from a reply draft whose
+  // original has since been deleted; Bcc stays out, since To would reveal it.
+  const [to, setTo] = useState(
+    [initialDraft?.to, initialDraft?.cc].filter(Boolean).join(", ")
+  );
   // Compose "To" contacts typeahead. `contactQuery` is the token under the caret
   // (null when inactive); `contactRange` is where a pick splices the address in.
   const toInputRef = useRef<HTMLInputElement>(null);
@@ -93,8 +106,8 @@ export default function SendEmail({
   >([]);
   const [contactIndex, setContactIndex] = useState(0);
   const contactReqId = useRef(0);
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  const [subject, setSubject] = useState(initialDraft?.subject ?? "");
+  const [body, setBody] = useState(initialDraft?.body ?? "");
   // When on, every recipient (Wayve or external) gets the magic-link path with
   // the same user-supplied passphrase, overriding the encryption mode below.
   const [secureSend, setSecureSend] = useState(false);
@@ -117,6 +130,34 @@ export default function SendEmail({
 
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Drafts are sealed with a server key, so the server could read them. That's
+  // fine for ordinary mail, but it must not hold the text of a message the user
+  // chose to keep from it.
+  const draftSensitive = secureSend || fluxzeOnly || encryptionMode === "e2e";
+  const draftAutosave = useDraftAutosave({
+    kind: "compose",
+    sourceEmailId: null,
+    accountId: fromAccountId,
+    content: { to, cc: "", bcc: "", subject, body },
+    hasContent: Boolean(to.trim() || subject.trim() || body.trim()),
+    enabled: true,
+    sensitive: draftSensitive,
+  });
+  const { adopt: adoptDraft } = draftAutosave;
+  useEffect(() => {
+    if (initialDraft) adoptDraft(initialDraft);
+    // Once: `initialDraft` is fixed at mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const discardDraft = () => {
+    void draftAutosave.discard();
+    setTo("");
+    setSubject("");
+    setBody("");
+    onClose?.();
+  };
 
   // Attachments are standard-mailbox only. Picking files forces the send down
   // the SMTP path (see `forceStandard` below) regardless of the E2E choice.
@@ -499,6 +540,7 @@ export default function SendEmail({
       }
 
       if (errors.length === 0) {
+        void draftAutosave.discard();
         setTo("");
         setSubject("");
         setBody("");
@@ -916,6 +958,29 @@ export default function SendEmail({
       >
         {loading ? "Sending..." : "Send"}
       </button>
+
+      <div className="email-draft-bar">
+        <span className="email-draft-status" role="status">
+          {draftSensitive
+            ? "Drafts aren't saved for Secure or end-to-end messages"
+            : draftStatusText(draftAutosave.status)}
+        </span>
+        {!draftSensitive &&
+          attachments.length > 0 &&
+          draftAutosave.status !== "idle" && (
+            <span className="email-draft-status">
+              Attachments aren&apos;t saved with drafts
+            </span>
+          )}
+        <button
+          type="button"
+          className="email-reply-cancel"
+          onClick={discardDraft}
+          disabled={loading}
+        >
+          Discard
+        </button>
+      </div>
 
       {status &&
         (statusSticky ? (

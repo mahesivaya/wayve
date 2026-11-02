@@ -133,6 +133,11 @@ export function useEmailInbox(
   // from a `refreshTick` bump on the same view (merge) — see there for why
   // that distinction matters.
   const loadedKeyRef = useRef<string | null>(null);
+  // The open email, readable from the list effect below without re-running it.
+  const selectedIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    selectedIdRef.current = selectedEmail?.id ?? null;
+  }, [selectedEmail?.id]);
   // The same key, but set only once that list's rows are actually in
   // `emails` — so a caller can tell the rows it sees belong to the view it
   // asked for, not the one before a folder/account/search switch.
@@ -143,6 +148,7 @@ export function useEmailInbox(
     const isFirstLoad = loadedKeyRef.current === null;
     const isFreshLoad = loadedKeyRef.current !== key;
     loadedKeyRef.current = key;
+    const openWhenSwitching = selectedIdRef.current;
 
     const fetchInitialEmails = async () => {
       // Signal (important) and Noise (social + promotions) are resolved
@@ -177,8 +183,11 @@ export function useEmailInbox(
         // email genuinely left the list (account switch, folder change,
         // delete). Not on the page's first load: nothing has switched, and an
         // email reopened from the URL or session may simply be past page one.
+        // Nor for one opened since this load began, which was picked from
+        // somewhere other than these rows (a saved draft, say).
         setSelectedEmail((cur) =>
           isFirstLoad ||
+          (cur && cur.id !== openWhenSwitching) ||
           (cur &&
             data.some(
               (email) =>

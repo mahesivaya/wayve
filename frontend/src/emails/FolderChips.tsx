@@ -39,6 +39,7 @@ export function FolderChips({
       {chip("signal", "Signal", "Signal")}
       {chip("noise", "Noise", "Noise")}
       {chip("sent", "Sent", "Sent")}
+      {chip("drafts", "Drafts", "Drafts")}
       {/* Sits next to Sent, where it's read as another place mail lives, rather
         than as a paperclip lost among the bulk-action icons at the far end. */}
       {onShowAttachments && (

@@ -12,6 +12,13 @@ import { EmailFilesList, EmailFileDetail } from "./EmailFilesPane";
 import { useVisibleFiles } from "./useVisibleFiles";
 import ProviderPicker from "./ProviderPicker";
 import { useEmailInbox, type TrashedBatch } from "./useEmailInbox";
+import { DraftsList } from "./DraftsList";
+import {
+  EMAIL_DRAFT_DELETED_EVENT,
+  notifyOtherTabsOfDrafts,
+  useEmailDrafts,
+} from "./useEmailDrafts";
+import { deleteEmailDraft, type EmailDraft } from "../api/emailDrafts";
 import type { EmailAttachment } from "../api/email";
 import {
   getEmail,
@@ -405,6 +412,48 @@ export default function Emails() {
   }, [openEmailId, userId, activeAccount, activeFolder]);
 
   const [composeOpen, setComposeOpen] = useState(false);
+  // The saved draft the compose window is carrying on with, if any.
+  const [composeDraft, setComposeDraft] = useState<EmailDraft | null>(null);
+  const { drafts, loaded: draftsLoaded } = useEmailDrafts(user?.id);
+
+  const startCompose = () => {
+    setComposeDraft(null);
+    setComposeOpen(true);
+  };
+  const closeCompose = () => {
+    setComposeOpen(false);
+    setComposeDraft(null);
+  };
+  const resumeInCompose = (draft: EmailDraft) => {
+    setComposeDraft(draft);
+    setComposeOpen(true);
+  };
+  // A reply or forward reopens on its email (EmailDetail restores the composer).
+  // With the original gone, what was written still opens, as a new email.
+  const openDraft = (draft: EmailDraft) => {
+    if (draft.source_email_id === null) {
+      resumeInCompose(draft);
+      return;
+    }
+    const sourceId = draft.source_email_id;
+    const fromList = emails.find((email) => email.id === sourceId);
+    void (fromList ? Promise.resolve(fromList) : getEmail<EmailItem>(sourceId))
+      .then((row) => openEmail(row))
+      .catch((err) => {
+        logger.warn("draft's source email could not be opened", err);
+        resumeInCompose(draft);
+      });
+  };
+  const discardDraft = (draft: EmailDraft) => {
+    void deleteEmailDraft(draft.id)
+      .then(() => {
+        window.dispatchEvent(
+          new CustomEvent(EMAIL_DRAFT_DELETED_EVENT, { detail: draft.id })
+        );
+        notifyOtherTabsOfDrafts();
+      })
+      .catch((err) => logger.warn("Failed to discard draft", err));
+  };
   // The toolbar spot EmailList renders its pager into (null until mounted, or
   // when the toolbar is hidden — then the pager stays at the list's bottom).
   const [pagerSlot, setPagerSlot] = useState<HTMLDivElement | null>(null);
@@ -842,7 +891,7 @@ export default function Emails() {
               viewMode={viewMode}
               onOpenFiles={showFiles}
               onRequestAddAccount={() => setAddAccountOpen(true)}
-              onCompose={() => setComposeOpen(true)}
+              onCompose={startCompose}
               composeDisabled={accounts.length === 0}
               width={sidebarWidth}
               onRenameAccount={renameAccount}
@@ -877,7 +926,7 @@ export default function Emails() {
               {!isPersonalScope && (
                 <button
                   className="compose-btn compose-btn--toolbar"
-                  onClick={() => setComposeOpen(true)}
+                  onClick={startCompose}
                   data-tooltip="Compose"
                 >
                   Compose
@@ -966,6 +1015,15 @@ export default function Emails() {
                 onSnooze={snoozeWithUndo}
                 onUnsnooze={unsnoozeRow}
                 activeFolder={activeFolder}
+                topContent={
+                  activeFolder === "drafts" ? (
+                    <DraftsList
+                      drafts={drafts}
+                      onOpen={openDraft}
+                      onDelete={discardDraft}
+                    />
+                  ) : undefined
+                }
                 hasAccounts={accounts.length > 0}
                 accountsLoaded={accountsLoaded}
                 showChrome={showToolbar}
@@ -1011,14 +1069,16 @@ export default function Emails() {
 
             <Modal
               isOpen={composeOpen && composeAccountId !== null}
-              onClose={() => setComposeOpen(false)}
-              title="New Message"
+              onClose={closeCompose}
+              title={composeDraft ? "Draft" : "New Message"}
             >
               {composeAccountId !== null && (
                 <SendEmail
+                  key={composeDraft?.id ?? "new"}
                   accountId={composeAccountId}
                   accounts={displayedAccounts}
-                  onClose={() => setComposeOpen(false)}
+                  onClose={closeCompose}
+                  draft={composeDraft}
                 />
               )}
             </Modal>
@@ -1057,6 +1117,8 @@ export default function Emails() {
                 }
                 onLoadMessage={fetchMessage}
                 ownAddresses={ownAddresses}
+                drafts={drafts}
+                draftsLoaded={draftsLoaded}
                 onFilterBySender={(address) => {
                   // Leave the current folder: the sender's mail is spread across
                   // Sent, Reviews and the category folders, and the inbox query
