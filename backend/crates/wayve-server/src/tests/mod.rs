@@ -66,6 +66,7 @@ mod scheduler_smtp_fallback_test;
 mod scheduler_zoom_test;
 mod scim_tokens_test;
 mod security_encryption_test;
+mod signup_verification_test;
 mod slack_test;
 mod slack_webhook_test;
 mod storage_s3_test;
