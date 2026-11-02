@@ -13,6 +13,9 @@ import { CHAT_UNREAD_CHANGED_EVENT } from "../useChatUnreadCount";
 export function useChatConversations(currentUserId?: number) {
   const [users, setUsers] = useState<ChatUser[]>([]);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
+  // Stays false if the fetch fails, so "not in the lists" can be told apart from
+  // "the lists never arrived".
+  const [conversationsLoaded, setConversationsLoaded] = useState(false);
   // DM unread counts and last-activity, refreshed on mount, on a poll, and on demand
   // via `refreshSummary` when a DM arrives or a conversation is opened.
   const [summary, setSummary] = useState<ChatConversationSummary>({
@@ -41,6 +44,7 @@ export function useChatConversations(currentUserId?: number) {
         setUsers(usersData.filter((u) => u.id !== currentUserId));
         setChannels(channelData);
         setSummary(summaryData);
+        setConversationsLoaded(true);
       } catch (err) {
         logger.error("Fetch chat conversations failed", err);
       }
@@ -80,6 +84,7 @@ export function useChatConversations(currentUserId?: number) {
     addUser,
     channels,
     setChannels,
+    conversationsLoaded,
     refreshChannels,
     summary,
     refreshSummary,

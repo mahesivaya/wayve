@@ -1,3 +1,4 @@
+import type { Ref } from "react";
 import type { ChatChannel, ChatMessage } from "../../api/chat";
 import { formatTime, getStatusIcon } from "../utils";
 import MessageAttachments from "./MessageAttachments";
@@ -37,6 +38,8 @@ type Props = {
     isChannel: boolean,
     emoji: string
   ) => void;
+  listRef?: Ref<HTMLDivElement>;
+  onListScroll?: (scrollTop: number) => void;
 };
 
 export default function MessageThread({
@@ -45,6 +48,8 @@ export default function MessageThread({
   currentUserId,
   onOpenThread,
   onToggleReaction,
+  listRef,
+  onListScroll,
 }: Props) {
   if (selectedChannel && !selectedChannel.is_member) {
     return (
@@ -66,7 +71,11 @@ export default function MessageThread({
   const topLevel = messages.filter((m) => m.parent_message_id == null);
 
   return (
-    <div className="messages">
+    <div
+      className="messages"
+      ref={listRef}
+      onScroll={(e) => onListScroll?.(e.currentTarget.scrollTop)}
+    >
       {topLevel.map((msg, i) => {
         const slack = msg.content ? parseSlackMessage(msg.content) : null;
         // A Slack-origin message is never the viewer's own, whatever sender id it was
