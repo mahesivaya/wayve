@@ -27,6 +27,15 @@ const RESET_TTL_MINUTES: i64 = 30;
 pub(crate) const CODE_TTL_MINUTES: i64 = 15;
 /// Wrong-code guesses allowed before a code is burned. Shared as above.
 pub(crate) const MAX_VERIFY_ATTEMPTS: i32 = 5;
+/// Lifetime of a signup verification code. Generous, because email can take a
+/// while to arrive; every code a user holds stays valid for its own lifetime,
+/// so whichever of their emails they open works. The admin creation flow keeps
+/// its own `CODE_TTL_MINUTES`.
+pub(crate) const SIGNUP_CODE_TTL_SECONDS: i64 = 600;
+/// How long after a code is issued a resend re-sends that same code. After it,
+/// a resend issues a new code (the earlier ones still work until they expire).
+/// The verify screen holds its Resend button for the same span.
+pub(crate) const SIGNUP_RESEND_WINDOW_SECONDS: i64 = 60;
 const DUMMY_PASSWORD_HASH: &str = "$2b$12$BeUHqArduWoNmhYKnepJYeYTQdhF/XcdcGFHaxiz0/H3JJUbHyLGe";
 
 /// A 6-digit numeric verification code (zero-padded), from the OS CSPRNG.
@@ -35,36 +44,70 @@ pub(crate) fn random_code() -> String {
     format!("{:06}", rand::rngs::OsRng.gen_range(0..1_000_000u32))
 }
 
-/// Issue a fresh 6-digit email-verification code and email it. Any prior unused
-/// codes for the user are invalidated so only the newest is valid. Shared by
-/// `/register` and `/resend-verification`.
-async fn issue_verification_code_and_email(
+/// Email the user their 6-digit verification code. Within
+/// `SIGNUP_RESEND_WINDOW_SECONDS` of their newest code it is sent again
+/// unchanged; after that a new code is issued, valid for
+/// `SIGNUP_CODE_TTL_SECONDS`, and earlier live codes are left valid. Wrong
+/// guesses are shared across a user's live codes (`verify_email`), so a new code
+/// inherits the count rather than bringing a fresh allowance; a code whose
+/// guesses are spent is retired instead of re-sent. Shared by `/register`, the
+/// login re-send and `/resend-verification`.
+pub(crate) async fn issue_verification_code_and_email(
     pool: &PgPool,
     user_id: i32,
     email: &str,
 ) -> std::result::Result<(), AppError> {
     sqlx::query(
         "UPDATE email_verification_tokens SET used_at = NOW() \
-         WHERE user_id = $1 AND used_at IS NULL",
+         WHERE user_id = $1 AND used_at IS NULL AND attempts >= $2",
     )
     .bind(user_id)
+    .bind(MAX_VERIFY_ATTEMPTS)
     .execute(pool)
     .await?;
 
-    let code = random_code();
-    let expires_at = chrono::Utc::now() + chrono::Duration::minutes(CODE_TTL_MINUTES);
-    sqlx::query(
-        "INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)",
+    let recent: Option<(String, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
+        "SELECT token, expires_at FROM email_verification_tokens \
+         WHERE user_id = $1 AND used_at IS NULL AND expires_at > NOW() \
+           AND created_at > NOW() - make_interval(secs => $2) \
+         ORDER BY id DESC LIMIT 1",
     )
     .bind(user_id)
-    .bind(&code)
-    .bind(expires_at)
-    .execute(pool)
+    .bind(SIGNUP_RESEND_WINDOW_SECONDS as f64)
+    .fetch_optional(pool)
     .await?;
+
+    let (code, expires_at) = match recent {
+        Some(recent) => recent,
+        None => {
+            let code = random_code();
+            let expires_at =
+                chrono::Utc::now() + chrono::Duration::seconds(SIGNUP_CODE_TTL_SECONDS);
+            sqlx::query(
+                "INSERT INTO email_verification_tokens (user_id, token, expires_at, attempts) \
+                 VALUES ($1, $2, $3, COALESCE((SELECT MAX(attempts) \
+                     FROM email_verification_tokens \
+                     WHERE user_id = $1 AND used_at IS NULL AND expires_at > NOW()), 0))",
+            )
+            .bind(user_id)
+            .bind(&code)
+            .bind(expires_at)
+            .execute(pool)
+            .await?;
+            (code, expires_at)
+        }
+    };
+    // A re-sent code has less than its full lifetime left; say how long.
+    let mins_left = ((expires_at - chrono::Utc::now()).num_seconds().max(1) + 59) / 60;
+    let within = if mins_left == 1 {
+        "1 minute".to_string()
+    } else {
+        format!("{mins_left} minutes")
+    };
 
     let body = format!(
         "Hi,\n\nWelcome to HadalMail! Your email verification code is:\n\n    {code}\n\n\
-         Enter it in the app within {CODE_TTL_MINUTES} minutes to activate your account.\n\
+         Enter it in the app within {within} to activate your account.\n\
          If you didn't create a HadalMail account, you can safely ignore this email.\n"
     );
     send_mail(
@@ -943,30 +986,29 @@ pub async fn verify_email(pool: web::Data<PgPool>, data: web::Json<VerifyEmailIn
     };
     let user_id: i32 = user_row.get("id");
 
-    let row = sqlx::query(
-        "SELECT id, token, attempts, expires_at, used_at \
-         FROM email_verification_tokens WHERE user_id = $1 ORDER BY id DESC LIMIT 1",
+    // Any of the user's live codes is accepted: each resend after the resend
+    // window issues a new one while earlier ones keep their own lifetime, and the
+    // user may open any of those emails. Wrong guesses count against all of them
+    // together (each live code carries the shared count).
+    let live: Vec<(String, i32)> = sqlx::query_as(
+        "SELECT token, attempts FROM email_verification_tokens \
+         WHERE user_id = $1 AND used_at IS NULL AND expires_at > NOW()",
     )
     .bind(user_id)
-    .fetch_optional(pool.get_ref())
+    .fetch_all(pool.get_ref())
     .await?;
-    let Some(row) = row else {
-        return Ok(bad());
-    };
-    let token_id: i32 = row.get("id");
-    let stored_code: String = row.try_get("token").unwrap_or_default();
-    let attempts: i32 = row.try_get("attempts").unwrap_or(0);
-    let used_at: Option<chrono::DateTime<chrono::Utc>> = row.try_get("used_at").ok().flatten();
-    let expires_at: chrono::DateTime<chrono::Utc> = row.get("expires_at");
-
-    if used_at.is_some() || expires_at < chrono::Utc::now() {
+    if live.is_empty() {
         return Ok(bad());
     }
 
-    if attempts >= MAX_VERIFY_ATTEMPTS {
-        // Burn the code so a fresh one must be requested.
-        let _ = sqlx::query("UPDATE email_verification_tokens SET used_at = NOW() WHERE id = $1")
-            .bind(token_id)
+    let retire_all = "UPDATE email_verification_tokens SET used_at = NOW() \
+                      WHERE user_id = $1 AND used_at IS NULL";
+
+    let guesses = live.iter().map(|(_, a)| *a).max().unwrap_or(0);
+    if guesses >= MAX_VERIFY_ATTEMPTS {
+        // Burn them all so a fresh code must be requested.
+        let _ = sqlx::query(retire_all)
+            .bind(user_id)
             .execute(pool.get_ref())
             .await;
         warn!(target: "auth", user_id, "verify-email rejected: too many attempts");
@@ -974,11 +1016,15 @@ pub async fn verify_email(pool: web::Data<PgPool>, data: web::Json<VerifyEmailIn
             .json(serde_json::json!({ "message": "Too many attempts. Request a new code." })));
     }
 
-    if stored_code != data.code.trim() {
-        sqlx::query("UPDATE email_verification_tokens SET attempts = attempts + 1 WHERE id = $1")
-            .bind(token_id)
-            .execute(pool.get_ref())
-            .await?;
+    let submitted = data.code.trim();
+    if !live.iter().any(|(token, _)| token == submitted) {
+        sqlx::query(
+            "UPDATE email_verification_tokens SET attempts = attempts + 1 \
+             WHERE user_id = $1 AND used_at IS NULL AND expires_at > NOW()",
+        )
+        .bind(user_id)
+        .execute(pool.get_ref())
+        .await?;
         warn!(target: "auth", user_id, "verify-email rejected: wrong code");
         return Ok(bad());
     }
@@ -988,8 +1034,8 @@ pub async fn verify_email(pool: web::Data<PgPool>, data: web::Json<VerifyEmailIn
         .bind(user_id)
         .execute(&mut *tx)
         .await?;
-    sqlx::query("UPDATE email_verification_tokens SET used_at = NOW() WHERE id = $1")
-        .bind(token_id)
+    sqlx::query(retire_all)
+        .bind(user_id)
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
