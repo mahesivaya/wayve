@@ -54,7 +54,10 @@ describe("createMeetingLinkApi", () => {
       vi
         .fn()
         .mockResolvedValue(
-          textResponse("Could not create a meeting link. Please try again.", 502)
+          textResponse(
+            "Could not create a meeting link. Please try again.",
+            502
+          )
         )
     );
 

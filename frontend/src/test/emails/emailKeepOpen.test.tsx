@@ -55,6 +55,8 @@ vi.mock("../../api/email", async (original) => ({
   getEmails: api.getEmails,
   getEmail: api.getEmail,
   getEmailBody: vi.fn(async (id: number) => ({ ...row(id), body: "body" })),
+  getEmailAttachments: vi.fn().mockResolvedValue([]),
+  getEmailThread: vi.fn().mockResolvedValue([]),
   markEmailRead: vi.fn().mockResolvedValue(undefined),
   wakeEmailSync: vi.fn().mockResolvedValue(undefined),
 }));
