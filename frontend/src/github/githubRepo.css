@@ -2758,3 +2758,144 @@
   opacity: 0.55;
   cursor: default;
 }
+
+/* Unified diff: [old-no | new-no | code], sharing the split view's cells. */
+.github-unified {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  margin: 0;
+  padding: 8px 0;
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  overflow-x: auto;
+}
+
+.github-split.is-compact,
+.github-unified.is-compact {
+  line-height: 1.2;
+}
+
+/* "Search within code" + diff settings gear at the top of an open commit. */
+.github-commit-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.github-code-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: text;
+}
+
+.github-code-search:focus-within {
+  border-color: var(--color-primary-action);
+}
+
+.github-code-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.github-code-match {
+  background: var(--diff-edit-soft, #fff8c5);
+  color: inherit;
+  border-radius: 2px;
+  outline: 1px solid var(--diff-edit-strong, #9a6700);
+}
+
+/* Diff settings gear and its menu. */
+.github-diff-settings {
+  position: relative;
+  display: inline-flex;
+}
+
+.github-diff-gear {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.github-diff-gear:hover,
+.github-diff-gear[aria-expanded="true"] {
+  color: var(--color-text-primary);
+  background: var(--color-surface-tint);
+}
+
+.github-diff-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 10;
+  min-width: 220px;
+  padding: 6px 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.github-diff-menu-label {
+  padding: 6px 14px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+.github-diff-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 14px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.github-diff-menu-item:hover {
+  background: var(--color-surface-tint);
+}
+
+.github-diff-menu-check {
+  display: inline-block;
+  width: 14px;
+  color: var(--color-text-muted);
+}
+
+.github-diff-menu-sep {
+  height: 1px;
+  margin: 6px 0;
+  background: var(--color-border);
+}
