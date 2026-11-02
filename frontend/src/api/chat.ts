@@ -161,6 +161,13 @@ export type ChatChannel = {
 export const getChatUsers = async () =>
   apiFetchJson<ChatUser[]>("/api/users/all");
 
+// Exact-email lookup, so someone outside the directory (a personal account you
+// haven't talked to yet) can still be messaged. `null` when no account matches.
+export const findChatUserByEmail = (email: string) =>
+  apiFetchJson<ChatUser | null>(
+    `/api/users?email=${encodeURIComponent(email)}`
+  );
+
 // `online` is the realtime signal (a live chat socket somewhere); `last_seen`
 // (RFC3339, null if never connected) is shown when they're offline. Live changes
 // also arrive over the chat socket as `{ type: "presence" }` frames — this

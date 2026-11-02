@@ -95,15 +95,10 @@ export default function PersonalChatList({
     );
   };
 
+  // The "Users" header (with its "+" start-chat control) is rendered by
+  // ConversationSidebar, which owns the form state.
   if (section === "people") {
-    return (
-      <>
-        <div className="conversation-section-title conversation-section-title--users">
-          Users
-        </div>
-        {people.map((r) => renderRow(r, false))}
-      </>
-    );
+    return <>{people.map((r) => renderRow(r, false))}</>;
   }
 
   return (

@@ -62,6 +62,13 @@ export function useChatConversations(currentUserId?: number) {
     );
   }, [summary.total_unread]);
 
+  // Adds someone found by email to the directory so a DM with them can open.
+  const addUser = useCallback((user: ChatUser) => {
+    setUsers((prev) =>
+      prev.some((u) => u.id === user.id) ? prev : [...prev, user]
+    );
+  }, []);
+
   const refreshChannels = async () => {
     const channelData = await getChatChannels();
     setChannels(channelData);
@@ -70,6 +77,7 @@ export function useChatConversations(currentUserId?: number) {
 
   return {
     users,
+    addUser,
     channels,
     setChannels,
     refreshChannels,

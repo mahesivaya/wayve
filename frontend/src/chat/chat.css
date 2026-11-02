@@ -214,16 +214,14 @@
 /* The "Channels", "Users" and "Recent" headers keep normal title case and a
    larger size — the shared section-title style otherwise uppercases them. */
 .conversation-section-header .conversation-section-title,
-.conversation-section-title--users,
 .conversation-section-title--recent {
   text-transform: none;
   letter-spacing: normal;
   font-size: var(--text-lg);
 }
 
-/* Tighter gap below the Recent and Users headers before their rows. */
-.conversation-section-title--recent,
-.conversation-section-title--users {
+/* Tighter gap below the Recent header before its rows. */
+.conversation-section-title--recent {
   padding-bottom: 0;
 }
 

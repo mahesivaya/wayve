@@ -70,6 +70,7 @@ export default function Chat() {
 
   const {
     users,
+    addUser,
     channels,
     setChannels,
     refreshChannels: fetchChannels,
@@ -1021,6 +1022,10 @@ export default function Chat() {
         onSelectChannel={loadChannelMessages}
         onJoinChannel={joinChannel}
         onSelectUser={loadUserMessages}
+        onStartChat={(found) => {
+          addUser(found);
+          void loadUserMessages(found);
+        }}
         summary={summary}
         presence={presence}
       />
