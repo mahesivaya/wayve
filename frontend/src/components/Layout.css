@@ -889,7 +889,8 @@
   color: var(--color-surface);
 }
 
-.sidebar-link.active-split {
+.sidebar-link.active-split,
+.sidebar-subitems .sidebar-project-label.active-split {
   background: var(--color-admin-badge-bg);
   color: var(--color-admin-badge-text);
   box-shadow: inset 0 -2px 0 var(--color-admin-badge-shadow);
