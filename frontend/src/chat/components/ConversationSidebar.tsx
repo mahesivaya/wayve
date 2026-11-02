@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type {
   ChatChannel,
   ChatConversationSummary,
@@ -11,6 +11,7 @@ import ChannelCreateForm from "./ChannelCreateForm";
 import ChannelList from "./ChannelList";
 import PersonalChatList from "./PersonalChatList";
 import RecentConversations from "./RecentConversations";
+import StartChatForm from "./StartChatForm";
 import StatusSelector from "./StatusSelector";
 
 type Props = {
@@ -31,6 +32,8 @@ type Props = {
   onSelectChannel: (channel: ChatChannel) => void;
   onJoinChannel: (channel: ChatChannel) => void;
   onSelectUser: (user: ChatUser) => void;
+  // A user found by email via the "+" next to Users, possibly not yet in `users`.
+  onStartChat: (user: ChatUser) => void;
   summary: ChatConversationSummary;
   presence: PresenceMap;
 };
@@ -52,10 +55,12 @@ export default function ConversationSidebar({
   onSelectChannel,
   onJoinChannel,
   onSelectUser,
+  onStartChat,
   summary,
   presence,
 }: Props) {
   const { setSearchQuery } = useGlobalSearch();
+  const [startingChat, setStartingChat] = useState(false);
 
   // Messages has no search input; clear any query carried over from another
   // page so it can't silently filter the conversation lists below.
@@ -112,6 +117,31 @@ export default function ConversationSidebar({
         onSelect={onSelectChannel}
         onJoin={onJoinChannel}
       />
+
+      <div className="conversation-section-header">
+        <span className="conversation-section-title">Users</span>
+        <button
+          type="button"
+          className="new-channel-btn"
+          onClick={() => setStartingChat((open) => !open)}
+          aria-label="Message someone by email"
+          data-tooltip="Message someone by email"
+        >
+          +
+        </button>
+      </div>
+
+      {startingChat && (
+        <StartChatForm
+          myUserId={myUserId}
+          users={users}
+          onFound={(user) => {
+            setStartingChat(false);
+            onStartChat(user);
+          }}
+          onCancel={() => setStartingChat(false)}
+        />
+      )}
 
       <PersonalChatList
         users={users}

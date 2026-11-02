@@ -63,13 +63,17 @@ async fn issue_verification_code_and_email(
     .await?;
 
     let body = format!(
-        "Hi,\n\nWelcome to Fluxze! Your email verification code is:\n\n    {code}\n\n\
+        "Hi,\n\nWelcome to HadalMail! Your email verification code is:\n\n    {code}\n\n\
          Enter it in the app within {CODE_TTL_MINUTES} minutes to activate your account.\n\
-         If you didn't create a Fluxze account, you can safely ignore this email.\n"
+         If you didn't create a HadalMail account, you can safely ignore this email.\n"
     );
-    send_mail(email, "Your Fluxze verification code", &body)
-        .await
-        .map_err(|e| AppError::Internal(format!("verification email send: {e}")))?;
+    send_mail(
+        email,
+        "Verify your email address for HadalMail account",
+        &body,
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("verification email send: {e}")))?;
     Ok(())
 }
 
