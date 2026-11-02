@@ -382,6 +382,17 @@ function FolderIcon() {
   );
 }
 
+function SearchIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"
+      />
+    </svg>
+  );
+}
+
 function FileIcon() {
   return (
     <svg
@@ -631,6 +642,10 @@ export function GitHubRepoViewer({
   const canManageAccess = isOwner || hasPermission(user, "members:manage");
   const [repo, setRepo] = useState<Repo | null>(null);
   const [diffPrefs, setDiffPrefs] = useDiffPrefs();
+  // "Search within code" text per open commit, keyed by SHA.
+  const [codeQueryBySha, setCodeQueryBySha] = useState<Record<string, string>>(
+    {}
+  );
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branch, setBranch] = useState("main");
   // A custom dropdown rather than a native <select> so the list reliably opens
@@ -1952,14 +1967,12 @@ export function GitHubRepoViewer({
             <div className="github-panel">
               <div className="github-panel-head">
                 <h2>Commits</h2>
-                <span className="github-panel-head-trail">
-                  <span>{commitsTotal ?? commits.length}</span>
-                  <DiffSettingsMenu prefs={diffPrefs} onChange={setDiffPrefs} />
-                </span>
+                <span>{commitsTotal ?? commits.length}</span>
               </div>
               {commits.map((commit) => {
                 const isOpen = diffs.expandedShas.has(commit.sha);
                 const detail = diffs.detailBySha[commit.sha];
+                const codeQuery = codeQueryBySha[commit.sha] ?? "";
                 return (
                   <div key={commit.sha} className="github-commit-node">
                     <div className={`github-commit ${isOpen ? "is-open" : ""}`}>
@@ -2016,10 +2029,34 @@ export function GitHubRepoViewer({
 
                     {isOpen && (
                       <div className="github-commit-diff">
+                        {/* Search + diff settings for this commit's changes;
+                            the settings are shared by every commit. */}
+                        <div className="github-commit-tools">
+                          <label className="github-code-search">
+                            <SearchIcon />
+                            <input
+                              type="search"
+                              placeholder="Search within code"
+                              aria-label="Search within code"
+                              value={codeQuery}
+                              onChange={(e) =>
+                                setCodeQueryBySha((prev) => ({
+                                  ...prev,
+                                  [commit.sha]: e.target.value,
+                                }))
+                              }
+                            />
+                          </label>
+                          <DiffSettingsMenu
+                            prefs={diffPrefs}
+                            onChange={setDiffPrefs}
+                          />
+                        </div>
                         <CommitDiffBody
                           sha={commit.sha}
                           diffs={diffs}
                           prefs={diffPrefs}
+                          query={codeQuery.trim()}
                         />
                         {!diffs.loadingShas.has(commit.sha) &&
                           !diffs.errorBySha[commit.sha] &&

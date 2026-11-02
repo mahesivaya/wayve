@@ -104,3 +104,18 @@ describe("diff settings", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 });
+
+describe("search within code", () => {
+  it("highlights every case-insensitive match in the diff", () => {
+    const { container } = render(<CommitPatch patch={PATCH} query="INDENT" />);
+    const marks = Array.from(container.querySelectorAll("mark")).map(
+      (m) => m.textContent
+    );
+    expect(marks).toEqual(["indent", "indent"]);
+  });
+
+  it("an empty query leaves the code untouched", () => {
+    const { container } = render(<CommitPatch patch={PATCH} query="" />);
+    expect(container.querySelector("mark")).toBeNull();
+  });
+});

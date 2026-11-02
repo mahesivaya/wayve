@@ -2776,21 +2776,66 @@
   line-height: 1.2;
 }
 
-/* Diff settings gear beside the Commits count. Spans here need the
-   `.github-panel-head` prefix to beat `.github-panel-head span`. */
-.github-panel-head .github-diff-settings {
+/* "Search within code" + diff settings gear at the top of an open commit. */
+.github-commit-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.github-code-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: text;
+}
+
+.github-code-search:focus-within {
+  border-color: var(--color-primary-action);
+}
+
+.github-code-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.github-code-match {
+  background: var(--diff-edit-soft, #fff8c5);
+  color: inherit;
+  border-radius: 2px;
+  outline: 1px solid var(--diff-edit-strong, #9a6700);
+}
+
+/* Diff settings gear and its menu. */
+.github-diff-settings {
   position: relative;
   display: inline-flex;
 }
 
 .github-diff-gear {
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid var(--color-border);
+  border: none;
   border-radius: 6px;
   background: transparent;
   color: var(--color-text-muted);
@@ -2843,7 +2888,7 @@
   background: var(--color-surface-tint);
 }
 
-.github-panel-head .github-diff-menu-check {
+.github-diff-menu-check {
   display: inline-block;
   width: 14px;
   color: var(--color-text-muted);
