@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import "./emails.css";
 import "./pager.css";
 import "../files/emailFiles.css";
@@ -23,6 +23,11 @@ import {
 import { useAuth } from "../auth/useAuth";
 import { useGlobalSearch } from "../search/SearchContext";
 import { useInSplitPane } from "../components/SplitPaneContext";
+import {
+  forgetOpenEmail,
+  readOpenEmail,
+  rememberOpenEmail,
+} from "./openEmailSession";
 import { FolderChips } from "./FolderChips";
 import SearchBar from "../search/SearchBar";
 import { logger } from "../utils/logger";
@@ -42,6 +47,31 @@ export default function Emails() {
     emailViewLayout,
     setEmailViewLayout,
   } = useGlobalSearch();
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Only the routed /emails page owns `?open=`. In a split pane elsewhere the URL
+  // belongs to the routed pane: reading it there would close this email whenever
+  // that pane navigated, and writing it would leave `?open=` on someone else's
+  // page. A pane reopens from the session alone.
+  const ownsUrl = useLocation().pathname === "/emails";
+  const openParam = ownsUrl ? searchParams.get("open") : null;
+
+  // The email left open when this page last unmounted. An explicit `?open=` for
+  // another email wins, and returning from a mailbox connect isn't coming back to
+  // it, since that flow rewrites the URL itself.
+  const [restored] = useState(() => {
+    const saved = readOpenEmail(user?.id);
+    if (!saved) return null;
+    if (openParam !== null && openParam !== String(saved.emailId)) return null;
+    const incoming = window.location.search + window.location.hash;
+    return /(connected|error)=/.test(incoming) ? null : saved;
+  });
+  // The email this mount is on its way to opening; clears once that settles.
+  const [reopeningId, setReopeningId] = useState<number | null>(() => {
+    if (restored) return restored.emailId;
+    const id = Number(openParam);
+    return openParam && Number.isFinite(id) ? id : null;
+  });
 
   const {
     accounts,
@@ -82,7 +112,7 @@ export default function Emails() {
     bulkRestore,
     markRead,
     markUnread,
-  } = useEmailInbox(user?.id, normalizedSearchQuery);
+  } = useEmailInbox(user?.id, normalizedSearchQuery, restored);
 
   // After a delete or a snooze: what happened, with Undo, until it times out.
   // Undo puts the rows back into the list on screen, so it is offered only in
@@ -198,16 +228,33 @@ export default function Emails() {
 
   // The open email is mirrored in the URL as `?open=<id>` so a refresh or deep
   // link restores it. This effect applies the param; the next one syncs back.
-  const [searchParams, setSearchParams] = useSearchParams();
   const deepLinkAppliedRef = useRef<number | null>(null);
   // Last value of `?open=` seen by the effect below, so it can tell "the param
   // was removed" (Back/Forward) apart from "the param isn't there yet" (the tick
   // right after a row click, before the URL catches up).
   const prevOpenParamRef = useRef<string | null>(null);
+
+  // Coming back to an email left open: put it in the URL, as a replace so Back
+  // goes where it would have gone rather than to a bare /emails entry.
   useEffect(() => {
-    const raw = searchParams.get("open");
+    if (!ownsUrl || !restored || searchParams.has("open")) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("open", String(restored.emailId));
+        return next;
+      },
+      { replace: true }
+    );
+    // Once per mount: afterwards the URL only follows the open email.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     const prevRaw = prevOpenParamRef.current;
-    prevOpenParamRef.current = raw;
+    prevOpenParamRef.current = openParam;
+    const raw =
+      openParam ?? (reopeningId === null ? null : String(reopeningId));
     if (!raw) {
       // Reset the guard so navigating to the same id again works.
       deepLinkAppliedRef.current = null;
@@ -240,41 +287,61 @@ export default function Emails() {
       deepLinkAppliedRef.current = id;
       return;
     }
+    // Wait for the list: only its rows say whether this is a conversation, so
+    // opening from a fetched row would show a thread as a lone message.
+    if (loadedListKey === null) return;
     if (deepLinkAppliedRef.current === id) return;
     deepLinkAppliedRef.current = id;
 
     // Deep-linking an email that isn't already open forces list view, so it reads
     // as a full-width row rather than the right pane of the 3-column split.
-    if (emailViewLayout !== "list") {
+    // Coming back to one left open keeps whichever layout the user had.
+    if (emailViewLayout !== "list" && restored?.emailId !== id) {
       setEmailViewLayout("list");
     }
 
-    const fromList = emails.find((email) => email.id === id);
+    const fromList =
+      emails.find((email) => email.id === id) ??
+      emails.find((email) => email.message_ids?.includes(id));
     if (fromList) {
-      void openEmail(fromList);
+      void openEmail(fromList).finally(() => setReopeningId(null));
       return;
     }
 
     // Not in the current page — fetch the row directly. A partial row is fine; the
-    // detail pane fetches the body itself.
-    let cancelled = false;
+    // detail pane fetches the body itself. Not cancelled on re-run: this effect
+    // re-runs on every list or selection change, and the guard above would then
+    // stop it ever retrying. The ref says whether this email is still wanted.
     void (async () => {
       try {
         const full = await getEmail<EmailItem>(id);
-        if (cancelled) return;
+        if (deepLinkAppliedRef.current !== id) return;
         await openEmail(full);
       } catch (err) {
         logger.warn("deep-link email open failed", { id, err });
+        // Most likely gone (deleted, or no longer ours): show the list, and don't
+        // try it again on the next visit.
+        forgetOpenEmail();
+        if (ownsUrl) {
+          setSearchParams(
+            (prev) => {
+              const next = new URLSearchParams(prev);
+              next.delete("open");
+              return next;
+            },
+            { replace: true }
+          );
+        }
+      } finally {
+        setReopeningId(null);
       }
     })();
-
-    return () => {
-      cancelled = true;
-    };
-    // Re-runs when the loaded list changes, so an email arriving via a later page
-    // or a background sync is picked up without re-navigating.
   }, [
-    searchParams,
+    ownsUrl,
+    openParam,
+    reopeningId,
+    restored,
+    loadedListKey,
     emails,
     openEmail,
     setSearchParams,
@@ -298,26 +365,44 @@ export default function Emails() {
       // past /emails to whatever preceded it (usually Home).
       // Skipped when the URL already carries this id — on a deep link the param
       // is what opened the email, and rewriting it would add a bogus entry.
-      if (searchParams.get("open") !== String(cur)) {
+      if (ownsUrl && openParam !== String(cur)) {
         setSearchParams((prev) => {
           const next = new URLSearchParams(prev);
           next.set("open", String(cur));
           return next;
         });
       }
-    } else if (had !== null && searchParams.get("open") !== null) {
+    } else if (had !== null) {
+      // Closed on purpose (leaving the page doesn't get here), so a later visit
+      // starts on the list.
+      forgetOpenEmail();
       // Closing from the UI is a correction, not a navigation, so replace —
       // and skip entirely when Back already removed the param.
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          next.delete("open");
-          return next;
-        },
-        { replace: true }
-      );
+      if (openParam !== null) {
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete("open");
+            return next;
+          },
+          { replace: true }
+        );
+      }
     }
-  }, [selectedEmail?.id, searchParams, setSearchParams]);
+  }, [selectedEmail?.id, ownsUrl, openParam, setSearchParams]);
+
+  // Keep the session's copy current, including the view it was opened from.
+  const openEmailId = selectedEmail?.id ?? null;
+  const userId = user?.id;
+  useEffect(() => {
+    if (openEmailId === null || userId === undefined) return;
+    rememberOpenEmail({
+      userId,
+      emailId: openEmailId,
+      account: activeAccount,
+      folder: activeFolder,
+    });
+  }, [openEmailId, userId, activeAccount, activeFolder]);
 
   const [composeOpen, setComposeOpen] = useState(false);
   // The toolbar spot EmailList renders its pager into (null until mounted, or
@@ -473,14 +558,19 @@ export default function Emails() {
   // picked, in split view always on a wide screen and only until something is
   // selected on a narrow one.
   const filesInListView = viewMode === "files" && effectiveLayout === "list";
+  // Where the open email takes over the whole page, hold the list back while it
+  // reopens, or coming back would flash the list first.
+  const waitingToReopen = reopeningId !== null && selectedEmail === null;
   const showList =
     viewMode === "files"
       ? filesInListView
         ? selectedFile === null
         : !useSingleColumn || selectedFile === null
-      : (effectiveLayout === "list" && selectedEmail === null) ||
+      : (effectiveLayout === "list" &&
+          selectedEmail === null &&
+          !waitingToReopen) ||
         (effectiveLayout === "split" &&
-          (!useSingleColumn || selectedEmail === null));
+          (!useSingleColumn || (selectedEmail === null && !waitingToReopen)));
   const showDetail =
     (viewMode === "files" &&
       (filesInListView
@@ -500,7 +590,15 @@ export default function Emails() {
     if (!sideBySide || loadedListKey === null) return;
     if (autoOpenedKeyRef.current === loadedListKey) return;
     autoOpenedKeyRef.current = loadedListKey;
-    if (selectedEmail === null && emails.length > 0) void openEmail(emails[0]);
+    // Not over an email already on its way back, from the URL or the session.
+    if (
+      selectedEmail === null &&
+      openParam === null &&
+      reopeningId === null &&
+      emails.length > 0
+    ) {
+      void openEmail(emails[0]);
+    }
     // openEmail is re-created every render; the key alone decides when.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sideBySide, loadedListKey, selectedEmail, emails]);
@@ -680,14 +778,16 @@ export default function Emails() {
   // If a selected account disappears (e.g. a shared inbox is revoked), fall back
   // to the unified view rather than jumping to some other mailbox.
   useEffect(() => {
-    if (activeAccount === null) return;
+    // Accounts start empty, which isn't the same as a revoked one: a reopened
+    // email's mailbox must survive until the list has actually loaded.
+    if (activeAccount === null || !accountsLoaded) return;
     const stillVisible = displayedAccounts.some(
       (account) => account.id === activeAccount
     );
     if (!stillVisible) {
       setActiveAccount(null);
     }
-  }, [activeAccount, displayedAccounts, setActiveAccount]);
+  }, [activeAccount, accountsLoaded, displayedAccounts, setActiveAccount]);
 
   return (
     <div className="emails-root">
@@ -834,6 +934,10 @@ export default function Emails() {
                 }
                 onShowAttachments={showFiles}
               />
+            )}
+
+            {waitingToReopen && !showList && viewMode === "email" && (
+              <div className="split-loading">Loading…</div>
             )}
 
             {showList && viewMode === "email" && (

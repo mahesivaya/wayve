@@ -29,6 +29,7 @@ import {
 } from "../theme/platformFonts";
 import { runtimeConfig } from "../config/runtimeConfig";
 import { clearHomeCache } from "../home/dashboard/useCardData";
+import { forgetOpenEmail } from "../emails/openEmailSession";
 import { logger } from "../utils/logger";
 import { isDesktopApp } from "../utils/desktop";
 import { normalizeAccountType } from "./accountHome";
@@ -585,6 +586,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // The home snapshots hold this session's mail. sessionStorage outlives the
       // expiry within the tab, so drop them before anyone else can sign in.
       clearHomeCache();
+      forgetOpenEmail();
       setUser(null);
       setNeedsRecovery(false);
     };
@@ -599,6 +601,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Drop the cached home snapshots: they hold this user's inbox subjects and
     // senders, and sessionStorage survives a logout within the same tab.
     clearHomeCache();
+    forgetOpenEmail();
     // Drop the cached per-user font so the next user starts from the platform
     // default rather than this one's resolved font.
     clearFontCache();
