@@ -168,6 +168,12 @@
   height: 18px;
 }
 
+/* Only the search icon is showing, so don't reserve room for a search box. The
+   row still grows, which keeps the pager at the toolbar's far right. */
+.emails-page-toolbar .global-search-row--collapsed {
+  flex: 1 1 auto;
+}
+
 /* Scoped under .emails-page-toolbar so these win over the base .compose-btn
    rule that's defined later in this file (equal specificity → source order
    would otherwise let its margin-bottom push the button off-center). */

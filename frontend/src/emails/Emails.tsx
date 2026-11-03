@@ -903,7 +903,7 @@ export default function Emails() {
               {/* EmailList portals its select-all checkbox in here, ahead of
                   SearchBar's list / split view buttons. */}
               <div className="emails-toolbar-select" ref={setSelectSlot} />
-              <SearchBar />
+              <SearchBar collapsible />
               {/* EmailList portals its "1–50 ‹ ›" pager in here. */}
               <div className="emails-toolbar-pager" ref={setPagerSlot} />
             </div>
