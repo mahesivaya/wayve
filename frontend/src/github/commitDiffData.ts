@@ -109,10 +109,18 @@ export type CommitDiffs = {
   loadFileLines: (ref: string, path: string) => Promise<string[]>;
 };
 
-export function useCommitDiffs(owner: string, repo: string): CommitDiffs {
+// `initialExpanded` reopens commits from an earlier visit; the self-heal effect
+// below fetches their diffs.
+export function useCommitDiffs(
+  owner: string,
+  repo: string,
+  initialExpanded: string[] = []
+): CommitDiffs {
   const API_BASE = `/api/github/repos/${owner}/${repo}`;
 
-  const [expandedShas, setExpandedShas] = useState<Set<string>>(new Set());
+  const [expandedShas, setExpandedShas] = useState<Set<string>>(
+    () => new Set(initialExpanded)
+  );
   const [detailBySha, setDetailBySha] = useState<Record<string, CommitDetail>>(
     {}
   );

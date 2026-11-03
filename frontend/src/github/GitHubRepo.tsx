@@ -42,6 +42,12 @@ import {
 import { CommentOptionsIcon, EditCommentIcon } from "../icons";
 import { useDiffPrefs } from "./diffPrefs";
 import {
+  readOpenRepo,
+  readRepoView,
+  rememberOpenRepo,
+  rememberRepoView,
+} from "./openRepoSession";
+import {
   canExpandFile,
   useCommitDiffs,
   githubJson,
@@ -743,6 +749,9 @@ export function GitHubRepoViewer({
   const isOwner = user?.effective_role === "owner";
   // The per-repo Access panel is for a scope owner or anyone with members:manage.
   const canManageAccess = isOwner || hasPermission(user, "members:manage");
+  const fullName = `${owner}/${repoName}`;
+  // Where this repo was left on an earlier visit this session.
+  const [restoredView] = useState(() => readRepoView(user?.id, fullName));
   const [repo, setRepo] = useState<Repo | null>(null);
   const [diffPrefs, setDiffPrefs] = useDiffPrefs();
   // "Search within code" text per open commit, keyed by SHA.
@@ -868,7 +877,7 @@ export function GitHubRepoViewer({
   >({});
   // Per-commit diffs (expand/collapse, cached detail, per-file fold, full-diff
   // fallback) live in this hook, shared with the Projects activity list.
-  const diffs = useCommitDiffs(owner, repoName);
+  const diffs = useCommitDiffs(owner, repoName, restoredView?.commits);
   // Stable reference used by the PR loader's dependency array.
   const { collapseFiles } = diffs;
   const [commitCommentsBySha, setCommitCommentsBySha] = useState<
@@ -984,12 +993,20 @@ export function GitHubRepoViewer({
       // Only the repo fetch is fatal. Branches are best-effort: an empty repo
       // legitimately has none, so failing there must not blank the view.
       const repoData = await githubJson<Repo>(API_BASE);
-      setRepo(repoData);
-      setBranch(repoData.default_branch);
       const branchData = await githubJson<Branch[]>(
         `${API_BASE}/branches?per_page=50`
       ).catch(() => [] as Branch[]);
       setBranches(branchData);
+      // Set together, once the branches are known: everything loads per branch,
+      // so starting on the default and then switching would load it all twice.
+      // A remembered branch may have been deleted since.
+      const remembered = restoredView?.branch;
+      setBranch(
+        remembered && branchData.some((b) => b.name === remembered)
+          ? remembered
+          : repoData.default_branch
+      );
+      setRepo(repoData);
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : "GitHub data failed to load";
@@ -1004,7 +1021,7 @@ export function GitHubRepoViewer({
     } finally {
       setLoading(false);
     }
-  }, [API_BASE]);
+  }, [API_BASE, restoredView]);
 
   // Deliberately passes no `branch=`: a push to any branch should surface under
   // Actions without the user switching the branch picker first. `append` pages
@@ -1728,7 +1745,7 @@ export function GitHubRepoViewer({
       setActiveSection("description");
   }, [canManageAccess, activeSection]);
 
-  async function openFile(item: ContentItem) {
+  const openFile = useCallback(async (item: ContentItem) => {
     setSelectedFile(item);
     setFileText("");
     if (!item.download_url) return;
@@ -1745,7 +1762,61 @@ export function GitHubRepoViewer({
     } finally {
       setFileLoading(false);
     }
-  }
+  }, []);
+
+  // Reopen what was open on an earlier visit, once. This sits after the effects
+  // above because they clear the open pull request, file and folders when the
+  // repo loads. A pull request or file gone since just shows its usual error, or
+  // nothing.
+  const restored = useRef(false);
+  const restoringFile = useRef<string | null>(null);
+  useEffect(() => {
+    if (!repo || restored.current) return;
+    restored.current = true;
+    if (!restoredView) return;
+    const { pull, file, folders } = restoredView;
+    if (pull !== null) openPull(pull);
+    // Files and folders belong to their branch, which may have been deleted.
+    if (branch !== restoredView.branch) return;
+    if (folders.length > 0) {
+      setExpandedPaths(new Set(folders));
+      for (const folder of folders) void loadDirectory(folder, branch);
+    }
+    if (file !== null) {
+      restoringFile.current = file;
+      const path = file.split("/").map(encodeURIComponent).join("/");
+      void githubJson<ContentItem>(
+        `${API_BASE}/contents/${path}?ref=${encodeURIComponent(branch)}`
+      )
+        // A path that has since become a folder lists as an array.
+        .then((item) => (Array.isArray(item) ? undefined : openFile(item)))
+        .catch(() => {})
+        .finally(() => {
+          restoringFile.current = null;
+        });
+    }
+  }, [API_BASE, branch, loadDirectory, openFile, openPull, repo, restoredView]);
+
+  useEffect(() => {
+    if (!repo) return;
+    rememberRepoView(user?.id, fullName, {
+      branch,
+      pull: selectedPull,
+      // Still on its way back: leaving now must not lose it.
+      file: selectedFile?.path ?? restoringFile.current,
+      folders: [...expandedPaths],
+      commits: [...diffs.expandedShas],
+    });
+  }, [
+    branch,
+    diffs.expandedShas,
+    expandedPaths,
+    fullName,
+    repo,
+    selectedFile,
+    selectedPull,
+    user?.id,
+  ]);
 
   function toggleDirectory(item: ContentItem) {
     setExpandedPaths((current) => {
@@ -3568,9 +3639,27 @@ function repoNameFromUrl(raw: string): string {
 
 // In-page repo manager for personal accounts at the bare `/github` route. The
 // repo selector renders in the viewer's left rail via the `repoSwitcher` prop.
+// The project to show: the current one, else the one left open earlier this
+// session, else the first. Either may have been removed since.
+function pickProject(
+  rows: Project[],
+  current: number | null,
+  userId: number | undefined
+): number | null {
+  const remembered = readOpenRepo(userId);
+  const kept = [current, remembered].find((id) =>
+    rows.some((r) => r.id === id)
+  );
+  return typeof kept === "number" ? kept : (rows[0]?.id ?? null);
+}
+
 function PersonalRepoManager() {
+  const { user } = useAuth();
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  useEffect(() => {
+    if (selectedId !== null) rememberOpenRepo(user?.id, selectedId);
+  }, [selectedId, user?.id]);
   const [adding, setAdding] = useState(false);
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -3660,12 +3749,10 @@ function PersonalRepoManager() {
     void listProjects()
       .then((rows) => {
         setProjects(rows);
-        setSelectedId((cur) =>
-          cur && rows.some((r) => r.id === cur) ? cur : (rows[0]?.id ?? null)
-        );
+        setSelectedId((cur) => pickProject(rows, cur, user?.id));
       })
       .catch(() => setProjects([]));
-  }, []);
+  }, [user?.id]);
 
   const submitAdd = () => {
     const value = url.trim();
@@ -3832,8 +3919,12 @@ function PersonalRepoManager() {
 // Linking is owner-only and lives in the sidebar project menu; here `canLink`
 // only decides whether an unlinked project shows the form or a read-only hint.
 function OrgRepoManager({ canLink }: { canLink: boolean }) {
+  const { user } = useAuth();
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  useEffect(() => {
+    if (selectedId !== null) rememberOpenRepo(user?.id, selectedId);
+  }, [selectedId, user?.id]);
   const [adding, setAdding] = useState(false);
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -3871,12 +3962,10 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
     void listProjects()
       .then((rows) => {
         setProjects(rows);
-        setSelectedId((cur) =>
-          cur && rows.some((r) => r.id === cur) ? cur : (rows[0]?.id ?? null)
-        );
+        setSelectedId((cur) => pickProject(rows, cur, user?.id));
       })
       .catch(() => setProjects([]));
-  }, []);
+  }, [user?.id]);
 
   // Creates the org project and links the repo in one owner-gated call. Mirrors
   // PersonalRepoManager.submitAdd.
@@ -4068,10 +4157,22 @@ function PlatformRepoManager() {
       ? `Couldn't connect GitHub (${decodeURIComponent(failure)}). Try again.`
       : "";
   });
-  const [selected, setSelected] = useState<{ owner: string; repo: string }>({
-    owner: searchParams.get("owner") || FALLBACK_OWNER,
-    repo: searchParams.get("repo") || FALLBACK_REPO,
-  });
+  // A deep link wins, then the repo left open earlier this session.
+  const [selected, setSelected] = useState<{ owner: string; repo: string }>(
+    () => {
+      const remembered = readOpenRepo(user?.id);
+      const [owner, repo] =
+        typeof remembered === "string" ? remembered.split("/") : [];
+      return {
+        owner: searchParams.get("owner") || owner || FALLBACK_OWNER,
+        repo: searchParams.get("repo") || repo || FALLBACK_REPO,
+      };
+    }
+  );
+
+  useEffect(() => {
+    rememberOpenRepo(user?.id, `${selected.owner}/${selected.repo}`);
+  }, [selected, user?.id]);
 
   // An owner gets the server's merged list (shared token + their own GitHub);
   // everyone else the shared token's repos, as before.
