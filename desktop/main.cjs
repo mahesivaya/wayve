@@ -161,10 +161,7 @@ function createWindow() {
   // macOS hides the window controls in full screen, so the web app drops the
   // space it keeps for them.
   const sendFullScreen = () =>
-    mainWindow.webContents.send(
-      "fluxze:fullscreen",
-      mainWindow.isFullScreen()
-    );
+    mainWindow.webContents.send("fluxze:fullscreen", mainWindow.isFullScreen());
   mainWindow.on("enter-full-screen", sendFullScreen);
   mainWindow.on("leave-full-screen", sendFullScreen);
 
@@ -340,8 +337,7 @@ app.whenReady().then(() => {
     (webContents, permission, callback) => {
       const allowed = ["media", "notifications", "clipboard-read"];
       const ok =
-        allowed.includes(permission) &&
-        isInWindowUrl(webContents.getURL());
+        allowed.includes(permission) && isInWindowUrl(webContents.getURL());
       callback(ok);
     },
   );
