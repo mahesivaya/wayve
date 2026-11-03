@@ -91,14 +91,21 @@
   overflow: hidden;
 }
 
+/* Wraps in a narrow split pane, so what doesn't fit moves to the next line
+   instead of being cut off at the pane's edge. */
 .emails-page-toolbar {
   flex: 0 0 auto;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 4px 12px;
   padding: 4px 14px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-canvas);
+}
+
+.emails-page-toolbar .email-folder-tabs {
+  flex-wrap: wrap;
 }
 
 /* EmailList portals its select-all checkbox here, ahead of the view buttons.
@@ -119,10 +126,11 @@
    left-aligns its contents, so the view toggles + search box cluster right
    after Compose instead of drifting to the far right. Drop the row's own
    background/border so it blends into the toolbar instead of showing as a
-   separate colored block. */
+   separate colored block. The 220px basis is what sends it to the next line
+   once a usable search box no longer fits; with `auto` it would squash instead. */
 .emails-page-toolbar .global-search-row {
   margin: 0;
-  flex: 1 1 auto;
+  flex: 1 1 220px;
   min-width: 0;
   height: auto;
   justify-content: flex-start;
