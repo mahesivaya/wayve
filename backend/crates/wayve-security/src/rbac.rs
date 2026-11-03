@@ -533,6 +533,15 @@ pub fn can_enter_admin(true_ctx: &RoleContext) -> bool {
     true_ctx.role == Role::Owner && true_ctx.scope != Scope::Personal
 }
 
+/// The mode a fresh sign-in starts in: eligible owners open in `Admin`, everyone
+/// else in `Normal`. A role lookup failure fails closed to `Normal`.
+pub async fn login_session_mode(pool: &PgPool, user_id: i32) -> SessionMode {
+    match resolve_role_context(pool, user_id).await {
+        Ok(ctx) if can_enter_admin(&ctx) => SessionMode::Admin,
+        _ => SessionMode::Normal,
+    }
+}
+
 /// Resolve the caller's effective context: DB truth, downscoped by session mode.
 /// The single chokepoint the gates and `/me` use, so a `Normal`-mode owner is
 /// genuinely restricted.

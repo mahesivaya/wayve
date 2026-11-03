@@ -15,8 +15,7 @@ use crate::routes::auth_scheme::{
 use rand::RngCore;
 use tracing::{error, info, instrument, warn};
 use wayve_security::jwt::{
-    SessionMode, auth_cookie, create_jwt_for_account_with_max_exp, create_jwt_with_mode,
-    expired_auth_cookie, get_user_id_from_request,
+    SessionMode, auth_cookie, create_jwt_with_mode, expired_auth_cookie, get_user_id_from_request,
 };
 use wayve_security::password::verify_password;
 use wayve_security::rbac;
@@ -393,11 +392,12 @@ pub(crate) async fn login(
     )
     .await;
     // Clamp `exp` so the JWT never outlives the account's hard expiry.
-    let token = create_jwt_for_account_with_max_exp(
+    let token = create_jwt_with_mode(
         user.id,
         user.email.clone(),
         user.account_type.clone(),
         user.password_valid_until,
+        rbac::login_session_mode(pool.get_ref(), user.id).await,
     );
 
     // Org members get their password-wrapped private key in the login response so
