@@ -1634,14 +1634,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         </button>
       )}
 
-      {/* Elevated-session indicator, pinned in the top-right just before the
-          split control while a switchable owner is in admin mode. */}
-      {user.mode === "admin" && user.can_switch_admin && (
-        <span className="admin-mode-badge" title="You are in admin mode">
-          🛡️ Admin mode
-        </span>
-      )}
-
       {/* One split control in the top-right; the menu offers only the splits
           that can still be made. Hidden below 768px, where splits are too. */}
       {!isNarrow && (
