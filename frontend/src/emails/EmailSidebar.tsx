@@ -83,9 +83,9 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
           className="compose-btn"
           onClick={onCompose}
           disabled={composeDisabled}
-          data-tooltip={composeDisabled ? "No inbox available" : "Compose"}
+          data-tooltip={composeDisabled ? "No inbox available" : "New message"}
         >
-          Compose
+          New message
         </button>
       )}
 
