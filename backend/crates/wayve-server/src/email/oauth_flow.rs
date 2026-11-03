@@ -7,7 +7,7 @@ use crate::email::sync::sync_account_recent;
 use actix_web::{HttpResponse, Responder, web};
 use sqlx::PgPool;
 use tracing::{error, info, instrument, warn};
-use wayve_security::jwt::{auth_cookie, create_jwt_for_account};
+use wayve_security::jwt::{auth_cookie, create_jwt_with_mode};
 use wayve_security::oauth::{consume_state, create_oauth_state};
 use wayve_security::rbac;
 
@@ -588,7 +588,13 @@ pub async fn oauth_callback(
     response.append_header(("Location", redirect));
 
     if is_signup {
-        let session_token = create_jwt_for_account(user_id, email.to_string(), account_type);
+        let session_token = create_jwt_with_mode(
+            user_id,
+            email.to_string(),
+            account_type,
+            None,
+            rbac::login_session_mode(pool.get_ref(), user_id).await,
+        );
         response.cookie(auth_cookie(session_token));
         // Only this branch mints a session, so only it records a login to pair
         // with the logout audit event; the `else` branch is a mailbox connect.

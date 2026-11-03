@@ -17,7 +17,7 @@ use crate::email::provider::MailProvider;
 use actix_web::{HttpRequest, HttpResponse, Responder, web};
 use sqlx::PgPool;
 use tracing::{error, info, instrument, warn};
-use wayve_security::jwt::{auth_cookie, create_jwt_for_account, get_user_id_from_request};
+use wayve_security::jwt::{auth_cookie, create_jwt_with_mode, get_user_id_from_request};
 use wayve_security::oauth::{consume_state, create_oauth_state};
 
 /// Flow tags for the OAuth `state`, distinct from the Google flows and from each
@@ -334,7 +334,13 @@ async fn finalize_oauth_session(
             ))
             .finish()
     } else {
-        let token = create_jwt_for_account(user_id, ctx.email.to_string(), account_type.clone());
+        let token = create_jwt_with_mode(
+            user_id,
+            ctx.email.to_string(),
+            account_type.clone(),
+            None,
+            wayve_security::rbac::login_session_mode(pool, user_id).await,
+        );
         let landing = if matches!(
             account_type.as_str(),
             "organization" | "organization_admin" | "platform_admin"

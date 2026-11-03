@@ -55,8 +55,8 @@ const PLATFORM_ROLE_HOMES: Record<string, string> = {
 };
 
 export function homePathForUser(user?: AccountLike | null): string {
-  // A switchable owner defaults to the personal workspace and reaches their admin
-  // console only after entering admin mode. The `can_switch_admin` gate keeps a
+  // Owners sign in to admin mode; one who has exited it stays on the personal
+  // workspace until they switch back. The `can_switch_admin` gate keeps a
   // regular member, who is also in mode "normal", on their own scope home.
   if (user?.can_switch_admin && user?.mode !== "admin") {
     return "/home";
