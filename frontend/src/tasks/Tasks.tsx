@@ -501,7 +501,7 @@ function EditSurface({
 
   if (surface === "modal") {
     return (
-      <Modal isOpen={isOpen} onClose={onClose} title={title}>
+      <Modal contained isOpen={isOpen} onClose={onClose} title={title}>
         {children}
       </Modal>
     );
