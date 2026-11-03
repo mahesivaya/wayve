@@ -148,6 +148,270 @@ mod tests {
 
     #[actix_web::test]
     #[serial_test::serial]
+    async fn line_comments_reach_the_diff_endpoints() {
+        // Unique repo: the proxy cache is process-wide.
+        let suffix = random_email().replace(['@', '.'], "-");
+        let repo = format!("acme/lines-{suffix}");
+        let sha = "abc1234";
+
+        let mock = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path(format!("/repos/{repo}/pulls/7/comments")))
+            .and(body_json(serde_json::json!({
+                "body": "Rename this",
+                "path": "src/lib.rs",
+                "line": 12,
+                "side": "RIGHT",
+                "commit_id": sha,
+            })))
+            .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({ "id": 1 })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+        Mock::given(method("POST"))
+            .and(path(format!("/repos/{repo}/commits/{sha}/comments")))
+            .and(body_json(serde_json::json!({
+                "body": "Why this?",
+                "path": "src/lib.rs",
+                "position": 4,
+            })))
+            .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({ "id": 2 })))
+            .expect(1)
+            .mount(&mock)
+            .await;
+
+        // SAFETY: serialized via #[serial]; points GitHub calls at the mock.
+        unsafe {
+            std::env::set_var("GITHUB_API_BASE", mock.uri());
+            std::env::set_var("GITHUB_TOKEN", "ghp_shared_server_token");
+        }
+
+        let pool = test_pool().await;
+        let email = random_email();
+        let owner = make_platform_owner(&pool, &email).await;
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(crate::github_proxy::create_pull_review_comment)
+                .service(crate::github_proxy::create_commit_comment),
+        )
+        .await;
+        let bearer = format!("Bearer {}", jwt_for(owner, &email));
+        let post = |uri: String, body: serde_json::Value| {
+            actix_test::TestRequest::post()
+                .uri(&uri)
+                .insert_header(("Authorization", bearer.clone()))
+                .set_json(body)
+                .to_request()
+        };
+        let pull_uri = format!("/github/repos/{repo}/pulls/7/review-comments");
+        let commit_uri = format!("/github/repos/{repo}/commits/{sha}/comments");
+        let line = |body: &str, line: i64, side: &str, commit_id: &str| {
+            serde_json::json!({
+                "body": body,
+                "path": "src/lib.rs",
+                "line": line,
+                "side": side,
+                "commit_id": commit_id,
+            })
+        };
+
+        // Malformed anchors never reach GitHub (its mocks expect exactly one call).
+        for bad in [
+            line("  ", 12, "RIGHT", sha),
+            line("x", 0, "RIGHT", sha),
+            line("x", 12, "MIDDLE", sha),
+            line("x", 12, "RIGHT", "not/a/sha"),
+            serde_json::json!({ "body": "x" }),
+        ] {
+            let res = actix_test::call_service(&app, post(pull_uri.clone(), bad)).await;
+            assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        }
+        for bad in [
+            serde_json::json!({ "body": "x", "path": "src/lib.rs" }),
+            serde_json::json!({ "body": "x", "position": 4 }),
+            serde_json::json!({ "body": "x", "path": "src/lib.rs", "position": 0 }),
+        ] {
+            let res = actix_test::call_service(&app, post(commit_uri.clone(), bad)).await;
+            assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        }
+
+        // A valid anchor is forwarded with the body trimmed.
+        let res = actix_test::call_service(
+            &app,
+            post(pull_uri.clone(), line(" Rename this\n", 12, "RIGHT", sha)),
+        )
+        .await;
+        assert_eq!(res.status(), StatusCode::CREATED);
+        let res = actix_test::call_service(
+            &app,
+            post(
+                commit_uri.clone(),
+                serde_json::json!({ "body": "Why this?", "path": "src/lib.rs", "position": 4 }),
+            ),
+        )
+        .await;
+        assert_eq!(res.status(), StatusCode::CREATED);
+
+        cleanup(&pool, owner).await;
+        // SAFETY: serialized via #[serial].
+        unsafe {
+            std::env::remove_var("GITHUB_API_BASE");
+            std::env::remove_var("GITHUB_TOKEN");
+        }
+    }
+
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn editing_a_comment_takes_its_author_and_an_admin() {
+        // Unique repo: the proxy cache is process-wide.
+        let suffix = random_email().replace(['@', '.'], "-");
+        let repo = format!("acme/edits-{suffix}");
+
+        let mock = MockServer::start().await;
+        let by = |login: &str| serde_json::json!({ "id": 1, "user": { "login": login } });
+        Mock::given(method("GET"))
+            .and(path("/user"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({ "login": "Bot" })),
+            )
+            .mount(&mock)
+            .await;
+        // Two comments by the token's account (login case differs, as GitHub
+        // allows) and one by somebody else.
+        for tail in ["comments/1", "pulls/comments/2"] {
+            let upstream = format!("/repos/{repo}/{tail}");
+            Mock::given(method("GET"))
+                .and(path(upstream.clone()))
+                .respond_with(ResponseTemplate::new(200).set_body_json(by("bot")))
+                .mount(&mock)
+                .await;
+            Mock::given(method("PATCH"))
+                .and(path(upstream))
+                .and(body_json(serde_json::json!({ "body": "Edited" })))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .set_body_json(serde_json::json!({ "id": 1, "body": "Edited" })),
+                )
+                .expect(1)
+                .mount(&mock)
+                .await;
+        }
+        let theirs = format!("/repos/{repo}/comments/3");
+        Mock::given(method("GET"))
+            .and(path(theirs.clone()))
+            .respond_with(ResponseTemplate::new(200).set_body_json(by("someone-else")))
+            .mount(&mock)
+            .await;
+        Mock::given(method("PATCH"))
+            .and(path(theirs))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(0)
+            .mount(&mock)
+            .await;
+
+        // SAFETY: serialized via #[serial]; points GitHub calls at the mock.
+        unsafe {
+            std::env::set_var("GITHUB_API_BASE", mock.uri());
+            std::env::set_var("GITHUB_TOKEN", "ghp_shared_server_token");
+        }
+
+        let pool = test_pool().await;
+        let owner_email = random_email();
+        let owner = make_platform_owner(&pool, &owner_email).await;
+        let support_email = random_email();
+        let support = make_platform_owner(&pool, &support_email).await;
+        sqlx::query("UPDATE platform_members SET role = 'support' WHERE user_id = $1")
+            .bind(support)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("set support: {e}"));
+        sqlx::query("INSERT INTO member_project_access (user_id, repo_full_name) VALUES ($1, $2)")
+            .bind(support)
+            .bind(&repo)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("seed repo grant: {e}"));
+        // Removed again below only if this test is what added it.
+        let seeded_access = sqlx::query_scalar::<_, String>(
+            "INSERT INTO platform_feature_access (feature_key, role) VALUES ('code_repo', 'support') \
+             ON CONFLICT DO NOTHING RETURNING role",
+        )
+        .fetch_optional(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("seed feature access: {e}"))
+        .is_some();
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(crate::github_proxy::edit_commit_comment)
+                .service(crate::github_proxy::edit_pull_review_comment),
+        )
+        .await;
+        let admin = format!("Bearer {}", jwt_for(owner, &owner_email));
+        let member = format!("Bearer {}", jwt_for(support, &support_email));
+        let edit = |bearer: &str, tail: &str, body: serde_json::Value| {
+            actix_test::TestRequest::patch()
+                .uri(&format!("/github/repos/{repo}/{tail}"))
+                .insert_header(("Authorization", bearer.to_string()))
+                .set_json(body)
+                .to_request()
+        };
+        let edited = serde_json::json!({ "body": " Edited\n" });
+
+        // A blank edit is refused.
+        let res = actix_test::call_service(
+            &app,
+            edit(&admin, "comments/1", serde_json::json!({ "body": " " })),
+        )
+        .await;
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+
+        // A non-admin can't edit through the shared token, even its own account's.
+        let res = actix_test::call_service(&app, edit(&member, "comments/1", edited.clone())).await;
+        assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        let refusal: serde_json::Value = actix_test::read_body_json(res).await;
+        assert_eq!(
+            refusal["message"],
+            "Only a project admin can edit comments here"
+        );
+
+        // Somebody else's comment stays theirs, even for the owner.
+        let res = actix_test::call_service(&app, edit(&admin, "comments/3", edited.clone())).await;
+        assert_eq!(res.status(), StatusCode::FORBIDDEN);
+        let refusal: serde_json::Value = actix_test::read_body_json(res).await;
+        assert_eq!(refusal["message"], "You can only edit your own comments");
+
+        // The admin edits the account's comments, on both kinds, trimmed.
+        for tail in ["comments/1", "pulls/comments/2"] {
+            let res = actix_test::call_service(&app, edit(&admin, tail, edited.clone())).await;
+            assert_eq!(res.status(), StatusCode::OK, "{tail}");
+        }
+
+        if seeded_access {
+            let _ = sqlx::query(
+                "DELETE FROM platform_feature_access \
+                 WHERE feature_key = 'code_repo' AND role = 'support'",
+            )
+            .execute(&pool)
+            .await;
+        }
+        let _ = sqlx::query("DELETE FROM member_project_access WHERE user_id = $1")
+            .bind(support)
+            .execute(&pool)
+            .await;
+        cleanup(&pool, support).await;
+        cleanup(&pool, owner).await;
+        // SAFETY: serialized via #[serial].
+        unsafe {
+            std::env::remove_var("GITHUB_API_BASE");
+            std::env::remove_var("GITHUB_TOKEN");
+        }
+    }
+
+    #[actix_web::test]
+    #[serial_test::serial]
     async fn member_with_repo_access_comments_but_cannot_approve() {
         let suffix = random_email().replace(['@', '.'], "-");
         let (gh_owner, gh_repo) = ("acme", format!("member-{suffix}"));

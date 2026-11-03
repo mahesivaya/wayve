@@ -148,19 +148,82 @@ export const createPullComment = (
     preserve401: true,
   });
 
+// `inline` anchors it to a line of the commit's diff instead of the conversation.
 export const createCommitComment = (
   owner: string,
   repo: string,
   sha: string,
-  body: string
+  body: string,
+  inline?: { path: string; position: number }
 ) =>
   apiFetchJson<{
     id: number;
     user: { login: string } | null;
     body: string | null;
     created_at: string;
+    path?: string | null;
+    position?: number | null;
   }>(`/api/github/repos/${owner}/${repo}/commits/${sha}/comments`, {
     method: "POST",
-    body: JSON.stringify({ body }),
+    body: JSON.stringify({ body, ...inline }),
+    preserve401: true,
+  });
+
+// Edits one of a commit's comments. The server only allows your own.
+export const editCommitComment = (
+  owner: string,
+  repo: string,
+  commentId: number,
+  body: string
+) =>
+  apiFetchJson<{ body: string | null }>(
+    `/api/github/repos/${owner}/${repo}/comments/${commentId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ body }),
+      preserve401: true,
+    }
+  );
+
+// Edits a comment on a line of a pull request's diff.
+export const editPullReviewComment = (
+  owner: string,
+  repo: string,
+  commentId: number,
+  body: string
+) =>
+  apiFetchJson<{ body: string | null }>(
+    `/api/github/repos/${owner}/${repo}/pulls/comments/${commentId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ body }),
+      preserve401: true,
+    }
+  );
+
+// A comment on one line of a pull request's diff.
+export const createPullReviewComment = (
+  owner: string,
+  repo: string,
+  number: number,
+  comment: {
+    body: string;
+    path: string;
+    line: number;
+    side: "LEFT" | "RIGHT";
+    commit_id: string;
+  }
+) =>
+  apiFetchJson<{
+    id: number;
+    user: { login: string } | null;
+    body: string | null;
+    created_at: string;
+    path?: string | null;
+    line?: number | null;
+    side?: "LEFT" | "RIGHT" | null;
+  }>(`/api/github/repos/${owner}/${repo}/pulls/${number}/review-comments`, {
+    method: "POST",
+    body: JSON.stringify(comment),
     preserve401: true,
   });

@@ -33,6 +33,7 @@ import { clearHomeCache } from "../home/dashboard/useCardData";
 import { forgetOpenChat } from "../chat/openChatSession";
 import { forgetOpenEmail } from "../emails/openEmailSession";
 import { forgetOpenNote } from "../notes/openNoteSession";
+import { forgetOpenRepo } from "../github/openRepoSession";
 import { logger } from "../utils/logger";
 import { isDesktopApp } from "../utils/desktop";
 import { normalizeAccountType } from "./accountHome";
@@ -592,6 +593,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       forgetOpenEmail();
       forgetOpenChat();
       forgetOpenNote();
+      forgetOpenRepo();
       forgetDeviceTheme();
       setUser(null);
       setNeedsRecovery(false);
@@ -610,6 +612,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     forgetOpenEmail();
     forgetOpenChat();
     forgetOpenNote();
+    forgetOpenRepo();
     forgetDeviceTheme();
     // Drop the cached per-user font so the next user starts from the platform
     // default rather than this one's resolved font.

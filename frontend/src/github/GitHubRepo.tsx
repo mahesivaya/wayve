@@ -18,6 +18,9 @@ import {
   mergePullRequest,
   createCommitComment,
   createPullComment,
+  createPullReviewComment,
+  editCommitComment,
+  editPullReviewComment,
   listImportableRepos,
   getGithubConnection,
   getGithubConnectUrl,
@@ -29,12 +32,27 @@ import "./githubRepo.css";
 import {
   CommitDiffBody,
   CommitSplitPatch,
+  DiffFileName,
   DiffSettingsMenu,
+  LineCommentComposer,
   RawUnifiedDiff,
   ChevronIcon,
+  type LineComments,
 } from "./commitDiff";
+import { CommentOptionsIcon, EditCommentIcon } from "../icons";
 import { useDiffPrefs } from "./diffPrefs";
 import {
+  draftStore,
+  readDraft,
+  readOpenRepo,
+  readRepoView,
+  rememberOpenRepo,
+  rememberRepoView,
+  type DraftStore,
+} from "./openRepoSession";
+import { useRepoScroll } from "./useRepoScroll";
+import {
+  canExpandFile,
   useCommitDiffs,
   githubJson,
   type CommitFile,
@@ -182,6 +200,8 @@ type PullBundle = {
   detail: PullDetail;
   files: CommitFile[];
   comments: IssueComment[];
+  // Comments on lines of the diff, kept by GitHub apart from the conversation.
+  lineComments: IssueComment[];
   reviews: PullReview[];
 };
 
@@ -316,6 +336,122 @@ type JobsResponse = {
   jobs: Job[];
   total_count: number;
 };
+
+// Half-written comments are keyed to what they'd post to. A pull request's includes
+// its head commit: a push can move or remove the line a comment was meant for.
+const pullLineDraftKey = (
+  fullName: string,
+  number: number,
+  headSha: string,
+  filename: string
+) => `${fullName}|pull:${number}:${headSha}:${filename}`;
+
+const editDraftKey = (
+  fullName: string,
+  kind: "commit" | "pull",
+  commentId: number
+) => `${fullName}|edit:${kind}:${commentId}`;
+
+// One comment on a commit or a diff line, with its ⋯ menu to edit it. The menu is
+// shown on every comment: only the server can tell whose comments are yours, as
+// the shared token posts them all under one GitHub account.
+export function DiffComment({
+  comment,
+  onSave,
+  editDraft,
+}: {
+  comment: IssueComment;
+  onSave: (body: string) => Promise<void>;
+  // Keeps an edit in progress when the page is left.
+  editDraft?: DraftStore;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editing, setEditing] = useState(() => editDraft?.read() != null);
+  const menuRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
+  return (
+    <li className="github-pr-comment">
+      <PrAvatar name={comment.user?.login ?? "ghost"} />
+      <div className="github-pr-comment-main">
+        <div className="github-pr-comment-head">
+          <strong>{comment.user?.login ?? "unknown"}</strong>
+          {comment.created_at && (
+            <small className="github-pr-comment-time">
+              {formatDate(comment.created_at)}
+            </small>
+          )}
+          {!editing && (
+            <span className="github-comment-options" ref={menuRef}>
+              <button
+                type="button"
+                className="github-comment-options-btn"
+                aria-label="Comment options"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((open) => !open)}
+              >
+                <CommentOptionsIcon size={16} />
+              </button>
+              {menuOpen && (
+                <div className="github-diff-menu" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="github-diff-menu-item"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setEditing(true);
+                    }}
+                  >
+                    <EditCommentIcon size={14} />
+                    Edit
+                  </button>
+                </div>
+              )}
+            </span>
+          )}
+        </div>
+        {editing ? (
+          <LineCommentComposer
+            initial={editDraft?.read()?.body ?? comment.body?.trim() ?? ""}
+            onDraft={(body) => editDraft?.save({ body })}
+            onClose={() => {
+              editDraft?.clear();
+              setEditing(false);
+            }}
+            onPost={async (body) => {
+              if (body !== comment.body?.trim()) await onSave(body);
+              editDraft?.clear();
+              setEditing(false);
+            }}
+          />
+        ) : (
+          comment.body?.trim() && (
+            <div className="github-pr-comment-text">
+              {renderRichText(comment.body)}
+            </div>
+          )
+        )}
+      </div>
+    </li>
+  );
+}
 
 function formatDate(value: string) {
   const date = new Date(value);
@@ -640,6 +776,9 @@ export function GitHubRepoViewer({
   const isOwner = user?.effective_role === "owner";
   // The per-repo Access panel is for a scope owner or anyone with members:manage.
   const canManageAccess = isOwner || hasPermission(user, "members:manage");
+  const fullName = `${owner}/${repoName}`;
+  // Where this repo was left on an earlier visit this session.
+  const [restoredView] = useState(() => readRepoView(user?.id, fullName));
   const [repo, setRepo] = useState<Repo | null>(null);
   const [diffPrefs, setDiffPrefs] = useDiffPrefs();
   // "Search within code" text per open commit, keyed by SHA.
@@ -751,7 +890,7 @@ export function GitHubRepoViewer({
   // PR conversation composer, per PR so a draft survives switching PRs.
   const [pullCommentDraft, setPullCommentDraft] = useState<
     Record<number, string>
-  >({});
+  >(() => restoredView?.pullDrafts ?? {});
   const [postingPullComment, setPostingPullComment] = useState<number | null>(
     null
   );
@@ -765,7 +904,12 @@ export function GitHubRepoViewer({
   >({});
   // Per-commit diffs (expand/collapse, cached detail, per-file fold, full-diff
   // fallback) live in this hook, shared with the Projects activity list.
-  const diffs = useCommitDiffs(owner, repoName);
+  const diffs = useCommitDiffs(
+    owner,
+    repoName,
+    restoredView?.commits,
+    restoredView?.collapsedFiles
+  );
   // Stable reference used by the PR loader's dependency array.
   const { collapseFiles } = diffs;
   const [commitCommentsBySha, setCommitCommentsBySha] = useState<
@@ -773,7 +917,7 @@ export function GitHubRepoViewer({
   >({});
   const [commitCommentDraft, setCommitCommentDraft] = useState<
     Record<string, string>
-  >({});
+  >(() => restoredView?.commitDrafts ?? {});
   const [postingCommentShas, setPostingCommentShas] = useState<Set<string>>(
     new Set()
   );
@@ -881,12 +1025,20 @@ export function GitHubRepoViewer({
       // Only the repo fetch is fatal. Branches are best-effort: an empty repo
       // legitimately has none, so failing there must not blank the view.
       const repoData = await githubJson<Repo>(API_BASE);
-      setRepo(repoData);
-      setBranch(repoData.default_branch);
       const branchData = await githubJson<Branch[]>(
         `${API_BASE}/branches?per_page=50`
       ).catch(() => [] as Branch[]);
       setBranches(branchData);
+      // Set together, once the branches are known: everything loads per branch,
+      // so starting on the default and then switching would load it all twice.
+      // A remembered branch may have been deleted since.
+      const remembered = restoredView?.branch;
+      setBranch(
+        remembered && branchData.some((b) => b.name === remembered)
+          ? remembered
+          : repoData.default_branch
+      );
+      setRepo(repoData);
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : "GitHub data failed to load";
@@ -901,7 +1053,7 @@ export function GitHubRepoViewer({
     } finally {
       setLoading(false);
     }
-  }, [API_BASE]);
+  }, [API_BASE, restoredView]);
 
   // Deliberately passes no `branch=`: a push to any branch should surface under
   // Actions without the user switching the branch picker first. `append` pages
@@ -1161,12 +1313,15 @@ export function GitHubRepoViewer({
         const detail = await githubJson<PullDetail>(
           `${API_BASE}/pulls/${number}`
         );
-        const [files, comments, reviews] = await Promise.all([
+        const [files, comments, lineComments, reviews] = await Promise.all([
           githubJson<CommitFile[]>(
             `${API_BASE}/pulls/${number}/files?per_page=100`
           ).catch(() => [] as CommitFile[]),
           githubJson<IssueComment[]>(
             `${API_BASE}/issues/${number}/comments?per_page=100`
+          ).catch(() => [] as IssueComment[]),
+          githubJson<IssueComment[]>(
+            `${API_BASE}/pulls/${number}/comments?per_page=100`
           ).catch(() => [] as IssueComment[]),
           githubJson<PullReview[]>(
             `${API_BASE}/pulls/${number}/reviews?per_page=100`
@@ -1174,11 +1329,27 @@ export function GitHubRepoViewer({
         ]);
         setPullBundleByNumber((current) => ({
           ...current,
-          [number]: { detail, files, comments, reviews },
+          [number]: { detail, files, comments, lineComments, reviews },
         }));
-        // Collapse every file in this PR; keys use the `pr-{number}::{filename}`
+        // Collapse this PR's files, except those opened on an earlier visit or
+        // holding a half-written comment; keys use the `pr-{number}::{filename}`
         // scheme shared with diffs.collapsedFiles.
-        collapseFiles(files.map((f) => `pr-${number}::${f.filename}`));
+        const stayOpen = (filename: string) =>
+          restoredView?.openPullFiles.includes(`pr-${number}::${filename}`) ||
+          readDraft(
+            user?.id,
+            pullLineDraftKey(fullName, number, detail.head.sha, filename)
+          ) !== null ||
+          lineComments.some(
+            (c) =>
+              c.path === filename &&
+              readDraft(user?.id, editDraftKey(fullName, "pull", c.id)) !== null
+          );
+        collapseFiles(
+          files
+            .filter((f) => !stayOpen(f.filename))
+            .map((f) => `pr-${number}::${f.filename}`)
+        );
       } catch (err) {
         setErrorByPullNumber((current) => ({
           ...current,
@@ -1195,7 +1366,14 @@ export function GitHubRepoViewer({
         });
       }
     },
-    [API_BASE, pullBundleByNumber, collapseFiles]
+    [
+      API_BASE,
+      pullBundleByNumber,
+      collapseFiles,
+      fullName,
+      restoredView,
+      user?.id,
+    ]
   );
 
   const openPull = useCallback(
@@ -1267,6 +1445,77 @@ export function GitHubRepoViewer({
       setPostingPullComment(null);
     }
   };
+
+  const pullLineComments = (
+    prNumber: number,
+    headSha: string,
+    filename: string,
+    comments: IssueComment[]
+  ): LineComments => ({
+    comments: comments.filter((c) => c.path === filename),
+    draft: draftStore(
+      user?.id,
+      pullLineDraftKey(fullName, prNumber, headSha, filename)
+    ),
+    renderComment: (comment) => (
+      <DiffComment
+        comment={comment}
+        editDraft={draftStore(
+          user?.id,
+          editDraftKey(fullName, "pull", comment.id)
+        )}
+        onSave={async (body) => {
+          const edited = await editPullReviewComment(
+            owner,
+            repoName,
+            comment.id,
+            body
+          );
+          setPullBundleByNumber((cur) => {
+            const bundle = cur[prNumber];
+            if (!bundle) return cur;
+            return {
+              ...cur,
+              [prNumber]: {
+                ...bundle,
+                lineComments: bundle.lineComments.map((c) =>
+                  c.id === comment.id ? { ...c, body: edited.body } : c
+                ),
+              },
+            };
+          });
+        }}
+      />
+    ),
+    post: async (anchor, body) => {
+      const created = await createPullReviewComment(owner, repoName, prNumber, {
+        body,
+        path: filename,
+        line: anchor.line,
+        side: anchor.side,
+        commit_id: headSha,
+      });
+      setPullBundleByNumber((cur) => {
+        const bundle = cur[prNumber];
+        if (!bundle) return cur;
+        return {
+          ...cur,
+          [prNumber]: {
+            ...bundle,
+            lineComments: [
+              ...bundle.lineComments,
+              {
+                ...created,
+                path: filename,
+                line: anchor.line,
+                side: anchor.side,
+              },
+            ],
+          },
+        };
+      });
+    },
+  });
 
   const mergePull = async (prNumber: number) => {
     setMergingPull(prNumber);
@@ -1411,6 +1660,50 @@ export function GitHubRepoViewer({
     [commitCommentDraft, postingCommentShas, owner, repoName]
   );
 
+  const saveCommitComment = async (
+    sha: string,
+    commentId: number,
+    body: string
+  ) => {
+    const edited = await editCommitComment(owner, repoName, commentId, body);
+    setCommitCommentsBySha((cur) => ({
+      ...cur,
+      [sha]: (cur[sha] ?? []).map((c) =>
+        c.id === commentId ? { ...c, body: edited.body } : c
+      ),
+    }));
+  };
+
+  const commitLineComments = (sha: string, filename: string): LineComments => ({
+    comments: (commitCommentsBySha[sha] ?? []).filter(
+      (c) => c.path === filename
+    ),
+    draft: draftStore(user?.id, `${fullName}|commit:${sha}:${filename}`),
+    renderComment: (comment) => (
+      <DiffComment
+        comment={comment}
+        editDraft={draftStore(
+          user?.id,
+          editDraftKey(fullName, "commit", comment.id)
+        )}
+        onSave={(body) => saveCommitComment(sha, comment.id, body)}
+      />
+    ),
+    post: async (anchor, body) => {
+      const created = await createCommitComment(owner, repoName, sha, body, {
+        path: filename,
+        position: anchor.position,
+      });
+      setCommitCommentsBySha((cur) => ({
+        ...cur,
+        [sha]: [
+          ...(cur[sha] ?? []),
+          { ...created, path: filename, position: anchor.position },
+        ],
+      }));
+    },
+  });
+
   // First open also fetches the run's jobs (steps embedded) and caches them by
   // run id.
   const toggleRunFlow = useCallback(
@@ -1464,6 +1757,9 @@ export function GitHubRepoViewer({
     void loadRepo();
   }, [loadRepo]);
 
+  const commitsStartPage = useRef(restoredView?.commitsPage ?? 1);
+  const pullsStartPage = useRef(restoredView?.pullsPage ?? 1);
+
   useEffect(() => {
     if (!repo) return;
     setTreeItems({});
@@ -1477,7 +1773,12 @@ export function GitHubRepoViewer({
     if (!repo) return;
     void loadReadme(branch);
     void loadWorkflows(branch);
-    void loadCommits(branch, 1);
+    // Back on the page of commits it was left on, the first time through.
+    void loadCommits(
+      branch,
+      branch === restoredView?.branch ? commitsStartPage.current : 1
+    );
+    commitsStartPage.current = 1;
     void loadCommitsTotal(branch);
     // Reset to the PR list rather than a stale detail when the repo or branch
     // changes. The PRs themselves load in their own effect below.
@@ -1497,6 +1798,7 @@ export function GitHubRepoViewer({
     loadRuns,
     loadWorkflows,
     repo,
+    restoredView,
   ]);
 
   // PRs aren't branch-filtered, so unlike the block above these don't reload
@@ -1504,7 +1806,8 @@ export function GitHubRepoViewer({
   // (back to page 1 on either), the counts follow the repo.
   useEffect(() => {
     if (!repo) return;
-    void loadPulls(pullFilter, 1);
+    void loadPulls(pullFilter, pullsStartPage.current);
+    pullsStartPage.current = 1;
   }, [loadPulls, pullFilter, repo]);
 
   useEffect(() => {
@@ -1520,7 +1823,20 @@ export function GitHubRepoViewer({
       setActiveSection("description");
   }, [canManageAccess, activeSection]);
 
-  async function openFile(item: ContentItem) {
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  useRepoScroll({
+    containerRef: contentRef,
+    userId: user?.id,
+    fullName,
+    place:
+      activeSection === "pulls" && selectedPull !== null
+        ? `pulls#${selectedPull}`
+        : activeSection,
+    file: selectedFile?.path ?? null,
+    ready: repo !== null,
+  });
+
+  const openFile = useCallback(async (item: ContentItem) => {
     setSelectedFile(item);
     setFileText("");
     if (!item.download_url) return;
@@ -1537,7 +1853,80 @@ export function GitHubRepoViewer({
     } finally {
       setFileLoading(false);
     }
-  }
+  }, []);
+
+  // Reopen what was open on an earlier visit, once. This sits after the effects
+  // above because they clear the open pull request, file and folders when the
+  // repo loads. A pull request or file gone since just shows its usual error, or
+  // nothing.
+  const restored = useRef(false);
+  const restoringFile = useRef<string | null>(null);
+  useEffect(() => {
+    if (!repo || restored.current) return;
+    restored.current = true;
+    if (!restoredView) return;
+    const { pull, file, folders } = restoredView;
+    if (pull !== null) openPull(pull);
+    // Files and folders belong to their branch, which may have been deleted.
+    if (branch !== restoredView.branch) return;
+    if (folders.length > 0) {
+      setExpandedPaths(new Set(folders));
+      for (const folder of folders) void loadDirectory(folder, branch);
+    }
+    if (file !== null) {
+      restoringFile.current = file;
+      const path = file.split("/").map(encodeURIComponent).join("/");
+      void githubJson<ContentItem>(
+        `${API_BASE}/contents/${path}?ref=${encodeURIComponent(branch)}`
+      )
+        // A path that has since become a folder lists as an array.
+        .then((item) => (Array.isArray(item) ? undefined : openFile(item)))
+        .catch(() => {})
+        .finally(() => {
+          restoringFile.current = null;
+        });
+    }
+  }, [API_BASE, branch, loadDirectory, openFile, openPull, repo, restoredView]);
+
+  useEffect(() => {
+    if (!repo) return;
+    rememberRepoView(user?.id, fullName, {
+      branch,
+      pull: selectedPull,
+      // Still on its way back: leaving now must not lose it.
+      file: selectedFile?.path ?? restoringFile.current,
+      folders: [...expandedPaths],
+      commits: [...diffs.expandedShas],
+      commitsPage,
+      pullsPage,
+      collapsedFiles: [...diffs.collapsedFiles].filter(
+        (key) => !key.startsWith("pr-")
+      ),
+      openPullFiles: Object.entries(pullBundleByNumber).flatMap(
+        ([number, bundle]) =>
+          bundle.files
+            .map((f) => `pr-${number}::${f.filename}`)
+            .filter((key) => !diffs.collapsedFiles.has(key))
+      ),
+      commitDrafts: commitCommentDraft,
+      pullDrafts: pullCommentDraft,
+    });
+  }, [
+    branch,
+    commitCommentDraft,
+    commitsPage,
+    diffs.collapsedFiles,
+    diffs.expandedShas,
+    expandedPaths,
+    fullName,
+    pullBundleByNumber,
+    pullCommentDraft,
+    pullsPage,
+    repo,
+    selectedFile,
+    selectedPull,
+    user?.id,
+  ]);
 
   function toggleDirectory(item: ContentItem) {
     setExpandedPaths((current) => {
@@ -1776,7 +2165,7 @@ export function GitHubRepoViewer({
         {/* Right pane — only the active section is rendered. The Files
             view keeps its existing 2-pane (tree + preview) layout
             because file browsing benefits from both being visible. */}
-        <div className="github-content">
+        <div className="github-content" ref={contentRef}>
           {activeSection === "description" && (
             <main
               className="github-description"
@@ -2056,6 +2445,9 @@ export function GitHubRepoViewer({
                           diffs={diffs}
                           prefs={diffPrefs}
                           query={codeQuery.trim()}
+                          lineComments={(file) =>
+                            commitLineComments(commit.sha, file.filename)
+                          }
                         />
                         {!diffs.loadingShas.has(commit.sha) &&
                           !diffs.errorBySha[commit.sha] &&
@@ -2064,8 +2456,17 @@ export function GitHubRepoViewer({
                               {/* Conversation comments on this commit
                                 (read-only, mirrors the PR comment thread). */}
                               {(() => {
-                                const comments =
-                                  commitCommentsBySha[commit.sha] ?? [];
+                                // A comment on a line shows under that line, so
+                                // only list it here if its file has no diff.
+                                const comments = (
+                                  commitCommentsBySha[commit.sha] ?? []
+                                ).filter(
+                                  (c) =>
+                                    c.position == null ||
+                                    !detail.files?.some(
+                                      (f) => f.filename === c.path && f.patch
+                                    )
+                                );
                                 return (
                                   <div className="github-commit-comments">
                                     <div className="github-commit-comments-head">
@@ -2076,36 +2477,30 @@ export function GitHubRepoViewer({
                                     </div>
                                     {comments.length === 0 ? (
                                       <div className="github-empty">
-                                        No comments on this commit yet.
+                                        No conversation on this commit yet.
                                       </div>
                                     ) : (
                                       <ul className="github-pr-thread">
                                         {comments.map((c) => (
-                                          <li
+                                          <DiffComment
                                             key={c.id}
-                                            className="github-pr-comment"
-                                          >
-                                            <PrAvatar
-                                              name={c.user?.login ?? "ghost"}
-                                            />
-                                            <div className="github-pr-comment-main">
-                                              <div className="github-pr-comment-head">
-                                                <strong>
-                                                  {c.user?.login ?? "unknown"}
-                                                </strong>
-                                                {c.created_at && (
-                                                  <small className="github-pr-comment-time">
-                                                    {formatDate(c.created_at)}
-                                                  </small>
-                                                )}
-                                              </div>
-                                              {c.body?.trim() && (
-                                                <div className="github-pr-comment-text">
-                                                  {renderRichText(c.body)}
-                                                </div>
-                                              )}
-                                            </div>
-                                          </li>
+                                            comment={c}
+                                            editDraft={draftStore(
+                                              user?.id,
+                                              editDraftKey(
+                                                fullName,
+                                                "commit",
+                                                c.id
+                                              )
+                                            )}
+                                            onSave={(body) =>
+                                              saveCommitComment(
+                                                commit.sha,
+                                                c.id,
+                                                body
+                                              )
+                                            }
+                                          />
                                         ))}
                                       </ul>
                                     )}
@@ -2568,11 +2963,12 @@ export function GitHubRepoViewer({
                                           >
                                             <ChevronIcon />
                                           </span>
-                                          <span className="github-commit-file-name">
-                                            {file.previous_filename
-                                              ? `${file.previous_filename} → ${file.filename}`
-                                              : file.filename}
-                                          </span>
+                                          <DiffFileName
+                                            filename={file.filename}
+                                            previousFilename={
+                                              file.previous_filename
+                                            }
+                                          />
                                           <span className="github-commit-file-meta">
                                             <em
                                               className={`github-commit-status status-${file.status}`}
@@ -2590,7 +2986,23 @@ export function GitHubRepoViewer({
                                         {fileOpen &&
                                           (file.patch ? (
                                             <CommitSplitPatch
+                                              key={`${fileKey}@${bundle.detail.head.sha}`}
                                               patch={file.patch}
+                                              loadLines={
+                                                canExpandFile(file.status)
+                                                  ? () =>
+                                                      diffs.loadFileLines(
+                                                        bundle.detail.head.sha,
+                                                        file.filename
+                                                      )
+                                                  : undefined
+                                              }
+                                              lineComments={pullLineComments(
+                                                selectedPull,
+                                                bundle.detail.head.sha,
+                                                file.filename,
+                                                bundle.lineComments
+                                              )}
                                             />
                                           ) : (
                                             <div className="github-commit-nopatch">
@@ -3345,9 +3757,27 @@ function repoNameFromUrl(raw: string): string {
 
 // In-page repo manager for personal accounts at the bare `/github` route. The
 // repo selector renders in the viewer's left rail via the `repoSwitcher` prop.
+// The project to show: the current one, else the one left open earlier this
+// session, else the first. Either may have been removed since.
+function pickProject(
+  rows: Project[],
+  current: number | null,
+  userId: number | undefined
+): number | null {
+  const remembered = readOpenRepo(userId);
+  const kept = [current, remembered].find((id) =>
+    rows.some((r) => r.id === id)
+  );
+  return typeof kept === "number" ? kept : (rows[0]?.id ?? null);
+}
+
 function PersonalRepoManager() {
+  const { user } = useAuth();
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  useEffect(() => {
+    if (selectedId !== null) rememberOpenRepo(user?.id, selectedId);
+  }, [selectedId, user?.id]);
   const [adding, setAdding] = useState(false);
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -3437,12 +3867,10 @@ function PersonalRepoManager() {
     void listProjects()
       .then((rows) => {
         setProjects(rows);
-        setSelectedId((cur) =>
-          cur && rows.some((r) => r.id === cur) ? cur : (rows[0]?.id ?? null)
-        );
+        setSelectedId((cur) => pickProject(rows, cur, user?.id));
       })
       .catch(() => setProjects([]));
-  }, []);
+  }, [user?.id]);
 
   const submitAdd = () => {
     const value = url.trim();
@@ -3516,45 +3944,6 @@ function PersonalRepoManager() {
           {err && <p className="github-add-repo-error">{err}</p>}
         </div>
       )}
-
-      {/* GitHub account controls — reachable here too (not just the empty
-          state) so a user with repos can still import more / disconnect. */}
-      <div className="github-repo-switch-conn">
-        {ghConn?.connected ? (
-          <>
-            <button
-              type="button"
-              className="github-link-btn"
-              onClick={importAll}
-              disabled={busy || importing}
-            >
-              {importing
-                ? `Importing… (${importCount})`
-                : "Import all my repositories"}
-            </button>
-            <span className="github-repo-switch-conn-who">
-              @{ghConn.login}
-              {" · "}
-              <button
-                type="button"
-                className="github-link-btn"
-                onClick={disconnect}
-              >
-                Disconnect
-              </button>
-            </span>
-          </>
-        ) : (
-          <button
-            type="button"
-            className="github-link-btn"
-            onClick={connectGithub}
-            disabled={ghConn === null}
-          >
-            Connect GitHub
-          </button>
-        )}
-      </div>
     </div>
   );
 
@@ -3648,8 +4037,12 @@ function PersonalRepoManager() {
 // Linking is owner-only and lives in the sidebar project menu; here `canLink`
 // only decides whether an unlinked project shows the form or a read-only hint.
 function OrgRepoManager({ canLink }: { canLink: boolean }) {
+  const { user } = useAuth();
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  useEffect(() => {
+    if (selectedId !== null) rememberOpenRepo(user?.id, selectedId);
+  }, [selectedId, user?.id]);
   const [adding, setAdding] = useState(false);
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -3687,12 +4080,10 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
     void listProjects()
       .then((rows) => {
         setProjects(rows);
-        setSelectedId((cur) =>
-          cur && rows.some((r) => r.id === cur) ? cur : (rows[0]?.id ?? null)
-        );
+        setSelectedId((cur) => pickProject(rows, cur, user?.id));
       })
       .catch(() => setProjects([]));
-  }, []);
+  }, [user?.id]);
 
   // Creates the org project and links the repo in one owner-gated call. Mirrors
   // PersonalRepoManager.submitAdd.
@@ -3884,10 +4275,22 @@ function PlatformRepoManager() {
       ? `Couldn't connect GitHub (${decodeURIComponent(failure)}). Try again.`
       : "";
   });
-  const [selected, setSelected] = useState<{ owner: string; repo: string }>({
-    owner: searchParams.get("owner") || FALLBACK_OWNER,
-    repo: searchParams.get("repo") || FALLBACK_REPO,
-  });
+  // A deep link wins, then the repo left open earlier this session.
+  const [selected, setSelected] = useState<{ owner: string; repo: string }>(
+    () => {
+      const remembered = readOpenRepo(user?.id);
+      const [owner, repo] =
+        typeof remembered === "string" ? remembered.split("/") : [];
+      return {
+        owner: searchParams.get("owner") || owner || FALLBACK_OWNER,
+        repo: searchParams.get("repo") || repo || FALLBACK_REPO,
+      };
+    }
+  );
+
+  useEffect(() => {
+    rememberOpenRepo(user?.id, `${selected.owner}/${selected.repo}`);
+  }, [selected, user?.id]);
 
   // An owner gets the server's merged list (shared token + their own GitHub);
   // everyone else the shared token's repos, as before.

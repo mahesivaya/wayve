@@ -1225,6 +1225,18 @@
   color: var(--color-text-primary);
 }
 
+.github-file-type {
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-right: -4px;
+}
+
+.github-commit-file-dir {
+  margin-left: 8px;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
 .github-commit-file-meta {
   display: inline-flex;
   align-items: center;
@@ -1266,7 +1278,7 @@
   margin: 0;
   padding: 8px 0;
   font-family: var(--mono);
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   line-height: 1.45;
   overflow-x: auto;
   white-space: pre;
@@ -1309,7 +1321,7 @@
   margin: 0;
   padding: 8px 0;
   font-family: var(--mono);
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   line-height: 1.45;
   overflow-x: auto;
 }
@@ -1323,7 +1335,213 @@
   word-break: break-word;
 }
 
+/* The divider for unchanged lines the patch left out: a rule either side of the
+   centred count, with the arrows out of flow in the gutter so the equal side
+   padding keeps the count on the row's true centre. */
+.github-diff-gap {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-height: 40px;
+  padding: 2px 36px;
+  background: transparent;
+}
+
+.github-diff-gap::before,
+.github-diff-gap::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
+.github-diff-gap-arrows {
+  position: absolute;
+  top: 50%;
+  left: 6px;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+}
+
+.github-diff-gap-btn,
+.github-diff-gap-all {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.github-diff-gap-btn {
+  justify-content: center;
+  width: 22px;
+  height: 18px;
+  padding: 0;
+  border-radius: 4px;
+}
+
+.github-diff-gap-all {
+  gap: 6px;
+  padding: 2px 4px;
+}
+
+.github-diff-gap-btn:hover:not(:disabled),
+.github-diff-gap-all:hover:not(:disabled) {
+  color: var(--color-text);
+}
+
+.github-diff-gap-btn:disabled,
+.github-diff-gap-all:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Wraps to its own centred line under the rule. */
+.github-diff-gap-error {
+  order: 1;
+  flex-basis: 100%;
+  text-align: center;
+  color: var(--diff-del-strong, #82071e);
+}
+
+/* One side of a diff row. Its cells stay in the parent grid, while this still
+   gives them a shared hover for the comment button. */
+.github-diff-side {
+  display: contents;
+}
+
+.github-line-comment-btn {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: var(--color-primary-action);
+  color: var(--color-surface);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.github-diff-side:hover .github-line-comment-btn,
+.github-line-comment-btn:focus-visible {
+  opacity: 1;
+}
+
+/* A line's comments and composer, spanning the whole row under it. */
+.github-line-thread {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px;
+  border-block: 1px solid var(--color-border);
+  background: var(--color-surface-tint);
+  font-family: var(--sans);
+  white-space: normal;
+}
+
+.github-comment-options {
+  position: relative;
+  display: inline-flex;
+  margin-left: auto;
+}
+
+.github-comment-options-btn {
+  display: inline-flex;
+  padding: 2px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.github-comment-options-btn:hover,
+.github-comment-options-btn[aria-expanded="true"] {
+  background: var(--color-surface-tint);
+  color: var(--color-text-primary);
+}
+
+/* Opens beside the button: below it, the diff's overflow would clip the menu on
+   a thread under the file's last line. */
+.github-comment-options .github-diff-menu {
+  top: 50%;
+  right: calc(100% + 6px);
+  min-width: 110px;
+  padding: 4px 0;
+  transform: translateY(-50%);
+}
+
+.github-line-composer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+}
+
+.github-line-composer-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 28px 0 0;
+  border: none;
+  outline: none;
+  resize: vertical;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--text-md);
+  line-height: 1.5;
+}
+
+.github-line-composer-close,
+.github-line-composer-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.github-line-composer-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+.github-line-composer-close:hover,
+.github-line-composer-send:hover:not(:disabled) {
+  color: var(--color-text-primary);
+}
+
+.github-line-composer-send:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.github-line-composer-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .github-split-no {
+  position: relative;
   padding: 0 8px;
   text-align: right;
   color: var(--color-text-muted);
@@ -2700,6 +2918,11 @@
   color: var(--color-text-primary);
 }
 
+/* The heading above already frames this, so no empty-state padding. */
+.github-commit-comments .github-empty {
+  padding: 0;
+}
+
 /* Functional comment composer (write). */
 .github-commit-composer {
   display: flex;
@@ -2759,14 +2982,14 @@
   cursor: default;
 }
 
-/* Unified diff: [old-no | new-no | code], sharing the split view's cells. */
+/* Unified diff: [line-no | code], sharing the split view's cells. */
 .github-unified {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   margin: 0;
   padding: 8px 0;
   font-family: var(--mono);
-  font-size: var(--text-xs);
+  font-size: var(--text-md);
   line-height: 1.45;
   overflow-x: auto;
 }
