@@ -109,12 +109,13 @@ export type CommitDiffs = {
   loadFileLines: (ref: string, path: string) => Promise<string[]>;
 };
 
-// `initialExpanded` reopens commits from an earlier visit; the self-heal effect
-// below fetches their diffs.
+// `initialExpanded` reopens commits from an earlier visit, whose diffs the
+// self-heal effect below fetches, and `initialCollapsed` folds their files again.
 export function useCommitDiffs(
   owner: string,
   repo: string,
-  initialExpanded: string[] = []
+  initialExpanded: string[] = [],
+  initialCollapsed: string[] = []
 ): CommitDiffs {
   const API_BASE = `/api/github/repos/${owner}/${repo}`;
 
@@ -137,7 +138,9 @@ export function useCommitDiffs(
   const [errorFullDiffBySha, setErrorFullDiffBySha] = useState<
     Record<string, string>
   >({});
-  const [collapsedFiles, setCollapsedFiles] = useState<Set<string>>(new Set());
+  const [collapsedFiles, setCollapsedFiles] = useState<Set<string>>(
+    () => new Set(initialCollapsed)
+  );
 
   const toggleFile = useCallback((key: string) => {
     setCollapsedFiles((prev) => {

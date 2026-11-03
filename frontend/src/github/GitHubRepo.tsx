@@ -42,11 +42,15 @@ import {
 import { CommentOptionsIcon, EditCommentIcon } from "../icons";
 import { useDiffPrefs } from "./diffPrefs";
 import {
+  draftStore,
+  readDraft,
   readOpenRepo,
   readRepoView,
   rememberOpenRepo,
   rememberRepoView,
+  type DraftStore,
 } from "./openRepoSession";
+import { useRepoScroll } from "./useRepoScroll";
 import {
   canExpandFile,
   useCommitDiffs,
@@ -333,18 +337,36 @@ type JobsResponse = {
   total_count: number;
 };
 
+// Half-written comments are keyed to what they'd post to. A pull request's includes
+// its head commit: a push can move or remove the line a comment was meant for.
+const pullLineDraftKey = (
+  fullName: string,
+  number: number,
+  headSha: string,
+  filename: string
+) => `${fullName}|pull:${number}:${headSha}:${filename}`;
+
+const editDraftKey = (
+  fullName: string,
+  kind: "commit" | "pull",
+  commentId: number
+) => `${fullName}|edit:${kind}:${commentId}`;
+
 // One comment on a commit or a diff line, with its ⋯ menu to edit it. The menu is
 // shown on every comment: only the server can tell whose comments are yours, as
 // the shared token posts them all under one GitHub account.
 export function DiffComment({
   comment,
   onSave,
+  editDraft,
 }: {
   comment: IssueComment;
   onSave: (body: string) => Promise<void>;
+  // Keeps an edit in progress when the page is left.
+  editDraft?: DraftStore;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(() => editDraft?.read() != null);
   const menuRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
@@ -407,10 +429,15 @@ export function DiffComment({
         </div>
         {editing ? (
           <LineCommentComposer
-            initial={comment.body?.trim() ?? ""}
-            onClose={() => setEditing(false)}
+            initial={editDraft?.read()?.body ?? comment.body?.trim() ?? ""}
+            onDraft={(body) => editDraft?.save({ body })}
+            onClose={() => {
+              editDraft?.clear();
+              setEditing(false);
+            }}
             onPost={async (body) => {
               if (body !== comment.body?.trim()) await onSave(body);
+              editDraft?.clear();
               setEditing(false);
             }}
           />
@@ -863,7 +890,7 @@ export function GitHubRepoViewer({
   // PR conversation composer, per PR so a draft survives switching PRs.
   const [pullCommentDraft, setPullCommentDraft] = useState<
     Record<number, string>
-  >({});
+  >(() => restoredView?.pullDrafts ?? {});
   const [postingPullComment, setPostingPullComment] = useState<number | null>(
     null
   );
@@ -877,7 +904,12 @@ export function GitHubRepoViewer({
   >({});
   // Per-commit diffs (expand/collapse, cached detail, per-file fold, full-diff
   // fallback) live in this hook, shared with the Projects activity list.
-  const diffs = useCommitDiffs(owner, repoName, restoredView?.commits);
+  const diffs = useCommitDiffs(
+    owner,
+    repoName,
+    restoredView?.commits,
+    restoredView?.collapsedFiles
+  );
   // Stable reference used by the PR loader's dependency array.
   const { collapseFiles } = diffs;
   const [commitCommentsBySha, setCommitCommentsBySha] = useState<
@@ -885,7 +917,7 @@ export function GitHubRepoViewer({
   >({});
   const [commitCommentDraft, setCommitCommentDraft] = useState<
     Record<string, string>
-  >({});
+  >(() => restoredView?.commitDrafts ?? {});
   const [postingCommentShas, setPostingCommentShas] = useState<Set<string>>(
     new Set()
   );
@@ -1299,9 +1331,25 @@ export function GitHubRepoViewer({
           ...current,
           [number]: { detail, files, comments, lineComments, reviews },
         }));
-        // Collapse every file in this PR; keys use the `pr-{number}::{filename}`
+        // Collapse this PR's files, except those opened on an earlier visit or
+        // holding a half-written comment; keys use the `pr-{number}::{filename}`
         // scheme shared with diffs.collapsedFiles.
-        collapseFiles(files.map((f) => `pr-${number}::${f.filename}`));
+        const stayOpen = (filename: string) =>
+          restoredView?.openPullFiles.includes(`pr-${number}::${filename}`) ||
+          readDraft(
+            user?.id,
+            pullLineDraftKey(fullName, number, detail.head.sha, filename)
+          ) !== null ||
+          lineComments.some(
+            (c) =>
+              c.path === filename &&
+              readDraft(user?.id, editDraftKey(fullName, "pull", c.id)) !== null
+          );
+        collapseFiles(
+          files
+            .filter((f) => !stayOpen(f.filename))
+            .map((f) => `pr-${number}::${f.filename}`)
+        );
       } catch (err) {
         setErrorByPullNumber((current) => ({
           ...current,
@@ -1318,7 +1366,14 @@ export function GitHubRepoViewer({
         });
       }
     },
-    [API_BASE, pullBundleByNumber, collapseFiles]
+    [
+      API_BASE,
+      pullBundleByNumber,
+      collapseFiles,
+      fullName,
+      restoredView,
+      user?.id,
+    ]
   );
 
   const openPull = useCallback(
@@ -1398,9 +1453,17 @@ export function GitHubRepoViewer({
     comments: IssueComment[]
   ): LineComments => ({
     comments: comments.filter((c) => c.path === filename),
+    draft: draftStore(
+      user?.id,
+      pullLineDraftKey(fullName, prNumber, headSha, filename)
+    ),
     renderComment: (comment) => (
       <DiffComment
         comment={comment}
+        editDraft={draftStore(
+          user?.id,
+          editDraftKey(fullName, "pull", comment.id)
+        )}
         onSave={async (body) => {
           const edited = await editPullReviewComment(
             owner,
@@ -1615,9 +1678,14 @@ export function GitHubRepoViewer({
     comments: (commitCommentsBySha[sha] ?? []).filter(
       (c) => c.path === filename
     ),
+    draft: draftStore(user?.id, `${fullName}|commit:${sha}:${filename}`),
     renderComment: (comment) => (
       <DiffComment
         comment={comment}
+        editDraft={draftStore(
+          user?.id,
+          editDraftKey(fullName, "commit", comment.id)
+        )}
         onSave={(body) => saveCommitComment(sha, comment.id, body)}
       />
     ),
@@ -1689,6 +1757,9 @@ export function GitHubRepoViewer({
     void loadRepo();
   }, [loadRepo]);
 
+  const commitsStartPage = useRef(restoredView?.commitsPage ?? 1);
+  const pullsStartPage = useRef(restoredView?.pullsPage ?? 1);
+
   useEffect(() => {
     if (!repo) return;
     setTreeItems({});
@@ -1702,7 +1773,12 @@ export function GitHubRepoViewer({
     if (!repo) return;
     void loadReadme(branch);
     void loadWorkflows(branch);
-    void loadCommits(branch, 1);
+    // Back on the page of commits it was left on, the first time through.
+    void loadCommits(
+      branch,
+      branch === restoredView?.branch ? commitsStartPage.current : 1
+    );
+    commitsStartPage.current = 1;
     void loadCommitsTotal(branch);
     // Reset to the PR list rather than a stale detail when the repo or branch
     // changes. The PRs themselves load in their own effect below.
@@ -1722,6 +1798,7 @@ export function GitHubRepoViewer({
     loadRuns,
     loadWorkflows,
     repo,
+    restoredView,
   ]);
 
   // PRs aren't branch-filtered, so unlike the block above these don't reload
@@ -1729,7 +1806,8 @@ export function GitHubRepoViewer({
   // (back to page 1 on either), the counts follow the repo.
   useEffect(() => {
     if (!repo) return;
-    void loadPulls(pullFilter, 1);
+    void loadPulls(pullFilter, pullsStartPage.current);
+    pullsStartPage.current = 1;
   }, [loadPulls, pullFilter, repo]);
 
   useEffect(() => {
@@ -1744,6 +1822,19 @@ export function GitHubRepoViewer({
     if (!canManageAccess && activeSection === "access")
       setActiveSection("description");
   }, [canManageAccess, activeSection]);
+
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  useRepoScroll({
+    containerRef: contentRef,
+    userId: user?.id,
+    fullName,
+    place:
+      activeSection === "pulls" && selectedPull !== null
+        ? `pulls#${selectedPull}`
+        : activeSection,
+    file: selectedFile?.path ?? null,
+    ready: repo !== null,
+  });
 
   const openFile = useCallback(async (item: ContentItem) => {
     setSelectedFile(item);
@@ -1806,12 +1897,31 @@ export function GitHubRepoViewer({
       file: selectedFile?.path ?? restoringFile.current,
       folders: [...expandedPaths],
       commits: [...diffs.expandedShas],
+      commitsPage,
+      pullsPage,
+      collapsedFiles: [...diffs.collapsedFiles].filter(
+        (key) => !key.startsWith("pr-")
+      ),
+      openPullFiles: Object.entries(pullBundleByNumber).flatMap(
+        ([number, bundle]) =>
+          bundle.files
+            .map((f) => `pr-${number}::${f.filename}`)
+            .filter((key) => !diffs.collapsedFiles.has(key))
+      ),
+      commitDrafts: commitCommentDraft,
+      pullDrafts: pullCommentDraft,
     });
   }, [
     branch,
+    commitCommentDraft,
+    commitsPage,
+    diffs.collapsedFiles,
     diffs.expandedShas,
     expandedPaths,
     fullName,
+    pullBundleByNumber,
+    pullCommentDraft,
+    pullsPage,
     repo,
     selectedFile,
     selectedPull,
@@ -2055,7 +2165,7 @@ export function GitHubRepoViewer({
         {/* Right pane — only the active section is rendered. The Files
             view keeps its existing 2-pane (tree + preview) layout
             because file browsing benefits from both being visible. */}
-        <div className="github-content">
+        <div className="github-content" ref={contentRef}>
           {activeSection === "description" && (
             <main
               className="github-description"
@@ -2375,6 +2485,14 @@ export function GitHubRepoViewer({
                                           <DiffComment
                                             key={c.id}
                                             comment={c}
+                                            editDraft={draftStore(
+                                              user?.id,
+                                              editDraftKey(
+                                                fullName,
+                                                "commit",
+                                                c.id
+                                              )
+                                            )}
                                             onSave={(body) =>
                                               saveCommitComment(
                                                 commit.sha,

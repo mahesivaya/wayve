@@ -26,6 +26,7 @@ vi.mock("../../api/workspace", async (importOriginal) => ({
 
 import GitHubRepo from "../../github/GitHubRepo";
 import {
+  draftStore,
   forgetOpenRepo,
   readOpenRepo,
   readRepoView,
@@ -45,6 +46,12 @@ const view = (fields: Partial<RepoView> = {}): RepoView => ({
   file: null,
   folders: [],
   commits: [],
+  commitsPage: 1,
+  pullsPage: 1,
+  collapsedFiles: [],
+  openPullFiles: [],
+  commitDrafts: {},
+  pullDrafts: {},
   ...fields,
 });
 
@@ -72,6 +79,15 @@ const fetchMock = vi.fn((input: RequestInfo | URL) => {
     body = [{ name: "main" }, { name: "dev" }];
   else if (url.endsWith(`${API}/pulls`)) body = [pull];
   else if (url.endsWith(`${API}/pulls/7`)) body = pull;
+  else if (url.endsWith(`${API}/pulls/7/files`))
+    body = ["opened.ts", "closed.ts"].map((filename) => ({
+      filename,
+      status: "modified",
+      additions: 1,
+      deletions: 0,
+      changes: 1,
+      patch: "@@ -1,1 +1,2 @@\n keep\n+added",
+    }));
   else if (url.endsWith(`${API}/contents/src/app.ts`))
     body = {
       name: "app.ts",
@@ -158,6 +174,78 @@ describe("Code Repo keeps its place", () => {
     // Going back to the list is remembered too.
     fireEvent.click(screen.getByText("← Back to pull requests"));
     await waitFor(() => expect(readRepoView(USER, FULL)?.pull).toBeNull());
+  });
+
+  it("returns to the page of commits and of pull requests it was left on", async () => {
+    leaveOff({ branch: "main", commitsPage: 3, pullsPage: 2 });
+    renderPage();
+    await waitFor(() => expect(fetched(`sha=main`)).toBe(true));
+    await waitFor(() => expect(fetched(`${API}/pulls?`)).toBe(true));
+    const page = (part: string) =>
+      urls()
+        .filter((url) => url.includes(part))
+        .map((url) => new URL(url, "http://x").searchParams.get("page"));
+    expect(page(`${API}/commits?sha=main`)).toContain("3");
+    expect(page(`${API}/pulls?state=`)).toContain("2");
+  });
+
+  it("starts a deleted branch's replacement on its first page of commits", async () => {
+    leaveOff({ branch: "gone", commitsPage: 3 });
+    renderPage();
+    await waitFor(() => expect(fetched(`sha=main`)).toBe(true));
+    expect(
+      urls().some((url) => url.includes("sha=main") && url.includes("page=3"))
+    ).toBe(false);
+  });
+
+  it("brings back the pull request's opened files and half-written comment", async () => {
+    localStorage.setItem("rwayve.github.section", "pulls");
+    leaveOff({
+      branch: "main",
+      pull: 7,
+      openPullFiles: ["pr-7::opened.ts"],
+      pullDrafts: { "7": "half written" },
+    });
+    renderPage();
+    const expanded = (name: string) =>
+      screen.getByText(name).closest("button")?.getAttribute("aria-expanded");
+    await screen.findByText("opened.ts");
+    expect(expanded("opened.ts")).toBe("true");
+    expect(expanded("closed.ts")).toBe("false");
+    expect(screen.getByDisplayValue("half written")).toBeTruthy();
+  });
+
+  it("keeps a pull request file open when it holds a half-written comment", async () => {
+    localStorage.setItem("rwayve.github.section", "pulls");
+    leaveOff({ branch: "main", pull: 7 });
+    draftStore(USER, `${FULL}|pull:7:${SHA}:closed.ts`).save({
+      body: "on a line",
+      anchor: { side: "RIGHT", line: 2, position: 2 },
+    });
+    renderPage();
+    expect(await screen.findByDisplayValue("on a line")).toBeTruthy();
+    expect(
+      screen
+        .getByText("opened.ts")
+        .closest("button")
+        ?.getAttribute("aria-expanded")
+    ).toBe("false");
+  });
+
+  it("brings back a commit's half-written comment and folded files", async () => {
+    leaveOff({
+      branch: "main",
+      commits: [SHA],
+      commitDrafts: { [SHA]: "half a commit comment" },
+      collapsedFiles: [`${SHA}::a.ts`],
+    });
+    renderPage();
+    await waitFor(() =>
+      expect(readRepoView(USER, FULL)?.commitDrafts).toEqual({
+        [SHA]: "half a commit comment",
+      })
+    );
+    expect(readRepoView(USER, FULL)?.collapsedFiles).toEqual([`${SHA}::a.ts`]);
   });
 
   it("reopens folders and the file on their branch", async () => {

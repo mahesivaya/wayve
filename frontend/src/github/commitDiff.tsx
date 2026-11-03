@@ -8,6 +8,7 @@ import {
   type IssueComment,
 } from "./commitDiffData";
 import { DEFAULT_DIFF_PREFS, type DiffPrefs } from "./diffPrefs";
+import type { DraftStore } from "./openRepoSession";
 import { FileTypeIcon } from "./FileTypeIcon";
 import "./githubRepo.css";
 
@@ -290,6 +291,9 @@ export type LineComments = {
   comments: IssueComment[];
   post: (anchor: LineAnchor, body: string) => Promise<void>;
   renderComment: (comment: IssueComment) => ReactNode;
+  // Keeps a half-written comment when the page is left. One per file's diff, as
+  // only one box is open in it at a time.
+  draft?: DraftStore;
 };
 
 const anchorOf = (
@@ -537,10 +541,13 @@ function GapRow({
 // posts and Shift+Enter starts a new line. The draft is kept if posting fails.
 export function LineCommentComposer({
   initial = "",
+  onDraft,
   onPost,
   onClose,
 }: {
   initial?: string;
+  // Called with the text as it's typed, so it can outlive the page.
+  onDraft?: (body: string) => void;
   onPost: (body: string) => Promise<void>;
   onClose: () => void;
 }) {
@@ -579,7 +586,10 @@ export function LineCommentComposer({
             e.currentTarget.value.length
           )
         }
-        onChange={(e) => setBody(e.target.value)}
+        onChange={(e) => {
+          setBody(e.target.value);
+          onDraft?.(e.target.value);
+        }}
         onKeyDown={(e) => {
           if (e.key === "Escape") onClose();
           // isComposing: Enter there picks an IME candidate, it isn't a send.
@@ -640,7 +650,11 @@ export function CommitPatch({
   // Without it, lines have no comment button and show no threads.
   lineComments?: LineComments;
 }) {
-  const [commentingOn, setCommentingOn] = useState<LineAnchor | null>(null);
+  const draft = lineComments?.draft;
+  // A comment left half-written reopens on its line.
+  const [commentingOn, setCommentingOn] = useState<LineAnchor | null>(
+    () => draft?.read()?.anchor ?? null
+  );
   const [lines, setLines] = useState<string[] | null>(null);
   const [reveals, setReveals] = useState<GapReveals>({});
   const [loadingLines, setLoadingLines] = useState(false);
@@ -700,7 +714,11 @@ export function CommitPatch({
           className="github-line-comment-btn"
           aria-label={`Comment on line ${anchor.line}`}
           title="Add a comment"
-          onClick={() => setCommentingOn(anchor)}
+          onClick={() => {
+            // The box moves here, leaving the text it held behind.
+            if (commentingOn && !sameLine(commentingOn, anchor)) draft?.clear();
+            setCommentingOn(anchor);
+          }}
         >
           <LineCommentIcon size={13} />
         </button>
@@ -731,9 +749,15 @@ export function CommitPatch({
         )}
         {composing && (
           <LineCommentComposer
-            onClose={() => setCommentingOn(null)}
+            initial={draft?.read()?.body ?? ""}
+            onDraft={(body) => draft?.save({ body, anchor: open })}
+            onClose={() => {
+              draft?.clear();
+              setCommentingOn(null);
+            }}
             onPost={async (body) => {
               await lineComments.post(open, body);
+              draft?.clear();
               setCommentingOn(null);
             }}
           />
