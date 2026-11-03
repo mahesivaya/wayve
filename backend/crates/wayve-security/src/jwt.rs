@@ -66,14 +66,13 @@ pub fn create_jwt_for_account_with_max_exp(
     account_type: String,
     max_exp: Option<DateTime<Utc>>,
 ) -> String {
-    // Every login, OAuth, and SSO mint path funnels through here and gets
-    // `Normal`, so a fresh login is always the restricted identity. Only the
-    // session-mode switch endpoint mints `Admin`, via `create_jwt_with_mode`.
+    // Always `Normal`. Sign-in paths and the session-mode switch choose a mode
+    // and call `create_jwt_with_mode` instead (see `rbac::login_session_mode`).
     create_jwt_with_mode(user_id, email, account_type, max_exp, SessionMode::Normal)
 }
 
-/// Mint a JWT with an explicit session mode. Used by the admin-mode switch
-/// endpoint; all other callers go through the `Normal`-defaulting wrappers.
+/// Mint a JWT with an explicit session mode. Used by the sign-in paths and the
+/// admin-mode switch endpoint; other callers use the `Normal`-defaulting wrappers.
 pub fn create_jwt_with_mode(
     user_id: i32,
     email: String,

@@ -12,7 +12,7 @@ use actix_web::{HttpRequest, HttpResponse, delete, get, post, put, web};
 use chrono::{DateTime, Utc};
 use tracing::{info, instrument, warn};
 use wayve_security::encryption::{decrypt, encrypt};
-use wayve_security::jwt::{auth_cookie, create_jwt_for_account};
+use wayve_security::jwt::{auth_cookie, create_jwt_with_mode};
 use wayve_security::rbac::{self, Permission};
 use wayve_security::sso::{
     IdTokenClaims, build_authorize_url, discovery, exchange_code, pkce_challenge_s256,
@@ -533,7 +533,13 @@ pub async fn auth_sso_callback(
             }
         };
 
-    let token = create_jwt_for_account(user_id, email.clone(), account_type.clone());
+    let token = create_jwt_with_mode(
+        user_id,
+        email.clone(),
+        account_type.clone(),
+        None,
+        rbac::login_session_mode(pool.get_ref(), user_id).await,
+    );
     let cookie = auth_cookie(token.clone());
 
     // The token rides in the URL fragment, which never reaches a server and so is
