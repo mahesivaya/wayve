@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./notes.css";
 
 import {
@@ -14,6 +14,11 @@ import { useAuth } from "../auth/useAuth";
 import { logger } from "../utils/logger";
 import { decryptForSelf } from "../crypto/selfEncrypt";
 import { fmtShortDate } from "../utils/datetime";
+import {
+  forgetOpenNote,
+  readOpenNote,
+  rememberOpenNote,
+} from "./openNoteSession";
 
 const formatDate = (iso: string | null | undefined) => {
   if (!iso) return "";
@@ -25,9 +30,19 @@ export default function Notes() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
   const [notes, setNotes] = useState<Note[]>([]);
-  const [selectedId, setSelectedId] = useState<number | "new" | null>(null);
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
+  const [restored] = useState(() => readOpenNote(userId));
+  const [selectedId, setSelectedId] = useState<number | "new" | null>(
+    restored?.noteId ?? null
+  );
+  const [title, setTitle] = useState(restored?.title ?? "");
+  const [content, setContent] = useState(restored?.content ?? "");
+  // A restored form stays unfocused, so typing can't land in the title when the
+  // writer was in the body.
+  const [focusTitle, setFocusTitle] = useState(restored === null);
+  // A restored note waiting to be checked against the saved copy.
+  const uncheckedRef = useRef(
+    typeof restored?.noteId === "number" ? restored : null
+  );
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [view, setView] = useState<"list" | "grid">(() => {
@@ -59,6 +74,25 @@ export default function Notes() {
         }))
       );
       setNotes(readable);
+
+      const unchecked = uncheckedRef.current;
+      uncheckedRef.current = null;
+      if (unchecked) {
+        const { noteId, title: oldTitle, content: oldContent } = unchecked;
+        const saved = readable.find((note) => note.id === noteId);
+        // Edits are kept whatever happened to the note; deleted elsewhere, they
+        // become a new note, since there's nothing left to update.
+        if (unchecked.edited) {
+          if (!saved) {
+            setSelectedId((id) => (id === noteId ? "new" : id));
+          }
+        } else {
+          // Only if the writer hasn't moved on, or started typing, in the meantime.
+          setSelectedId((id) => (id === noteId && !saved ? null : id));
+          setTitle((t) => (t === oldTitle ? (saved?.title ?? "") : t));
+          setContent((c) => (c === oldContent ? (saved?.content ?? "") : c));
+        }
+      }
     } catch (err) {
       logger.error(err);
     }
@@ -79,12 +113,14 @@ export default function Notes() {
   }, [status]);
 
   const openNew = () => {
+    setFocusTitle(true);
     setSelectedId("new");
     setTitle("");
     setContent("");
   };
 
   const openNote = (note: Note) => {
+    setFocusTitle(true);
     setSelectedId(note.id);
     setTitle(note.title ?? "");
     setContent(note.content ?? "");
@@ -155,6 +191,21 @@ export default function Notes() {
     editingNote === undefined ||
     title !== (editingNote.title ?? "") ||
     content !== (editingNote.content ?? "");
+
+  useEffect(() => {
+    if (selectedId === null || !userId) {
+      forgetOpenNote();
+      return;
+    }
+    rememberOpenNote({
+      userId,
+      noteId: selectedId,
+      title,
+      content,
+      // Until the list arrives `dirty` can't tell, so the restored answer stands.
+      edited: uncheckedRef.current ? uncheckedRef.current.edited : dirty,
+    });
+  }, [userId, selectedId, title, content, dirty]);
 
   const visibleNotes = useMemo(() => {
     if (!normalizedSearchQuery) return notes;
@@ -227,7 +278,7 @@ export default function Notes() {
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
                   placeholder="Enter note title"
-                  autoFocus
+                  autoFocus={focusTitle}
                 />
               </label>
 
