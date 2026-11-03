@@ -565,7 +565,13 @@ html.is-titlebar-inset .header-brand .sidebar-collapse-icon {
      non-themeable --color-canvas (#0a1730 navy), so on a near-black custom
      theme the sidebar stayed blue. (Default dark is unchanged: surface-soft is
      also #0a1730 there.) */
-  background: var(--color-surface-soft);
+  /* A step darker than the content beside it, so the menu reads as its own
+     area. Mixed from the surface so it follows light custom themes; dark themes
+     override this below. */
+  --sidebar-surface: color-mix(in oklab, var(--color-surface-soft) 94%, black);
+  --sidebar-hover: color-mix(in oklab, var(--color-surface-soft) 88%, black);
+
+  background: var(--sidebar-surface);
   border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
@@ -905,7 +911,7 @@ html.is-titlebar-inset .header-brand .sidebar-collapse-icon {
 
 .sidebar-link:hover,
 .sidebar-subitems .sidebar-project-label:hover {
-  background: var(--color-surface-hover);
+  background: var(--sidebar-hover);
 }
 
 .sidebar-link.active,
@@ -1855,7 +1861,9 @@ html.is-titlebar-inset .header-brand .sidebar-collapse-icon {
   /* Themeable soft surface (was the non-themeable --color-surface-darken navy
      #0a1730, which stayed blue on a near-black custom theme). Default dark is
      unchanged: surface-soft is also #0a1730. */
-  background: var(--color-surface-soft);
+  --sidebar-surface: var(--color-surface-soft);
+  --sidebar-hover: var(--color-surface-hover);
+
   border-right: 1px solid var(--color-border-dark);
 }
 :root[data-theme="dark"] .sidebar-collapse-btn {
