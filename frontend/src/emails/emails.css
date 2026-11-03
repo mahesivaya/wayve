@@ -82,6 +82,8 @@
    (see Layout.tsx) and rendered here instead so search + view-mode
    controls live with the page they affect. */
 .emails-root {
+  /* The new message form opens over this box, not the whole window. */
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;

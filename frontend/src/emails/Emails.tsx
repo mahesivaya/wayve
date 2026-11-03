@@ -1010,6 +1010,7 @@ export default function Emails() {
             )}
 
             <Modal
+              contained
               isOpen={composeOpen && composeAccountId !== null}
               onClose={() => setComposeOpen(false)}
               title="New Message"
