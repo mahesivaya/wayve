@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { HEADER_NAME } from "../config/brand";
 
 /* Decorative-but-interactive product mockup for the landing hero. Auto-cycles
    through the app's tabs (each a distinct mini-screen) and also responds to
@@ -13,7 +14,7 @@ function MailScreen() {
     },
     {
       from: "GitHub",
-      subject: "[fluxze] PR #482 merged into main",
+      subject: "[hadal-mail] PR #482 merged into main",
       time: "8:10",
     },
     {
@@ -374,7 +375,7 @@ function HomeScreen() {
     },
     {
       from: "GitHub",
-      subject: "[fluxze] PR #482 merged into main",
+      subject: "[hadal-mail] PR #482 merged into main",
       time: "8:10",
     },
     {
@@ -633,14 +634,14 @@ runserver:
 }
 
 const TABS = [
-  { key: "Home", search: "Search Fluxze…", Screen: HomeScreen },
+  { key: "Home", search: `Search ${HEADER_NAME}…`, Screen: HomeScreen },
   { key: "Mail", search: "Search mail…", Screen: MailScreen },
   { key: "Chat", search: "Search chat…", Screen: ChatScreen },
   { key: "Meet", search: "Search meetings…", Screen: MeetScreen },
   { key: "Drive", search: "Search files…", Screen: DriveScreen },
   { key: "Notes", search: "Search notes…", Screen: NotesScreen },
   { key: "Tasks", search: "Search tasks…", Screen: TasksScreen },
-  { key: "AI", search: "Ask Fluxze AI…", Screen: AIScreen },
+  { key: "AI", search: `Ask ${HEADER_NAME} AI…`, Screen: AIScreen },
   { key: "More", search: "Go to file…", Screen: MoreScreen },
 ] as const;
 
@@ -672,11 +673,11 @@ export default function HeroMock() {
         <span className="hx-dot hx-dot-r" />
         <span className="hx-dot hx-dot-y" />
         <span className="hx-dot hx-dot-g" />
-        <span className="hx-mock-url">app.fluxze.com</span>
+        <span className="hx-mock-url">{HEADER_NAME}</span>
       </div>
       <div className="hx-mock-body">
         <aside className="hx-mock-side">
-          <div className="hx-mock-logo">Fluxze</div>
+          <div className="hx-mock-logo">{HEADER_NAME}</div>
           {TABS.map((t, i) => (
             <button
               key={t.key}
