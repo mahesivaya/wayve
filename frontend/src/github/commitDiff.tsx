@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import type { CommitDiffs } from "./commitDiffData";
+import { canExpandFile, type CommitDiffs } from "./commitDiffData";
 import { DEFAULT_DIFF_PREFS, type DiffPrefs } from "./diffPrefs";
 import "./githubRepo.css";
 
@@ -34,8 +34,24 @@ export function ChevronIcon() {
 // A patch becomes hunk headers, context lines, and change blocks (the run of
 // removals and the additions that follow them); both layouts render from that.
 type DiffLine = { no: number; text: string };
+type HunkItem = {
+  type: "hunk";
+  text: string;
+  oldStart: number;
+  newStart: number;
+};
+// Unchanged lines the patch left out. `hidden` is null for the end of the file
+// until its text has loaded, because the patch doesn't say how long a file is.
+type GapItem = {
+  type: "gap";
+  id: number;
+  hidden: number | null;
+  hasAbove: boolean;
+  hasBelow: boolean;
+};
 type PatchItem =
-  | { type: "hunk"; text: string }
+  | HunkItem
+  | GapItem
   | { type: "ctx"; old: DiffLine; new: DiffLine }
   | { type: "change"; dels: DiffLine[]; adds: DiffLine[] };
 
@@ -60,7 +76,12 @@ function parsePatch(patch: string): PatchItem[] {
         oldLn = Number(m[1]);
         newLn = Number(m[2]);
       }
-      items.push({ type: "hunk", text: line });
+      items.push({
+        type: "hunk",
+        text: line,
+        oldStart: oldLn,
+        newStart: newLn,
+      });
     } else if (line.startsWith("\\")) {
       // "\ No newline at end of file" is an annotation, not content.
       continue;
@@ -82,6 +103,98 @@ function parsePatch(patch: string): PatchItem[] {
   }
   flush();
   return items;
+}
+
+// Lines revealed from each edge of a gap, keyed by gap id.
+type GapReveals = Record<number, { top: number; bottom: number }>;
+
+// GitHub's patches carry 3 lines of context, so a last hunk ending in fewer has
+// reached the end of the file and nothing is left to reveal below it.
+const PATCH_CONTEXT = 3;
+
+function endsBeforeEof(items: PatchItem[]): boolean {
+  let trailingCtx = 0;
+  for (let i = items.length - 1; i >= 0 && items[i].type === "ctx"; i--) {
+    trailingCtx++;
+  }
+  return trailingCtx >= PATCH_CONTEXT;
+}
+
+// Puts a gap row wherever the patch skipped lines, and the lines already revealed
+// from `lines` (the file's new side) on either side of it. A fully revealed gap
+// disappears along with its hunk header, leaving one continuous run of code.
+function withGaps(
+  items: PatchItem[],
+  lines: string[] | null,
+  reveals: GapReveals
+): PatchItem[] {
+  const out: PatchItem[] = [];
+  let nextNew = 1;
+  let oldOffset = 0;
+  let nextGapId = 0;
+
+  const pushLines = (from: number, count: number) => {
+    for (let no = from; no < from + count; no++) {
+      const text = lines?.[no - 1] ?? "";
+      out.push({
+        type: "ctx",
+        old: { no: no + oldOffset, text },
+        new: { no, text },
+      });
+    }
+  };
+
+  for (const item of items) {
+    if (item.type === "hunk") {
+      const id = nextGapId++;
+      const total = item.newStart - nextNew;
+      oldOffset = item.oldStart - item.newStart;
+      if (total <= 0) {
+        out.push(item);
+      } else {
+        const reveal = reveals[id] ?? { top: 0, bottom: 0 };
+        const top = Math.min(reveal.top, total);
+        const bottom = Math.min(reveal.bottom, total - top);
+        const hidden = total - top - bottom;
+        pushLines(nextNew, top);
+        if (hidden > 0) {
+          out.push({
+            type: "gap",
+            id,
+            hidden,
+            hasAbove: id > 0,
+            hasBelow: true,
+          });
+        }
+        pushLines(item.newStart - bottom, bottom);
+      }
+      nextNew = item.newStart;
+    } else {
+      out.push(item);
+      if (item.type === "ctx") {
+        nextNew = item.new.no + 1;
+      } else if (item.type === "change") {
+        nextNew += item.adds.length;
+        oldOffset += item.dels.length - item.adds.length;
+      }
+    }
+  }
+
+  const gapEnd = {
+    type: "gap",
+    id: nextGapId,
+    hasAbove: true,
+    hasBelow: false,
+  } as const;
+  if (!lines) {
+    if (endsBeforeEof(items)) out.push({ ...gapEnd, hidden: null });
+  } else {
+    const total = lines.length - nextNew + 1;
+    const top = Math.min(reveals[nextGapId]?.top ?? 0, Math.max(total, 0));
+    pushLines(nextNew, top);
+    if (total - top > 0) out.push({ ...gapEnd, hidden: total - top });
+  }
+  return out;
 }
 
 const squash = (text: string) => text.replace(/\s+/g, "");
@@ -127,15 +240,14 @@ type SplitCell = {
   kind: "add" | "del" | "ctx" | "empty";
 };
 type SplitRow =
-  | { type: "hunk"; text: string }
-  | { type: "pair"; left: SplitCell; right: SplitCell };
+  HunkItem | GapItem | { type: "pair"; left: SplitCell; right: SplitCell };
 
 const EMPTY_CELL: SplitCell = { no: null, text: "", kind: "empty" };
 
 function toSplitRows(items: PatchItem[]): SplitRow[] {
   const rows: SplitRow[] = [];
   for (const item of items) {
-    if (item.type === "hunk") rows.push(item);
+    if (item.type === "hunk" || item.type === "gap") rows.push(item);
     else if (item.type === "ctx")
       rows.push({
         type: "pair",
@@ -156,9 +268,11 @@ function toSplitRows(items: PatchItem[]): SplitRow[] {
   return rows;
 }
 
-// Unified: one column, removals then additions, with old and new line numbers.
+// Unified: one column, removals then additions, numbered by the new file. A
+// removal has no line there, so its gutter shows a minus instead.
 type UnifiedRow =
-  | { type: "hunk"; text: string }
+  | HunkItem
+  | GapItem
   | {
       type: "line";
       oldNo: number | null;
@@ -170,7 +284,7 @@ type UnifiedRow =
 function toUnifiedRows(items: PatchItem[]): UnifiedRow[] {
   const rows: UnifiedRow[] = [];
   for (const item of items) {
-    if (item.type === "hunk") rows.push(item);
+    if (item.type === "hunk" || item.type === "gap") rows.push(item);
     else if (item.type === "ctx")
       rows.push({
         type: "line",
@@ -226,32 +340,189 @@ function highlight(text: string, query: string): ReactNode {
   return parts;
 }
 
+const GAP_STEP = 20;
+
+function GapArrowIcon({ direction }: { direction: "up" | "down" }) {
+  return (
+    <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M3 2.5h10M8 13.5V6M4.5 9.5 8 6l3.5 3.5"
+        transform={direction === "down" ? "rotate(180 8 8)" : undefined}
+      />
+    </svg>
+  );
+}
+
+function GapAllIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M8 2v12M5 5l3-3 3 3M5 11l3 3 3-3"
+      />
+    </svg>
+  );
+}
+
+// The divider standing in for a gap: arrows in the gutter reveal GAP_STEP lines
+// from either edge, and the centred count reveals all of them.
+function GapRow({
+  gap,
+  busy,
+  error,
+  onReveal,
+}: {
+  gap: GapItem;
+  busy: boolean;
+  error: string;
+  onReveal: (gap: GapItem, edge: "top" | "bottom", count: number) => void;
+}) {
+  const { hidden } = gap;
+  const stepWouldFinish = hidden !== null && hidden <= GAP_STEP;
+  const reveal = (
+    edge: "top" | "bottom",
+    count: number,
+    label: string,
+    icon: ReactNode
+  ) => (
+    <button
+      type="button"
+      className="github-diff-gap-btn"
+      aria-label={label}
+      title={label}
+      disabled={busy}
+      onClick={() => onReveal(gap, edge, count)}
+    >
+      {icon}
+    </button>
+  );
+
+  return (
+    <div className="github-split-hunk github-diff-gap">
+      {!stepWouldFinish && (
+        <span className="github-diff-gap-arrows">
+          {gap.hasBelow &&
+            reveal(
+              "bottom",
+              GAP_STEP,
+              `Show ${GAP_STEP} lines above`,
+              <GapArrowIcon direction="up" />
+            )}
+          {gap.hasAbove &&
+            reveal(
+              "top",
+              GAP_STEP,
+              `Show ${GAP_STEP} lines below`,
+              <GapArrowIcon direction="down" />
+            )}
+        </span>
+      )}
+      <button
+        type="button"
+        className="github-diff-gap-all"
+        title="Show these lines"
+        disabled={busy}
+        onClick={() => onReveal(gap, gap.hasBelow ? "bottom" : "top", Infinity)}
+      >
+        <GapAllIcon />
+        {hidden === null
+          ? "Show the rest of the file"
+          : `${hidden.toLocaleString()} unchanged ${hidden === 1 ? "line" : "lines"}`}
+      </button>
+      {error && (
+        <span className="github-diff-gap-error" role="alert">
+          {error}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function CommitPatch({
   patch,
   prefs = DEFAULT_DIFF_PREFS,
   query = "",
+  loadLines,
 }: {
   patch: string;
   prefs?: DiffPrefs;
   // Text to highlight in the code (the Commits "Search within code" box).
   query?: string;
+  // Fetches the file's new side. Without it, hunks stay plain headers and there
+  // is nothing to expand.
+  loadLines?: () => Promise<string[]>;
 }) {
+  const [lines, setLines] = useState<string[] | null>(null);
+  const [reveals, setReveals] = useState<GapReveals>({});
+  const [loadingLines, setLoadingLines] = useState(false);
+  const [linesError, setLinesError] = useState("");
+
+  const revealGap = async (
+    gap: GapItem,
+    edge: "top" | "bottom",
+    count: number
+  ) => {
+    if (!loadLines) return;
+    if (!lines) {
+      setLoadingLines(true);
+      setLinesError("");
+      try {
+        setLines(await loadLines());
+      } catch (err) {
+        setLinesError(
+          err instanceof Error ? err.message : "Could not load this file"
+        );
+        return;
+      } finally {
+        setLoadingLines(false);
+      }
+    }
+    setReveals((current) => {
+      const reveal = current[gap.id] ?? { top: 0, bottom: 0 };
+      return {
+        ...current,
+        [gap.id]: { ...reveal, [edge]: reveal[edge] + count },
+      };
+    });
+  };
+
   const parsed = parsePatch(patch);
-  const items = prefs.hideWhitespace ? ignoreWhitespace(parsed) : parsed;
+  const expanded = loadLines ? withGaps(parsed, lines, reveals) : parsed;
+  const items = prefs.hideWhitespace ? ignoreWhitespace(expanded) : expanded;
   const compact = prefs.compact ? " is-compact" : "";
+
+  const gapRow = (key: number, gap: GapItem) => (
+    <GapRow
+      key={key}
+      gap={gap}
+      busy={loadingLines}
+      error={linesError}
+      onReveal={(g, edge, count) => void revealGap(g, edge, count)}
+    />
+  );
 
   if (prefs.layout === "unified") {
     return (
       <div className={`github-unified${compact}`}>
         {toUnifiedRows(items).map((row, idx) =>
-          row.type === "hunk" ? (
+          row.type === "gap" ? (
+            gapRow(idx, row)
+          ) : row.type === "hunk" ? (
             <div key={idx} className="github-split-hunk">
               {row.text}
             </div>
           ) : (
             <Fragment key={idx}>
-              <span className="github-split-no">{row.oldNo ?? ""}</span>
-              <span className="github-split-no">{row.newNo ?? ""}</span>
+              <span className="github-split-no">{row.newNo ?? "−"}</span>
               <span className={`github-split-code is-${row.kind}`}>
                 {MARK[row.kind]} {highlight(row.text, query)}
               </span>
@@ -265,7 +536,9 @@ export function CommitPatch({
   return (
     <div className={`github-split${compact}`}>
       {toSplitRows(items).map((row, idx) =>
-        row.type === "hunk" ? (
+        row.type === "gap" ? (
+          gapRow(idx, row)
+        ) : row.type === "hunk" ? (
           <div key={idx} className="github-split-hunk">
             {row.text}
           </div>
@@ -286,8 +559,14 @@ export function CommitPatch({
   );
 }
 
-export function CommitSplitPatch({ patch }: { patch: string }) {
-  return <CommitPatch patch={patch} />;
+export function CommitSplitPatch({
+  patch,
+  loadLines,
+}: {
+  patch: string;
+  loadLines?: () => Promise<string[]>;
+}) {
+  return <CommitPatch patch={patch} loadLines={loadLines} />;
 }
 
 function GearIcon() {
@@ -484,9 +763,15 @@ export function CommitDiffBody({
                 {fileOpen &&
                   (file.patch ? (
                     <CommitPatch
+                      key={fileKey}
                       patch={file.patch}
                       prefs={prefs}
                       query={query}
+                      loadLines={
+                        canExpandFile(file.status)
+                          ? () => diffs.loadFileLines(sha, file.filename)
+                          : undefined
+                      }
                     />
                   ) : (
                     <div className="github-commit-nopatch">

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getAuthToken } from "../auth/token";
 
 // Data layer for commit diffs, shared by the Code Repo viewer and the Projects
@@ -60,6 +60,27 @@ export async function githubJson<T>(url: string): Promise<T> {
   return data as T;
 }
 
+// Unchanged lines come from the file at the diff's new side, which an added file
+// has only in its patch and a removed file doesn't have at all.
+export const canExpandFile = (status: string) =>
+  status !== "added" && status !== "removed";
+
+// A /contents response as file lines. GitHub sends base64 up to 1 MB and an empty
+// `encoding: "none"` body above that.
+export function decodeFileLines(file: {
+  content?: string;
+  encoding?: string;
+}): string[] {
+  if (file.encoding !== "base64" || file.content === undefined) {
+    throw new Error("This file is too large to expand.");
+  }
+  const binary = atob(file.content.replace(/\s/g, ""));
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  const lines = new TextDecoder().decode(bytes).split("\n");
+  if (lines[lines.length - 1] === "") lines.pop();
+  return lines;
+}
+
 // Per-commit diff state, keyed by SHA and shared across every expanded row.
 // Detail is cached so toggling a row closed and open again doesn't re-hit
 // GitHub; `collapsedFiles` holds only the file diffs the user has folded away
@@ -79,6 +100,7 @@ export type CommitDiffs = {
   toggleFile: (key: string) => void;
   collapseFiles: (keys: string[]) => void;
   loadFullDiff: (sha: string) => void;
+  loadFileLines: (ref: string, path: string) => Promise<string[]>;
 };
 
 export function useCommitDiffs(owner: string, repo: string): CommitDiffs {
@@ -236,6 +258,25 @@ export function useCommitDiffs(owner: string, repo: string): CommitDiffs {
     [API_BASE, fullDiffBySha]
   );
 
+  // A file at a given SHA never changes, so every gap in it shares one fetch. A
+  // failure is dropped from the cache so the next click retries.
+  const fileLines = useRef(new Map<string, Promise<string[]>>());
+  const loadFileLines = useCallback(
+    (ref: string, path: string) => {
+      const key = `${API_BASE}@${ref}::${path}`;
+      const cached = fileLines.current.get(key);
+      if (cached) return cached;
+      const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+      const request = githubJson<{ content?: string; encoding?: string }>(
+        `${API_BASE}/contents/${encodedPath}?ref=${encodeURIComponent(ref)}`
+      ).then(decodeFileLines);
+      fileLines.current.set(key, request);
+      request.catch(() => void fileLines.current.delete(key));
+      return request;
+    },
+    [API_BASE]
+  );
+
   return {
     expandedShas,
     detailBySha,
@@ -250,5 +291,6 @@ export function useCommitDiffs(owner: string, repo: string): CommitDiffs {
     toggleFile,
     collapseFiles,
     loadFullDiff,
+    loadFileLines,
   };
 }

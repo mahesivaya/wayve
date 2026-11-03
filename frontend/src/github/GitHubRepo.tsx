@@ -35,6 +35,7 @@ import {
 } from "./commitDiff";
 import { useDiffPrefs } from "./diffPrefs";
 import {
+  canExpandFile,
   useCommitDiffs,
   githubJson,
   type CommitFile,
@@ -2590,7 +2591,17 @@ export function GitHubRepoViewer({
                                         {fileOpen &&
                                           (file.patch ? (
                                             <CommitSplitPatch
+                                              key={`${fileKey}@${bundle.detail.head.sha}`}
                                               patch={file.patch}
+                                              loadLines={
+                                                canExpandFile(file.status)
+                                                  ? () =>
+                                                      diffs.loadFileLines(
+                                                        bundle.detail.head.sha,
+                                                        file.filename
+                                                      )
+                                                  : undefined
+                                              }
                                             />
                                           ) : (
                                             <div className="github-commit-nopatch">
@@ -3516,45 +3527,6 @@ function PersonalRepoManager() {
           {err && <p className="github-add-repo-error">{err}</p>}
         </div>
       )}
-
-      {/* GitHub account controls — reachable here too (not just the empty
-          state) so a user with repos can still import more / disconnect. */}
-      <div className="github-repo-switch-conn">
-        {ghConn?.connected ? (
-          <>
-            <button
-              type="button"
-              className="github-link-btn"
-              onClick={importAll}
-              disabled={busy || importing}
-            >
-              {importing
-                ? `Importing… (${importCount})`
-                : "Import all my repositories"}
-            </button>
-            <span className="github-repo-switch-conn-who">
-              @{ghConn.login}
-              {" · "}
-              <button
-                type="button"
-                className="github-link-btn"
-                onClick={disconnect}
-              >
-                Disconnect
-              </button>
-            </span>
-          </>
-        ) : (
-          <button
-            type="button"
-            className="github-link-btn"
-            onClick={connectGithub}
-            disabled={ghConn === null}
-          >
-            Connect GitHub
-          </button>
-        )}
-      </div>
     </div>
   );
 
