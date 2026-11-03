@@ -2,6 +2,7 @@
 // the format and the v1→v2 migration. v1 stored a bare ThemeChoice; v2 wraps it
 // as { v: 2, active, library, ui }. Old v1 blobs are migrated forward on read.
 
+import { BW_DARK_INPUT } from "./blackAndWhite";
 import type {
   PersistedTheme,
   SavedTheme,
@@ -11,6 +12,8 @@ import type {
 } from "./customThemeShared";
 
 export type { PersistedTheme };
+
+export const STORAGE_KEY = "wayve-custom-theme-v2";
 
 // Mirror of the currently applied light/dark mode, read by the pre-paint script
 // in index.html before React mounts. Light (a white background) is the default
@@ -36,11 +39,33 @@ export function rememberMode(mode: ThemeMode) {
   }
 }
 
+// Called on logout and session expiry. The theme belongs to the account, so it
+// must not stay on the device for whoever signs in next.
+export function forgetDeviceTheme() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(MODE_STORAGE_KEY);
+  } catch {
+    // ignore — storage may be blocked
+  }
+}
+
 export const EMPTY_PERSISTED: PersistedTheme = {
   active: { kind: "default" },
   library: [],
   ui: {},
 };
+
+// Accounts can still hold these two presets, which no longer exist. Unknown
+// presets paint as light, which would put "default-dark" accounts on white.
+function upgradeChoice(choice: ThemeChoice): ThemeChoice {
+  if (choice.kind !== "preset") return choice;
+  if (choice.presetId === "default-light") return { kind: "default" };
+  if (choice.presetId === "default-dark") {
+    return { kind: "custom", mode: "dark", input: BW_DARK_INPUT };
+  }
+  return choice;
+}
 
 function isThemeChoice(value: unknown): value is ThemeChoice {
   if (!value || typeof value !== "object") return false;
@@ -65,7 +90,7 @@ export function parsePersisted(
 
     if (obj.v === 2 && isThemeChoice(obj.active)) {
       return {
-        active: obj.active,
+        active: upgradeChoice(obj.active),
         library: Array.isArray(obj.library)
           ? (obj.library.filter(
               (t) =>
@@ -80,12 +105,16 @@ export function parsePersisted(
 
     // Legacy v1: the old localStorage wrapper.
     if (isThemeChoice(obj.choice)) {
-      return { active: obj.choice, library: [], ui: {} };
+      return { active: upgradeChoice(obj.choice), library: [], ui: {} };
     }
 
     // Legacy v1: the old backend wire format, a bare ThemeChoice.
     if (isThemeChoice(obj)) {
-      return { active: obj as unknown as ThemeChoice, library: [], ui: {} };
+      return {
+        active: upgradeChoice(obj as unknown as ThemeChoice),
+        library: [],
+        ui: {},
+      };
     }
   } catch {
     // ignore — opaque blob; bad JSON falls back to local/default.
