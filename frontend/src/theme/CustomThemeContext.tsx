@@ -36,10 +36,10 @@ import {
   parsePersisted,
   rememberMode,
   serializePersisted,
+  STORAGE_KEY,
   type PersistedTheme,
 } from "./themeStorage";
 
-const STORAGE_KEY = "wayve-custom-theme-v2";
 // The previous (v1) key — read once for migration, then removed.
 const LEGACY_STORAGE_KEY = "wayve-custom-theme-v1";
 

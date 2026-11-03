@@ -1,6 +1,11 @@
 // Bridges the auth-unaware CustomThemeContext to backend persistence; it renders
 // children unchanged and exists only for the side effects.
 //
+// The account's theme always wins over what the device holds, which may be left
+// over from another account. A fresh login first sets a user built from the JWT
+// with no theme_json (undefined, where /api/me gives a string or null), so
+// neither effect runs until the profile has arrived.
+//
 // Hydration runs once per user id: re-hydrating on every /api/me poll would
 // clobber unsaved local changes. Pushes are debounced so rapid library edits
 // don't spam the API, and lastRemoteRef suppresses the hydrate-then-PUT echo.
@@ -11,7 +16,11 @@ import { putTheme } from "../api/profile";
 import { useAuth } from "../auth/useAuth";
 import { logger } from "../utils/logger";
 import { useCustomTheme } from "./useCustomTheme";
-import { parsePersisted, serializePersisted } from "./themeStorage";
+import {
+  EMPTY_PERSISTED,
+  parsePersisted,
+  serializePersisted,
+} from "./themeStorage";
 
 const SYNC_DEBOUNCE_MS = 600;
 
@@ -28,21 +37,16 @@ export default function ThemeSyncBridge({ children }: { children: ReactNode }) {
       lastRemoteRef.current = null;
       return;
     }
+    if (user.theme_json === undefined) return;
     if (hydratedForUserRef.current === user.id) return;
     hydratedForUserRef.current = user.id;
-    const remote = parsePersisted(user.theme_json);
-    if (remote) {
-      lastRemoteRef.current = serializePersisted(remote);
-      hydrate(remote);
-    } else {
-      // The server has no override, so leave the local state marked unsynced and
-      // let the PUT effect push it up on the next tick.
-      lastRemoteRef.current = null;
-    }
+    const remote = parsePersisted(user.theme_json) ?? EMPTY_PERSISTED;
+    lastRemoteRef.current = serializePersisted(remote);
+    hydrate(remote);
   }, [user, hydrate]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || user.theme_json === undefined) return;
     const serialized = serializePersisted({ active: choice, library, ui });
     if (serialized === lastRemoteRef.current) return;
 

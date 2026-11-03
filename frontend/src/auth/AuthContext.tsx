@@ -27,6 +27,7 @@ import {
   cacheFontKey,
   clearFontCache,
 } from "../theme/platformFonts";
+import { forgetDeviceTheme } from "../theme/themeStorage";
 import { runtimeConfig } from "../config/runtimeConfig";
 import { clearHomeCache } from "../home/dashboard/useCardData";
 import { forgetOpenChat } from "../chat/openChatSession";
@@ -591,6 +592,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       forgetOpenEmail();
       forgetOpenChat();
       forgetOpenNote();
+      forgetDeviceTheme();
       setUser(null);
       setNeedsRecovery(false);
     };
@@ -608,6 +610,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     forgetOpenEmail();
     forgetOpenChat();
     forgetOpenNote();
+    forgetDeviceTheme();
     // Drop the cached per-user font so the next user starts from the platform
     // default rather than this one's resolved font.
     clearFontCache();
