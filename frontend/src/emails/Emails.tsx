@@ -878,9 +878,9 @@ export default function Emails() {
                 <button
                   className="compose-btn compose-btn--toolbar"
                   onClick={() => setComposeOpen(true)}
-                  data-tooltip="Compose"
+                  data-tooltip="New message"
                 >
-                  Compose
+                  New message
                 </button>
               )}
               {/* Split (pane or list+detail layout): the folder menu sits next to
