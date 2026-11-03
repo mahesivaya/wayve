@@ -8,7 +8,7 @@
 
 use crate::cache::TtlCache;
 use crate::email::oauth::HTTP_CLIENT;
-use actix_web::{HttpMessage, HttpRequest, HttpResponse, Responder, get, post, put, web};
+use actix_web::{HttpMessage, HttpRequest, HttpResponse, Responder, get, patch, post, put, web};
 use once_cell::sync::Lazy;
 use sqlx::PgPool;
 use std::time::Duration;
@@ -1015,11 +1015,18 @@ pub async fn merge_pull_request(
 struct CommitCommentInput {
     #[serde(default)]
     body: Option<String>,
+    /// With `position`, anchors the comment to a line of the commit's diff.
+    #[serde(default)]
+    path: Option<String>,
+    /// GitHub's line index within the file's diff, counted from its first hunk.
+    #[serde(default)]
+    position: Option<i64>,
 }
 
-/// Post a conversation comment on a commit. The comment is attributed to the
-/// shared token's GitHub account, not the individual app user; per-user
-/// attribution would need per-user OAuth.
+/// Post a comment on a commit: the conversation, or one line of its diff when
+/// `path` and `position` are given. The comment is attributed to the shared
+/// token's GitHub account, not the individual app user; per-user attribution
+/// would need per-user OAuth.
 #[post("/github/repos/{owner}/{repo}/commits/{sha}/comments")]
 #[instrument(target = "http", skip(req, pool, payload))]
 pub async fn create_commit_comment(
@@ -1045,9 +1052,10 @@ pub async fn create_commit_comment(
         Err(resp) => return resp,
     };
 
-    let body_text = serde_json::from_slice::<CommitCommentInput>(&payload)
-        .ok()
-        .and_then(|input| input.body)
+    let input = serde_json::from_slice::<CommitCommentInput>(&payload).ok();
+    let body_text = input
+        .as_ref()
+        .and_then(|input| input.body.as_deref())
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
     let Some(body_text) = body_text else {
@@ -1055,6 +1063,19 @@ pub async fn create_commit_comment(
             "message": "Comment body is required"
         }));
     };
+    let mut upstream_body = serde_json::json!({ "body": body_text });
+    match input.as_ref().map(|input| (&input.path, input.position)) {
+        Some((Some(file), Some(position))) if !file.trim().is_empty() && position >= 1 => {
+            upstream_body["path"] = serde_json::json!(file);
+            upstream_body["position"] = serde_json::json!(position);
+        }
+        None | Some((None, None)) => {}
+        Some(_) => {
+            return HttpResponse::BadRequest().json(serde_json::json!({
+                "message": "A line comment needs both a path and a position"
+            }));
+        }
+    }
 
     let api_base = crate::external::github_api_base();
     let url = format!("{api_base}/repos/{owner}/{repo}/commits/{sha}/comments");
@@ -1065,7 +1086,7 @@ pub async fn create_commit_comment(
         .header("X-GitHub-Api-Version", "2022-11-28")
         .header("User-Agent", "rwayve-app")
         .header("Authorization", format!("Bearer {pat}"))
-        .json(&serde_json::json!({ "body": body_text }))
+        .json(&upstream_body)
         .send()
         .await
     {
@@ -1192,6 +1213,296 @@ pub async fn create_pull_comment(
     )
     .insert_header(("Content-Type", "application/json"))
     .body(resp_body)
+}
+
+#[derive(serde::Deserialize)]
+struct PullReviewCommentInput {
+    body: String,
+    path: String,
+    line: i64,
+    side: String,
+    commit_id: String,
+}
+
+/// Post a comment on one line of a pull request's diff. GitHub keeps these apart
+/// from the conversation, as the PR's own `pulls/{number}/comments`. Gated and
+/// attributed like `create_pull_comment`; GitHub answers 422 for a line outside
+/// the diff, mirrored back as is.
+#[post("/github/repos/{owner}/{repo}/pulls/{number}/review-comments")]
+#[instrument(target = "http", skip(req, pool, payload))]
+pub async fn create_pull_review_comment(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<(String, String, i64)>,
+    payload: web::Bytes,
+) -> impl Responder {
+    let (owner, repo, number) = path.into_inner();
+    // Validated before the tail is built; see `valid_repo_segment`.
+    if !valid_repo_segment(&owner) || !valid_repo_segment(&repo) {
+        return invalid_repo_path();
+    }
+    // The tail these comments are read through.
+    let tail = format!("repos/{owner}/{repo}/pulls/{number}/comments");
+    if let Err(resp) = authorize_github_access(&req, pool.get_ref(), &tail).await {
+        return resp;
+    }
+
+    // Personal accounts comment only as their own connected GitHub.
+    let pat = match write_github_token(&req, pool.get_ref()).await {
+        Ok(pat) => pat,
+        Err(resp) => return resp,
+    };
+
+    let input = serde_json::from_slice::<PullReviewCommentInput>(&payload)
+        .ok()
+        .filter(|input| {
+            !input.path.trim().is_empty()
+                && input.line >= 1
+                && matches!(input.side.as_str(), "LEFT" | "RIGHT")
+                && valid_sha(&input.commit_id)
+        });
+    let Some(input) = input else {
+        return HttpResponse::BadRequest().json(serde_json::json!({
+            "message": "A line comment needs a body, path, line, side and commit"
+        }));
+    };
+    let body_text = input.body.trim();
+    if body_text.is_empty() {
+        return HttpResponse::BadRequest().json(serde_json::json!({
+            "message": "Comment body is required"
+        }));
+    }
+    if body_text.chars().count() > MAX_COMMENT_CHARS {
+        return HttpResponse::BadRequest().json(serde_json::json!({
+            "message": "Comment is too long (GitHub allows 65,536 characters)"
+        }));
+    }
+
+    let api_base = crate::external::github_api_base();
+    let url = format!("{api_base}/{tail}");
+    let response = match HTTP_CLIENT
+        .post(&url)
+        .timeout(Duration::from_secs(20))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "rwayve-app")
+        .header("Authorization", format!("Bearer {pat}"))
+        .json(&serde_json::json!({
+            "body": body_text,
+            "path": input.path,
+            "line": input.line,
+            "side": input.side,
+            "commit_id": input.commit_id,
+        }))
+        .send()
+        .await
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            warn!(target: "http", error = ?e, url = %url, "pr line comment upstream call failed");
+            return HttpResponse::BadGateway().json(serde_json::json!({
+                "message": "Upstream GitHub call failed"
+            }));
+        }
+    };
+
+    let status = response.status().as_u16();
+    let resp_body = match response.bytes().await {
+        Ok(b) => b.to_vec(),
+        Err(e) => {
+            warn!(target: "http", error = ?e, "pr line comment body read failed");
+            return HttpResponse::BadGateway().finish();
+        }
+    };
+    if (200..300).contains(&status) {
+        info!(target: "http", owner = %owner, repo = %repo, number, "pull request line comment posted");
+        // A later reload should show the comment rather than a cached list.
+        invalidate_cached(&tail).await;
+    } else {
+        warn!(target: "http", status, owner = %owner, repo = %repo, number, "pr line comment rejected by GitHub");
+    }
+    HttpResponse::build(
+        actix_web::http::StatusCode::from_u16(status).unwrap_or(actix_web::http::StatusCode::OK),
+    )
+    .insert_header(("Content-Type", "application/json"))
+    .body(resp_body)
+}
+
+/// The GitHub login behind one upstream object (`/user`, or a comment's `user`).
+async fn upstream_login(url: &str, pat: &str, pointer: &str) -> Result<String, HttpResponse> {
+    let upstream = fetch_upstream(url, "application/vnd.github+json", Some(pat)).await?;
+    if !(200..300).contains(&upstream.status) {
+        return Err(HttpResponse::build(
+            actix_web::http::StatusCode::from_u16(upstream.status)
+                .unwrap_or(actix_web::http::StatusCode::BAD_GATEWAY),
+        )
+        .json(serde_json::json!({ "message": "GitHub couldn't find that comment" })));
+    }
+    serde_json::from_slice::<serde_json::Value>(&upstream.body)
+        .ok()
+        .and_then(|value| value.pointer(pointer)?.as_str().map(str::to_string))
+        .ok_or_else(|| {
+            HttpResponse::BadGateway()
+                .json(serde_json::json!({ "message": "GitHub returned an unexpected response" }))
+        })
+}
+
+/// Replace a comment's text at `comment_tail`, a repo-relative GitHub path.
+///
+/// GitHub lets a token with repo admin rewrite anyone's comment, so the comment's
+/// author must be the account behind the token. The shared PAT can't tell app
+/// users apart (everything they post is its account), so editing through it also
+/// takes a project admin, or any member could rewrite any other member's comment.
+async fn edit_comment(
+    req: &HttpRequest,
+    pool: &PgPool,
+    (owner, repo, comment_tail): (&str, &str, &str),
+    payload: &[u8],
+) -> HttpResponse {
+    if !valid_repo_segment(owner) || !valid_repo_segment(repo) {
+        return invalid_repo_path();
+    }
+    let tail = format!("repos/{owner}/{repo}/{comment_tail}");
+    if let Err(resp) = authorize_github_access(req, pool, &tail).await {
+        return resp;
+    }
+
+    let Some(user_id) = get_user_id_from_request(req) else {
+        return HttpResponse::Unauthorized().finish();
+    };
+    let ctx = match resolve_role_context_moded(req, pool, user_id).await {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            warn!(target: "auth", user_id, error = ?e, "comment edit: rbac resolution failed");
+            return HttpResponse::InternalServerError().finish();
+        }
+    };
+    if ctx.scope != Scope::Personal {
+        let role = match code_repo_role(req, pool, &ctx).await {
+            Ok(role) => role,
+            Err(e) => {
+                warn!(target: "auth", user_id, error = ?e, "comment edit: role lookup failed");
+                return HttpResponse::InternalServerError().finish();
+            }
+        };
+        if !is_project_admin(role) {
+            warn!(target: "auth", user_id, role = role.as_str(),
+                  "comment edit denied: shared token needs a project admin");
+            return HttpResponse::Forbidden().json(serde_json::json!({
+                "message": "Only a project admin can edit comments here"
+            }));
+        }
+    }
+
+    let pat = match write_github_token(req, pool).await {
+        Ok(pat) => pat,
+        Err(resp) => return resp,
+    };
+
+    let body_text = serde_json::from_slice::<CommitCommentInput>(payload)
+        .ok()
+        .and_then(|input| input.body)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let Some(body_text) = body_text else {
+        return HttpResponse::BadRequest().json(serde_json::json!({
+            "message": "Comment body is required"
+        }));
+    };
+    if body_text.chars().count() > MAX_COMMENT_CHARS {
+        return HttpResponse::BadRequest().json(serde_json::json!({
+            "message": "Comment is too long (GitHub allows 65,536 characters)"
+        }));
+    }
+
+    let api_base = crate::external::github_api_base();
+    let url = format!("{api_base}/{tail}");
+    let author = match upstream_login(&url, &pat, "/user/login").await {
+        Ok(login) => login,
+        Err(resp) => return resp,
+    };
+    let me = match upstream_login(&format!("{api_base}/user"), &pat, "/login").await {
+        Ok(login) => login,
+        Err(resp) => return resp,
+    };
+    if !author.eq_ignore_ascii_case(&me) {
+        warn!(target: "auth", user_id, owner = %owner, repo = %repo,
+              "comment edit denied: comment has another author");
+        return HttpResponse::Forbidden().json(serde_json::json!({
+            "message": "You can only edit your own comments"
+        }));
+    }
+
+    let response = match HTTP_CLIENT
+        .patch(&url)
+        .timeout(Duration::from_secs(20))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "rwayve-app")
+        .header("Authorization", format!("Bearer {pat}"))
+        .json(&serde_json::json!({ "body": body_text }))
+        .send()
+        .await
+    {
+        Ok(resp) => resp,
+        Err(e) => {
+            warn!(target: "http", error = ?e, url = %url, "comment edit upstream call failed");
+            return HttpResponse::BadGateway().json(serde_json::json!({
+                "message": "Upstream GitHub call failed"
+            }));
+        }
+    };
+
+    let status = response.status().as_u16();
+    let resp_body = match response.bytes().await {
+        Ok(b) => b.to_vec(),
+        Err(e) => {
+            warn!(target: "http", error = ?e, "comment edit body read failed");
+            return HttpResponse::BadGateway().finish();
+        }
+    };
+    if (200..300).contains(&status) {
+        info!(target: "http", owner = %owner, repo = %repo, "comment edited");
+        // The lists holding this comment aren't known from its id, so drop this
+        // repo's commit and pull request reads for a reload to see the new text.
+        invalidate_cached(&format!("repos/{owner}/{repo}/commits")).await;
+        invalidate_cached(&format!("repos/{owner}/{repo}/pulls")).await;
+    } else {
+        warn!(target: "http", status, owner = %owner, repo = %repo, "comment edit rejected by GitHub");
+    }
+    HttpResponse::build(
+        actix_web::http::StatusCode::from_u16(status).unwrap_or(actix_web::http::StatusCode::OK),
+    )
+    .insert_header(("Content-Type", "application/json"))
+    .body(resp_body)
+}
+
+/// Edit a comment on a commit, whether on the conversation or on a line.
+#[patch("/github/repos/{owner}/{repo}/comments/{comment_id}")]
+#[instrument(target = "http", skip(req, pool, payload))]
+pub async fn edit_commit_comment(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<(String, String, i64)>,
+    payload: web::Bytes,
+) -> impl Responder {
+    let (owner, repo, comment_id) = path.into_inner();
+    let tail = format!("comments/{comment_id}");
+    edit_comment(&req, pool.get_ref(), (&owner, &repo, &tail), &payload).await
+}
+
+/// Edit a comment on a line of a pull request's diff.
+#[patch("/github/repos/{owner}/{repo}/pulls/comments/{comment_id}")]
+#[instrument(target = "http", skip(req, pool, payload))]
+pub async fn edit_pull_review_comment(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<(String, String, i64)>,
+    payload: web::Bytes,
+) -> impl Responder {
+    let (owner, repo, comment_id) = path.into_inner();
+    let tail = format!("pulls/comments/{comment_id}");
+    edit_comment(&req, pool.get_ref(), (&owner, &repo, &tail), &payload).await
 }
 
 /// The Projects page data for the current user. Project admins are unrestricted;
@@ -1356,6 +1667,9 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(merge_pull_request);
     cfg.service(create_commit_comment);
     cfg.service(create_pull_comment);
+    cfg.service(create_pull_review_comment);
+    cfg.service(edit_commit_comment);
+    cfg.service(edit_pull_review_comment);
     cfg.service(visible_projects);
 }
 

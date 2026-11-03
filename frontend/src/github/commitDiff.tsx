@@ -1,6 +1,12 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { canExpandFile, type CommitDiffs } from "./commitDiffData";
+import { CloseCommentIcon, LineCommentIcon, SendCommentIcon } from "../icons";
+import {
+  canExpandFile,
+  type CommitDiffs,
+  type CommitFile,
+  type IssueComment,
+} from "./commitDiffData";
 import { DEFAULT_DIFF_PREFS, type DiffPrefs } from "./diffPrefs";
 import { FileTypeIcon } from "./FileTypeIcon";
 import "./githubRepo.css";
@@ -65,7 +71,10 @@ export function DiffFileName({
 // `diff --git`/`---`/`+++` headers), so a leading `-`/`+` is always content.
 // A patch becomes hunk headers, context lines, and change blocks (the run of
 // removals and the additions that follow them); both layouts render from that.
-type DiffLine = { no: number; text: string };
+// `position` is GitHub's index of the line within this file's diff, which a commit
+// comment anchors to. Lines revealed from the full file have none, and GitHub
+// refuses comments outside the diff, so they can't be commented on.
+type DiffLine = { no: number; text: string; position?: number };
 type HunkItem = {
   type: "hunk";
   text: string;
@@ -100,7 +109,11 @@ function parsePatch(patch: string): PatchItem[] {
     adds = [];
   };
 
+  // Every line after the first hunk header counts, later headers included.
+  let position = -1;
+
   for (const line of patch.split("\n")) {
+    position++;
     if (line.startsWith("@@")) {
       flush();
       const m = /@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
@@ -118,9 +131,9 @@ function parsePatch(patch: string): PatchItem[] {
       // "\ No newline at end of file" is an annotation, not content.
       continue;
     } else if (line.startsWith("+")) {
-      adds.push({ no: newLn++, text: line.slice(1) });
+      adds.push({ no: newLn++, text: line.slice(1), position });
     } else if (line.startsWith("-")) {
-      dels.push({ no: oldLn++, text: line.slice(1) });
+      dels.push({ no: oldLn++, text: line.slice(1), position });
     } else {
       // Context line: flush the pending change block first so removals and
       // additions stay grouped.
@@ -128,8 +141,8 @@ function parsePatch(patch: string): PatchItem[] {
       const text = line.startsWith(" ") ? line.slice(1) : line;
       items.push({
         type: "ctx",
-        old: { no: oldLn++, text },
-        new: { no: newLn++, text },
+        old: { no: oldLn++, text, position },
+        new: { no: newLn++, text, position },
       });
     }
   }
@@ -264,12 +277,46 @@ function ignoreWhitespace(items: PatchItem[]): PatchItem[] {
   return out;
 }
 
+// A line someone can comment on, in both of the forms GitHub takes: a commit
+// comment anchors by `position`, a pull request comment by `side` and `line`.
+export type LineAnchor = {
+  side: "LEFT" | "RIGHT";
+  line: number;
+  position: number;
+};
+
+// What a diff needs to take comments: the caller owns the data and posting.
+export type LineComments = {
+  comments: IssueComment[];
+  post: (anchor: LineAnchor, body: string) => Promise<void>;
+  renderComment: (comment: IssueComment) => ReactNode;
+};
+
+const anchorOf = (
+  side: LineAnchor["side"],
+  line: number | null,
+  position: number | undefined
+): LineAnchor | null =>
+  line === null || position === undefined ? null : { side, line, position };
+
+const anchorsOf = (...anchors: (LineAnchor | null)[]) =>
+  anchors.filter((a): a is LineAnchor => a !== null);
+
+const sameLine = (a: LineAnchor, b: LineAnchor) =>
+  a.side === b.side && a.line === b.line;
+
+const isCommentOn = (comment: IssueComment, anchor: LineAnchor) =>
+  comment.side
+    ? comment.side === anchor.side && comment.line === anchor.line
+    : comment.position === anchor.position;
+
 // Split (side-by-side): within a change block, removals pair row-for-row with
 // the additions; overhang gets an empty cell opposite.
 type SplitCell = {
   no: number | null;
   text: string;
   kind: "add" | "del" | "ctx" | "empty";
+  position?: number;
 };
 type SplitRow =
   HunkItem | GapItem | { type: "pair"; left: SplitCell; right: SplitCell };
@@ -311,6 +358,7 @@ type UnifiedRow =
       newNo: number | null;
       text: string;
       kind: "add" | "del" | "ctx";
+      anchors: LineAnchor[];
     };
 
 function toUnifiedRows(items: PatchItem[]): UnifiedRow[] {
@@ -324,6 +372,10 @@ function toUnifiedRows(items: PatchItem[]): UnifiedRow[] {
         newNo: item.new.no,
         text: item.new.text,
         kind: "ctx",
+        anchors: anchorsOf(
+          anchorOf("LEFT", item.old.no, item.old.position),
+          anchorOf("RIGHT", item.new.no, item.new.position)
+        ),
       });
     else {
       for (const del of item.dels)
@@ -333,6 +385,7 @@ function toUnifiedRows(items: PatchItem[]): UnifiedRow[] {
           newNo: null,
           text: del.text,
           kind: "del",
+          anchors: anchorsOf(anchorOf("LEFT", del.no, del.position)),
         });
       for (const add of item.adds)
         rows.push({
@@ -341,6 +394,7 @@ function toUnifiedRows(items: PatchItem[]): UnifiedRow[] {
           newNo: add.no,
           text: add.text,
           kind: "add",
+          anchors: anchorsOf(anchorOf("RIGHT", add.no, add.position)),
         });
     }
   }
@@ -479,11 +533,102 @@ function GapRow({
   );
 }
 
+// The box opened under a line, or over a comment being edited (`initial`). Enter
+// posts and Shift+Enter starts a new line. The draft is kept if posting fails.
+export function LineCommentComposer({
+  initial = "",
+  onPost,
+  onClose,
+}: {
+  initial?: string;
+  onPost: (body: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [body, setBody] = useState(initial);
+  const [posting, setPosting] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async () => {
+    const text = body.trim();
+    if (!text || posting) return;
+    setPosting(true);
+    setError("");
+    try {
+      await onPost(text);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Couldn't post the comment."
+      );
+      setPosting(false);
+    }
+  };
+
+  return (
+    <div className="github-line-composer">
+      <textarea
+        className="github-line-composer-input"
+        placeholder="Leave a code comment…"
+        aria-label="Leave a code comment"
+        value={body}
+        rows={2}
+        autoFocus
+        disabled={posting}
+        onFocus={(e) =>
+          e.currentTarget.setSelectionRange(
+            e.currentTarget.value.length,
+            e.currentTarget.value.length
+          )
+        }
+        onChange={(e) => setBody(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") onClose();
+          // isComposing: Enter there picks an IME candidate, it isn't a send.
+          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            void submit();
+          }
+        }}
+      />
+      <button
+        type="button"
+        className="github-line-composer-close"
+        aria-label="Close comment"
+        title="Close"
+        onClick={onClose}
+      >
+        <CloseCommentIcon size={16} />
+      </button>
+      <div className="github-line-composer-foot">
+        {error ? (
+          <span className="github-diff-gap-error" role="alert">
+            {error}
+          </span>
+        ) : (
+          <span className="github-commit-composer-note">
+            Posts to GitHub as the connected account
+          </span>
+        )}
+        <button
+          type="button"
+          className="github-line-composer-send"
+          aria-label="Post comment"
+          title="Post comment (Enter)"
+          disabled={posting || !body.trim()}
+          onClick={() => void submit()}
+        >
+          <SendCommentIcon size={16} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function CommitPatch({
   patch,
   prefs = DEFAULT_DIFF_PREFS,
   query = "",
   loadLines,
+  lineComments,
 }: {
   patch: string;
   prefs?: DiffPrefs;
@@ -492,7 +637,10 @@ export function CommitPatch({
   // Fetches the file's new side. Without it, hunks stay plain headers and there
   // is nothing to expand.
   loadLines?: () => Promise<string[]>;
+  // Without it, lines have no comment button and show no threads.
+  lineComments?: LineComments;
 }) {
+  const [commentingOn, setCommentingOn] = useState<LineAnchor | null>(null);
   const [lines, setLines] = useState<string[] | null>(null);
   const [reveals, setReveals] = useState<GapReveals>({});
   const [loadingLines, setLoadingLines] = useState(false);
@@ -542,6 +690,58 @@ export function CommitPatch({
     />
   );
 
+  // A line number, with the comment button that shows when its side is hovered.
+  const gutter = (no: ReactNode, anchor: LineAnchor | null | undefined) => (
+    <span className="github-split-no">
+      {no}
+      {lineComments && anchor && (
+        <button
+          type="button"
+          className="github-line-comment-btn"
+          aria-label={`Comment on line ${anchor.line}`}
+          title="Add a comment"
+          onClick={() => setCommentingOn(anchor)}
+        >
+          <LineCommentIcon size={13} />
+        </button>
+      )}
+    </span>
+  );
+
+  // The comments on a row, and the composer if it was opened on this row.
+  const rowComments = (anchors: LineAnchor[]) => {
+    if (!lineComments) return null;
+    const thread = lineComments.comments.filter((c) =>
+      anchors.some((anchor) => isCommentOn(c, anchor))
+    );
+    const open = commentingOn;
+    const composing =
+      open !== null && anchors.some((anchor) => sameLine(anchor, open));
+    if (thread.length === 0 && !composing) return null;
+    return (
+      <div className="github-line-thread">
+        {thread.length > 0 && (
+          <ul className="github-pr-thread">
+            {thread.map((comment) => (
+              <Fragment key={comment.id}>
+                {lineComments.renderComment(comment)}
+              </Fragment>
+            ))}
+          </ul>
+        )}
+        {composing && (
+          <LineCommentComposer
+            onClose={() => setCommentingOn(null)}
+            onPost={async (body) => {
+              await lineComments.post(open, body);
+              setCommentingOn(null);
+            }}
+          />
+        )}
+      </div>
+    );
+  };
+
   if (prefs.layout === "unified") {
     return (
       <div className={`github-unified${compact}`}>
@@ -554,10 +754,13 @@ export function CommitPatch({
             </div>
           ) : (
             <Fragment key={idx}>
-              <span className="github-split-no">{row.newNo ?? "−"}</span>
-              <span className={`github-split-code is-${row.kind}`}>
-                {MARK[row.kind]} {highlight(row.text, query)}
-              </span>
+              <div className="github-diff-side">
+                {gutter(row.newNo ?? "−", row.anchors[row.anchors.length - 1])}
+                <span className={`github-split-code is-${row.kind}`}>
+                  {MARK[row.kind]} {highlight(row.text, query)}
+                </span>
+              </div>
+              {rowComments(row.anchors)}
             </Fragment>
           )
         )}
@@ -567,26 +770,35 @@ export function CommitPatch({
 
   return (
     <div className={`github-split${compact}`}>
-      {toSplitRows(items).map((row, idx) =>
-        row.type === "gap" ? (
-          gapRow(idx, row)
-        ) : row.type === "hunk" ? (
-          <div key={idx} className="github-split-hunk">
-            {row.text}
-          </div>
-        ) : (
+      {toSplitRows(items).map((row, idx) => {
+        if (row.type === "gap") return gapRow(idx, row);
+        if (row.type === "hunk") {
+          return (
+            <div key={idx} className="github-split-hunk">
+              {row.text}
+            </div>
+          );
+        }
+        const left = anchorOf("LEFT", row.left.no, row.left.position);
+        const right = anchorOf("RIGHT", row.right.no, row.right.position);
+        return (
           <Fragment key={idx}>
-            <span className="github-split-no">{row.left.no ?? ""}</span>
-            <span className={`github-split-code is-${row.left.kind}`}>
-              {row.left.text ? highlight(row.left.text, query) : " "}
-            </span>
-            <span className="github-split-no">{row.right.no ?? ""}</span>
-            <span className={`github-split-code is-${row.right.kind}`}>
-              {row.right.text ? highlight(row.right.text, query) : " "}
-            </span>
+            <div className="github-diff-side">
+              {gutter(row.left.no ?? "", left)}
+              <span className={`github-split-code is-${row.left.kind}`}>
+                {row.left.text ? highlight(row.left.text, query) : " "}
+              </span>
+            </div>
+            <div className="github-diff-side">
+              {gutter(row.right.no ?? "", right)}
+              <span className={`github-split-code is-${row.right.kind}`}>
+                {row.right.text ? highlight(row.right.text, query) : " "}
+              </span>
+            </div>
+            {rowComments(anchorsOf(left, right))}
           </Fragment>
-        )
-      )}
+        );
+      })}
     </div>
   );
 }
@@ -594,11 +806,19 @@ export function CommitPatch({
 export function CommitSplitPatch({
   patch,
   loadLines,
+  lineComments,
 }: {
   patch: string;
   loadLines?: () => Promise<string[]>;
+  lineComments?: LineComments;
 }) {
-  return <CommitPatch patch={patch} loadLines={loadLines} />;
+  return (
+    <CommitPatch
+      patch={patch}
+      loadLines={loadLines}
+      lineComments={lineComments}
+    />
+  );
 }
 
 function GearIcon() {
@@ -725,11 +945,13 @@ export function CommitDiffBody({
   diffs,
   prefs,
   query,
+  lineComments,
 }: {
   sha: string;
   diffs: CommitDiffs;
   prefs?: DiffPrefs;
   query?: string;
+  lineComments?: (file: CommitFile) => LineComments;
 }) {
   const isLoading = diffs.loadingShas.has(sha);
   const errorText = diffs.errorBySha[sha];
@@ -803,6 +1025,7 @@ export function CommitDiffBody({
                           ? () => diffs.loadFileLines(sha, file.filename)
                           : undefined
                       }
+                      lineComments={lineComments?.(file)}
                     />
                   ) : (
                     <div className="github-commit-nopatch">

@@ -1409,7 +1409,139 @@
   color: var(--diff-del-strong, #82071e);
 }
 
+/* One side of a diff row. Its cells stay in the parent grid, while this still
+   gives them a shared hover for the comment button. */
+.github-diff-side {
+  display: contents;
+}
+
+.github-line-comment-btn {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: var(--color-primary-action);
+  color: var(--color-surface);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.github-diff-side:hover .github-line-comment-btn,
+.github-line-comment-btn:focus-visible {
+  opacity: 1;
+}
+
+/* A line's comments and composer, spanning the whole row under it. */
+.github-line-thread {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px;
+  border-block: 1px solid var(--color-border);
+  background: var(--color-surface-tint);
+  font-family: var(--sans);
+  white-space: normal;
+}
+
+.github-comment-options {
+  position: relative;
+  display: inline-flex;
+  margin-left: auto;
+}
+
+.github-comment-options-btn {
+  display: inline-flex;
+  padding: 2px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.github-comment-options-btn:hover,
+.github-comment-options-btn[aria-expanded="true"] {
+  background: var(--color-surface-tint);
+  color: var(--color-text-primary);
+}
+
+/* Opens beside the button: below it, the diff's overflow would clip the menu on
+   a thread under the file's last line. */
+.github-comment-options .github-diff-menu {
+  top: 50%;
+  right: calc(100% + 6px);
+  min-width: 110px;
+  padding: 4px 0;
+  transform: translateY(-50%);
+}
+
+.github-line-composer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+}
+
+.github-line-composer-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 28px 0 0;
+  border: none;
+  outline: none;
+  resize: vertical;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--text-md);
+  line-height: 1.5;
+}
+
+.github-line-composer-close,
+.github-line-composer-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.github-line-composer-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+.github-line-composer-close:hover,
+.github-line-composer-send:hover:not(:disabled) {
+  color: var(--color-text-primary);
+}
+
+.github-line-composer-send:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.github-line-composer-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .github-split-no {
+  position: relative;
   padding: 0 8px;
   text-align: right;
   color: var(--color-text-muted);

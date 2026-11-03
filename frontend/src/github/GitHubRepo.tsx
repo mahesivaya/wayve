@@ -18,6 +18,9 @@ import {
   mergePullRequest,
   createCommitComment,
   createPullComment,
+  createPullReviewComment,
+  editCommitComment,
+  editPullReviewComment,
   listImportableRepos,
   getGithubConnection,
   getGithubConnectUrl,
@@ -31,9 +34,12 @@ import {
   CommitSplitPatch,
   DiffFileName,
   DiffSettingsMenu,
+  LineCommentComposer,
   RawUnifiedDiff,
   ChevronIcon,
+  type LineComments,
 } from "./commitDiff";
+import { CommentOptionsIcon, EditCommentIcon } from "../icons";
 import { useDiffPrefs } from "./diffPrefs";
 import {
   canExpandFile,
@@ -184,6 +190,8 @@ type PullBundle = {
   detail: PullDetail;
   files: CommitFile[];
   comments: IssueComment[];
+  // Comments on lines of the diff, kept by GitHub apart from the conversation.
+  lineComments: IssueComment[];
   reviews: PullReview[];
 };
 
@@ -318,6 +326,99 @@ type JobsResponse = {
   jobs: Job[];
   total_count: number;
 };
+
+// One comment on a commit or a diff line, with its ⋯ menu to edit it. The menu is
+// shown on every comment: only the server can tell whose comments are yours, as
+// the shared token posts them all under one GitHub account.
+export function DiffComment({
+  comment,
+  onSave,
+}: {
+  comment: IssueComment;
+  onSave: (body: string) => Promise<void>;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const menuRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
+  return (
+    <li className="github-pr-comment">
+      <PrAvatar name={comment.user?.login ?? "ghost"} />
+      <div className="github-pr-comment-main">
+        <div className="github-pr-comment-head">
+          <strong>{comment.user?.login ?? "unknown"}</strong>
+          {comment.created_at && (
+            <small className="github-pr-comment-time">
+              {formatDate(comment.created_at)}
+            </small>
+          )}
+          {!editing && (
+            <span className="github-comment-options" ref={menuRef}>
+              <button
+                type="button"
+                className="github-comment-options-btn"
+                aria-label="Comment options"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((open) => !open)}
+              >
+                <CommentOptionsIcon size={16} />
+              </button>
+              {menuOpen && (
+                <div className="github-diff-menu" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="github-diff-menu-item"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setEditing(true);
+                    }}
+                  >
+                    <EditCommentIcon size={14} />
+                    Edit
+                  </button>
+                </div>
+              )}
+            </span>
+          )}
+        </div>
+        {editing ? (
+          <LineCommentComposer
+            initial={comment.body?.trim() ?? ""}
+            onClose={() => setEditing(false)}
+            onPost={async (body) => {
+              if (body !== comment.body?.trim()) await onSave(body);
+              setEditing(false);
+            }}
+          />
+        ) : (
+          comment.body?.trim() && (
+            <div className="github-pr-comment-text">
+              {renderRichText(comment.body)}
+            </div>
+          )
+        )}
+      </div>
+    </li>
+  );
+}
 
 function formatDate(value: string) {
   const date = new Date(value);
@@ -1163,12 +1264,15 @@ export function GitHubRepoViewer({
         const detail = await githubJson<PullDetail>(
           `${API_BASE}/pulls/${number}`
         );
-        const [files, comments, reviews] = await Promise.all([
+        const [files, comments, lineComments, reviews] = await Promise.all([
           githubJson<CommitFile[]>(
             `${API_BASE}/pulls/${number}/files?per_page=100`
           ).catch(() => [] as CommitFile[]),
           githubJson<IssueComment[]>(
             `${API_BASE}/issues/${number}/comments?per_page=100`
+          ).catch(() => [] as IssueComment[]),
+          githubJson<IssueComment[]>(
+            `${API_BASE}/pulls/${number}/comments?per_page=100`
           ).catch(() => [] as IssueComment[]),
           githubJson<PullReview[]>(
             `${API_BASE}/pulls/${number}/reviews?per_page=100`
@@ -1176,7 +1280,7 @@ export function GitHubRepoViewer({
         ]);
         setPullBundleByNumber((current) => ({
           ...current,
-          [number]: { detail, files, comments, reviews },
+          [number]: { detail, files, comments, lineComments, reviews },
         }));
         // Collapse every file in this PR; keys use the `pr-{number}::{filename}`
         // scheme shared with diffs.collapsedFiles.
@@ -1269,6 +1373,69 @@ export function GitHubRepoViewer({
       setPostingPullComment(null);
     }
   };
+
+  const pullLineComments = (
+    prNumber: number,
+    headSha: string,
+    filename: string,
+    comments: IssueComment[]
+  ): LineComments => ({
+    comments: comments.filter((c) => c.path === filename),
+    renderComment: (comment) => (
+      <DiffComment
+        comment={comment}
+        onSave={async (body) => {
+          const edited = await editPullReviewComment(
+            owner,
+            repoName,
+            comment.id,
+            body
+          );
+          setPullBundleByNumber((cur) => {
+            const bundle = cur[prNumber];
+            if (!bundle) return cur;
+            return {
+              ...cur,
+              [prNumber]: {
+                ...bundle,
+                lineComments: bundle.lineComments.map((c) =>
+                  c.id === comment.id ? { ...c, body: edited.body } : c
+                ),
+              },
+            };
+          });
+        }}
+      />
+    ),
+    post: async (anchor, body) => {
+      const created = await createPullReviewComment(owner, repoName, prNumber, {
+        body,
+        path: filename,
+        line: anchor.line,
+        side: anchor.side,
+        commit_id: headSha,
+      });
+      setPullBundleByNumber((cur) => {
+        const bundle = cur[prNumber];
+        if (!bundle) return cur;
+        return {
+          ...cur,
+          [prNumber]: {
+            ...bundle,
+            lineComments: [
+              ...bundle.lineComments,
+              {
+                ...created,
+                path: filename,
+                line: anchor.line,
+                side: anchor.side,
+              },
+            ],
+          },
+        };
+      });
+    },
+  });
 
   const mergePull = async (prNumber: number) => {
     setMergingPull(prNumber);
@@ -1412,6 +1579,45 @@ export function GitHubRepoViewer({
     },
     [commitCommentDraft, postingCommentShas, owner, repoName]
   );
+
+  const saveCommitComment = async (
+    sha: string,
+    commentId: number,
+    body: string
+  ) => {
+    const edited = await editCommitComment(owner, repoName, commentId, body);
+    setCommitCommentsBySha((cur) => ({
+      ...cur,
+      [sha]: (cur[sha] ?? []).map((c) =>
+        c.id === commentId ? { ...c, body: edited.body } : c
+      ),
+    }));
+  };
+
+  const commitLineComments = (sha: string, filename: string): LineComments => ({
+    comments: (commitCommentsBySha[sha] ?? []).filter(
+      (c) => c.path === filename
+    ),
+    renderComment: (comment) => (
+      <DiffComment
+        comment={comment}
+        onSave={(body) => saveCommitComment(sha, comment.id, body)}
+      />
+    ),
+    post: async (anchor, body) => {
+      const created = await createCommitComment(owner, repoName, sha, body, {
+        path: filename,
+        position: anchor.position,
+      });
+      setCommitCommentsBySha((cur) => ({
+        ...cur,
+        [sha]: [
+          ...(cur[sha] ?? []),
+          { ...created, path: filename, position: anchor.position },
+        ],
+      }));
+    },
+  });
 
   // First open also fetches the run's jobs (steps embedded) and caches them by
   // run id.
@@ -2058,6 +2264,9 @@ export function GitHubRepoViewer({
                           diffs={diffs}
                           prefs={diffPrefs}
                           query={codeQuery.trim()}
+                          lineComments={(file) =>
+                            commitLineComments(commit.sha, file.filename)
+                          }
                         />
                         {!diffs.loadingShas.has(commit.sha) &&
                           !diffs.errorBySha[commit.sha] &&
@@ -2066,8 +2275,17 @@ export function GitHubRepoViewer({
                               {/* Conversation comments on this commit
                                 (read-only, mirrors the PR comment thread). */}
                               {(() => {
-                                const comments =
-                                  commitCommentsBySha[commit.sha] ?? [];
+                                // A comment on a line shows under that line, so
+                                // only list it here if its file has no diff.
+                                const comments = (
+                                  commitCommentsBySha[commit.sha] ?? []
+                                ).filter(
+                                  (c) =>
+                                    c.position == null ||
+                                    !detail.files?.some(
+                                      (f) => f.filename === c.path && f.patch
+                                    )
+                                );
                                 return (
                                   <div className="github-commit-comments">
                                     <div className="github-commit-comments-head">
@@ -2078,36 +2296,22 @@ export function GitHubRepoViewer({
                                     </div>
                                     {comments.length === 0 ? (
                                       <div className="github-empty">
-                                        No comments on this commit yet.
+                                        No conversation on this commit yet.
                                       </div>
                                     ) : (
                                       <ul className="github-pr-thread">
                                         {comments.map((c) => (
-                                          <li
+                                          <DiffComment
                                             key={c.id}
-                                            className="github-pr-comment"
-                                          >
-                                            <PrAvatar
-                                              name={c.user?.login ?? "ghost"}
-                                            />
-                                            <div className="github-pr-comment-main">
-                                              <div className="github-pr-comment-head">
-                                                <strong>
-                                                  {c.user?.login ?? "unknown"}
-                                                </strong>
-                                                {c.created_at && (
-                                                  <small className="github-pr-comment-time">
-                                                    {formatDate(c.created_at)}
-                                                  </small>
-                                                )}
-                                              </div>
-                                              {c.body?.trim() && (
-                                                <div className="github-pr-comment-text">
-                                                  {renderRichText(c.body)}
-                                                </div>
-                                              )}
-                                            </div>
-                                          </li>
+                                            comment={c}
+                                            onSave={(body) =>
+                                              saveCommitComment(
+                                                commit.sha,
+                                                c.id,
+                                                body
+                                              )
+                                            }
+                                          />
                                         ))}
                                       </ul>
                                     )}
@@ -2604,6 +2808,12 @@ export function GitHubRepoViewer({
                                                       )
                                                   : undefined
                                               }
+                                              lineComments={pullLineComments(
+                                                selectedPull,
+                                                bundle.detail.head.sha,
+                                                file.filename,
+                                                bundle.lineComments
+                                              )}
                                             />
                                           ) : (
                                             <div className="github-commit-nopatch">

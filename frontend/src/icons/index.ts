@@ -101,6 +101,15 @@ export {
   FolderGit2 as ProjectsTileIcon,
 } from "lucide-react";
 
+// Code Repo line comments
+export {
+  MessageSquarePlus as LineCommentIcon,
+  X as CloseCommentIcon,
+  ArrowUp as SendCommentIcon,
+  Ellipsis as CommentOptionsIcon,
+  Pencil as EditCommentIcon,
+} from "lucide-react";
+
 // Code Repo file types
 export {
   Atom as ReactFileIcon,

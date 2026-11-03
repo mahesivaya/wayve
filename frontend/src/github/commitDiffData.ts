@@ -26,11 +26,17 @@ export type CommitDetail = {
   parents?: Array<{ sha: string; html_url: string }>;
 };
 
+// `path` and the rest are set only on a comment anchored to a line of a diff: a
+// commit's by `position`, a pull request's by `side` and `line`.
 export type IssueComment = {
   id: number;
   user: { login: string } | null;
   body: string | null;
   created_at: string;
+  path?: string | null;
+  position?: number | null;
+  line?: number | null;
+  side?: "LEFT" | "RIGHT" | null;
 };
 
 // Authed fetch through the GitHub proxy. Bearer token, not the cookie alone,
