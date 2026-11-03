@@ -1,4 +1,7 @@
 .tasks-app {
+  /* The create/edit form opens over this box. No `isolation` here: the drawer is
+     `position: fixed` and has to stay above the app's header. */
+  position: relative;
   display: flex;
   width: 100%;
   height: 100%;
@@ -636,6 +639,18 @@
 
 .modal-content:has(.task-compose) .modal-body {
   overflow: visible;
+}
+
+/* Opened inside the page, so sized by the page rather than the window. The form
+   has no scrollbar of its own, so if the page is shorter than the form the
+   overlay scrolls instead, starting from the top rather than cutting it off. */
+.modal-overlay--contained .modal-content:has(.task-compose) {
+  max-width: 92%;
+}
+
+.modal-overlay.modal-overlay--contained:has(.task-compose) {
+  align-items: safe center;
+  overflow-y: auto;
 }
 
 .task-compose-title {
