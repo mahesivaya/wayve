@@ -29,6 +29,7 @@ import "./githubRepo.css";
 import {
   CommitDiffBody,
   CommitSplitPatch,
+  DiffFileName,
   DiffSettingsMenu,
   RawUnifiedDiff,
   ChevronIcon,
@@ -2569,11 +2570,12 @@ export function GitHubRepoViewer({
                                           >
                                             <ChevronIcon />
                                           </span>
-                                          <span className="github-commit-file-name">
-                                            {file.previous_filename
-                                              ? `${file.previous_filename} → ${file.filename}`
-                                              : file.filename}
-                                          </span>
+                                          <DiffFileName
+                                            filename={file.filename}
+                                            previousFilename={
+                                              file.previous_filename
+                                            }
+                                          />
                                           <span className="github-commit-file-meta">
                                             <em
                                               className={`github-commit-status status-${file.status}`}

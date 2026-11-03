@@ -101,5 +101,22 @@ export {
   FolderGit2 as ProjectsTileIcon,
 } from "lucide-react";
 
+// Code Repo file types
+export {
+  Atom as ReactFileIcon,
+  Cog as RustFileIcon,
+  FileCode as CodeFileIcon,
+  Braces as DataFileIcon,
+  Palette as StyleFileIcon,
+  Globe as MarkupFileIcon,
+  FileText as TextFileIcon,
+  Image as ImageFileIcon,
+  Terminal as ShellFileIcon,
+  Database as SqlFileIcon,
+  Settings as ConfigFileIcon,
+  Container as DockerFileIcon,
+  Lock as LockFileIcon,
+} from "lucide-react";
+
 export { default as GitLogoIcon } from "./GitLogoIcon";
 export { default as BugReportIcon } from "./BugReportIcon";

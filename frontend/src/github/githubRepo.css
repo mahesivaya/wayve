@@ -1225,6 +1225,18 @@
   color: var(--color-text-primary);
 }
 
+.github-file-type {
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-right: -4px;
+}
+
+.github-commit-file-dir {
+  margin-left: 8px;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
 .github-commit-file-meta {
   display: inline-flex;
   align-items: center;
@@ -2772,6 +2784,11 @@
   margin: 0;
   font-size: var(--text-md);
   color: var(--color-text-primary);
+}
+
+/* The heading above already frames this, so no empty-state padding. */
+.github-commit-comments .github-empty {
+  padding: 0;
 }
 
 /* Functional comment composer (write). */

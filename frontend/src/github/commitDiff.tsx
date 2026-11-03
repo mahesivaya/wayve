@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { canExpandFile, type CommitDiffs } from "./commitDiffData";
 import { DEFAULT_DIFF_PREFS, type DiffPrefs } from "./diffPrefs";
+import { FileTypeIcon } from "./FileTypeIcon";
 import "./githubRepo.css";
 
 // Commit-diff rendering, extracted from GitHubRepo.tsx so both the Code Repo
@@ -26,6 +27,37 @@ export function ChevronIcon() {
         d="M6 3l5 5-5 5"
       />
     </svg>
+  );
+}
+
+// A diff header's file: its type icon, then the name with its folder muted after
+// it. A rename keeps both full paths, since the folder may be what changed.
+export function DiffFileName({
+  filename,
+  previousFilename,
+}: {
+  filename: string;
+  previousFilename?: string | null;
+}) {
+  const slash = filename.lastIndexOf("/");
+  return (
+    <>
+      <FileTypeIcon path={filename} />
+      <span className="github-commit-file-name">
+        {previousFilename ? (
+          `${previousFilename} → ${filename}`
+        ) : (
+          <>
+            {filename.slice(slash + 1)}
+            {slash !== -1 && (
+              <span className="github-commit-file-dir">
+                {filename.slice(0, slash + 1)}
+              </span>
+            )}
+          </>
+        )}
+      </span>
+    </>
   );
 }
 
@@ -741,11 +773,10 @@ export function CommitDiffBody({
                   >
                     <ChevronIcon />
                   </span>
-                  <span className="github-commit-file-name">
-                    {file.previous_filename
-                      ? `${file.previous_filename} → ${file.filename}`
-                      : file.filename}
-                  </span>
+                  <DiffFileName
+                    filename={file.filename}
+                    previousFilename={file.previous_filename}
+                  />
                   <span className="github-commit-file-meta">
                     <em
                       className={`github-commit-status status-${file.status}`}
