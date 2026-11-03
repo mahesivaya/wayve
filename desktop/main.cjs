@@ -17,6 +17,7 @@ const APP_URL = process.env.FLUXZE_URL || "https://fluxze.com";
 // app's /login guard redirects already-authenticated users to their account
 // home, so returning users land in the app — not stranded on login.
 const START_URL = `${APP_URL.replace(/\/$/, "")}/login`;
+const isMac = process.platform === "darwin";
 
 // Force the app/menu name to the brand so the macOS app menu reads "Fluxze"
 // (and "About/Hide/Quit Fluxze") in dev too — not "Electron"/"fluxze-desktop".
@@ -86,11 +87,21 @@ function injectCancelButton(webContents) {
       border: "1px solid #d0d5dd", background: "#ffffff", color: "#1f2937",
       font: "500 13px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
       cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,.12)",
+      webkitAppRegion: "no-drag",
     });
     btn.addEventListener("click", () => {
       window.location.href = ${JSON.stringify(START_URL)};
     });
-    (document.body || document.documentElement).appendChild(btn);
+    // With no native title bar, these pages would otherwise have nothing to
+    // drag the window by.
+    const strip = document.createElement("div");
+    Object.assign(strip.style, {
+      position: "fixed", top: "0", left: "0", right: "0", height: "38px",
+      pointerEvents: "none", webkitAppRegion: "drag",
+    });
+    const host = document.body || document.documentElement;
+    host.appendChild(strip);
+    host.appendChild(btn);
   })();`;
   webContents.executeJavaScript(js).catch(() => {});
 }
@@ -104,10 +115,16 @@ function createWindow() {
     minWidth: 940,
     minHeight: 600,
     backgroundColor: "#ffffff",
-    // Standard macOS title bar: the red/yellow/green window controls sit in
-    // their own bar ABOVE the web content. "hiddenInset" floats them over the
-    // top-left of the page, where they collide with the app's logo/header.
-    titleBarStyle: "default",
+    // macOS: no native title bar. The window controls float over the app's own
+    // 38px header, which the web app clears when preload reports titleBarInset
+    // (see applyRuntimeClass), and the sidebar toggle sits right next to them.
+    // Other platforms keep their standard title bar.
+    ...(isMac
+      ? {
+          titleBarStyle: "hiddenInset",
+          trafficLightPosition: { x: 14, y: 11 },
+        }
+      : { titleBarStyle: "default" }),
     show: false,
     webPreferences: {
       contextIsolation: true,
@@ -141,10 +158,21 @@ function createWindow() {
     }
   });
 
+  // macOS hides the window controls in full screen, so the web app drops the
+  // space it keeps for them.
+  const sendFullScreen = () =>
+    mainWindow.webContents.send(
+      "fluxze:fullscreen",
+      mainWindow.isFullScreen()
+    );
+  mainWindow.on("enter-full-screen", sendFullScreen);
+  mainWindow.on("leave-full-screen", sendFullScreen);
+
   // Any full page load that isn't the app (i.e. an external auth page such as
   // Google sign-in) gets the floating cancel pill, so there is always a way
   // back if the flow fails or the user changes their mind.
   mainWindow.webContents.on("did-finish-load", () => {
+    sendFullScreen();
     const url = mainWindow.webContents.getURL();
     if (/^https?:/i.test(url) && !isAppUrl(url)) {
       injectCancelButton(mainWindow.webContents);
@@ -170,6 +198,7 @@ function offlinePage(detail) {
 <title>Fluxze</title>
 <style>
   html,body{height:100%;margin:0}
+  .drag{position:fixed;top:0;left:0;right:0;height:38px;-webkit-app-region:drag}
   body{display:flex;align-items:center;justify-content:center;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
     background:#0e1d40;color:#fff}
@@ -180,6 +209,7 @@ function offlinePage(detail) {
     background:#2563eb;color:#fff;cursor:pointer}
   button:hover{background:#1d4ed8}
 </style></head><body>
+  <div class="drag"></div>
   <div class="box">
     <h1>Can't reach Fluxze</h1>
     <p>Check your internet connection and try again.<br>${detail || ""}</p>
@@ -211,7 +241,6 @@ function checkForUpdatesItem() {
 
 /** Native menu so ⌘C/⌘V/⌘A, reload, zoom and window controls work. */
 function buildMenu() {
-  const isMac = process.platform === "darwin";
   const template = [
     ...(isMac
       ? [

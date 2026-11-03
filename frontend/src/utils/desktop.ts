@@ -8,6 +8,9 @@ declare global {
       isDesktop?: boolean;
       version?: string;
       platform?: string;
+      // This shell hides the native title bar and floats the window controls
+      // over the page. Absent on older installs.
+      titleBarInset?: boolean;
     };
   }
 }
@@ -31,5 +34,14 @@ export function applyRuntimeClass(): void {
   root.classList.toggle("is-web", !desktop);
   if (desktop && window.fluxzeDesktop?.platform) {
     root.dataset.platform = window.fluxzeDesktop.platform;
+  }
+  const inset = desktop && window.fluxzeDesktop?.titleBarInset === true;
+  root.classList.toggle("is-titlebar-inset", inset);
+  // Every page, including those without the app header, needs something to drag
+  // the window by. First in <body> so the app's no-drag controls override it.
+  if (inset && !document.querySelector(".desktop-drag-strip")) {
+    const strip = document.createElement("div");
+    strip.className = "desktop-drag-strip";
+    document.body.prepend(strip);
   }
 }

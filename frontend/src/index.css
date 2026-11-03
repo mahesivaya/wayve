@@ -1149,3 +1149,35 @@ code {
   right: auto;
   transform: none;
 }
+
+/* Desktop shell with no native title bar (macOS): the top of every page drags
+   the window, except the things people click there. */
+.desktop-drag-strip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 38px;
+  pointer-events: none;
+  -webkit-app-region: drag;
+}
+
+html.is-titlebar-inset
+  :is(
+    button,
+    a,
+    input,
+    select,
+    textarea,
+    label,
+    [role="button"],
+    .logo,
+    .header .actions,
+    .global-search-row
+  ) {
+  -webkit-app-region: no-drag;
+}
+
+html.is-titlebar-inset:not(.is-fullscreen) .public-home-nav {
+  padding-left: 84px;
+}

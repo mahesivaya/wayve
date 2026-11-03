@@ -344,6 +344,46 @@
   margin-left: 14px;
 }
 
+/* Desktop shell with no native title bar (macOS): the header is the title bar,
+   with the window controls floating over its left end and the toggle right next
+   to them. Border-box keeps the brand lined up with the sidebar below it. */
+html.is-titlebar-inset .header-brand {
+  box-sizing: border-box;
+  min-width: max-content;
+  padding-left: 56px;
+}
+
+html.is-titlebar-inset.is-fullscreen .header-brand {
+  padding-left: 0;
+}
+
+/* The desktop app shows no brand in its header, only the sidebar toggle. */
+html.is-desktop .header-brand .logo {
+  display: none;
+}
+
+html.is-titlebar-inset .header-brand .header-collapse-btn,
+html.is-titlebar-inset .header-brand .sidebar-toggle-btn {
+  order: -1;
+  margin: 0;
+}
+
+/* Sized and weighted to sit beside the native window controls, which are about
+   12pt across, rather than to stand out from them. */
+html.is-titlebar-inset .header-brand .sidebar-collapse-btn {
+  color: var(--color-text-secondary);
+}
+
+html.is-titlebar-inset .header-brand .sidebar-collapse-btn:hover {
+  color: var(--color-text-primary);
+}
+
+html.is-titlebar-inset .header-brand .sidebar-collapse-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.7;
+}
+
 /* Shared by the header expand/collapse toggle (`.header-collapse-btn`). */
 .sidebar-collapse-btn {
   width: 26px;
