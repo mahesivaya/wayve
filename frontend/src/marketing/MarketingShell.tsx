@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { BRAND_NAME } from "../config/brand";
+import { BRAND_NAME, HEADER_NAME } from "../config/brand";
 import BrandLogo from "../components/BrandLogo";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
@@ -60,7 +60,7 @@ export default function MarketingShell({
             size={40}
             gradientId="fluxze-nav-mark"
           />
-          <span>{BRAND_NAME}</span>
+          <span>{HEADER_NAME}</span>
         </button>
 
         <nav className="public-home-links" aria-label="Main navigation">
