@@ -83,6 +83,47 @@ fn pick_free_slug(base: &str, taken: &[String]) -> String {
     }
 }
 
+/// Give a new org its default team, named after the org, with `admin` on the
+/// roster. The team is created only while the org has no teams, so it never lands
+/// beside teams the org already has; a later admin joins it if it is still there.
+pub(crate) async fn ensure_default_team(
+    conn: &mut sqlx::PgConnection,
+    org_id: i32,
+    org_name: &str,
+    admin: Option<i32>,
+) -> std::result::Result<(), sqlx::Error> {
+    let slug = slugify(org_name);
+    sqlx::query(
+        "INSERT INTO teams (organization_id, name, slug, created_by)
+         SELECT $1, $2, $3, $4
+          WHERE NOT EXISTS (SELECT 1 FROM teams WHERE organization_id = $1)",
+    )
+    .bind(org_id)
+    .bind(org_name)
+    .bind(&slug)
+    .bind(admin)
+    .execute(&mut *conn)
+    .await?;
+
+    if let Some(admin) = admin {
+        sqlx::query(
+            "INSERT INTO team_members (team_id, name, role, email, created_by)
+             SELECT t.id, COALESCE(NULLIF(trim(u.username), ''), split_part(u.email, '@', 1)),
+                    'Admin', u.email, u.id
+               FROM teams t, users u
+              WHERE t.organization_id = $1 AND t.slug = $2 AND u.id = $3
+                AND NOT EXISTS (SELECT 1 FROM team_members m
+                                 WHERE m.team_id = t.id AND m.email = u.email)",
+        )
+        .bind(org_id)
+        .bind(&slug)
+        .bind(admin)
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(())
+}
+
 /// Which teams the caller can see: an org member sees their org's teams, and a
 /// platform owner sees platform-level teams (`organization_id IS NULL`).
 enum TeamScope {

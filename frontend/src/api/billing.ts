@@ -167,6 +167,28 @@ export const startInlineSubscription = (planCode: string, autopay = true) =>
     body: JSON.stringify({ plan_code: planCode, autopay }),
   });
 
+// A free plan upgrades at once and returns `organization_id`. A paid plan
+// returns the payment to confirm, then finalizeOrganizationUpgrade creates the org.
+export type OrganizationUpgradeStart = {
+  organization_id?: number;
+  pending_id?: number;
+  client_secret?: string;
+  publishable_key?: string | null;
+};
+
+export const startOrganizationUpgrade = (planCode: string, name: string) =>
+  json<OrganizationUpgradeStart>("/api/billing/organization-upgrade", {
+    method: "POST",
+    body: JSON.stringify({ plan_code: planCode, name }),
+  });
+
+// `organization_id` is null while Stripe has yet to report the payment.
+export const finalizeOrganizationUpgrade = (pendingId: number) =>
+  json<{ organization_id: number | null }>(
+    `/api/billing/organization-upgrade/${pendingId}/finalize`,
+    { method: "POST" }
+  );
+
 export const openBillingPortal = () =>
   json<{ url: string }>("/api/billing/portal", { method: "POST" });
 

@@ -9,6 +9,7 @@ pub mod entitlements;
 pub mod invoices;
 pub mod models;
 pub mod organization_billing;
+pub mod organization_upgrade;
 pub mod plans;
 pub mod provider;
 pub mod quotas;
@@ -35,7 +36,7 @@ pub fn current_user(req: &HttpRequest) -> std::result::Result<i32, HttpResponse>
 }
 
 /// `(account_type, organization_id)` for a user.
-async fn account_row(
+pub(crate) async fn account_row(
     pool: &PgPool,
     user_id: i32,
 ) -> std::result::Result<(String, Option<i32>), HttpResponse> {

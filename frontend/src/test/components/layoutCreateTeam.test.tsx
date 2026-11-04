@@ -1,13 +1,15 @@
 // Creating a team from the sidebar's ＋ opens the new team's page, instead of
-// leaving the owner on whatever page they were on (often a sample team, which
-// looked like "it opened another team"). The Teams section itself only shows
-// in admin mode.
+// leaving the owner on whatever page they were on. The Teams section itself only
+// shows in admin mode.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 
-const session = vi.hoisted(() => ({ mode: "admin" as "admin" | "normal" }));
+const session = vi.hoisted(() => ({
+  mode: "admin" as "admin" | "normal",
+  organizationId: 1,
+}));
 vi.mock("../../auth/useAuth", () => ({
   useAuth: () => ({
     user: {
@@ -17,6 +19,7 @@ vi.mock("../../auth/useAuth", () => ({
       scope: "organization",
       effective_role: "owner",
       mode: session.mode,
+      organization_id: session.organizationId,
       can_switch_admin: true,
       permissions: [],
     },
@@ -29,8 +32,9 @@ vi.mock("../../auth/permissions", () => ({
 }));
 vi.mock("../../api/activity", () => ({ recordActivity: vi.fn() }));
 const createTeam = vi.fn();
+const listTeams = vi.hoisted(() => vi.fn());
 vi.mock("../../api/workspace", () => ({
-  listTeams: vi.fn().mockResolvedValue([]),
+  listTeams,
   createTeam: (input: { name: string }) => createTeam(input),
 }));
 vi.mock("../../emails/useEmailsUnreadCount", () => ({
@@ -63,6 +67,9 @@ function CurrentPath() {
 describe("Layout team creation", () => {
   beforeEach(() => {
     session.mode = "admin";
+    session.organizationId = 1;
+    listTeams.mockReset();
+    listTeams.mockResolvedValue([]);
   });
 
   it("navigates to the team it just created", async () => {
@@ -94,6 +101,52 @@ describe("Layout team creation", () => {
     expect((await screen.findByText("/teams/platform")).textContent).toBe(
       "/teams/platform"
     );
+  });
+
+  it("lists no invented teams for an org that has none", async () => {
+    render(
+      <MemoryRouter initialEntries={["/home"]}>
+        <Layout>
+          <Routes>
+            <Route path="*" element={<CurrentPath />} />
+          </Routes>
+        </Layout>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("No teams yet")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Engineering" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Finance" })).toBeNull();
+  });
+
+  // Upgrading keeps the same user, so the user id alone wouldn't refetch.
+  it("loads the default team when the user joins an organization", async () => {
+    const layout = () => (
+      <MemoryRouter initialEntries={["/home"]}>
+        <Layout>
+          <Routes>
+            <Route path="*" element={<CurrentPath />} />
+          </Routes>
+        </Layout>
+      </MemoryRouter>
+    );
+    const { rerender } = render(layout());
+    expect(await screen.findByText("No teams yet")).toBeTruthy();
+
+    listTeams.mockResolvedValue([
+      {
+        id: 9,
+        name: "Acme",
+        slug: "acme",
+        tagline: null,
+        description: null,
+      },
+    ]);
+    session.organizationId = 5;
+    rerender(layout());
+
+    expect(await screen.findByRole("link", { name: "Acme" })).toBeTruthy();
+    expect(screen.queryByText("No teams yet")).toBeNull();
   });
 
   it("shows the Teams section in admin mode only", () => {

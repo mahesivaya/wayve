@@ -190,6 +190,47 @@ pub async fn create_subscription(
     price_id: &str,
     client_reference: &str,
 ) -> Result<PendingSubscription> {
+    create_incomplete_subscription(
+        customer_id,
+        price_id,
+        ("metadata[client_reference]", client_reference.to_string()),
+    )
+    .await
+}
+
+/// The subscription that gates a personal account's upgrade to an organization.
+/// Tagged with `org_pending` instead of a `client_reference`, since no
+/// organization exists to reference until it is paid; the webhook finalizes the
+/// `pending_org_signups` row from this tag.
+pub async fn create_org_upgrade_subscription(
+    customer_id: &str,
+    price_id: &str,
+    pending_id: i32,
+) -> Result<PendingSubscription> {
+    create_incomplete_subscription(
+        customer_id,
+        price_id,
+        ("metadata[org_pending]", pending_id.to_string()),
+    )
+    .await
+}
+
+/// A subscription's current Stripe `status` (e.g. `active`, `incomplete`), read
+/// from Stripe so that "the client says it paid" is never trusted.
+pub async fn get_subscription_status(subscription_id: &str) -> Result<String> {
+    let body = get_json(&format!("/subscriptions/{subscription_id}"), &[]).await?;
+    Ok(body
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("incomplete")
+        .to_string())
+}
+
+async fn create_incomplete_subscription(
+    customer_id: &str,
+    price_id: &str,
+    metadata: (&str, String),
+) -> Result<PendingSubscription> {
     // Both the legacy `payment_intent` and the newer `confirmation_secret` are
     // expanded because which one Stripe returns depends on the API version
     // pinned to the account.
@@ -205,7 +246,7 @@ pub async fn create_subscription(
         ),
         ("expand[]", "latest_invoice.payment_intent".to_string()),
         ("expand[]", "latest_invoice.confirmation_secret".to_string()),
-        ("metadata[client_reference]", client_reference.to_string()),
+        metadata,
     ];
     let body = post_form("/subscriptions", &params).await?;
 

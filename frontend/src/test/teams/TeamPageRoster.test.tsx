@@ -1,6 +1,5 @@
-// A real team's roster is saved: members come back with the team, adding and
-// removing go through the API, and the Delete button is only for member managers. A sample
-// team (no backend row) keeps edits in the browser, as before.
+// A team's roster is saved: members come back with the team, adding and removing
+// go through the API, and the Delete button is only for member managers.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -162,16 +161,12 @@ describe("team page: saved roster", () => {
     expect(screen.queryByRole("button", { name: /^delete /i })).toBeNull();
   });
 
-  it("removes from a sample team locally, without calling the API", async () => {
+  // No team is ever invented for a name the org doesn't have.
+  it("reports a slug with no team as not found", async () => {
     getTeam.mockRejectedValue(new Error("Team not found"));
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     renderAt("finance");
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: "Delete Guadalupe Herrera" })
-    );
-
-    expect(removeTeamMember).not.toHaveBeenCalled();
-    expect(screen.queryByText("Guadalupe Herrera")).toBeNull();
+    expect(await screen.findByText("Team not found")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /add member/i })).toBeNull();
   });
 });

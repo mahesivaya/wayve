@@ -10,15 +10,12 @@ import {
   type Team,
 } from "../api/workspace";
 import { PersonIcon } from "../icons";
-import { findSampleTeam } from "./sampleTeams";
 import "./teams.css";
 
-// A real team's roster is saved server-side (team_members) and comes back with
-// the team from /api/teams/<slug>. A display-only sample team has no row to
-// save to, so edits there stay in this browser session, as before. `id` is set
-// only for saved rows.
+// A team's roster is saved server-side (team_members) and comes back with the
+// team from /api/teams/<slug>.
 type Member = {
-  id?: number;
+  id: number;
   name: string;
   role: string;
   email: string;
@@ -75,10 +72,6 @@ export default function TeamPage() {
     setRosterError("");
   }
 
-  // A real backend team wins. Only when there is no row for the slug does the
-  // display-only sample take over, bringing its own roster — a real team must
-  // never be shown invented members, so the seeding happens on this branch
-  // alone.
   useEffect(() => {
     let cancelled = false;
     getTeam(slug)
@@ -88,22 +81,12 @@ export default function TeamPage() {
         setMembers((t.members ?? []).map(toMember));
       })
       .catch(() => {
-        if (cancelled) return;
-        const sample = findSampleTeam(slug);
-        if (sample) {
-          setTeam(sample);
-          setMembers(sample.members);
-        } else {
-          setTeam(null);
-        }
+        if (!cancelled) setTeam(null);
       });
     return () => {
       cancelled = true;
     };
   }, [slug]);
-
-  // Sample teams (negative ids) have no backend row: edits stay local there.
-  const isSaved = !!team && team.id > 0;
 
   const canSubmit = draft.name.trim().length > 0 && !rosterBusy;
   const submitMember = async () => {
@@ -114,25 +97,18 @@ export default function TeamPage() {
       email: draft.email.trim(),
     };
     setRosterError("");
-    if (isSaved) {
-      setRosterBusy(true);
-      try {
-        const saved = await addTeamMember(team.id, input);
-        setMembers((prev) => [...prev, toMember(saved)]);
-      } catch (err) {
-        setRosterError(
-          err instanceof Error ? err.message : "Failed to add member"
-        );
-        setRosterBusy(false);
-        return;
-      }
+    setRosterBusy(true);
+    try {
+      const saved = await addTeamMember(team.id, input);
+      setMembers((prev) => [...prev, toMember(saved)]);
+    } catch (err) {
+      setRosterError(
+        err instanceof Error ? err.message : "Failed to add member"
+      );
       setRosterBusy(false);
-    } else {
-      setMembers((prev) => [
-        ...prev,
-        { ...input, role: input.role || "Member" },
-      ]);
+      return;
     }
+    setRosterBusy(false);
     setDraft(EMPTY_DRAFT);
     setAdding(false);
   };
@@ -142,24 +118,22 @@ export default function TeamPage() {
     if (!member || !team) return;
     if (!window.confirm(`Remove ${member.name} from ${team.name}?`)) return;
     setRosterError("");
-    if (isSaved && member.id !== undefined) {
-      setRosterBusy(true);
-      try {
-        await removeTeamMember(team.id, member.id);
-      } catch (err) {
-        setRosterError(
-          err instanceof Error ? err.message : "Failed to remove member"
-        );
-        setRosterBusy(false);
-        return;
-      }
+    setRosterBusy(true);
+    try {
+      await removeTeamMember(team.id, member.id);
+    } catch (err) {
+      setRosterError(
+        err instanceof Error ? err.message : "Failed to remove member"
+      );
       setRosterBusy(false);
+      return;
     }
+    setRosterBusy(false);
     setMembers((prev) => prev.filter((_, i) => i !== index));
   };
 
   const removeTeam = async () => {
-    if (!team || team.id <= 0) return;
+    if (!team) return;
     if (
       !window.confirm(
         `Delete the team "${team.name}"? This removes it for everyone and can't be undone.`
@@ -224,8 +198,7 @@ export default function TeamPage() {
               ＋ Add member
             </button>
           )}
-          {/* Sample teams (negative ids) have no row to delete. */}
-          {isOwner && team.id > 0 && (
+          {isOwner && (
             <button
               type="button"
               className="team-delete-btn"
@@ -334,7 +307,7 @@ export default function TeamPage() {
 }
 
 function toMember(m: {
-  id?: number;
+  id: number;
   name: string;
   role: string | null;
   email: string | null;
