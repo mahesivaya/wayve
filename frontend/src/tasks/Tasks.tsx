@@ -434,13 +434,15 @@ const clampDrawerWidth = (px: number) =>
 // for Create, and Edit on boards without a drawer) or a right-side drawer (used
 // when an item's name is clicked on a drawer-enabled board). The form is passed
 // as `children`, so it is written once regardless of surface. `onExpand`, when
-// given, renders a button that jumps to the full page.
+// given, renders a button that jumps to the full page. `contained` keeps the
+// drawer inside the board, so in a split pane it doesn't cover the other panes.
 function EditSurface({
   surface,
   isOpen,
   onClose,
   title,
   onExpand,
+  contained = false,
   children,
 }: {
   surface: "modal" | "drawer";
@@ -448,17 +450,31 @@ function EditSurface({
   onClose: () => void;
   title: string;
   onExpand?: () => void;
+  contained?: boolean;
   children: React.ReactNode;
 }) {
+  const drawerRef = useRef<HTMLElement>(null);
+
   // Modal has its own ESC handling; the drawer needs its own.
   useEffect(() => {
     if (surface !== "drawer" || !isOpen) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      // Escape pressed in another pane isn't meant for a contained drawer.
+      const target = event.target;
+      if (
+        contained &&
+        target instanceof Node &&
+        target !== document.body &&
+        !drawerRef.current?.contains(target)
+      ) {
+        return;
+      }
+      onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [surface, isOpen, onClose]);
+  }, [surface, isOpen, onClose, contained]);
 
   // Drag the drawer's left edge to widen it — a diff or a long description is
   // unreadable in a 460px column. Same drag mechanics as the email sidebar
@@ -477,8 +493,12 @@ function EditSurface({
     function onMove(event: MouseEvent) {
       if (!draggingRef.current) return;
       // The drawer is pinned to the right, so its width is the gap between the
-      // pointer and the viewport's right edge.
-      setDrawerWidth(clampDrawerWidth(window.innerWidth - event.clientX));
+      // pointer and its own right edge. A contained drawer can't outgrow its
+      // board; a fixed one has no offsetParent.
+      const drawer = drawerRef.current;
+      const right = drawer?.getBoundingClientRect().right ?? window.innerWidth;
+      const room = drawer?.offsetParent?.clientWidth ?? Infinity;
+      setDrawerWidth(Math.min(clampDrawerWidth(right - event.clientX), room));
     }
     function onUp() {
       if (!draggingRef.current) return;
@@ -510,12 +530,13 @@ function EditSurface({
   return (
     <>
       <div
-        className="task-drawer-overlay"
+        className={`task-drawer-overlay${contained ? " task-drawer-overlay--contained" : ""}`}
         onClick={onClose}
         aria-hidden="true"
       />
       <aside
-        className="task-drawer"
+        ref={drawerRef}
+        className={`task-drawer${contained ? " task-drawer--contained" : ""}`}
         role="dialog"
         aria-label={title}
         style={{ width: clampDrawerWidth(drawerWidth) }}
@@ -2282,6 +2303,7 @@ export default function Tasks({
 
         <EditSurface
           surface={editSurface}
+          contained={inSplitPane}
           isOpen={creating}
           onClose={closeForm}
           title={
