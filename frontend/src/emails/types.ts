@@ -76,8 +76,8 @@ export type { EmailAttachment };
 // Inbox and Sent read the `emails` table directly. The rest filter on
 // `emails.labels`, which the sync worker fills with Gmail labelIds, Outlook
 // categories, and synthetic IMPORTANT / SPAM / DRAFT values, so one filter
-// shape works across both providers. `STUB_EMAIL_FOLDERS` is empty but kept:
-// adding a name to it re-enables EmailList's coming-soon placeholder branch.
+// shape works across both providers. A name in `STUB_EMAIL_FOLDERS` has no
+// backing query: it fetches nothing and EmailList shows a coming-soon placeholder.
 export type EmailFolder =
   | "inbox"
   | "sent"
@@ -94,9 +94,13 @@ export type EmailFolder =
   // Virtual folder matched by sender (`notifications@github.com`) on the
   // backend, not a Gmail label.
   | "github"
-  // Client-only inbox sub-views shown as chips beside "All" (= inbox). No
-  // backend query yet: `useEmailInbox` short-circuits them to an empty list and
-  // EmailList renders a "coming soon" placeholder.
+  // Gmail's promotions category, and Gmail mail out of the inbox.
+  | "promotions"
+  | "archived"
+  // Scheduled send isn't built yet, so this is a stub (see STUB_EMAIL_FOLDERS).
+  | "scheduled"
+  // Inbox sub-views, resolved server-side in email/repo.rs. No chip opens them
+  // now, but "Mark as Noise" still routes a sender's mail to Noise.
   //
   // The intended rule, when these are built: Signal is mail a real person sent
   // you — a human sender with you on To/Cc, and replies in threads you are part
@@ -116,4 +120,4 @@ export type EmailFolder =
   // them — and "Messages from this sender" wants all of that sender's mail.
   | "all";
 
-export const STUB_EMAIL_FOLDERS: ReadonlyArray<EmailFolder> = [];
+export const STUB_EMAIL_FOLDERS: ReadonlyArray<EmailFolder> = ["scheduled"];

@@ -20,7 +20,7 @@ import {
 } from "../api/email";
 import { logger } from "../utils/logger";
 import { decryptWayveBodyIfNeeded, emailBodyErrorMessage } from "./bodyUtils";
-import { listFolder } from "./searchScope";
+import { isStubView, listFolder } from "./searchScope";
 import { EmailAccount, EmailFolder, EmailItem, EmailAttachment } from "./types";
 import {
   conversationKey,
@@ -151,12 +151,14 @@ export function useEmailInbox(
         emails: data,
         hasMore: hasMorePage,
         total: viewTotal,
-      } = await getEmails<EmailItem>({
-        folder: listFolder(activeFolder, normalizedSearchQuery),
-        accountId: activeAccount,
-        query: normalizedSearchQuery,
-        threads: true,
-      });
+      } = isStubView(activeFolder, normalizedSearchQuery)
+        ? { emails: [] as EmailItem[], hasMore: false, total: 0 }
+        : await getEmails<EmailItem>({
+            folder: listFolder(activeFolder, normalizedSearchQuery),
+            accountId: activeAccount,
+            query: normalizedSearchQuery,
+            threads: true,
+          });
 
       // Every first-page fetch (fresh load or the refresh poll) re-counts, so
       // the total tracks new mail, deletes and snoozes within a poll.

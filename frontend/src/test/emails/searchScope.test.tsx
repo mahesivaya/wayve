@@ -63,4 +63,25 @@ describe("the inbox list request", () => {
     await waitFor(() => expect(getEmails).toHaveBeenCalled());
     expect(getEmails.mock.calls[0][0]).toMatchObject({ folder: "inbox" });
   });
+
+  // The server answers an unknown folder with all mail, which select-all could
+  // then act on behind the placeholder.
+  it("never fetches for the Scheduled stub", async () => {
+    getEmails.mockResolvedValue({ emails: [], hasMore: false });
+    const { result } = renderHook(() =>
+      useEmailInbox(1, "", { account: null, folder: "scheduled" })
+    );
+    await waitFor(() => expect(result.current.total).toBe(0));
+    expect(getEmails).not.toHaveBeenCalled();
+    expect(result.current.emails).toEqual([]);
+  });
+
+  it("still searches all mail from the Scheduled stub", async () => {
+    getEmails.mockResolvedValue({ emails: [], hasMore: false });
+    renderHook(() =>
+      useEmailInbox(1, "jobs", { account: null, folder: "scheduled" })
+    );
+    await waitFor(() => expect(getEmails).toHaveBeenCalled());
+    expect(getEmails.mock.calls[0][0]).toMatchObject({ folder: "all" });
+  });
 });

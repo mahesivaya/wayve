@@ -3,7 +3,7 @@ import { apiFetch, apiFetchJson } from "./client";
 // Duplicates `EmailFolder` in `../emails/types.ts` on purpose: this module is
 // the lowest layer of the API client and must not depend on a feature folder.
 // Keep the two in sync. The backend's `routes/email.rs::get_emails` ignores
-// unknown folder values (returns all), so the stub folders are safe to send.
+// unknown folder values (returns all).
 export type EmailFolder =
   | "inbox"
   | "sent"
@@ -16,8 +16,11 @@ export type EmailFolder =
   | "social"
   | "trash"
   | "github"
-  // Client-only inbox sub-views; callers short-circuit these to an empty list
-  // and never send them here (see `useEmailInbox`).
+  | "promotions"
+  | "archived"
+  // A stub: `useEmailInbox` never sends it here, as the server would return all
+  // mail for a folder it doesn't know.
+  | "scheduled"
   | "signal"
   | "noise"
   // All mail (everything but spam, drafts and trash): the "All mail" folder

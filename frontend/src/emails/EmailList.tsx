@@ -1,6 +1,7 @@
 import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { EmailFolder, EmailItem, STUB_EMAIL_FOLDERS } from "./types";
+import { isStubView } from "./searchScope";
+import { EmailFolder, EmailItem } from "./types";
 import { FolderChips } from "./FolderChips";
 import {
   AttachmentIcon,
@@ -74,8 +75,6 @@ interface EmailListProps {
   // sidebar but still need to reach Sent.
   showFolderTabs?: boolean;
   onSelectFolder?: (folder: EmailFolder) => void;
-  // Omitted by embeddings that don't host the Files panel.
-  onShowAttachments?: () => void;
   // Identifies which list this is (account + folder), so the scroll offset
   // restored on remount belongs to the rows being shown. Omitting it keeps the
   // memory per-search-term only, which is right for a lone embedded list.
@@ -98,6 +97,7 @@ interface EmailListProps {
 const STUB_FOLDER_LABELS: Record<string, string> = {
   spam: "Spam",
   drafts: "Drafts",
+  scheduled: "Scheduled",
 };
 
 export const EMAIL_PAGE_SIZE = 50;
@@ -154,20 +154,19 @@ export const EmailList: React.FC<EmailListProps> = ({
   onAddAccount,
   showFolderTabs = false,
   onSelectFolder,
-  onShowAttachments,
   scrollKey = "emails",
   pagerSlot = null,
   selectSlot = null,
   total = null,
   ownAddresses = [],
 }) => {
-  const isStubFolder = activeFolder
-    ? (STUB_EMAIL_FOLDERS as ReadonlyArray<string>).includes(activeFolder)
-    : false;
   const showNoAccounts = accountsLoaded && !hasAccounts;
   // Read-only here: the query is set from the page toolbar's search box and is
   // only needed as part of the scroll-memory key below.
   const { searchQuery } = useGlobalSearch();
+  const isStubFolder = activeFolder
+    ? isStubView(activeFolder, searchQuery)
+    : false;
   // A search reads all mail (see listFolder), so say so: the results include
   // mail this folder doesn't list.
   const searchingAllMail =
@@ -685,13 +684,11 @@ export const EmailList: React.FC<EmailListProps> = ({
             <FolderChips
               activeFolder={activeFolder}
               onSelectFolder={onSelectFolder}
-              onShowAttachments={onShowAttachments}
             />
           )}
           {/* The unread-filter and mark-as-read icons that used to sit here are
             gone; both actions stay on the row itself, where they act on the
-            email under the pointer rather than on a selection. The attachments
-            paperclip is now the "Docs" chip beside Sent, in FolderChips. */}
+            email under the pointer rather than on a selection. */}
           {onBulkRestore && checkedIds.size > 0 && (
             <button
               type="button"
@@ -779,8 +776,8 @@ export const EmailList: React.FC<EmailListProps> = ({
             — coming soon
           </strong>
           <span>
-            Gmail-label and Outlook-category sync isn&apos;t wired up yet.
-            Switch back to <em>Inbox</em> or <em>Sent</em> to keep working.
+            This isn&apos;t available yet. Switch back to <em>Inbox</em> or{" "}
+            <em>Sent</em> to keep working.
           </span>
         </div>
       ) : (

@@ -883,6 +883,9 @@ export default function Emails() {
                   New message
                 </button>
               )}
+              {/* EmailList portals its select-all checkbox in here, ahead of the
+                  folder menu and SearchBar's list / split view buttons. */}
+              <div className="emails-toolbar-select" ref={setSelectSlot} />
               {/* Split (pane or list+detail layout): the folder menu sits next to
                 Compose (the list header that normally hosts it is too cramped). */}
               {chipsInToolbar && !isPersonalScope && (
@@ -893,16 +896,8 @@ export default function Emails() {
                     setSelectedEmail(null);
                     setActiveFolder(f);
                   }}
-                  // The attachments view rides inside the chip group as "Docs" next
-                  // to Sent, the same as in the list header — it used to be a
-                  // separate "Attachments" button tacked on after Reviews.
-                  onShowAttachments={showFiles}
-                  filesActive={viewMode === "files"}
                 />
               )}
-              {/* EmailList portals its select-all checkbox in here, ahead of
-                  SearchBar's list / split view buttons. */}
-              <div className="emails-toolbar-select" ref={setSelectSlot} />
               <SearchBar collapsible />
               {/* EmailList portals its "1–50 ‹ ›" pager in here. */}
               <div className="emails-toolbar-pager" ref={setPagerSlot} />
@@ -932,7 +927,6 @@ export default function Emails() {
                       }
                     : undefined
                 }
-                onShowAttachments={showFiles}
               />
             )}
 
@@ -952,7 +946,11 @@ export default function Emails() {
                 isListView={effectiveLayout === "list"}
                 scrollKey={`${activeAccount ?? "all"}:${activeFolder}`}
                 pagerSlot={pagerSlot}
-                selectSlot={selectSlot}
+                // With the folder menu in the list's own bar, select-all stays
+                // there too, so it still sits right before Inbox.
+                selectSlot={
+                  !isPersonalScope && !chipsInToolbar ? null : selectSlot
+                }
                 total={total}
                 ownAddresses={ownAddresses}
                 onBulkMarkRead={bulkMarkRead}
@@ -976,7 +974,6 @@ export default function Emails() {
                   setViewMode("email");
                   setActiveFolder(f);
                 }}
-                onShowAttachments={showFiles}
               />
             )}
 
