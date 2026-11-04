@@ -19,20 +19,29 @@ const MORE_FOLDERS: ReadonlyArray<FolderChip> = [
   { folder: "spam", label: "Spam" },
   { folder: "promotions", label: "Promotions" },
   { folder: "archived", label: "Archived" },
+  { folder: "github", label: "Reviews" },
 ];
 
 export function FolderChips({
   activeFolder,
   onSelectFolder,
+  onShowAttachments,
+  filesActive,
 }: {
   // null/undefined = no folder highlighted (e.g. while the files view is open).
   activeFolder?: EmailFolder | null;
   onSelectFolder: (folder: EmailFolder) => void;
+  // The attachments view. Not a folder — it swaps the whole pane — so it doesn't
+  // go through `onSelectFolder`. Omit to leave "Docs" out of the dropdown.
+  onShowAttachments?: () => void;
+  filesActive?: boolean;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement | null>(null);
   // The trigger names the folder you're in, so a tab always says where you are.
-  const activeMore = MORE_FOLDERS.find((f) => f.folder === activeFolder);
+  const activeMore = filesActive
+    ? "Docs"
+    : MORE_FOLDERS.find((f) => f.folder === activeFolder)?.label;
 
   // Closes on Escape or a click outside the menu.
   useEffect(() => {
@@ -79,7 +88,7 @@ export function FolderChips({
           aria-expanded={moreOpen}
           onClick={() => setMoreOpen((open) => !open)}
         >
-          {activeMore?.label ?? "More"} ▾
+          {activeMore ?? "More"} ▾
         </button>
         {moreOpen && (
           <div className="email-select-menu" role="menu">
@@ -97,6 +106,19 @@ export function FolderChips({
                 {label}
               </button>
             ))}
+            {onShowAttachments && (
+              <button
+                type="button"
+                role="menuitem"
+                className="email-select-item"
+                onClick={() => {
+                  setMoreOpen(false);
+                  onShowAttachments();
+                }}
+              >
+                Docs
+              </button>
+            )}
           </div>
         )}
       </div>

@@ -896,6 +896,8 @@ export default function Emails() {
                     setSelectedEmail(null);
                     setActiveFolder(f);
                   }}
+                  onShowAttachments={showFiles}
+                  filesActive={viewMode === "files"}
                 />
               )}
               <SearchBar collapsible />
@@ -927,6 +929,7 @@ export default function Emails() {
                       }
                     : undefined
                 }
+                onShowAttachments={showFiles}
               />
             )}
 
@@ -974,6 +977,7 @@ export default function Emails() {
                   setViewMode("email");
                   setActiveFolder(f);
                 }}
+                onShowAttachments={showFiles}
               />
             )}
 
