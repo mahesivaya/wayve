@@ -61,13 +61,17 @@ describe("ReminderPopups", () => {
       { id: 8, title: "Roadmap sync", ...meetingAt(120) },
     ]);
     const first = render(<ReminderPopups />);
+    // The chime comes from an effect, which can run just after the text appears.
     await screen.findByText("Roadmap sync");
-    expect(playChime).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(playChime).toHaveBeenCalledTimes(1));
 
-    // Nor does a reload within the same alert.
+    // Nor does a reload within the same alert. The retried toast comes from the
+    // same effect, so once it's back the chime has had its chance to repeat.
     first.unmount();
+    showDesktopNotification.mockClear();
     render(<ReminderPopups />);
     await screen.findByText("Roadmap sync");
+    await waitFor(() => expect(showDesktopNotification).toHaveBeenCalled());
     expect(playChime).toHaveBeenCalledTimes(1);
   });
 
@@ -78,10 +82,10 @@ describe("ReminderPopups", () => {
     ]);
     const first = render(<ReminderPopups />);
     await screen.findByText("Roadmap sync");
-    expect(playChime).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(showDesktopNotification).toHaveBeenCalledTimes(1)
     );
+    expect(playChime).not.toHaveBeenCalled();
     first.unmount();
 
     sessionStorage.clear();
@@ -90,7 +94,7 @@ describe("ReminderPopups", () => {
     setAlertEnabled("calendar", "notification", false);
     render(<ReminderPopups />);
     await screen.findByText("Roadmap sync");
-    expect(playChime).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(playChime).toHaveBeenCalledTimes(1));
     expect(showDesktopNotification).not.toHaveBeenCalled();
   });
 

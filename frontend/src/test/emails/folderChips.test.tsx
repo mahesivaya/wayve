@@ -58,7 +58,7 @@ describe("FolderChips", () => {
     expect(pressed.map((button) => button.textContent)).toEqual(["Draft"]);
   });
 
-  it("offers Spam, Promotions and Archived from the dropdown, then closes", () => {
+  it("offers the other folders from the dropdown, then closes", () => {
     const onSelectFolder = vi.fn();
     render(
       <FolderChips activeFolder="inbox" onSelectFolder={onSelectFolder} />
@@ -69,6 +69,7 @@ describe("FolderChips", () => {
       ["Spam", "spam"],
       ["Promotions", "promotions"],
       ["Archived", "archived"],
+      ["Reviews", "github"],
     ]) {
       openMore();
       fireEvent.click(screen.getByRole("menuitem", { name }));
@@ -82,6 +83,42 @@ describe("FolderChips", () => {
     const trigger = screen.getByRole("button", { name: /Archived/ });
     expect(trigger.className).toContain("is-active");
     expect(screen.queryByRole("button", { name: /More/ })).toBeNull();
+  });
+
+  it("opens the attachments view from Docs in the dropdown", () => {
+    const onSelectFolder = vi.fn();
+    const onShowAttachments = vi.fn();
+    render(
+      <FolderChips
+        activeFolder="inbox"
+        onSelectFolder={onSelectFolder}
+        onShowAttachments={onShowAttachments}
+      />
+    );
+    openMore();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Docs" }));
+    expect(onShowAttachments).toHaveBeenCalledTimes(1);
+    expect(onSelectFolder).not.toHaveBeenCalled();
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("names the dropdown Docs while attachments are open", () => {
+    render(
+      <FolderChips
+        activeFolder={null}
+        onSelectFolder={vi.fn()}
+        onShowAttachments={vi.fn()}
+        filesActive
+      />
+    );
+    const trigger = screen.getByRole("button", { name: /Docs/ });
+    expect(trigger.className).toContain("is-active");
+  });
+
+  it("leaves Docs out where there's no attachments view", () => {
+    render(<FolderChips activeFolder="inbox" onSelectFolder={vi.fn()} />);
+    openMore();
+    expect(screen.queryByRole("menuitem", { name: "Docs" })).toBeNull();
   });
 
   it("closes on Escape and on a click outside", () => {

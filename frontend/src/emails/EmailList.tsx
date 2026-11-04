@@ -75,6 +75,8 @@ interface EmailListProps {
   // sidebar but still need to reach Sent.
   showFolderTabs?: boolean;
   onSelectFolder?: (folder: EmailFolder) => void;
+  // Omitted by embeddings that don't host the Files panel.
+  onShowAttachments?: () => void;
   // Identifies which list this is (account + folder), so the scroll offset
   // restored on remount belongs to the rows being shown. Omitting it keeps the
   // memory per-search-term only, which is right for a lone embedded list.
@@ -154,6 +156,7 @@ export const EmailList: React.FC<EmailListProps> = ({
   onAddAccount,
   showFolderTabs = false,
   onSelectFolder,
+  onShowAttachments,
   scrollKey = "emails",
   pagerSlot = null,
   selectSlot = null,
@@ -684,6 +687,7 @@ export const EmailList: React.FC<EmailListProps> = ({
             <FolderChips
               activeFolder={activeFolder}
               onSelectFolder={onSelectFolder}
+              onShowAttachments={onShowAttachments}
             />
           )}
           {/* The unread-filter and mark-as-read icons that used to sit here are
