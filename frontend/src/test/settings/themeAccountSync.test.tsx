@@ -10,7 +10,7 @@ vi.mock("../../auth/useAuth", () => ({ useAuth: () => ({ user: auth.user }) }));
 vi.mock("../../api/profile", () => ({ putTheme }));
 
 import { CustomThemeProvider } from "../../theme/CustomThemeContext";
-import { BW_DARK_INPUT } from "../../theme/blackAndWhite";
+import { BW_DARK_INPUT, BW_LIGHT_INPUT } from "../../theme/blackAndWhite";
 import ThemeSyncBridge from "../../theme/ThemeSyncBridge";
 import {
   forgetDeviceTheme,
@@ -179,6 +179,32 @@ describe("removed presets", () => {
         '{"v":2,"active":{"kind":"preset","presetId":"default-dark"}}'
       )?.active
     ).toEqual({ kind: "custom", mode: "dark", input: BW_DARK_INPUT });
+  });
+
+  it.each([
+    { mode: "light", depth: 0.04, input: BW_LIGHT_INPUT },
+    { mode: "dark", depth: 0.05, input: BW_DARK_INPUT },
+  ])(
+    "a stored $mode black and white theme picks up the separate levels",
+    ({ mode, depth, input }) => {
+      const active = { kind: "custom", mode, input: { ...input, depth } };
+      expect(parsePersisted(JSON.stringify({ v: 2, active }))?.active).toEqual({
+        kind: "custom",
+        mode,
+        input,
+      });
+    }
+  );
+
+  it("keeps a black and white depth set by hand", () => {
+    const active = {
+      kind: "custom",
+      mode: "dark",
+      input: { ...BW_DARK_INPUT, depth: 0.02 },
+    };
+    expect(parsePersisted(JSON.stringify({ v: 2, active }))?.active).toEqual(
+      active
+    );
   });
 
   it("keeps saved themes and overrides on an upgraded choice", () => {

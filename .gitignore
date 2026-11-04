@@ -72,3 +72,8 @@ infra/geoip/*.mmdb
 
 # Business/strategy docs + personal notes — not part of the codebase
 /decentralization/
+
+# Apple code-signing certificates and requests — never committed
+*.cer
+*.p12
+*.certSigningRequest

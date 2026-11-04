@@ -1,9 +1,10 @@
 import { useNavigate } from "react-router-dom";
 
-import { BW_DARK_INPUT, isBwInput } from "../theme/blackAndWhite";
+import { BW_DARK_INPUT } from "../theme/blackAndWhite";
+import { basicThemeMode } from "../theme/basicThemeMode";
 import { useCustomTheme } from "../theme/useCustomTheme";
 
-type ThemeMode = "light" | "dark" | "custom";
+type ThemeMode = "system" | "light" | "dark" | "custom";
 
 // The Appearance entry on the General settings page (narrow screens, which
 // have no settings rail): one tap for Light or Dark, and Custom opens the full
@@ -12,20 +13,7 @@ export default function AppearanceCard() {
   const navigate = useNavigate();
   const { choice, ui, setChoice, resetToDefault, resetUi } = useCustomTheme();
 
-  // Light is the app's plain white default; Dark is the editor's plain black
-  // (its black & white toggle), not a tinted dark preset. Per-role colour
-  // overrides make either a custom look, so only an untouched one counts.
-  const plain = Object.keys(ui).length === 0;
-  const plainBlack =
-    choice.kind === "custom" &&
-    choice.mode === "dark" &&
-    isBwInput(choice.input);
-  const current: ThemeMode =
-    plain && choice.kind === "default"
-      ? "light"
-      : plain && plainBlack
-        ? "dark"
-        : "custom";
+  const current: ThemeMode = basicThemeMode(choice, ui) ?? "custom";
 
   const option = (
     mode: ThemeMode,
@@ -50,6 +38,10 @@ export default function AppearanceCard() {
       <div className="settings-theme-modes" role="group" aria-label="Theme">
         {/* Resetting keeps the saved theme library; it only clears the active
             palette and overrides. */}
+        {option("system", "💻", "System", () => {
+          setChoice({ kind: "system" });
+          resetUi();
+        })}
         {option("light", "☀️", "Light", resetToDefault)}
         {option("dark", "🌙", "Dark", () => {
           setChoice({ kind: "custom", mode: "dark", input: BW_DARK_INPUT });

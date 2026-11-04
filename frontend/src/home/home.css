@@ -143,10 +143,8 @@
   align-items: center;
   gap: 16px;
   padding: 0 26px;
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--color-chrome-light);
   border-bottom: 1px solid var(--hx-border);
-  -webkit-backdrop-filter: saturate(140%) blur(14px);
-  backdrop-filter: saturate(140%) blur(14px);
 }
 
 /* Brand wordmark (left) */
@@ -686,10 +684,8 @@
      page width. Vertical padding only; the inner grid below re-centers the
      content to the page column. */
   padding: 32px 0 20px;
-  /* Match the header + page: transparent over the page's surface with a hairline
-     top border, using the shared --hx-* tokens so it tracks light/dark like the
-     rest of the marketing chrome. */
-  background: transparent;
+  /* Same surface as the header and the app menu, with a hairline top border. */
+  background: var(--color-chrome-light);
   border-top: 1px solid var(--hx-border);
   color: var(--hx-ink);
 }
@@ -3629,10 +3625,6 @@
 .public-home-footer {
   margin-top: 44px;
   border-top: 1px solid var(--hx-border);
-  /* Transparent over the page surface so the footer blends into the section
-     above instead of showing a hard gray band/seam. The hairline top border is
-     the only divider. */
-  background: transparent;
 }
 /* `.public-home-footer-grid`, `.public-home-footer-social h2`,
    `.public-home-social-links a` and its `:hover` were merged into their original
@@ -3815,8 +3807,9 @@
   background: rgba(255, 255, 255, 0.3);
 }
 
-[data-public-theme="dark"] .public-home-nav {
-  background: rgba(0, 0, 0, 0.78);
+[data-public-theme="dark"] .public-home-nav,
+[data-public-theme="dark"] .public-home-footer {
+  background: var(--color-chrome-dark);
 }
 [data-public-theme="dark"] .public-home-links button,
 [data-public-theme="dark"] .services-trigger {

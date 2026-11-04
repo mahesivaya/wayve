@@ -997,9 +997,15 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         className={`split-pane-body${inSplit ? "" : " split-pane-body--full"}`}
       >
         <SplitPaneContext.Provider value={inSplit}>
-          <Suspense fallback={<div className="split-loading">Loading…</div>}>
-            {content}
-          </Suspense>
+          <div className="page-card-frame">
+            <div className="page-card">
+              <Suspense
+                fallback={<div className="split-loading">Loading…</div>}
+              >
+                {content}
+              </Suspense>
+            </div>
+          </div>
         </SplitPaneContext.Provider>
       </div>
     );

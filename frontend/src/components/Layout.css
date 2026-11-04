@@ -14,10 +14,9 @@
    🔝 HEADER
 ============================== */
 .header {
-  /* Track the same themeable surface as the sidebar so the header follows the
-     active/custom theme background instead of a fixed midgray. Text uses the
-     themeable ink token so contrast flips with the surface too. */
-  background: var(--color-surface-soft);
+  /* Same surface as the sidebar, in every theme. Text uses the themeable ink
+     token so contrast flips with the surface too. */
+  background: var(--color-chrome-surface);
   color: var(--color-text-primary);
   display: flex;
   align-items: center;
@@ -344,6 +343,46 @@
   margin-left: 14px;
 }
 
+/* Desktop shell with no native title bar (macOS): the header is the title bar,
+   with the window controls floating over its left end and the toggle right next
+   to them. Border-box keeps the brand lined up with the sidebar below it. */
+html.is-titlebar-inset .header-brand {
+  box-sizing: border-box;
+  min-width: max-content;
+  padding-left: 56px;
+}
+
+html.is-titlebar-inset.is-fullscreen .header-brand {
+  padding-left: 0;
+}
+
+/* The desktop app shows no brand in its header, only the sidebar toggle. */
+html.is-desktop .header-brand .logo {
+  display: none;
+}
+
+html.is-titlebar-inset .header-brand .header-collapse-btn,
+html.is-titlebar-inset .header-brand .sidebar-toggle-btn {
+  order: -1;
+  margin: 0;
+}
+
+/* Sized and weighted to sit beside the native window controls, which are about
+   12pt across, rather than to stand out from them. */
+html.is-titlebar-inset .header-brand .sidebar-collapse-btn {
+  color: var(--color-text-secondary);
+}
+
+html.is-titlebar-inset .header-brand .sidebar-collapse-btn:hover {
+  color: var(--color-text-primary);
+}
+
+html.is-titlebar-inset .header-brand .sidebar-collapse-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.7;
+}
+
 /* Shared by the header expand/collapse toggle (`.header-collapse-btn`). */
 .sidebar-collapse-btn {
   width: 26px;
@@ -520,12 +559,13 @@
 ============================== */
 .sidebar {
   width: 220px;
-  /* Track the themeable soft surface so the sidebar matches the active theme's
-     background in every theme. The old --color-surface-cool-faint aliases the
-     non-themeable --color-canvas (#0a1730 navy), so on a near-black custom
-     theme the sidebar stayed blue. (Default dark is unchanged: surface-soft is
-     also #0a1730 there.) */
-  background: var(--color-surface-soft);
+  /* Darker than the content beside it, so the menu reads as its own area. Shared
+     with the header. The hover is mixed from the surface so it follows light
+     custom themes; dark themes override it below. */
+  --sidebar-surface: var(--color-chrome-surface);
+  --sidebar-hover: color-mix(in oklab, var(--color-surface-soft) 82%, black);
+
+  background: var(--sidebar-surface);
   border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
@@ -865,7 +905,7 @@
 
 .sidebar-link:hover,
 .sidebar-subitems .sidebar-project-label:hover {
-  background: var(--color-surface-hover);
+  background: var(--sidebar-hover);
 }
 
 .sidebar-link.active,
@@ -1056,6 +1096,50 @@
   flex: 1;
   display: flex;
   overflow: hidden;
+}
+
+/* =============================
+   ▢ PAGE CARD
+============================== */
+/* Every page sits in one rounded card, with a margin of slightly darker page
+   around it (renderPaneBody in Layout.tsx). Clipping keeps its panes inside the
+   corners. Pages lay out as they did directly in .split-pane: a flex column. */
+.page-card-frame {
+  box-sizing: border-box;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 4px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--color-canvas) 94%, black);
+}
+
+.page-card-frame > .page-card {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--u-card-shadow, 0 1px 2px rgb(0, 0, 0, 0.03));
+}
+
+/* Phones have no width to give to a margin. */
+@media (max-width: 768px) {
+  .page-card-frame {
+    padding: 0;
+  }
+
+  .page-card-frame > .page-card {
+    border: none;
+    border-radius: 0;
+  }
 }
 
 /* =============================
@@ -1796,7 +1880,6 @@
    is also #0a1730 there.
    ============================================================ */
 :root[data-theme="dark"] .header {
-  background: var(--color-surface-soft);
   border-bottom: 1px solid var(--color-border-dark);
   color: var(--color-surface-tint-slate);
 }
@@ -1812,10 +1895,8 @@
   color: var(--color-primary-border);
 }
 :root[data-theme="dark"] .sidebar {
-  /* Themeable soft surface (was the non-themeable --color-surface-darken navy
-     #0a1730, which stayed blue on a near-black custom theme). Default dark is
-     unchanged: surface-soft is also #0a1730. */
-  background: var(--color-surface-soft);
+  --sidebar-hover: var(--color-surface-hover);
+
   border-right: 1px solid var(--color-border-dark);
 }
 :root[data-theme="dark"] .sidebar-collapse-btn {

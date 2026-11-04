@@ -1,9 +1,18 @@
+import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useGlobalSearch } from "./SearchContext";
 import { getSearchLabel, shouldHideSearch } from "./SearchConfig";
 import { useInSplitPane } from "../components/SplitPaneContext";
+import { SearchIcon } from "../icons";
 
-export default function SearchBar() {
+export default function SearchBar({
+  collapsible = false,
+}: {
+  // Shows only a search icon until clicked. Stays open while there's a query,
+  // so an active filter is never hidden behind the icon.
+  collapsible?: boolean;
+} = {}) {
+  const [expanded, setExpanded] = useState(false);
   const location = useLocation();
   // Inside a split pane Emails.tsx forces the list layout, so neither button
   // would do anything — the whole group goes rather than sitting there inert.
@@ -16,9 +25,12 @@ export default function SearchBar() {
   }
 
   const searchLabel = getSearchLabel(location.pathname);
+  const collapsed = collapsible && !expanded && !searchQuery;
 
   return (
-    <div className="global-search-row">
+    <div
+      className={`global-search-row${collapsed ? " global-search-row--collapsed" : ""}`}
+    >
       {/* On the emails page the view-layout toggles sit BEFORE the search box,
           and the whole cluster sits left, right after Compose (see
           .emails-page-toolbar). */}
@@ -59,29 +71,61 @@ export default function SearchBar() {
           </button>
         </div>
       )}
-      <div className="global-search-box">
-        <span className="global-search-icon" aria-hidden="true">
-          ⌕
-        </span>
-        <input
-          type="search"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder={`Search ${searchLabel}`}
+      {collapsed ? (
+        <button
+          type="button"
+          className="email-layout-btn"
+          onClick={() => setExpanded(true)}
+          data-tooltip="Search"
           aria-label={`Search ${searchLabel}`}
-        />
-        {searchQuery && (
-          <button
-            type="button"
-            className="global-search-clear"
-            onClick={() => setSearchQuery("")}
-            data-tooltip="Clear search"
-            aria-label="Clear search"
-          >
-            ×
-          </button>
-        )}
-      </div>
+        >
+          <SearchIcon size={18} aria-hidden="true" />
+        </button>
+      ) : (
+        <div
+          className="global-search-box"
+          onBlur={(e) => {
+            if (!searchQuery && !e.currentTarget.contains(e.relatedTarget)) {
+              setExpanded(false);
+            }
+          }}
+        >
+          <span className="global-search-icon" aria-hidden="true">
+            ⌕
+          </span>
+          <input
+            type="search"
+            value={searchQuery}
+            // Only just opened by the icon. A plain search box, or one restored
+            // with a query, must not take focus when the page loads.
+            autoFocus={collapsible && expanded}
+            onFocus={() => setExpanded(true)}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (collapsible && e.key === "Escape") {
+                setSearchQuery("");
+                setExpanded(false);
+              }
+            }}
+            placeholder={`Search ${searchLabel}`}
+            aria-label={`Search ${searchLabel}`}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              className="global-search-clear"
+              onClick={() => {
+                setSearchQuery("");
+                setExpanded(false);
+              }}
+              data-tooltip="Clear search"
+              aria-label="Clear search"
+            >
+              ×
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

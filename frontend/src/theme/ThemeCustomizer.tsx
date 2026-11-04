@@ -77,64 +77,6 @@ function ContrastIcon() {
 // Minimum WCAG ratio between text and surface before we warn the user.
 const MIN_CONTRAST = 4.5;
 
-// One-click background swatches: each sets the page background and matching
-// accents to a curated color + mode.
-const BACKGROUNDS: {
-  id: string;
-  label: string;
-  mode: ThemeMode;
-  input: PaletteInput;
-}[] = [
-  {
-    id: "bg-navy",
-    label: "Navy",
-    mode: "dark",
-    input: { ...DEFAULT_INPUT, hue: 230, chroma: 0.16 },
-  },
-  {
-    id: "bg-slate",
-    label: "Slate",
-    mode: "dark",
-    input: { ...DEFAULT_INPUT, hue: 220, chroma: 0.05 },
-  },
-  {
-    id: "bg-black",
-    label: "Ink",
-    mode: "dark",
-    input: { ...DEFAULT_INPUT, hue: 250, chroma: 0, depth: 0.04 },
-  },
-  {
-    id: "bg-forest",
-    label: "Forest",
-    mode: "dark",
-    input: { ...DEFAULT_INPUT, hue: 155, chroma: 0.14 },
-  },
-  {
-    id: "bg-plum",
-    label: "Plum",
-    mode: "dark",
-    input: { ...DEFAULT_INPUT, hue: 300, chroma: 0.15 },
-  },
-  {
-    id: "bg-light",
-    label: "Light",
-    mode: "light",
-    input: { ...DEFAULT_INPUT, hue: 220, chroma: 0.12 },
-  },
-  {
-    id: "bg-cream",
-    label: "Cream",
-    mode: "light",
-    input: { ...DEFAULT_INPUT, hue: 75, chroma: 0.12 },
-  },
-  {
-    id: "bg-rose",
-    label: "Rose",
-    mode: "light",
-    input: { ...DEFAULT_INPUT, hue: 350, chroma: 0.12 },
-  },
-];
-
 function RowSwatch({ input, mode }: { input: PaletteInput; mode: ThemeMode }) {
   const tokens = useMemo(() => generatePalette(input, mode), [input, mode]);
   return (
@@ -224,6 +166,10 @@ export default function ThemeCustomizer() {
       const saved = library.find((t) => t.id === choice.id);
       if (saved) return { input: saved.input, mode: saved.mode };
     }
+    if (choice.kind === "preset") {
+      const preset = PRESETS.find((p) => p.id === choice.presetId);
+      if (preset) return { input: preset.input, mode: preset.mode };
+    }
     return { input: DEFAULT_INPUT, mode: "light" as ThemeMode };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -236,11 +182,14 @@ export default function ThemeCustomizer() {
   const [importError, setImportError] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
-  // Discrete picks (swatch/preset/saved/B&W) sync `input`/`mode` so this always-on
+  // Discrete picks (preset/saved/B&W) sync `input`/`mode` so this always-on
   // preview reflects the pick rather than masking it.
+  // Nothing to preview until the editor moves off its starting values, which for
+  // a Light, Dark or System page are only the sliders' defaults, not its look.
   useEffect(() => {
+    if (input === initial.input && mode === initial.mode) return;
     previewInput(input, mode);
-  }, [input, mode, previewInput]);
+  }, [input, mode, previewInput, initial]);
   // Revert an unsaved preview on unmount only; doing it on every render would
   // clear and reapply on each slider tick, which flickers.
   useEffect(() => () => clearPreview(), [clearPreview]);
@@ -251,7 +200,7 @@ export default function ThemeCustomizer() {
   const activeSavedId = choice.kind === "saved" ? choice.id : null;
   const bwActive = choice.kind === "custom" && isBwInput(choice.input);
 
-  // Cycles white → black → white. Picking a colored swatch clears B&W, so the
+  // Cycles white → black → white. Picking a color clears B&W, so the
   // next click restarts at white.
   const toggleBlackAndWhite = () => {
     const nextMode: ThemeMode =
@@ -361,462 +310,442 @@ export default function ThemeCustomizer() {
 
   return (
     <div className="theme-customizer">
-      <div className="theme-customizer-header">
-        <div className="theme-header-tools">
-          <button
-            type="button"
-            className="theme-icon-btn"
-            onClick={handleSave}
-            data-tooltip="Save to your themes"
-            aria-label="Save theme"
-          >
-            <SaveIcon />
-          </button>
-          <button
-            type="button"
-            className="theme-icon-btn"
-            onClick={handleRandomize}
-            data-tooltip="Randomize"
-            aria-label="Randomize theme"
-          >
-            <DiceIcon />
-          </button>
-          <button
-            type="button"
-            className="theme-icon-btn"
-            onClick={toggleBlackAndWhite}
-            data-tooltip={
-              bwActive
-                ? `Black & white: ${choice.kind === "custom" && choice.mode === "dark" ? "black — click for white" : "white — click for black"}`
-                : "Black & white"
-            }
-            aria-label="Toggle black and white"
-            aria-pressed={bwActive}
-          >
-            <ContrastIcon />
-          </button>
-        </div>
+      <ColorGrid
+        hue={input.hue}
+        chroma={input.chroma}
+        mode={mode}
+        onChange={({ hue, chroma, mode: nextMode }) =>
+          commitInput(
+            // Black & white has no saturation, so a color would have no effect.
+            { ...(isBwInput(input) ? DEFAULT_INPUT : input), hue, chroma },
+            nextMode
+          )
+        }
+      />
 
-        <input
-          type="text"
-          className="theme-name-input theme-name-input--header"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="New Theme"
-          aria-label="Theme name"
-        />
-      </div>
-
-      <div
-        className="theme-bg-quick"
-        role="group"
-        aria-label="Background color"
-      >
-        <span className="theme-bg-quick-label">Background</span>
-        <div className="theme-bg-swatches">
-          {BACKGROUNDS.map((bg) => {
-            const surface = generatePalette(bg.input, bg.mode).surface;
-            const active =
-              choice.kind === "custom" &&
-              choice.mode === bg.mode &&
-              choice.input.hue === bg.input.hue &&
-              choice.input.chroma === bg.input.chroma;
-            return (
-              <button
-                key={bg.id}
-                type="button"
-                className={`theme-bg-swatch ${active ? "active" : ""}`}
-                style={{ background: surface }}
-                data-tooltip={bg.label}
-                aria-label={`${bg.label} background`}
-                aria-pressed={active}
-                onClick={() => {
-                  setInput(bg.input);
-                  setMode(bg.mode);
-                  setChoice({
-                    kind: "custom",
-                    mode: bg.mode,
-                    input: bg.input,
-                  });
-                }}
-              />
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="theme-custom-panel">
-        <ColorGrid
-          hue={input.hue}
-          chroma={input.chroma}
-          onChange={({ hue, chroma }) => commitInput({ ...input, hue, chroma })}
-        />
-
-        <div className="theme-custom-sliders">
-          <div className="theme-custom-row">
-            <label>Chroma</label>
-            <TickSlider
-              value={input.chroma}
-              min={0}
-              max={0.3}
-              step={0.01}
-              onChange={(chroma) => commitInput({ ...input, chroma })}
-              variant="gradient"
-              trackBackground={chromaTrack}
-              ariaLabel="Chroma"
-            />
-          </div>
-          <div className="theme-custom-row">
-            <label>Saturation</label>
-            <TickSlider
-              value={input.saturation}
-              min={0}
-              max={1.5}
-              step={0.05}
-              onChange={(saturation) => commitInput({ ...input, saturation })}
-              variant="ticks"
-              ariaLabel="Saturation"
-            />
-          </div>
-          <div className="theme-custom-row">
-            <label>Contrast</label>
-            <TickSlider
-              value={input.contrast}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(contrast) => commitInput({ ...input, contrast })}
-              variant="ticks"
-              ariaLabel="Contrast"
-            />
-          </div>
-          <div className="theme-custom-row">
-            <label>Depth</label>
-            <TickSlider
-              value={input.depth}
-              min={-0.05}
-              max={0.05}
-              step={0.005}
-              onChange={(depth) => commitInput({ ...input, depth })}
-              variant="ticks"
-              ariaLabel="Depth"
-            />
-          </div>
-        </div>
-
-        <div className="theme-advanced-toolbar">
-          <button
-            type="button"
-            className="theme-tool-btn"
-            onClick={() => copyTheme({ name, mode, input })}
-            data-tooltip="Copy this theme to clipboard"
-          >
-            📋 Copy
-          </button>
-          <button
-            type="button"
-            className="theme-tool-btn"
-            onClick={() => {
-              setImportOpen((o) => !o);
-              setImportError(null);
-            }}
-            data-tooltip="Import a theme from clipboard text"
-          >
-            Import
-          </button>
-          <button
-            type="button"
-            className="theme-customizer-revert"
-            onClick={() => commitInput(DEFAULT_INPUT)}
-          >
-            Revert sliders
-          </button>
-          <button
-            type="button"
-            className="theme-customizer-reset"
-            onClick={resetToDefault}
-            data-tooltip="Restore stylesheet defaults"
-          >
-            Reset
-          </button>
-        </div>
-
-        {importOpen && (
-          <div className="theme-import">
-            <textarea
-              className="theme-import-text"
-              value={importText}
-              onChange={(e) => setImportText(e.target.value)}
-              placeholder='Paste an exported theme JSON, e.g. {"name":"…","mode":"dark","input":{…}}'
-              rows={4}
-            />
-            {importError && (
-              <div className="theme-import-error">{importError}</div>
-            )}
-            <div className="theme-import-actions">
+      <details className="theme-advanced">
+        <summary className="theme-advanced-summary">Advanced</summary>
+        <div className="theme-advanced-body">
+          <div className="theme-customizer-header">
+            <div className="theme-header-tools">
               <button
                 type="button"
-                className="theme-customizer-apply"
-                onClick={handleImport}
+                className="theme-icon-btn"
+                onClick={handleSave}
+                data-tooltip="Save to your themes"
+                aria-label="Save theme"
               >
-                Apply import
+                <SaveIcon />
+              </button>
+              <button
+                type="button"
+                className="theme-icon-btn"
+                onClick={handleRandomize}
+                data-tooltip="Randomize"
+                aria-label="Randomize theme"
+              >
+                <DiceIcon />
+              </button>
+              <button
+                type="button"
+                className="theme-icon-btn"
+                onClick={toggleBlackAndWhite}
+                data-tooltip={
+                  bwActive
+                    ? `Black & white: ${choice.kind === "custom" && choice.mode === "dark" ? "black — click for white" : "white — click for black"}`
+                    : "Black & white"
+                }
+                aria-label="Toggle black and white"
+                aria-pressed={bwActive}
+              >
+                <ContrastIcon />
               </button>
             </div>
+
+            <input
+              type="text"
+              className="theme-name-input theme-name-input--header"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="New Theme"
+              aria-label="Theme name"
+            />
           </div>
-        )}
-      </div>
 
-      <div className="theme-lib">
-        <div className="theme-lib-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={libTab === "themes"}
-            className={`theme-customizer-tab ${libTab === "themes" ? "active" : ""}`}
-            onClick={() => setLibTab("themes")}
-          >
-            Themes
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={libTab === "ui"}
-            className={`theme-customizer-tab ${libTab === "ui" ? "active" : ""}`}
-            onClick={() => setLibTab("ui")}
-          >
-            Font
-          </button>
-        </div>
-
-        {libTab === "themes" && (
-          <div className="theme-lib-list">
-            {PRESETS.map((preset: ThemePreset) => (
-              <div
-                key={preset.id}
-                className={`theme-lib-row ${activePresetId === preset.id ? "active" : ""}`}
-              >
-                <button
-                  type="button"
-                  className="theme-lib-apply"
-                  onClick={() => applyPreset(preset.id)}
-                  data-tooltip={`Apply ${preset.name}`}
-                >
-                  <RowSwatch input={preset.input} mode={preset.mode} />
-                  <span className="theme-lib-name">{preset.name}</span>
-                </button>
-                <button
-                  type="button"
-                  className="theme-lib-icon"
-                  onClick={() =>
-                    copyTheme({
-                      name: preset.name,
-                      mode: preset.mode,
-                      input: preset.input,
-                    })
+          <div className="theme-custom-panel">
+            <div className="theme-custom-sliders">
+              <div className="theme-custom-row">
+                <label>Chroma</label>
+                <TickSlider
+                  value={input.chroma}
+                  min={0}
+                  max={0.3}
+                  step={0.01}
+                  onChange={(chroma) => commitInput({ ...input, chroma })}
+                  variant="gradient"
+                  trackBackground={chromaTrack}
+                  ariaLabel="Chroma"
+                />
+              </div>
+              <div className="theme-custom-row">
+                <label>Saturation</label>
+                <TickSlider
+                  value={input.saturation}
+                  min={0}
+                  max={1.5}
+                  step={0.05}
+                  onChange={(saturation) =>
+                    commitInput({ ...input, saturation })
                   }
-                  data-tooltip="Copy theme"
-                  aria-label={`Copy ${preset.name}`}
-                >
-                  📋
-                </button>
+                  variant="ticks"
+                  ariaLabel="Saturation"
+                />
               </div>
-            ))}
+              <div className="theme-custom-row">
+                <label>Contrast</label>
+                <TickSlider
+                  value={input.contrast}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  onChange={(contrast) => commitInput({ ...input, contrast })}
+                  variant="ticks"
+                  ariaLabel="Contrast"
+                />
+              </div>
+              <div className="theme-custom-row">
+                <label>Depth</label>
+                <TickSlider
+                  value={input.depth}
+                  min={-0.05}
+                  max={0.05}
+                  step={0.005}
+                  onChange={(depth) => commitInput({ ...input, depth })}
+                  variant="ticks"
+                  ariaLabel="Depth"
+                />
+              </div>
+            </div>
 
-            {library.map((t) => (
-              <div
-                key={t.id}
-                className={`theme-lib-row ${activeSavedId === t.id ? "active" : ""}`}
+            <div className="theme-advanced-toolbar">
+              <button
+                type="button"
+                className="theme-tool-btn"
+                onClick={() => copyTheme({ name, mode, input })}
+                data-tooltip="Copy this theme to clipboard"
               >
-                <button
-                  type="button"
-                  className="theme-lib-apply"
-                  onClick={() => applySaved(t)}
-                  data-tooltip={`Apply ${t.name}`}
-                >
-                  <RowSwatch input={t.input} mode={t.mode} />
-                  {renamingId === t.id ? (
-                    <input
-                      type="text"
-                      className="theme-lib-rename"
-                      defaultValue={t.name}
-                      autoFocus
-                      onClick={(e) => e.stopPropagation()}
-                      onBlur={(e) => {
-                        renameTheme(t.id, e.target.value);
-                        setRenamingId(null);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          renameTheme(t.id, e.currentTarget.value);
-                          setRenamingId(null);
-                        }
-                        if (e.key === "Escape") setRenamingId(null);
-                      }}
-                    />
-                  ) : (
-                    <span className="theme-lib-name">{t.name}</span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  className="theme-lib-icon"
-                  onClick={() =>
-                    copyTheme({ name: t.name, mode: t.mode, input: t.input })
-                  }
-                  data-tooltip="Copy theme"
-                  aria-label={`Copy ${t.name}`}
-                >
-                  📋
-                </button>
-                <button
-                  type="button"
-                  className="theme-lib-icon"
-                  onClick={() => setRenamingId(t.id)}
-                  data-tooltip="Rename"
-                  aria-label={`Rename ${t.name}`}
-                >
-                  ✏️
-                </button>
-                <button
-                  type="button"
-                  className="theme-lib-icon theme-lib-delete"
-                  onClick={() => deleteTheme(t.id)}
-                  data-tooltip="Delete"
-                  aria-label={`Delete ${t.name}`}
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
+                📋 Copy
+              </button>
+              <button
+                type="button"
+                className="theme-tool-btn"
+                onClick={() => {
+                  setImportOpen((o) => !o);
+                  setImportError(null);
+                }}
+                data-tooltip="Import a theme from clipboard text"
+              >
+                Import
+              </button>
+              <button
+                type="button"
+                className="theme-customizer-revert"
+                onClick={() => commitInput(DEFAULT_INPUT)}
+              >
+                Revert sliders
+              </button>
+              <button
+                type="button"
+                className="theme-customizer-reset"
+                onClick={resetToDefault}
+                data-tooltip="Restore stylesheet defaults"
+              >
+                Reset
+              </button>
+            </div>
 
-            {library.length === 0 && (
-              <div className="theme-lib-empty">
-                Save a theme from the Advanced tab to build your library.
-              </div>
-            )}
-          </div>
-        )}
-
-        {libTab === "ui" && (
-          <div className="theme-ui-knobs">
-            {fontCfg && (
-              <div className="theme-ui-fonts">
-                <div className="theme-ui-font">
-                  <label htmlFor="ui-font-me">Your font</label>
-                  <select
-                    id="ui-font-me"
-                    className="theme-ui-font-select"
-                    value={normalizeFontKey(fontCfg.user)}
-                    disabled={fontSaving}
-                    onChange={(e) =>
-                      void setFont("me", e.target.value as FontKey)
-                    }
+            {importOpen && (
+              <div className="theme-import">
+                <textarea
+                  className="theme-import-text"
+                  value={importText}
+                  onChange={(e) => setImportText(e.target.value)}
+                  placeholder='Paste an exported theme JSON, e.g. {"name":"…","mode":"dark","input":{…}}'
+                  rows={4}
+                />
+                {importError && (
+                  <div className="theme-import-error">{importError}</div>
+                )}
+                <div className="theme-import-actions">
+                  <button
+                    type="button"
+                    className="theme-customizer-apply"
+                    onClick={handleImport}
                   >
-                    {FONT_OPTIONS.map((o) => (
-                      <option key={o.key} value={o.key}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="theme-ui-font-note">
-                    Just for you — overrides your organization &amp; the
-                    platform default.
-                  </p>
+                    Apply import
+                  </button>
                 </div>
-
-                {fontCfg.can_set_org && (
-                  <div className="theme-ui-font">
-                    <label htmlFor="ui-font-org">Organization font</label>
-                    <select
-                      id="ui-font-org"
-                      className="theme-ui-font-select"
-                      value={normalizeFontKey(fontCfg.org)}
-                      disabled={fontSaving}
-                      onChange={(e) =>
-                        void setFont("org", e.target.value as FontKey)
-                      }
-                    >
-                      {FONT_OPTIONS.map((o) => (
-                        <option key={o.key} value={o.key}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="theme-ui-font-note">
-                      For all members who haven&apos;t set their own font.
-                    </p>
-                  </div>
-                )}
-
-                {fontCfg.can_set_platform && (
-                  <div className="theme-ui-font">
-                    <label htmlFor="ui-font-platform">
-                      Platform font (default)
-                    </label>
-                    <select
-                      id="ui-font-platform"
-                      className="theme-ui-font-select"
-                      value={normalizeFontKey(fontCfg.platform)}
-                      disabled={fontSaving}
-                      onChange={(e) =>
-                        void setFont("platform", e.target.value as FontKey)
-                      }
-                    >
-                      {FONT_OPTIONS.map((o) => (
-                        <option key={o.key} value={o.key}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="theme-ui-font-note">
-                      The default for everyone on the platform.
-                    </p>
-                  </div>
-                )}
               </div>
             )}
-            {lowContrast && (
-              <div className="theme-ui-warning" role="alert">
-                ⚠ Low contrast between Text and Surface (
-                {textVsSurface?.toFixed(1)}:1). Text may be hard to read.
-              </div>
-            )}
-            {UI_OVERRIDE_ROLES.map(({ role, label }) => {
-              const overridden = ui[role] !== undefined;
-              return (
-                <div key={role} className="theme-ui-row">
-                  <label htmlFor={`ui-${role}`}>{label}</label>
-                  <input
-                    id={`ui-${role}`}
-                    type="color"
-                    className="theme-ui-color"
-                    value={cssColorToHex(effectiveColor(role))}
-                    onChange={(e) => setUiOverride(role, e.target.value)}
-                  />
-                  {overridden && (
+          </div>
+
+          <div className="theme-lib">
+            <div className="theme-lib-tabs" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={libTab === "themes"}
+                className={`theme-customizer-tab ${libTab === "themes" ? "active" : ""}`}
+                onClick={() => setLibTab("themes")}
+              >
+                Themes
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={libTab === "ui"}
+                className={`theme-customizer-tab ${libTab === "ui" ? "active" : ""}`}
+                onClick={() => setLibTab("ui")}
+              >
+                Font
+              </button>
+            </div>
+
+            {libTab === "themes" && (
+              <div className="theme-lib-list">
+                {PRESETS.map((preset: ThemePreset) => (
+                  <div
+                    key={preset.id}
+                    className={`theme-lib-row ${activePresetId === preset.id ? "active" : ""}`}
+                  >
+                    <button
+                      type="button"
+                      className="theme-lib-apply"
+                      onClick={() => applyPreset(preset.id)}
+                      data-tooltip={`Apply ${preset.name}`}
+                    >
+                      <RowSwatch input={preset.input} mode={preset.mode} />
+                      <span className="theme-lib-name">{preset.name}</span>
+                    </button>
                     <button
                       type="button"
                       className="theme-lib-icon"
-                      onClick={() => clearUiOverride(role)}
-                      data-tooltip="Clear override"
-                      aria-label={`Clear ${label} override`}
+                      onClick={() =>
+                        copyTheme({
+                          name: preset.name,
+                          mode: preset.mode,
+                          input: preset.input,
+                        })
+                      }
+                      data-tooltip="Copy theme"
+                      aria-label={`Copy ${preset.name}`}
+                    >
+                      📋
+                    </button>
+                  </div>
+                ))}
+
+                {library.map((t) => (
+                  <div
+                    key={t.id}
+                    className={`theme-lib-row ${activeSavedId === t.id ? "active" : ""}`}
+                  >
+                    <button
+                      type="button"
+                      className="theme-lib-apply"
+                      onClick={() => applySaved(t)}
+                      data-tooltip={`Apply ${t.name}`}
+                    >
+                      <RowSwatch input={t.input} mode={t.mode} />
+                      {renamingId === t.id ? (
+                        <input
+                          type="text"
+                          className="theme-lib-rename"
+                          defaultValue={t.name}
+                          autoFocus
+                          onClick={(e) => e.stopPropagation()}
+                          onBlur={(e) => {
+                            renameTheme(t.id, e.target.value);
+                            setRenamingId(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              renameTheme(t.id, e.currentTarget.value);
+                              setRenamingId(null);
+                            }
+                            if (e.key === "Escape") setRenamingId(null);
+                          }}
+                        />
+                      ) : (
+                        <span className="theme-lib-name">{t.name}</span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="theme-lib-icon"
+                      onClick={() =>
+                        copyTheme({
+                          name: t.name,
+                          mode: t.mode,
+                          input: t.input,
+                        })
+                      }
+                      data-tooltip="Copy theme"
+                      aria-label={`Copy ${t.name}`}
+                    >
+                      📋
+                    </button>
+                    <button
+                      type="button"
+                      className="theme-lib-icon"
+                      onClick={() => setRenamingId(t.id)}
+                      data-tooltip="Rename"
+                      aria-label={`Rename ${t.name}`}
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      type="button"
+                      className="theme-lib-icon theme-lib-delete"
+                      onClick={() => deleteTheme(t.id)}
+                      data-tooltip="Delete"
+                      aria-label={`Delete ${t.name}`}
                     >
                       ✕
                     </button>
-                  )}
-                </div>
-              );
-            })}
-            <button
-              type="button"
-              className="theme-customizer-revert"
-              onClick={resetUi}
-            >
-              Reset UI overrides
-            </button>
+                  </div>
+                ))}
+
+                {library.length === 0 && (
+                  <div className="theme-lib-empty">
+                    Save a theme from the Advanced tab to build your library.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {libTab === "ui" && (
+              <div className="theme-ui-knobs">
+                {fontCfg && (
+                  <div className="theme-ui-fonts">
+                    <div className="theme-ui-font">
+                      <label htmlFor="ui-font-me">Your font</label>
+                      <select
+                        id="ui-font-me"
+                        className="theme-ui-font-select"
+                        value={normalizeFontKey(fontCfg.user)}
+                        disabled={fontSaving}
+                        onChange={(e) =>
+                          void setFont("me", e.target.value as FontKey)
+                        }
+                      >
+                        {FONT_OPTIONS.map((o) => (
+                          <option key={o.key} value={o.key}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="theme-ui-font-note">
+                        Just for you — overrides your organization &amp; the
+                        platform default.
+                      </p>
+                    </div>
+
+                    {fontCfg.can_set_org && (
+                      <div className="theme-ui-font">
+                        <label htmlFor="ui-font-org">Organization font</label>
+                        <select
+                          id="ui-font-org"
+                          className="theme-ui-font-select"
+                          value={normalizeFontKey(fontCfg.org)}
+                          disabled={fontSaving}
+                          onChange={(e) =>
+                            void setFont("org", e.target.value as FontKey)
+                          }
+                        >
+                          {FONT_OPTIONS.map((o) => (
+                            <option key={o.key} value={o.key}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="theme-ui-font-note">
+                          For all members who haven&apos;t set their own font.
+                        </p>
+                      </div>
+                    )}
+
+                    {fontCfg.can_set_platform && (
+                      <div className="theme-ui-font">
+                        <label htmlFor="ui-font-platform">
+                          Platform font (default)
+                        </label>
+                        <select
+                          id="ui-font-platform"
+                          className="theme-ui-font-select"
+                          value={normalizeFontKey(fontCfg.platform)}
+                          disabled={fontSaving}
+                          onChange={(e) =>
+                            void setFont("platform", e.target.value as FontKey)
+                          }
+                        >
+                          {FONT_OPTIONS.map((o) => (
+                            <option key={o.key} value={o.key}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="theme-ui-font-note">
+                          The default for everyone on the platform.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {lowContrast && (
+                  <div className="theme-ui-warning" role="alert">
+                    ⚠ Low contrast between Text and Surface (
+                    {textVsSurface?.toFixed(1)}:1). Text may be hard to read.
+                  </div>
+                )}
+                {UI_OVERRIDE_ROLES.map(({ role, label }) => {
+                  const overridden = ui[role] !== undefined;
+                  return (
+                    <div key={role} className="theme-ui-row">
+                      <label htmlFor={`ui-${role}`}>{label}</label>
+                      <input
+                        id={`ui-${role}`}
+                        type="color"
+                        className="theme-ui-color"
+                        value={cssColorToHex(effectiveColor(role))}
+                        onChange={(e) => setUiOverride(role, e.target.value)}
+                      />
+                      {overridden && (
+                        <button
+                          type="button"
+                          className="theme-lib-icon"
+                          onClick={() => clearUiOverride(role)}
+                          data-tooltip="Clear override"
+                          aria-label={`Clear ${label} override`}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+                <button
+                  type="button"
+                  className="theme-customizer-revert"
+                  onClick={resetUi}
+                >
+                  Reset UI overrides
+                </button>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      </details>
     </div>
   );
 }

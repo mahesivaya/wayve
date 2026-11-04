@@ -12,8 +12,11 @@ import {
   useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
+
+import { BW_DARK_INPUT } from "./blackAndWhite";
 
 import {
   CustomThemeContext,
@@ -84,11 +87,31 @@ function genId(): string {
   return `t_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+const DARK_QUERY = "(prefers-color-scheme: dark)";
+
+function subscribeDeviceDark(onChange: () => void) {
+  if (typeof window.matchMedia !== "function") return () => {};
+  const query = window.matchMedia(DARK_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+function deviceIsDark() {
+  return (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia(DARK_QUERY).matches
+  );
+}
+
 function baseTokensFor(
   active: ThemeChoice,
-  library: SavedTheme[]
+  library: SavedTheme[],
+  deviceDark: boolean
 ): TokenOverrides {
   if (active.kind === "default") return {};
+  if (active.kind === "system") {
+    return deviceDark ? generatePalette(BW_DARK_INPUT, "dark") : {};
+  }
   if (active.kind === "preset") {
     const p = findPreset(active.presetId);
     return p ? tokensForPreset(p) : {};
@@ -103,8 +126,13 @@ function baseTokensFor(
 // Drives the data-theme attribute. The default choice resolves to light, so
 // resetting lands back on the white default rather than keeping whatever mode
 // the previously active theme happened to paint.
-function modeFor(active: ThemeChoice, library: SavedTheme[]): ThemeMode {
+function modeFor(
+  active: ThemeChoice,
+  library: SavedTheme[],
+  deviceDark: boolean
+): ThemeMode {
   if (active.kind === "default") return "light";
+  if (active.kind === "system") return deviceDark ? "dark" : "light";
   if (active.kind === "preset")
     return findPreset(active.presetId)?.mode ?? "light";
   if (active.kind === "saved") {
@@ -129,20 +157,21 @@ function applyTokensToRoot(tokens: TokenOverrides) {
 export function CustomThemeProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PersistedTheme>(() => loadFromStorage());
   const { active, library, ui } = state;
+  const deviceDark = useSyncExternalStore(subscribeDeviceDark, deviceIsDark);
 
   const baseTokens = useMemo(
-    () => baseTokensFor(active, library),
-    [active, library]
+    () => baseTokensFor(active, library, deviceDark),
+    [active, library, deviceDark]
   );
 
   useEffect(() => {
     applyTokensToRoot({ ...baseTokens, ...ui });
-    const mode = modeFor(active, library);
+    const mode = modeFor(active, library, deviceDark);
     document.documentElement.setAttribute("data-theme", mode);
     // Mirror it for the pre-paint script, so the next load opens on the right
     // surface instead of flashing the light default first.
     rememberMode(mode);
-  }, [baseTokens, ui, active, library]);
+  }, [baseTokens, ui, active, library, deviceDark]);
 
   const setChoice = useCallback((next: ThemeChoice) => {
     setState((prev) => {
@@ -266,9 +295,9 @@ export function CustomThemeProvider({ children }: { children: ReactNode }) {
     applyTokensToRoot({ ...baseTokens, ...ui });
     document.documentElement.setAttribute(
       "data-theme",
-      modeFor(active, library)
+      modeFor(active, library, deviceDark)
     );
-  }, [baseTokens, ui, active, library]);
+  }, [baseTokens, ui, active, library, deviceDark]);
 
   const value = useMemo<CustomThemeValue>(
     () => ({

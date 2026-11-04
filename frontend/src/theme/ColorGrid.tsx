@@ -1,14 +1,17 @@
-// A dotted matrix of OKLCH samples with a draggable marker. The ~1200 dots are
-// SVG circles rather than divs: inline-styled divs are sluggish to update at
-// that count, and preserveAspectRatio="none" stretches the grid to any width
-// without per-dot math.
+// A dotted matrix of OKLCH samples: click a dot to get a theme in its color, or
+// drag the marker. The ~1200 dots are SVG circles rather than divs: inline-styled
+// divs are sluggish to update at that count, and preserveAspectRatio="none"
+// stretches the grid to any width without per-dot math.
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
+
+import type { ThemeMode } from "./customThemeShared";
 
 interface Props {
   hue: number;
   chroma: number;
-  onChange: (next: { hue: number; chroma: number }) => void;
+  mode: ThemeMode;
+  onChange: (next: { hue: number; chroma: number; mode: ThemeMode }) => void;
 }
 
 const COLS = 60;
@@ -18,6 +21,10 @@ const PREVIEW_C = 0.16;
 // Must match the Chroma slider's max, or the grid and slider drift apart.
 const CHROMA_MAX = 0.3;
 const CHROMA_STEP = 0.01;
+// The palest theme a dot gives, so every dot shows some of its color.
+const CHROMA_MIN = 0.04;
+const HALF = Math.floor(ROWS / 2);
+const LAST_DARK_ROW_OFFSET = ROWS - HALF - 1;
 
 interface Dot {
   cx: number;
@@ -25,22 +32,23 @@ interface Dot {
   fill: string;
 }
 
+// The mid-row split gives the grid two lightness bands: a brighter one on top
+// and a darker one below.
+const rowLightness = (row: number) =>
+  row < HALF ? 0.82 - (row / HALF) * 0.27 : 0.45 - ((row - HALF) / HALF) * 0.23;
+
+const dotColor = (row: number, hue: number) =>
+  `oklch(${rowLightness(row).toFixed(3)} ${PREVIEW_C.toFixed(3)} ${hue.toFixed(1)})`;
+
 function buildDots(): Dot[] {
   const dots: Dot[] = [];
   for (let row = 0; row < ROWS; row++) {
-    // The mid-row split gives the grid two lightness bands: a brighter one on
-    // top and a darker one below.
-    const half = Math.floor(ROWS / 2);
-    const l =
-      row < half
-        ? 0.82 - (row / half) * 0.27
-        : 0.45 - ((row - half) / half) * 0.23;
     for (let col = 0; col < COLS; col++) {
       const h = (col / COLS) * 360;
       dots.push({
         cx: col + 0.5,
         cy: row + 0.5,
-        fill: `oklch(${l.toFixed(3)} ${PREVIEW_C.toFixed(3)} ${h.toFixed(1)})`,
+        fill: dotColor(row, h),
       });
     }
   }
@@ -51,15 +59,47 @@ function buildDots(): Dot[] {
 const snapChroma = (c: number) =>
   Math.max(0, Math.min(CHROMA_MAX, Math.round(c / CHROMA_STEP) * CHROMA_STEP));
 
-export default function ColorGrid({ hue, chroma, onChange }: Props) {
+const clampRow = (row: number) => Math.max(0, Math.min(ROWS - 1, row));
+
+// A dot's row sets the theme: the bright band gives a light theme and the dark
+// band a dark one, each strongest where the two bands meet.
+function themeForRow(row: number): { chroma: number; mode: ThemeMode } {
+  const span = CHROMA_MAX - CHROMA_MIN;
+  if (row < HALF) {
+    return {
+      mode: "light",
+      chroma: snapChroma(CHROMA_MIN + (row / (HALF - 1)) * span),
+    };
+  }
+  return {
+    mode: "dark",
+    chroma: snapChroma(
+      CHROMA_MAX - ((row - HALF) / LAST_DARK_ROW_OFFSET) * span
+    ),
+  };
+}
+
+function rowForTheme(chroma: number, mode: ThemeMode): number {
+  const strength = Math.max(
+    0,
+    Math.min(1, (chroma - CHROMA_MIN) / (CHROMA_MAX - CHROMA_MIN))
+  );
+  return mode === "light"
+    ? Math.round(strength * (HALF - 1))
+    : HALF + Math.round((1 - strength) * LAST_DARK_ROW_OFFSET);
+}
+
+const hueForCol = (col: number) => Math.round((col / COLS) * 360);
+
+export default function ColorGrid({ hue, chroma, mode, onChange }: Props) {
   const dots = useMemo(() => buildDots(), []);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // X drives hue; Y drives chroma, muted at the top and vivid at the bottom.
-  const markerCol = (hue / 360) * COLS;
-  const chromaPct = chroma / CHROMA_MAX;
-  const markerXPct = (markerCol / COLS) * 100;
-  const markerYPct = chromaPct * 100;
+  // The marker sits on the dot for the current theme, in that dot's color.
+  const markerCol = Math.min(COLS - 1, Math.round((hue / 360) * COLS));
+  const markerRow = rowForTheme(chroma, mode);
+  const markerXPct = ((markerCol + 0.5) / COLS) * 100;
+  const markerYPct = ((markerRow + 0.5) / ROWS) * 100;
 
   const updateFromClient = useCallback(
     (clientX: number, clientY: number) => {
@@ -69,8 +109,8 @@ export default function ColorGrid({ hue, chroma, onChange }: Props) {
       const px = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
       const py = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
       onChange({
-        hue: Math.round(px * 360),
-        chroma: snapChroma(py * CHROMA_MAX),
+        hue: hueForCol(Math.min(COLS - 1, Math.floor(px * COLS))),
+        ...themeForRow(clampRow(Math.floor(py * ROWS))),
       });
     },
     [onChange]
@@ -96,19 +136,27 @@ export default function ColorGrid({ hue, chroma, onChange }: Props) {
     e.currentTarget.releasePointerCapture(e.pointerId);
   }, []);
 
-  // Keyboard nudges for accessibility: Left/Right → hue, Up/Down → chroma.
+  // Keyboard nudges for accessibility: the arrows move one dot.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft") {
-        onChange({ hue: Math.max(0, hue - 5), chroma });
+        onChange({
+          hue: hueForCol(Math.max(0, markerCol - 1)),
+          chroma,
+          mode,
+        });
       } else if (e.key === "ArrowRight") {
-        onChange({ hue: Math.min(360, hue + 5), chroma });
+        onChange({
+          hue: hueForCol(Math.min(COLS - 1, markerCol + 1)),
+          chroma,
+          mode,
+        });
       } else if (e.key === "ArrowUp") {
-        onChange({ hue, chroma: snapChroma(chroma - CHROMA_STEP * 2) });
+        onChange({ hue, ...themeForRow(clampRow(markerRow - 1)) });
       } else if (e.key === "ArrowDown") {
-        onChange({ hue, chroma: snapChroma(chroma + CHROMA_STEP * 2) });
+        onChange({ hue, ...themeForRow(clampRow(markerRow + 1)) });
       } else {
         return;
       }
@@ -116,7 +164,7 @@ export default function ColorGrid({ hue, chroma, onChange }: Props) {
     };
     el.addEventListener("keydown", onKey);
     return () => el.removeEventListener("keydown", onKey);
-  }, [hue, chroma, onChange]);
+  }, [hue, chroma, mode, markerCol, markerRow, onChange]);
 
   return (
     <div
@@ -147,7 +195,7 @@ export default function ColorGrid({ hue, chroma, onChange }: Props) {
         style={{
           left: `${markerXPct}%`,
           top: `${markerYPct}%`,
-          background: `oklch(0.68 ${chroma.toFixed(3)} ${hue.toFixed(1)})`,
+          background: dotColor(markerRow, hue),
         }}
       />
     </div>

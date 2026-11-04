@@ -454,14 +454,14 @@
 
 .marketing-footer {
   margin-top: 4rem;
-  background: var(--color-surface-deep-navy);
-  color: var(--color-text-marketing-light);
+  background: var(--color-chrome-light);
+  color: var(--hx-ink);
   padding: 2.5rem 2rem 1.5rem 2rem;
 }
 
-/* The footer is deep navy in BOTH themes, so the black brand mark must always be
-   flipped to white here (a theme-only rule would hide it on the light theme). */
-.marketing-footer .brand-logo {
+/* The footer follows the public theme, so the black brand mark only needs
+   flipping to white on the dark one. */
+[data-public-theme="dark"] .marketing-footer .brand-logo {
   filter: invert(1) brightness(2);
 }
 
@@ -481,19 +481,19 @@
 }
 
 .marketing-footer-inner strong {
-  color: white;
+  color: var(--hx-ink);
   font-size: 1.1rem;
 }
 
 .marketing-footer-inner p {
   margin: 0.5rem 0 0 0;
   font-size: 0.9rem;
-  color: var(--color-text-slate-soft);
+  color: var(--hx-muted);
   max-width: 320px;
 }
 
 .marketing-footer-inner h4 {
-  color: white;
+  color: var(--hx-ink);
   font-size: 0.95rem;
   margin: 0 0 0.75rem 0;
 }
@@ -501,7 +501,7 @@
 .marketing-footer-inner button {
   background: transparent;
   border: none;
-  color: var(--color-text-marketing-light);
+  color: var(--hx-muted);
   display: block;
   padding: 0.3rem 0;
   cursor: pointer;
@@ -510,16 +510,16 @@
 }
 
 .marketing-footer-inner button:hover {
-  color: white;
+  color: var(--hx-ink);
 }
 
 .marketing-footer-legal {
   max-width: 1200px;
   margin: 1.5rem auto 0 auto;
   padding-top: 1.5rem;
-  border-top: 1px solid var(--color-surface-dark-divider);
+  border-top: 1px solid var(--hx-border);
   font-size: 0.8rem;
-  color: var(--color-text-slate-soft-mid);
+  color: var(--hx-muted);
   text-align: center;
 }
 
@@ -613,10 +613,6 @@
   border: 1px solid var(--color-surface-dark-border);
 }
 
-:root[data-theme="dark"] .marketing-footer-inner button {
-  color: var(--color-input-border);
-}
-
 /* ============================================================
    Public light/dark (see usePublicTheme) — /pricing and /support opt in via
    MarketingShell `themeable`. Scoped to the shell's `data-public-theme`, not
@@ -653,11 +649,8 @@
   background: rgba(96, 165, 250, 0.12);
 }
 [data-public-theme="dark"] .marketing-footer {
-  background: #050505;
+  background: var(--color-chrome-dark);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-[data-public-theme="dark"] .marketing-footer-legal {
-  border-top-color: rgba(255, 255, 255, 0.08);
 }
 
 /* Monochrome hero buttons on the opt-in public pages, matching the pricing
