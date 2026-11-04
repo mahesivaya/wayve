@@ -22,6 +22,14 @@ export const isConversation = (email: EmailItem): boolean =>
 export const isUnread = (email: EmailItem): boolean =>
   (email.unread_count ?? 0) > 0 || email.is_read === false;
 
+// The per-sender flags behind a row's bold names. They come from the server, so
+// reading a row has to clear them itself or the names stay bold until the list
+// next reloads.
+export const clearUnreadSenders = (
+  participants: EmailItem["participants"]
+): EmailItem["participants"] =>
+  participants?.map((p) => ({ ...p, unread: false }));
+
 // A conversation row is starred while any message in it is, as in Gmail.
 export const isStarred = (email: EmailItem): boolean =>
   email.is_starred === true || (email.starred_ids?.length ?? 0) > 0;

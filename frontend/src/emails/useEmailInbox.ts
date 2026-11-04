@@ -23,6 +23,7 @@ import { decryptWayveBodyIfNeeded, emailBodyErrorMessage } from "./bodyUtils";
 import { isStubView, listFolder } from "./searchScope";
 import { EmailAccount, EmailFolder, EmailItem, EmailAttachment } from "./types";
 import {
+  clearUnreadSenders,
   conversationKey,
   conversationMessageIds,
   isConversation,
@@ -376,6 +377,7 @@ export function useEmailInbox(
                 message_ids: messages.map((m) => m.id).reverse(),
                 unread_count: 0,
                 unread_ids: [],
+                participants: clearUnreadSenders(item.participants),
               }
             : item
         )
@@ -452,7 +454,12 @@ export function useEmailInbox(
     setEmails((prev) =>
       prev.map((item) =>
         item.id === email.id
-          ? { ...item, is_read: true, unread_count: 0 }
+          ? {
+              ...item,
+              is_read: true,
+              unread_count: 0,
+              participants: clearUnreadSenders(item.participants),
+            }
           : item
       )
     );
@@ -645,7 +652,12 @@ export function useEmailInbox(
             (unreadByAccount.get(email.account_id) ?? 0) + drop
           );
         }
-        return { ...email, is_read: true, unread_count: 0 };
+        return {
+          ...email,
+          is_read: true,
+          unread_count: 0,
+          participants: clearUnreadSenders(email.participants),
+        };
       })
     );
     setAccounts((prev) =>
@@ -692,6 +704,9 @@ export function useEmailInbox(
           ...email,
           is_read: false,
           unread_count: Math.max(1, email.unread_count ?? 0),
+          participants: email.participants?.map((p) =>
+            p.sender === email.sender ? { ...p, unread: true } : p
+          ),
         };
       })
     );

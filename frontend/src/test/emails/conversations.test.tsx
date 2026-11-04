@@ -29,12 +29,14 @@ vi.mock("../../api/email", async (importOriginal) => ({
   getEmailAttachments: vi.fn().mockResolvedValue([]),
   trashEmails: (ids: number[]) => trashEmails(ids),
   markEmailRead: (id: number) => markEmailRead(id),
+  markEmailUnread: vi.fn().mockResolvedValue(undefined),
   downloadEmailAttachment: (a: unknown, userId: unknown) =>
     downloadEmailAttachment(a, userId),
 }));
 
 import { EmailList } from "../../emails/EmailList";
 import { ConversationView } from "../../emails/ConversationView";
+import { clearUnreadSenders } from "../../emails/conversation";
 import { useEmailInbox } from "../../emails/useEmailInbox";
 import type { EmailItem } from "../../emails/types";
 
@@ -294,6 +296,68 @@ describe("useEmailInbox with conversations", () => {
     expect(trashEmails).toHaveBeenCalledTimes(1);
     expect(trashEmails.mock.calls[0][0].slice().sort()).toEqual([10, 11, 12]);
     expect(result.current.emails).toHaveLength(0);
+  });
+
+  describe("a row's bold sender names", () => {
+    const named: EmailItem = {
+      ...row,
+      sender: "Alice <alice@x.com>",
+      is_read: false,
+      participants: [
+        { sender: "Alice <alice@x.com>", unread: true },
+        { sender: "Bob <bob@x.com>", unread: true },
+      ],
+    };
+    const flags = (rows: EmailItem[]) =>
+      rows[0].participants?.map((p) => p.unread);
+
+    beforeEach(() => {
+      getEmails.mockResolvedValue({ emails: [named], hasMore: false });
+    });
+
+    it("clear the moment the row is opened, before the server answers", async () => {
+      getEmailThread.mockReturnValue(new Promise(() => {}));
+      const { result } = await loaded();
+      act(() => {
+        void result.current.openEmail(named);
+      });
+      expect(flags(result.current.emails)).toEqual([false, false]);
+    });
+
+    it("stay clear once the conversation has loaded", async () => {
+      const { result } = await loaded();
+      await act(async () => {
+        await result.current.openEmail(named);
+      });
+      await waitFor(() => expect(result.current.conversation).not.toBeNull());
+      expect(flags(result.current.emails)).toEqual([false, false]);
+    });
+
+    it("clear when the row is marked read from the list", async () => {
+      const { result } = await loaded();
+      await act(async () => {
+        await result.current.bulkMarkRead([named.id]);
+      });
+      expect(flags(result.current.emails)).toEqual([false, false]);
+    });
+
+    it("come back for the row's sender when it is marked unread", async () => {
+      const read = { ...named, is_read: true, unread_count: 0 };
+      getEmails.mockResolvedValue({
+        emails: [
+          {
+            ...read,
+            participants: clearUnreadSenders(read.participants),
+          },
+        ],
+        hasMore: false,
+      });
+      const { result } = await loaded();
+      await act(async () => {
+        await result.current.markUnread(named.id);
+      });
+      expect(flags(result.current.emails)).toEqual([true, false]);
+    });
   });
 
   it("marking a conversation read posts only its unread messages", async () => {
