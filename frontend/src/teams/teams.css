@@ -7,20 +7,41 @@
   gap: 16px;
 }
 
-/* The member list is the whole page, so its heading row carries the count on
-   the left and the add action on the right. */
+/* The member list is the whole page, so its heading row carries the title on
+   the left and the actions on the right. */
 .team-members-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
-  /* Breathing room so the heading doesn't sit flush against the panel top. */
-  padding-top: 12px;
-  margin-bottom: 10px;
+  gap: 8px 14px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--color-border-soft);
 }
 
-/* "Add member" button — pinned to the right of that row (manager-only). */
-.team-add-btn {
+/* "Add member" — pinned to the right of that row (manager-only). Quiet, so the
+   list stays the focus of the page. */
+.team-members-add {
   margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+  cursor: pointer;
+}
+
+.team-members-add:hover,
+.team-members-add[aria-expanded="true"] {
+  background: var(--color-surface-hover);
+}
+
+/* The form's submit button. */
+.team-add-btn {
   flex-shrink: 0;
   padding: 8px 14px;
   border: none;
@@ -63,7 +84,7 @@
     color 0.15s;
 }
 
-.team-add-btn + .team-delete-btn {
+.team-members-add + .team-delete-btn {
   margin-left: 0;
 }
 
@@ -78,7 +99,7 @@
 }
 
 .team-delete-error {
-  margin: 0 0 10px;
+  margin: 10px 20px 0;
   color: var(--color-danger);
   font-size: var(--text-sm);
 }
@@ -87,8 +108,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
+  padding: 12px 20px;
   border-bottom: 1px solid var(--color-border-soft);
 }
 
@@ -127,119 +147,279 @@
 .team-section-title {
   margin: 0;
   font-size: var(--text-lg);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--color-text-primary);
+}
+
+/* Search on the left, the filter and display icons on the right. */
+.team-roster-toolbar {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 10px 12px 10px 20px;
 }
 
-.team-member-count {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--color-on-primary, #fff);
-  background: var(--color-primary-action);
-  border-radius: 999px;
-  padding: 1px 9px;
-  line-height: 1.6;
-}
-
-.team-member-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.team-member {
+.team-roster-search {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 8px;
+  gap: 10px;
+  color: var(--color-text-muted);
+}
+
+.team-roster-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+}
+
+.team-roster-tool {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.team-roster-tool-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.team-roster-tool-btn:hover,
+.team-roster-tool-btn[aria-expanded="true"] {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+/* A filter is on or a column is hidden, so it shows with the menu closed. */
+.team-roster-tool-btn.is-active {
+  border-color: var(--color-primary-action);
+  color: var(--color-primary-action);
+}
+
+.team-roster-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 150px;
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow:
+    0 10px 25px rgb(0, 0, 0, 0.12),
+    0 4px 6px rgb(0, 0, 0, 0.06);
+}
+
+.team-roster-menu-item {
+  padding: 8px 12px;
+  border: none;
   border-radius: var(--radius-sm);
-  border-bottom: 1px solid var(--color-border-soft);
+  background: none;
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
 }
 
-.team-member:last-child {
-  border-bottom: none;
-}
-
-.team-member:hover {
+.team-roster-menu-item:hover {
   background: var(--color-surface-hover);
 }
 
-.team-avatar {
-  width: 36px;
-  height: 36px;
+.team-roster-menu-item[aria-checked="true"] {
+  color: var(--color-primary-action);
+  font-weight: 600;
+}
+
+.team-roster-menu-item[aria-checked="true"]::after {
+  content: " ✓";
+}
+
+.team-roster {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.team-roster th,
+.team-roster td {
+  padding: 8px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.team-roster th {
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+  font-weight: 400;
+}
+
+.team-roster th:first-child,
+.team-roster td:first-child {
+  padding-left: 20px;
+}
+
+.team-roster th:last-child,
+.team-roster td:last-child {
+  padding-right: 20px;
+}
+
+.team-roster tbody tr:hover {
+  background: var(--color-surface-hover);
+}
+
+/* The name column takes the spare width, so these stay at the right. */
+.team-roster-col {
+  width: 130px;
+  white-space: nowrap;
+}
+
+.team-roster-col-action {
+  width: 40px;
+  text-align: right;
+}
+
+.team-roster-sort {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.team-roster-sort:hover {
+  color: var(--color-text-primary);
+}
+
+.team-roster-person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.team-roster-avatar {
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--color-primary-action);
-  color: var(--color-on-primary, #fff);
+  color: #fff;
   font-size: var(--text-sm);
-  font-weight: 700;
+  font-weight: 600;
 }
 
-.team-member-info {
+.team-roster-identity {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  flex: 1 1 auto;
 }
 
-.team-member-name {
-  font-size: var(--text-md);
-  font-weight: 600;
+.team-roster-name {
+  overflow: hidden;
   color: var(--color-text-primary);
-}
-
-.team-member-role {
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-
-.team-member-email {
-  flex-shrink: 0;
-  font-size: var(--text-sm);
-  color: var(--color-primary-action);
-  text-decoration: none;
+  font-size: var(--text-md);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.team-member-email:hover {
+.team-roster-email {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-roster-email:hover {
   text-decoration: underline;
 }
 
-/* Per-member "Delete", for member managers. Same outlined danger style as
-   "Delete team", sized down to sit at the end of a member row. */
-.team-member-remove {
+.team-roster-muted {
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+  white-space: nowrap;
+}
+
+/* Mixed from the action colour, so it follows every theme. */
+.team-roster-admin {
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-primary-action) 12%, transparent);
+  color: var(--color-primary-action);
+}
+
+/* Long lists cut off here; the full list is in the title tooltip. */
+.team-roster-teams {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 180px;
+  vertical-align: middle;
+}
+
+.team-roster-teams svg {
   flex-shrink: 0;
-  padding: 4px 10px;
-  border: 1px solid var(--color-danger);
+}
+
+.team-roster-team-names {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Per-member delete, for member managers. */
+.team-roster-remove {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-danger);
-  font-size: var(--text-sm);
-  font-weight: 600;
   cursor: pointer;
-  transition:
-    background 0.15s,
-    color 0.15s;
 }
 
-.team-member-remove:hover:not(:disabled),
-.team-member-remove:focus-visible {
+.team-roster-remove:hover:not(:disabled),
+.team-roster-remove:focus-visible {
   background: var(--color-danger);
   color: var(--color-on-primary);
 }
 
-.team-member-remove:disabled {
+.team-roster-remove:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.team-roster-empty {
+  padding: 24px 20px;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+  text-align: center;
 }
 
 .team-empty {
@@ -258,7 +438,11 @@
 }
 
 @media (max-width: 640px) {
-  .team-member-email {
+  .team-roster-wide {
     display: none;
+  }
+
+  .team-roster-col {
+    width: auto;
   }
 }

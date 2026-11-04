@@ -309,9 +309,31 @@ async fn handle_subscription_event(pool: &PgPool, event_type: &str, object: &Val
             .and_then(|s| s.parse::<i32>().ok())
         {
             if status == "active" || status == "trialing" {
-                crate::routes::user::finalize_org_signup_inner(pool, pending)
+                let finalized = crate::routes::user::finalize_org_signup_inner(pool, pending)
                     .await
                     .map_err(|e| anyhow::anyhow!("org finalize from webhook failed: {e}"))?;
+                if finalized.is_none() {
+                    // Paid, but no org could be created: stop further charges.
+                    warn!(target: "billing", sub_id, pending, "org upgrade failed after payment; canceling");
+                    provider::cancel_now(sub_id).await?;
+                }
+                // Finalize just inserted the row the UPDATE above missed.
+                sqlx::query(
+                    r#"
+                    UPDATE subscriptions
+                       SET current_period_end = CASE
+                               WHEN $2::bigint IS NULL THEN current_period_end
+                               ELSE to_timestamp($2::double precision)
+                           END,
+                           cancel_at_period_end = $3
+                     WHERE stripe_subscription_id = $1
+                    "#,
+                )
+                .bind(sub_id)
+                .bind(period_end)
+                .bind(cancel)
+                .execute(pool)
+                .await?;
             }
             return Ok(());
         }

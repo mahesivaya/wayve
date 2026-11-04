@@ -266,6 +266,32 @@ mod tests {
         let team: serde_json::Value =
             actix_test::call_and_read_body_json(&app, roster(member_id, &member_email)).await;
         assert_eq!(team["members"][0]["email"], "ada@example.com");
+        assert!(team["members"][0]["joined_at"].is_string());
+        assert_eq!(team["members"][0]["teams"], serde_json::json!(["roster"]));
+
+        // The same email on another team of this org is listed; one in a
+        // different org is not.
+        let second_team = insert_org_team(&pool, org_id, "second").await;
+        let foreign_team = insert_org_team(&pool, other_org, "foreign").await;
+        for other_team in [second_team, foreign_team] {
+            sqlx::query("INSERT INTO team_members (team_id, name, email) VALUES ($1, 'Ada', $2)")
+                .bind(other_team)
+                .bind("ADA@example.com")
+                .execute(&pool)
+                .await
+                .unwrap_or_else(|e| panic!("insert roster row: {e}"));
+        }
+        let team: serde_json::Value =
+            actix_test::call_and_read_body_json(&app, roster(member_id, &member_email)).await;
+        assert_eq!(
+            team["members"][0]["teams"],
+            serde_json::json!(["roster", "second"])
+        );
+        sqlx::query("DELETE FROM teams WHERE id = ANY($1)")
+            .bind(vec![second_team, foreign_team])
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("clean up teams: {e}"));
 
         let remove = |uid: i32, email: &str| {
             actix_test::TestRequest::delete()

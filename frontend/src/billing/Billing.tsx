@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   cancelSubscription,
   createPaymentMethodSetupIntent,
+  finalizeOrganizationUpgrade,
   getEntitlements,
   getOrganizationBilling,
   getStripeStatus,
@@ -12,6 +13,7 @@ import {
   listPlans,
   setDefaultPaymentMethod,
   startInlineSubscription,
+  startOrganizationUpgrade,
   type Entitlements,
   type Invoice,
   type OrganizationBilling,
@@ -118,7 +120,7 @@ function loadStripeScript(): Promise<void> {
 }
 
 function BillingInner() {
-  const { user, refresh } = useAuth();
+  const { user, refresh, switchMode } = useAuth();
   const [params] = useSearchParams();
   const navigate = useNavigate();
 
@@ -143,6 +145,15 @@ function BillingInner() {
   const [subscribeFormReady, setSubscribeFormReady] = useState(false);
   const [subscribeMessage, setSubscribeMessage] = useState("");
   const [subscribePlan, setSubscribePlan] = useState<Plan | null>(null);
+
+  // Personal → organization upgrade: the plan being upgraded to, while its
+  // organization name is asked for. A paid plan then moves to the subscribe form.
+  const [orgUpgradePlan, setOrgUpgradePlan] = useState<Plan | null>(null);
+  const [orgName, setOrgName] = useState("");
+  const [orgUpgradeMessage, setOrgUpgradeMessage] = useState("");
+  const pendingOrgUpgradeId = useRef<number | null>(null);
+  const orgUpgradePanelRef = useRef<HTMLElement | null>(null);
+  const orgUpgradeReturnHandled = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -264,10 +275,11 @@ function BillingInner() {
   }, [checkoutStatus, refreshAfterUpgrade]);
 
   const currentPlanCode = sub?.subscription?.plan_code ?? null;
-  // A personal account with no subscription row is implicitly on the free Basic
-  // tier, so name it explicitly and the card renders as "Active".
+  // An owner with no subscription row is implicitly on their free tier, so name
+  // it explicitly and the card renders as "Active".
   const effectiveCurrentCode =
-    currentPlanCode ?? (ownerType === "personal" ? "basic_user" : null);
+    currentPlanCode ??
+    (ownerType === "personal" ? "basic_user" : (org?.plan_code ?? null));
   const hasPaidPlan = (sub?.subscription?.amount_cents ?? 0) > 0;
   // Organizations get a focused billing view instead of the personal
   // plan-selection + usage layout.
@@ -285,7 +297,9 @@ function BillingInner() {
   // Creates the subscription server-side in `incomplete` state and mounts a
   // Payment Element bound to the latest invoice's PaymentIntent. Confirmation
   // happens locally via stripe.confirmPayment — no redirect to checkout.stripe.com.
-  const subscribe = async (plan: Plan) => {
+  // With `organizationName` the payment upgrades this personal account to a new
+  // organization rather than subscribing the current owner.
+  const subscribe = async (plan: Plan, organizationName?: string) => {
     setBusy(`plan:${plan.code}`);
     setError("");
     setSubscribeMessage("");
@@ -320,9 +334,16 @@ function BillingInner() {
       // hasn't finished or failed.
       let stripe = preloadedStripeRef.current;
       const [intent] = await Promise.all([
-        startInlineSubscription(plan.code, autopay),
+        organizationName
+          ? startOrganizationUpgrade(plan.code, organizationName)
+          : startInlineSubscription(plan.code, autopay),
         stripe ? Promise.resolve() : loadStripeScript(),
       ]);
+      if (!intent.client_secret) {
+        throw new Error("Payment could not be initialized");
+      }
+      pendingOrgUpgradeId.current =
+        "pending_id" in intent ? (intent.pending_id ?? null) : null;
       if (!stripe) {
         stripe = window.Stripe?.(publishableKey) ?? null;
         if (stripe) preloadedStripeRef.current = stripe;
@@ -353,8 +374,91 @@ function BillingInner() {
       clearSubscribeElements();
       setSubscribeFormOpen(false);
       setSubscribePlan(null);
-      setError(
-        err instanceof Error ? err.message : "Could not start subscription"
+      const message =
+        err instanceof Error ? err.message : "Could not start subscription";
+      // Back to the name form, where a taken name can be corrected.
+      if (organizationName) {
+        setOrgUpgradePlan(plan);
+        setOrgUpgradeMessage(message);
+      } else {
+        setError(message);
+      }
+    } finally {
+      setBusy("");
+    }
+  };
+
+  // The new owner lands in admin mode on their workspace, as they would at login.
+  const enterNewOrganization = useCallback(async () => {
+    invalidateGetCache();
+    await switchMode("admin").catch(() => refresh());
+    void navigate("/organization/home", { replace: true });
+  }, [switchMode, refresh, navigate]);
+
+  // Stripe can report the invoice paid a moment after the card is confirmed, so
+  // poll briefly. If it is still unpaid the webhook creates the org once it lands.
+  const finishOrgUpgrade = useCallback(
+    async (pendingId: number) => {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        if (attempt > 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, 1500));
+        }
+        const { organization_id } =
+          await finalizeOrganizationUpgrade(pendingId);
+        if (organization_id) {
+          await enterNewOrganization();
+          return;
+        }
+      }
+      throw new Error(
+        "Your payment is still being confirmed. Your organization will appear here once it clears."
+      );
+    },
+    [enterNewOrganization]
+  );
+
+  const openOrgUpgrade = (plan: Plan) => {
+    setError("");
+    setPaymentSuccess("");
+    setOrgUpgradeMessage("");
+    if (paymentFormOpen) {
+      setPaymentFormOpen(false);
+      clearPaymentElements();
+    }
+    if (subscribeFormOpen) {
+      setSubscribeFormOpen(false);
+      setSubscribePlan(null);
+      clearSubscribeElements();
+    }
+    setOrgUpgradePlan(plan);
+    window.requestAnimationFrame(() => {
+      orgUpgradePanelRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  };
+
+  const submitOrgUpgrade = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const plan = orgUpgradePlan;
+    const name = orgName.trim();
+    if (!plan || !name) return;
+    setOrgUpgradeMessage("");
+
+    if (plan.amount_cents > 0) {
+      setOrgUpgradePlan(null);
+      await subscribe(plan, name);
+      return;
+    }
+
+    setBusy("org-upgrade");
+    try {
+      await startOrganizationUpgrade(plan.code, name);
+      await enterNewOrganization();
+    } catch (err) {
+      setOrgUpgradeMessage(
+        err instanceof Error ? err.message : "Could not create the organization"
       );
     } finally {
       setBusy("");
@@ -379,7 +483,11 @@ function BillingInner() {
       const result = await stripe.confirmPayment({
         elements,
         confirmParams: {
-          return_url: `${window.location.origin}/billing?checkout=success`,
+          return_url: `${window.location.origin}/billing?checkout=success${
+            pendingOrgUpgradeId.current
+              ? `&org_upgrade=${pendingOrgUpgradeId.current}`
+              : ""
+          }`,
         },
         redirect: "if_required",
       });
@@ -392,19 +500,45 @@ function BillingInner() {
       setSubscribePlan(null);
       clearSubscribeElements();
       setPaymentSuccess("Subscription started — confirming with Stripe…");
+      const pendingOrgId = pendingOrgUpgradeId.current;
+      if (pendingOrgId) {
+        pendingOrgUpgradeId.current = null;
+        await finishOrgUpgrade(pendingOrgId);
+        return;
+      }
       // Stripe's webhooks flip the local subscriptions row to `active`. Two
       // refresh attempts: the first usually beats the webhook and shows the
       // pending state, the second lands after activation.
       window.setTimeout(() => void refreshAfterUpgrade(), 1500);
       window.setTimeout(() => void refreshAfterUpgrade(), 5000);
     } catch (err) {
-      setSubscribeMessage(
-        err instanceof Error ? err.message : "Could not complete payment"
-      );
+      const message =
+        err instanceof Error ? err.message : "Could not complete payment";
+      // The form closes once the card is charged, so a later failure to create
+      // the org has to show on the page instead.
+      if (subscribeElementsRef.current) {
+        setSubscribeMessage(message);
+      } else {
+        setPaymentSuccess("");
+        setError(message);
+      }
     } finally {
       setBusy("");
     }
   };
+
+  // A 3DS challenge returns here with the upgrade to finish.
+  const returnedOrgUpgrade = Number(params.get("org_upgrade")) || null;
+  useEffect(() => {
+    if (checkoutStatus !== "success" || !returnedOrgUpgrade) return;
+    if (orgUpgradeReturnHandled.current) return;
+    orgUpgradeReturnHandled.current = true;
+    finishOrgUpgrade(returnedOrgUpgrade).catch((err: unknown) => {
+      setError(
+        err instanceof Error ? err.message : "Could not finish the upgrade"
+      );
+    });
+  }, [checkoutStatus, returnedOrgUpgrade, finishOrgUpgrade]);
 
   // Unmount the Payment Element so it doesn't outlive the React tree.
   useEffect(() => () => clearSubscribeElements(), [clearSubscribeElements]);
@@ -614,12 +748,23 @@ function BillingInner() {
     (plan) => plan.tier === "enterprise"
   );
 
+  // Organization plans bill per user. Must match the backend's `billable_seats`,
+  // which is also what `seats_used` reports. An upgrade starts with just the owner.
+  const seats = org?.seats_used ?? 1;
+  const subscribeSeats = isOrg ? seats : 1;
+
   const renderPlanCard = (plan: Plan) => {
     const isCurrent = plan.code === effectiveCurrentCode;
     const isFree = plan.amount_cents === 0;
     const copy = PLAN_COPY[plan.code];
     const isForOwner = plan.audience === ownerType;
     const canBuy = isForOwner && !isCurrent && !isFree;
+    // Platform staff also bill as "personal", but only a personal account can
+    // convert. Enterprise stays sales-led.
+    const canUpgradeToOrg =
+      user?.account_type === "personal" &&
+      plan.audience === "organization" &&
+      plan.tier !== "enterprise";
     const busyHere = busy === `plan:${plan.code}`;
     return (
       <article
@@ -628,7 +773,8 @@ function BillingInner() {
       >
         <h3>{PLAN_TITLE[plan.code] ?? plan.name}</h3>
         <p className="billing-plan-price">
-          {copy?.price ??
+          {(copy &&
+            `${copy.price}${copy.interval ? ` / ${copy.interval}` : ""}`) ??
             (isFree
               ? "Free"
               : `${formatMoney(plan.amount_cents, plan.currency)} / ${plan.billing_interval}`)}
@@ -658,11 +804,13 @@ function BillingInner() {
           >
             {busyHere ? "Preparing…" : hasPaidPlan ? "Switch plan" : "Upgrade"}
           </button>
+        ) : canUpgradeToOrg ? (
+          <button type="button" onClick={() => openOrgUpgrade(plan)}>
+            Upgrade
+          </button>
         ) : !isForOwner &&
           ownerType === "personal" &&
           plan.audience === "organization" ? (
-          // Personal accounts can't self-convert into an organization. Business
-          // accounts are provisioned separately, so route these to sales.
           <button type="button" onClick={() => navigate("/support")}>
             Contact sales
           </button>
@@ -722,9 +870,21 @@ function BillingInner() {
             {activeSub ? (
               <div className="billing-sub">
                 <div className="billing-sub-row">
+                  <span>Users</span>
+                  <strong>
+                    {seats} ×{" "}
+                    {formatMoney(activeSub.amount_cents, activeSub.currency)}
+                  </strong>
+                </div>
+                <div className="billing-sub-row">
                   <span>Amount</span>
                   <strong className="billing-amount-lg">
-                    {formatMoney(activeSub.amount_cents, activeSub.currency)}
+                    {formatMoney(
+                      activeSub.amount_cents == null
+                        ? null
+                        : activeSub.amount_cents * seats,
+                      activeSub.currency
+                    )}
                     {activeSub.billing_interval
                       ? ` / ${activeSub.billing_interval}`
                       : " / month"}
@@ -884,6 +1044,56 @@ function BillingInner() {
         </section>
       )}
 
+      {orgUpgradePlan && (
+        <section className="billing-card" ref={orgUpgradePanelRef}>
+          <h2>Upgrade — {orgUpgradePlan.name}</h2>
+          <p className="billing-note">
+            Your account becomes the owner of a new organization.
+            {orgUpgradePlan.amount_cents > 0
+              ? ` ${formatMoney(orgUpgradePlan.amount_cents, orgUpgradePlan.currency)} per user / ${orgUpgradePlan.billing_interval}, starting with you. Each user you add increases the monthly charge.`
+              : " This plan is free."}
+          </p>
+          <form
+            className="billing-payment-form"
+            onSubmit={(event) => void submitOrgUpgrade(event)}
+          >
+            <label>
+              Organization name
+              <input
+                type="text"
+                value={orgName}
+                maxLength={120}
+                autoFocus
+                required
+                onChange={(event) => setOrgName(event.target.value)}
+              />
+            </label>
+            {orgUpgradeMessage && (
+              <p className="billing-payment-error">{orgUpgradeMessage}</p>
+            )}
+            <div className="billing-payment-actions">
+              <button
+                type="submit"
+                disabled={!orgName.trim() || busy === "org-upgrade"}
+              >
+                {busy === "org-upgrade"
+                  ? "Creating…"
+                  : orgUpgradePlan.amount_cents > 0
+                    ? "Continue to payment"
+                    : "Create organization"}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setOrgUpgradePlan(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
       {subscribeFormOpen && (
         <section className="billing-card" ref={subscribePanelRef}>
           <h2>
@@ -891,7 +1101,12 @@ function BillingInner() {
           </h2>
           {subscribePlan && (
             <p className="billing-note">
-              {formatMoney(subscribePlan.amount_cents, subscribePlan.currency)}
+              {subscribeSeats > 1 &&
+                `${subscribeSeats} users × ${formatMoney(subscribePlan.amount_cents, subscribePlan.currency)} = `}
+              {formatMoney(
+                subscribePlan.amount_cents * subscribeSeats,
+                subscribePlan.currency
+              )}
               {subscribePlan.billing_interval
                 ? ` / ${subscribePlan.billing_interval}`
                 : ""}{" "}
@@ -927,7 +1142,7 @@ function BillingInner() {
                   : !subscribeFormReady
                     ? "Loading…"
                     : subscribePlan
-                      ? `Pay ${formatMoney(subscribePlan.amount_cents, subscribePlan.currency)}`
+                      ? `Pay ${formatMoney(subscribePlan.amount_cents * subscribeSeats, subscribePlan.currency)}`
                       : "Confirm"}
               </button>
               <button

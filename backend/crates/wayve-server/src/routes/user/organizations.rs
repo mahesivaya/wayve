@@ -12,6 +12,7 @@ use crate::email::profile::invalidate_me_cache;
 use crate::organization;
 use crate::prelude::*;
 use crate::routes::auth::{CODE_TTL_MINUTES, MAX_VERIFY_ATTEMPTS, random_code};
+use crate::workspace::handler::ensure_default_team;
 use actix_web::{delete, patch};
 use tracing::{error, info, instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
@@ -264,6 +265,8 @@ pub async fn admin_create_organization(
     let organization_name: String = org_row.get("name");
     let organization_slug: Option<String> = org_row.get("slug");
 
+    ensure_default_team(&mut tx, organization_id, &organization_name, None).await?;
+
     let mut admin_json = serde_json::Value::Null;
 
     if let Some((username, email, password)) = organization_admin {
@@ -342,6 +345,9 @@ pub async fn admin_create_organization(
                 .bind(provisioned.login_wrap.iterations as i32)
                 .execute(&mut *tx)
                 .await?;
+
+                ensure_default_team(&mut tx, organization_id, &organization_name, Some(id))
+                    .await?;
             }
             Err(e) => {
                 if e.to_string().contains("duplicate key") {
@@ -482,7 +488,25 @@ pub(crate) async fn create_org_for_user(
     .execute(&mut **tx)
     .await?;
 
+    ensure_default_team(tx, organization_id, name, Some(user_id)).await?;
+
     Ok(Some(organization_id))
+}
+
+/// Lock the user's row and report whether it is still a plain personal account.
+/// Creating an org repoints `users.organization_id`, so without this a second
+/// attempt would move an existing owner out of the org they just created.
+pub(crate) async fn lock_if_personal(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    user_id: i32,
+) -> std::result::Result<bool, AppError> {
+    let row = sqlx::query_as::<_, (String, Option<i32>)>(
+        "SELECT account_type, organization_id FROM users WHERE id = $1 FOR UPDATE",
+    )
+    .bind(user_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(matches!(row, Some((account_type, None)) if account_type == "personal"))
 }
 
 /// Create the organization for a *paid* pending signup. Idempotent and
@@ -537,27 +561,32 @@ pub(crate) async fn finalize_org_signup_inner(
         tx.commit().await?;
         return Ok(organization_id);
     }
+    if status == "failed" {
+        return Ok(None);
+    }
 
-    let created = match create_org_for_user(
-        &mut tx,
-        owner_id,
-        &name,
-        place.as_deref(),
-        admin_email.as_deref(),
-    )
-    .await?
-    {
-        Some(id) => id,
-        None => {
-            // Name taken between intent and finalize. The caller turns this into
-            // a 409 and the charge is refunded out of band.
-            sqlx::query("UPDATE pending_org_signups SET status = 'failed' WHERE id = $1")
-                .bind(pending_id)
-                .execute(&mut *tx)
-                .await?;
-            tx.commit().await?;
-            return Ok(None);
-        }
+    let created = if lock_if_personal(&mut tx, owner_id).await? {
+        create_org_for_user(
+            &mut tx,
+            owner_id,
+            &name,
+            place.as_deref(),
+            admin_email.as_deref(),
+        )
+        .await?
+    } else {
+        None
+    };
+    let Some(created) = created else {
+        // Name taken, or the owner already has an org, since the intent. The
+        // caller cancels the subscription and the charge is refunded out of
+        // band. A duplicate key has aborted `tx`, so this write needs its own.
+        tx.rollback().await?;
+        sqlx::query("UPDATE pending_org_signups SET status = 'failed' WHERE id = $1")
+            .bind(pending_id)
+            .execute(pool)
+            .await?;
+        return Ok(None);
     };
     let org_id = created;
 
@@ -1046,6 +1075,13 @@ pub async fn delete_my_account(req: HttpRequest, pool: web::Data<PgPool>) -> App
     )
     .await;
 
+    let organization_id: Option<i32> =
+        sqlx::query_scalar("SELECT organization_id FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(pool.get_ref())
+            .await?
+            .flatten();
+
     let mut tx = pool.begin().await?;
     crate::db::apply_rls_bypass(&mut tx).await?;
     // notes.user_id has no FK, so it does not ride the cascade on `users`.
@@ -1067,6 +1103,9 @@ pub async fn delete_my_account(req: HttpRequest, pool: web::Data<PgPool>) -> App
     invalidate_profile_cache(user_id).await;
     invalidate_me_cache(user_id).await;
     rbac::invalidate_role_context(user_id).await;
+    if let Some(org_id) = organization_id {
+        crate::billing::seats::sync_org_seats(pool.get_ref(), org_id).await;
+    }
 
     info!(target: "auth", user_id, "user self-deleted account");
 
@@ -1592,6 +1631,16 @@ pub async fn admin_create_user(
                 .bind(role)
                 .execute(pool.get_ref())
                 .await?;
+
+                if matches!(role, "owner" | "super_admin" | "admin") {
+                    let org_name: String =
+                        sqlx::query_scalar("SELECT name FROM organizations WHERE id = $1")
+                            .bind(org_id)
+                            .fetch_one(pool.get_ref())
+                            .await?;
+                    let mut conn = pool.acquire().await?;
+                    ensure_default_team(&mut conn, org_id, &org_name, Some(id)).await?;
+                }
             }
 
             // The member keypair never leaves this process unwrapped: the blocking
@@ -1628,6 +1677,10 @@ pub async fn admin_create_user(
                     organization_id = org_id,
                     "org member keypair provisioned + escrowed"
                 );
+            }
+
+            if let Some(org_id) = organization_id {
+                crate::billing::seats::sync_org_seats(pool.get_ref(), org_id).await;
             }
 
             info!(target: "auth", admin_id, user_id = id, "admin created user");
@@ -1759,6 +1812,9 @@ pub async fn admin_delete_user(
     invalidate_me_cache(target_user_id).await;
     invalidate_profile_cache(target_user_id).await;
     rbac::invalidate_role_context(target_user_id).await;
+    if let Some(org_id) = target_ctx.organization_id {
+        crate::billing::seats::sync_org_seats(pool.get_ref(), org_id).await;
+    }
     info!(
         target: "auth",
         actor = ctx.user_id,

@@ -36,8 +36,8 @@ export default function RecoverySeedModal({
   // distinct files. The org master key is downloaded from BootstrapPage instead.
   const recoveryFileName =
     user?.scope === "platform"
-      ? "fluxze.platform-recovery-key.txt"
-      : "fluxze-recovery-key.txt";
+      ? "hadal.platform-recovery-key.txt"
+      : "hadal-recovery-key.txt";
 
   // Disable keyboard shortcuts that could accidentally close the modal.
   useEffect(() => {
@@ -57,12 +57,12 @@ export default function RecoverySeedModal({
 
   function downloadMnemonic() {
     const body = [
-      "Fluxze recovery phrase",
+      "Hadal recovery phrase",
       "=====================",
       "",
       "Keep this file somewhere safe and offline. This is the ONLY way",
       "to recover your account if you forget your password or lose this",
-      "device. Fluxze cannot reset it for you.",
+      "device. Hadal cannot reset it for you.",
       "",
       mnemonic,
       "",
@@ -88,7 +88,7 @@ export default function RecoverySeedModal({
           <p>
             These {MNEMONIC_WORD_COUNT} words are the <strong>only</strong> way
             to recover your account if you forget your password or switch to a
-            new device. Fluxze cannot reset them for you — losing both the
+            new device. Hadal cannot reset them for you — losing both the
             password and this phrase means your encrypted content (emails, chat,
             drive, tasks, calendar, notes) is unrecoverable. Copy or download
             them and keep them somewhere safe — not in a screenshot, not in

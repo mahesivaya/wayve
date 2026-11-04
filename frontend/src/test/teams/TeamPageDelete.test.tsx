@@ -1,6 +1,5 @@
-// "Delete team" on the team page: owner-only (same rule as creating a team),
-// never offered for a display-only sample team, and a confirmed delete calls
-// the API and leaves the page.
+// "Delete team" on the team page: owner-only (same rule as creating a team), and
+// a confirmed delete calls the API and leaves the page.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -104,7 +103,7 @@ describe("team page: delete team", () => {
     getTeam.mockResolvedValue(REAL_TEAM);
     renderAt("engineering");
 
-    await screen.findByText(/members/i);
+    await screen.findByRole("heading", { name: "Members" });
     expect(screen.queryByRole("button", { name: /delete team/i })).toBeNull();
   });
 
@@ -113,15 +112,7 @@ describe("team page: delete team", () => {
     getTeam.mockResolvedValue(REAL_TEAM);
     renderAt("engineering");
 
-    await screen.findByText(/members/i);
-    expect(screen.queryByRole("button", { name: /delete team/i })).toBeNull();
-  });
-
-  it("is never offered for a display-only sample team", async () => {
-    getTeam.mockRejectedValue(new Error("Team not found"));
-    renderAt("finance");
-
-    await screen.findByText("Guadalupe Herrera");
+    await screen.findByRole("heading", { name: "Members" });
     expect(screen.queryByRole("button", { name: /delete team/i })).toBeNull();
   });
 });

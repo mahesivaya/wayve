@@ -9,10 +9,12 @@ pub mod entitlements;
 pub mod invoices;
 pub mod models;
 pub mod organization_billing;
+pub mod organization_upgrade;
 pub mod plans;
 pub mod provider;
 pub mod quotas;
 pub mod routes;
+pub mod seats;
 pub mod subscriptions;
 pub mod tiers;
 pub mod usage_metering;
@@ -35,7 +37,7 @@ pub fn current_user(req: &HttpRequest) -> std::result::Result<i32, HttpResponse>
 }
 
 /// `(account_type, organization_id)` for a user.
-async fn account_row(
+pub(crate) async fn account_row(
     pool: &PgPool,
     user_id: i32,
 ) -> std::result::Result<(String, Option<i32>), HttpResponse> {
@@ -169,6 +171,7 @@ pub async fn spawn_billing_worker(pool: PgPool) {
                 error!(target: "billing", tick = ticks, error = ?e, "entitlement reconcile failed")
             }
         }
+        seats::reconcile_org_seats(&pool).await;
     }
 }
 

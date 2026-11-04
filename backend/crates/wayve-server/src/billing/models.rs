@@ -85,6 +85,12 @@ pub struct CheckoutInput {
 }
 
 #[derive(Deserialize)]
+pub struct OrganizationUpgradeInput {
+    pub plan_code: String,
+    pub name: String,
+}
+
+#[derive(Deserialize)]
 pub struct DefaultPaymentMethodInput {
     pub payment_method_id: String,
 }

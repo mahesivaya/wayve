@@ -2,8 +2,8 @@
 // `public_routes` carries the unauthenticated Stripe webhook at the root.
 
 use super::{
-    checkout, entitlements, invoices, organization_billing, plans, subscriptions, tiers,
-    usage_metering, webhook_handler,
+    checkout, entitlements, invoices, organization_billing, organization_upgrade, plans,
+    subscriptions, tiers, usage_metering, webhook_handler,
 };
 use actix_web::web;
 
@@ -44,6 +44,8 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(usage_metering::record_usage)
         .service(usage_metering::get_usage)
         .service(organization_billing::get_organization_billing)
+        .service(organization_upgrade::start_organization_upgrade)
+        .service(organization_upgrade::finalize_organization_upgrade)
         .service(tiers::list_tiers)
         .service(tiers::get_quota);
 }

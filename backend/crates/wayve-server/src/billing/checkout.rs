@@ -153,6 +153,7 @@ pub async fn create_checkout(
         Err(resp) => return Ok(resp),
     };
 
+    let quantity = super::seats::subscription_quantity(pool.get_ref(), owner).await?;
     let base = frontend_url();
     let params = CheckoutParams {
         customer_id,
@@ -161,6 +162,7 @@ pub async fn create_checkout(
         cancel_url: format!("{base}/billing?checkout=cancel"),
         client_reference: format!("{}:{}:{}", owner.kind(), owner_id(owner), plan_id),
         autopay: data.autopay.unwrap_or(true),
+        quantity,
     };
 
     match provider::create_checkout_session(&params).await {
@@ -254,8 +256,10 @@ pub async fn create_inline_subscription(
     };
 
     let client_reference = format!("{}:{}:{}", owner.kind(), owner_id(owner), plan_id);
+    let quantity = super::seats::subscription_quantity(pool.get_ref(), owner).await?;
 
-    match provider::create_subscription(&customer_id, &price_id, &client_reference).await {
+    match provider::create_subscription(&customer_id, &price_id, &client_reference, quantity).await
+    {
         Ok(pending) => {
             crate::audit::record_action(
                 pool.get_ref(),

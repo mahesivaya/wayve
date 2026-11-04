@@ -83,6 +83,47 @@ fn pick_free_slug(base: &str, taken: &[String]) -> String {
     }
 }
 
+/// Give a new org its default team, named after the org, with `admin` on the
+/// roster. The team is created only while the org has no teams, so it never lands
+/// beside teams the org already has; a later admin joins it if it is still there.
+pub(crate) async fn ensure_default_team(
+    conn: &mut sqlx::PgConnection,
+    org_id: i32,
+    org_name: &str,
+    admin: Option<i32>,
+) -> std::result::Result<(), sqlx::Error> {
+    let slug = slugify(org_name);
+    sqlx::query(
+        "INSERT INTO teams (organization_id, name, slug, created_by)
+         SELECT $1, $2, $3, $4
+          WHERE NOT EXISTS (SELECT 1 FROM teams WHERE organization_id = $1)",
+    )
+    .bind(org_id)
+    .bind(org_name)
+    .bind(&slug)
+    .bind(admin)
+    .execute(&mut *conn)
+    .await?;
+
+    if let Some(admin) = admin {
+        sqlx::query(
+            "INSERT INTO team_members (team_id, name, role, email, created_by)
+             SELECT t.id, COALESCE(NULLIF(trim(u.username), ''), split_part(u.email, '@', 1)),
+                    'Admin', u.email, u.id
+               FROM teams t, users u
+              WHERE t.organization_id = $1 AND t.slug = $2 AND u.id = $3
+                AND NOT EXISTS (SELECT 1 FROM team_members m
+                                 WHERE m.team_id = t.id AND m.email = u.email)",
+        )
+        .bind(org_id)
+        .bind(&slug)
+        .bind(admin)
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(())
+}
+
 /// Which teams the caller can see: an org member sees their org's teams, and a
 /// platform owner sees platform-level teams (`organization_id IS NULL`).
 enum TeamScope {
@@ -667,11 +708,9 @@ pub async fn get_team(
         );
     };
     let team_id: i32 = row.get("id");
-    let members: Vec<serde_json::Value> = sqlx::query(
-        "SELECT id, name, role, email FROM team_members
-         WHERE team_id = $1
-         ORDER BY created_at, id",
-    )
+    let members: Vec<serde_json::Value> = sqlx::query(&format!(
+        "{TEAM_MEMBER_SELECT} WHERE m.team_id = $1 ORDER BY m.created_at, m.id"
+    ))
     .bind(team_id)
     .fetch_all(pool.get_ref())
     .await?
@@ -864,10 +903,10 @@ pub async fn add_team_member(
     let email = clean_optional(input.email.as_deref(), MEMBER_EMAIL_MAX);
     let created_by = get_user_id_from_request(&req);
 
-    let row = sqlx::query(
+    let member_id: i32 = sqlx::query_scalar(
         "INSERT INTO team_members (team_id, name, role, email, created_by)
          VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, name, role, email",
+         RETURNING id",
     )
     .bind(team_id)
     .bind(&name)
@@ -876,6 +915,12 @@ pub async fn add_team_member(
     .bind(created_by)
     .fetch_one(pool.get_ref())
     .await?;
+
+    // Read back separately: the teams list has to see the row just inserted.
+    let row = sqlx::query(&format!("{TEAM_MEMBER_SELECT} WHERE m.id = $1"))
+        .bind(member_id)
+        .fetch_one(pool.get_ref())
+        .await?;
 
     Ok(HttpResponse::Created().json(team_member_json(&row)))
 }
@@ -907,12 +952,30 @@ pub async fn remove_team_member(
     }
 }
 
+/// A roster row plus the teams its person is on. Rosters aren't linked to user
+/// accounts, so a person is matched across their organization's teams by email;
+/// a row with no email lists only its own team.
+const TEAM_MEMBER_SELECT: &str = "
+    SELECT m.id, m.name, m.role, m.email, m.created_at,
+           ARRAY(
+               SELECT DISTINCT other_team.name
+               FROM team_members other
+               JOIN teams other_team ON other_team.id = other.team_id
+               WHERE other_team.organization_id IS NOT DISTINCT FROM t.organization_id
+                 AND (other.id = m.id OR lower(other.email) = lower(m.email))
+               ORDER BY other_team.name
+           ) AS teams
+    FROM team_members m
+    JOIN teams t ON t.id = m.team_id";
+
 fn team_member_json(row: &sqlx::postgres::PgRow) -> serde_json::Value {
     serde_json::json!({
         "id": row.get::<i32, _>("id"),
         "name": row.get::<String, _>("name"),
         "role": row.get::<Option<String>, _>("role"),
         "email": row.get::<Option<String>, _>("email"),
+        "joined_at": row.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339(),
+        "teams": row.get::<Vec<String>, _>("teams"),
     })
 }
 

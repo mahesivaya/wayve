@@ -49,9 +49,6 @@ import {
   type PaneArrangement,
 } from "./paneLayout";
 import { listTeams, createTeam, type Team } from "../api/workspace";
-// Display-only fallback for an org with no teams yet; shared with TeamPage so
-// the rows in this sidebar lead to a page that knows about them.
-import { SAMPLE_TEAMS } from "../teams/sampleTeams";
 import { getFeatureAccess } from "../api/featureAccess";
 import { isDesktopApp } from "../utils/desktop";
 import "./Layout.css";
@@ -337,7 +334,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const [teamCreateDraft, setTeamCreateDraft] = useState("");
   const [billingAllowed, setBillingAllowed] = useState(true);
 
+  // Keyed on the org too: upgrading to an organization keeps the same user but
+  // brings the org's default team.
   const userId = user?.id;
+  const userOrganizationId = user?.organization_id;
   useEffect(() => {
     if (userId == null) return;
     let cancelled = false;
@@ -347,7 +347,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, userOrganizationId]);
 
   // The team page deletes through the api layer, which announces it here.
   useEffect(() => {
@@ -1357,8 +1357,6 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     );
   };
 
-  const displayTeams = teams.length ? teams : SAMPLE_TEAMS;
-
   // A Workspace row's class: lit as active in the routed left pane, or as
   // active-split when it's open in another column.
   const workspaceLinkClass = (app: AppKey, path: string, extra = "") =>
@@ -1500,7 +1498,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               }}
             />
           )}
-          {displayTeams.map((team) => (
+          {teams.map((team) => (
             <Fragment key={team.slug}>
               {renderSidebarLink(
                 `/teams/${team.slug}`,
@@ -1510,7 +1508,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               )}
             </Fragment>
           ))}
-          {!creatingTeam && displayTeams.length === 0 && (
+          {!creatingTeam && teams.length === 0 && (
             <div className="sidebar-empty-hint">No teams yet</div>
           )}
         </div>
