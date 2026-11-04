@@ -74,7 +74,8 @@ function isThemeChoice(value: unknown): value is ThemeChoice {
     kind === "default" ||
     kind === "preset" ||
     kind === "custom" ||
-    kind === "saved"
+    kind === "saved" ||
+    kind === "system"
   );
 }
 

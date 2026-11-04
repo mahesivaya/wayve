@@ -1,0 +1,221 @@
+.mode-picker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 150px));
+  justify-content: center;
+  gap: 14px;
+}
+
+.mode-caption {
+  margin: 14px 0 0;
+  text-align: center;
+  font-size: var(--text-sm, 13px);
+  color: var(--color-text-muted);
+}
+
+.mode-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+
+/* Visually hidden, but it stays the real control for keyboards and screen readers. */
+.mode-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mode-preview {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  outline: 1px solid var(--color-border);
+  outline-offset: 3px;
+  transition: outline-color 0.15s;
+}
+
+.mode-option:hover .mode-preview {
+  outline-color: var(--color-text-muted);
+}
+
+.mode-option.active .mode-preview,
+.mode-option:has(input:focus-visible) .mode-preview {
+  /* Fixed, like the drawings: a grey accent theme would make it hard to see. */
+  outline: 2px solid #5b9bf3;
+}
+
+.mode-option.active {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.mode-option-label {
+  font-size: var(--text-md, 14px);
+}
+
+/* Right half of the System preview: the dark drawing clipped over the light one. */
+.mode-preview-half {
+  position: absolute;
+  inset: 0;
+  clip-path: inset(0 0 0 50%);
+}
+
+/* The drawing. Fixed colours on purpose: it shows the choice, not the theme. */
+.mode-mini {
+  --mini-page: #f4f4f4;
+  --mini-window: #ffffff;
+  --mini-side: #f4f4f4;
+  --mini-edge: #e4e4e4;
+  --mini-dot: #bdbdbd;
+  --mini-title: #707070;
+  --mini-line: #d4d4d4;
+  --mini-active: #d3e0f3;
+  --mini-input: #ffffff;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--mini-page);
+}
+
+.mode-mini--dark {
+  --mini-page: #0d0d0d;
+  --mini-window: #101010;
+  --mini-side: #141414;
+  --mini-edge: #222222;
+  --mini-dot: #4a4a4a;
+  --mini-title: #a8a8a8;
+  --mini-line: #333333;
+  --mini-active: #243148;
+  --mini-input: #121212;
+}
+
+.mode-mini-window {
+  display: flex;
+  width: 84%;
+  height: 76%;
+  overflow: hidden;
+  border: 1px solid var(--mini-edge);
+  border-radius: 8px;
+  background: var(--mini-window);
+}
+
+.mode-mini-side {
+  flex: 0 0 28%;
+  display: flex;
+  flex-direction: column;
+  gap: 7%;
+  padding: 5% 5%;
+  box-sizing: border-box;
+  background: var(--mini-side);
+  border-right: 1px solid var(--mini-edge);
+}
+
+.mode-mini-dots {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 8%;
+}
+
+.mode-mini-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--mini-dot);
+}
+
+.mode-mini-nav {
+  display: block;
+  height: 5px;
+  width: 70%;
+  border-radius: 3px;
+  background: var(--mini-line);
+}
+
+.mode-mini-nav--active {
+  width: 100%;
+  height: 7px;
+  background: var(--mini-active);
+}
+
+.mode-mini-nav--short {
+  width: 50%;
+}
+
+.mode-mini-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8%;
+  padding: 6% 7%;
+  box-sizing: border-box;
+}
+
+.mode-mini-title {
+  display: block;
+  width: 65%;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--mini-title);
+}
+
+.mode-mini-line {
+  display: block;
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--mini-line);
+}
+
+.mode-mini-line--short {
+  width: 80%;
+}
+
+.mode-mini-input {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1;
+  min-height: 0;
+  margin-top: 2%;
+  padding: 0 4%;
+  border: 1px solid var(--mini-edge);
+  border-radius: 4px;
+  background: var(--mini-input);
+}
+
+.mode-mini-input i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #70a1e2;
+}
+
+@media (max-width: 560px) {
+  .mode-picker {
+    gap: 10px;
+  }
+
+  .mode-mini-dots i {
+    width: 3px;
+    height: 3px;
+  }
+
+  .mode-mini-input i {
+    width: 6px;
+    height: 6px;
+  }
+}

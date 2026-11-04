@@ -14,6 +14,8 @@ export type ThemeChoice =
   // Holds only the id, resolving input/mode from `library`, so renames and edits
   // stay live.
   | { kind: "saved"; id: string }
+  // Follows the device's light/dark setting, as Light or Dark does below.
+  | { kind: "system" }
   | { kind: "default" };
 
 export interface SavedTheme {

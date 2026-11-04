@@ -224,6 +224,10 @@ export default function ThemeCustomizer() {
       const saved = library.find((t) => t.id === choice.id);
       if (saved) return { input: saved.input, mode: saved.mode };
     }
+    if (choice.kind === "preset") {
+      const preset = PRESETS.find((p) => p.id === choice.presetId);
+      if (preset) return { input: preset.input, mode: preset.mode };
+    }
     return { input: DEFAULT_INPUT, mode: "light" as ThemeMode };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -238,9 +242,12 @@ export default function ThemeCustomizer() {
 
   // Discrete picks (swatch/preset/saved/B&W) sync `input`/`mode` so this always-on
   // preview reflects the pick rather than masking it.
+  // Nothing to preview until the editor moves off its starting values, which for
+  // a Light, Dark or System page are only the sliders' defaults, not its look.
   useEffect(() => {
+    if (input === initial.input && mode === initial.mode) return;
     previewInput(input, mode);
-  }, [input, mode, previewInput]);
+  }, [input, mode, previewInput, initial]);
   // Revert an unsaved preview on unmount only; doing it on every render would
   // clear and reapply on each slider tick, which flickers.
   useEffect(() => () => clearPreview(), [clearPreview]);
