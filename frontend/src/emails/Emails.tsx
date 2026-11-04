@@ -30,6 +30,7 @@ import {
 } from "./openEmailSession";
 import { FolderChips } from "./FolderChips";
 import SearchBar from "../search/SearchBar";
+import { SearchFilterMenu } from "./SearchFilterMenu";
 import { logger } from "../utils/logger";
 import type { EmailItem } from "./types";
 import { conversationKey, isStarred } from "./conversation";
@@ -883,24 +884,39 @@ export default function Emails() {
                   New message
                 </button>
               )}
-              {/* EmailList portals its select-all checkbox in here, ahead of the
-                  folder menu and SearchBar's list / split view buttons. */}
-              <div className="emails-toolbar-select" ref={setSelectSlot} />
-              {/* Split (pane or list+detail layout): the folder menu sits next to
-                Compose (the list header that normally hosts it is too cramped). */}
-              {chipsInToolbar && !isPersonalScope && (
-                <FolderChips
-                  activeFolder={viewMode === "email" ? activeFolder : null}
-                  onSelectFolder={(f) => {
-                    setViewMode("email");
-                    setSelectedEmail(null);
-                    setActiveFolder(f);
-                  }}
-                  onShowAttachments={showFiles}
-                  filesActive={viewMode === "files"}
-                />
-              )}
-              <SearchBar collapsible />
+              {/* One unit, so a wrapping toolbar can't part select-all from the
+                  folder menu it sits in front of. */}
+              <div className="emails-toolbar-folders">
+                {/* EmailList portals its select-all checkbox in here, ahead of the
+                    folder menu and SearchBar's list / split view buttons. */}
+                <div className="emails-toolbar-select" ref={setSelectSlot} />
+                {/* Split (pane or list+detail layout): the folder menu sits next to
+                  Compose (the list header that normally hosts it is too cramped). */}
+                {chipsInToolbar && !isPersonalScope && (
+                  <FolderChips
+                    activeFolder={viewMode === "email" ? activeFolder : null}
+                    onSelectFolder={(f) => {
+                      setViewMode("email");
+                      setSelectedEmail(null);
+                      setActiveFolder(f);
+                    }}
+                    onShowAttachments={showFiles}
+                    filesActive={viewMode === "files"}
+                  />
+                )}
+              </div>
+              <SearchBar
+                filter={
+                  <SearchFilterMenu
+                    activeFolder={activeFolder}
+                    onSelectFolder={(f) => {
+                      setViewMode("email");
+                      setSelectedEmail(null);
+                      setActiveFolder(f);
+                    }}
+                  />
+                }
+              />
               {/* EmailList portals its "1–50 ‹ ›" pager in here. */}
               <div className="emails-toolbar-pager" ref={setPagerSlot} />
             </div>

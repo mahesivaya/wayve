@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { useGlobalSearch } from "./SearchContext";
 import { getSearchLabel, shouldHideSearch } from "./SearchConfig";
@@ -7,10 +7,13 @@ import { SearchIcon } from "../icons";
 
 export default function SearchBar({
   collapsible = false,
+  filter,
 }: {
   // Shows only a search icon until clicked. Stays open while there's a query,
   // so an active filter is never hidden behind the icon.
   collapsible?: boolean;
+  // Extra control at the end of the box, after the clear button.
+  filter?: ReactNode;
 } = {}) {
   const [expanded, setExpanded] = useState(false);
   const location = useLocation();
@@ -91,7 +94,11 @@ export default function SearchBar({
           }}
         >
           <span className="global-search-icon" aria-hidden="true">
-            ⌕
+            {location.pathname.startsWith("/emails") ? (
+              <SearchIcon size={16} />
+            ) : (
+              "⌕"
+            )}
           </span>
           <input
             type="search"
@@ -124,6 +131,7 @@ export default function SearchBar({
               ×
             </button>
           )}
+          {filter}
         </div>
       )}
     </div>

@@ -4,7 +4,7 @@ export const SEARCH_LABELS: Record<string, string> = {
   // rather than falling back to the generic "this page".
   "/organization/home": "apps and settings",
   "/platform/home": "apps and settings",
-  "/emails": "all emails",
+  "/emails": "mail",
   "/emails/attachments": "email files",
   "/chat": "users and messages",
   "/call": "calls",

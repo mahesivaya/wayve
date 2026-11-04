@@ -65,6 +65,7 @@ export {
   Phone as PhoneIcon,
   Video as VideoIcon,
   Search as SearchIcon,
+  SlidersHorizontal as FilterIcon,
   ChevronRight as ChevronIcon,
   Plus as PlusIcon,
   // Addable "fake" personal apps (placeholder catalog)
