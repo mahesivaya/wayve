@@ -748,6 +748,11 @@ function BillingInner() {
     (plan) => plan.tier === "enterprise"
   );
 
+  // Organization plans bill per user. Must match the backend's `billable_seats`,
+  // which is also what `seats_used` reports. An upgrade starts with just the owner.
+  const seats = org?.seats_used ?? 1;
+  const subscribeSeats = isOrg ? seats : 1;
+
   const renderPlanCard = (plan: Plan) => {
     const isCurrent = plan.code === effectiveCurrentCode;
     const isFree = plan.amount_cents === 0;
@@ -768,7 +773,8 @@ function BillingInner() {
       >
         <h3>{PLAN_TITLE[plan.code] ?? plan.name}</h3>
         <p className="billing-plan-price">
-          {copy?.price ??
+          {(copy &&
+            `${copy.price}${copy.interval ? ` / ${copy.interval}` : ""}`) ??
             (isFree
               ? "Free"
               : `${formatMoney(plan.amount_cents, plan.currency)} / ${plan.billing_interval}`)}
@@ -864,9 +870,21 @@ function BillingInner() {
             {activeSub ? (
               <div className="billing-sub">
                 <div className="billing-sub-row">
+                  <span>Users</span>
+                  <strong>
+                    {seats} ×{" "}
+                    {formatMoney(activeSub.amount_cents, activeSub.currency)}
+                  </strong>
+                </div>
+                <div className="billing-sub-row">
                   <span>Amount</span>
                   <strong className="billing-amount-lg">
-                    {formatMoney(activeSub.amount_cents, activeSub.currency)}
+                    {formatMoney(
+                      activeSub.amount_cents == null
+                        ? null
+                        : activeSub.amount_cents * seats,
+                      activeSub.currency
+                    )}
                     {activeSub.billing_interval
                       ? ` / ${activeSub.billing_interval}`
                       : " / month"}
@@ -1032,7 +1050,7 @@ function BillingInner() {
           <p className="billing-note">
             Your account becomes the owner of a new organization.
             {orgUpgradePlan.amount_cents > 0
-              ? ` ${formatMoney(orgUpgradePlan.amount_cents, orgUpgradePlan.currency)} / ${orgUpgradePlan.billing_interval}.`
+              ? ` ${formatMoney(orgUpgradePlan.amount_cents, orgUpgradePlan.currency)} per user / ${orgUpgradePlan.billing_interval}, starting with you. Each user you add increases the monthly charge.`
               : " This plan is free."}
           </p>
           <form
@@ -1083,7 +1101,12 @@ function BillingInner() {
           </h2>
           {subscribePlan && (
             <p className="billing-note">
-              {formatMoney(subscribePlan.amount_cents, subscribePlan.currency)}
+              {subscribeSeats > 1 &&
+                `${subscribeSeats} users × ${formatMoney(subscribePlan.amount_cents, subscribePlan.currency)} = `}
+              {formatMoney(
+                subscribePlan.amount_cents * subscribeSeats,
+                subscribePlan.currency
+              )}
               {subscribePlan.billing_interval
                 ? ` / ${subscribePlan.billing_interval}`
                 : ""}{" "}
@@ -1119,7 +1142,7 @@ function BillingInner() {
                   : !subscribeFormReady
                     ? "Loading…"
                     : subscribePlan
-                      ? `Pay ${formatMoney(subscribePlan.amount_cents, subscribePlan.currency)}`
+                      ? `Pay ${formatMoney(subscribePlan.amount_cents * subscribeSeats, subscribePlan.currency)}`
                       : "Confirm"}
               </button>
               <button

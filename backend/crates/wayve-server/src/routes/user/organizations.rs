@@ -1075,6 +1075,13 @@ pub async fn delete_my_account(req: HttpRequest, pool: web::Data<PgPool>) -> App
     )
     .await;
 
+    let organization_id: Option<i32> =
+        sqlx::query_scalar("SELECT organization_id FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_optional(pool.get_ref())
+            .await?
+            .flatten();
+
     let mut tx = pool.begin().await?;
     crate::db::apply_rls_bypass(&mut tx).await?;
     // notes.user_id has no FK, so it does not ride the cascade on `users`.
@@ -1096,6 +1103,9 @@ pub async fn delete_my_account(req: HttpRequest, pool: web::Data<PgPool>) -> App
     invalidate_profile_cache(user_id).await;
     invalidate_me_cache(user_id).await;
     rbac::invalidate_role_context(user_id).await;
+    if let Some(org_id) = organization_id {
+        crate::billing::seats::sync_org_seats(pool.get_ref(), org_id).await;
+    }
 
     info!(target: "auth", user_id, "user self-deleted account");
 
@@ -1669,6 +1679,10 @@ pub async fn admin_create_user(
                 );
             }
 
+            if let Some(org_id) = organization_id {
+                crate::billing::seats::sync_org_seats(pool.get_ref(), org_id).await;
+            }
+
             info!(target: "auth", admin_id, user_id = id, "admin created user");
             // `temp_password` is present only when the server generated it; a
             // supplied password is never echoed back.
@@ -1798,6 +1812,9 @@ pub async fn admin_delete_user(
     invalidate_me_cache(target_user_id).await;
     invalidate_profile_cache(target_user_id).await;
     rbac::invalidate_role_context(target_user_id).await;
+    if let Some(org_id) = target_ctx.organization_id {
+        crate::billing::seats::sync_org_seats(pool.get_ref(), org_id).await;
+    }
     info!(
         target: "auth",
         actor = ctx.user_id,

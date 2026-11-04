@@ -14,6 +14,7 @@ pub mod plans;
 pub mod provider;
 pub mod quotas;
 pub mod routes;
+pub mod seats;
 pub mod subscriptions;
 pub mod tiers;
 pub mod usage_metering;
@@ -170,6 +171,7 @@ pub async fn spawn_billing_worker(pool: PgPool) {
                 error!(target: "billing", tick = ticks, error = ?e, "entitlement reconcile failed")
             }
         }
+        seats::reconcile_org_seats(&pool).await;
     }
 }
 

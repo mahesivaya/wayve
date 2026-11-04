@@ -7,6 +7,7 @@ mod admin_create_verification_test;
 mod ai_config_test;
 mod auth_key_scheme_test;
 mod billing_audit_test;
+mod billing_seats_test;
 mod channel_admin_test;
 mod channel_delete_test;
 mod channel_scope_test;

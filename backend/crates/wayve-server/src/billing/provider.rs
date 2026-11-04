@@ -159,6 +159,7 @@ pub struct CheckoutParams {
     pub cancel_url: String,
     pub client_reference: String,
     pub autopay: bool,
+    pub quantity: i64,
 }
 
 pub struct CheckoutSession {
@@ -189,10 +190,11 @@ pub async fn create_subscription(
     customer_id: &str,
     price_id: &str,
     client_reference: &str,
+    quantity: i64,
 ) -> Result<PendingSubscription> {
     create_incomplete_subscription(
         customer_id,
-        price_id,
+        (price_id, quantity),
         ("metadata[client_reference]", client_reference.to_string()),
     )
     .await
@@ -209,10 +211,35 @@ pub async fn create_org_upgrade_subscription(
 ) -> Result<PendingSubscription> {
     create_incomplete_subscription(
         customer_id,
-        price_id,
+        // The upgrading user is the org's only member so far.
+        (price_id, 1),
         ("metadata[org_pending]", pending_id.to_string()),
     )
     .await
+}
+
+/// Set a subscription's quantity, prorated onto the next invoice. Returns whether
+/// it changed, so a repeat sync doesn't write to Stripe or create a proration.
+pub async fn set_subscription_quantity(subscription_id: &str, quantity: i64) -> Result<bool> {
+    let path = format!("/subscriptions/{subscription_id}");
+    let body = get_json(&path, &[]).await?;
+    let item = body
+        .pointer("/items/data/0")
+        .ok_or_else(|| anyhow!("subscription response missing items"))?;
+    if item.get("quantity").and_then(Value::as_i64) == Some(quantity) {
+        return Ok(false);
+    }
+    let item_id = item
+        .get("id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("subscription item missing id"))?;
+    let params = vec![
+        ("items[0][id]", item_id.to_string()),
+        ("items[0][quantity]", quantity.to_string()),
+        ("proration_behavior", "create_prorations".to_string()),
+    ];
+    post_form(&path, &params).await?;
+    Ok(true)
 }
 
 /// A subscription's current Stripe `status` (e.g. `active`, `incomplete`), read
@@ -228,7 +255,7 @@ pub async fn get_subscription_status(subscription_id: &str) -> Result<String> {
 
 async fn create_incomplete_subscription(
     customer_id: &str,
-    price_id: &str,
+    (price_id, quantity): (&str, i64),
     metadata: (&str, String),
 ) -> Result<PendingSubscription> {
     // Both the legacy `payment_intent` and the newer `confirmation_secret` are
@@ -237,6 +264,7 @@ async fn create_incomplete_subscription(
     let params = vec![
         ("customer", customer_id.to_string()),
         ("items[0][price]", price_id.to_string()),
+        ("items[0][quantity]", quantity.to_string()),
         // Without `default_incomplete` Stripe charges immediately and returns no
         // client_secret for the frontend to confirm.
         ("payment_behavior", "default_incomplete".to_string()),
@@ -327,7 +355,7 @@ pub async fn create_checkout_session(p: &CheckoutParams) -> Result<CheckoutSessi
         ("mode", "subscription".to_string()),
         ("customer", p.customer_id.clone()),
         ("line_items[0][price]", p.price_id.clone()),
-        ("line_items[0][quantity]", "1".to_string()),
+        ("line_items[0][quantity]", p.quantity.to_string()),
         ("success_url", p.success_url.clone()),
         ("cancel_url", p.cancel_url.clone()),
         ("client_reference_id", p.client_reference.clone()),

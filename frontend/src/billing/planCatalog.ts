@@ -111,11 +111,16 @@ export const PLAN_NAMES: Record<string, string> = Object.fromEntries(
 /** Display order of plan codes. */
 export const PLAN_DISPLAY_ORDER: string[] = PLAN_CATALOG.map((p) => p.code);
 
-/** code → { price, features } for spots that show plan copy without the API. */
-export const PLAN_COPY: Record<string, { price: string; features: string[] }> =
-  Object.fromEntries(
-    PLAN_CATALOG.map((p) => [p.code, { price: p.price, features: p.features }])
-  );
+/** code → { price, interval, features } for spots that show plan copy without the API. */
+export const PLAN_COPY: Record<
+  string,
+  { price: string; interval: string | null; features: string[] }
+> = Object.fromEntries(
+  PLAN_CATALOG.map((p) => [
+    p.code,
+    { price: p.price, interval: p.interval, features: p.features },
+  ])
+);
 
 /** Friendly name for a plan code; "Free" when there is no plan. */
 export const planName = (code: string | null | undefined): string =>

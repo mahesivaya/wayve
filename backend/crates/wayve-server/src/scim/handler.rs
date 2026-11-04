@@ -333,6 +333,7 @@ pub async fn create_user(
     .bind(row.try_get::<i32, _>("id").unwrap_or(0))
     .execute(pool.get_ref())
     .await?;
+    crate::billing::seats::sync_org_seats(pool.get_ref(), principal.organization_id).await;
 
     Ok(HttpResponse::Created()
         .content_type("application/scim+json")
@@ -386,9 +387,13 @@ pub async fn replace_user(
     .fetch_optional(pool.get_ref())
     .await?;
     match row {
-        Some(row) => Ok(HttpResponse::Ok()
-            .content_type("application/scim+json")
-            .json(user_to_scim(&row))),
+        Some(row) => {
+            // Deactivating or reactivating a user changes what the org pays for.
+            crate::billing::seats::sync_org_seats(pool.get_ref(), principal.organization_id).await;
+            Ok(HttpResponse::Ok()
+                .content_type("application/scim+json")
+                .json(user_to_scim(&row)))
+        }
         None => Ok(scim_error(404, "User not found")),
     }
 }
@@ -418,6 +423,7 @@ pub async fn delete_user(
     if done.rows_affected() == 0 {
         return Ok(scim_error(404, "User not found"));
     }
+    crate::billing::seats::sync_org_seats(pool.get_ref(), principal.organization_id).await;
     Ok(HttpResponse::NoContent().finish())
 }
 

@@ -46,13 +46,11 @@ pub async fn get_organization_billing(req: HttpRequest, pool: web::Data<PgPool>)
         None => return Ok(HttpResponse::NotFound().finish()),
     };
 
-    let seats_used = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*)::BIGINT FROM users WHERE organization_id = $1",
-    )
-    .bind(org_id)
-    .fetch_one(pool.get_ref())
-    .await
-    .unwrap_or(0);
+    // The same count the subscription's quantity follows, so the page's total
+    // matches the invoice.
+    let seats_used = super::seats::billable_seats(pool.get_ref(), org_id)
+        .await
+        .unwrap_or(0);
 
     let entitlement = effective_entitlements(pool.get_ref(), owner).await;
 

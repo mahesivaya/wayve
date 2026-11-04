@@ -12,6 +12,8 @@ const h = vi.hoisted(() => ({
   startOrganizationUpgrade: vi.fn(),
   finalizeOrganizationUpgrade: vi.fn(),
   startInlineSubscription: vi.fn(),
+  subscription: {} as Record<string, unknown>,
+  org: null as Record<string, unknown> | null,
 }));
 
 vi.mock("../../auth/useAuth", () => ({
@@ -65,7 +67,7 @@ vi.mock("../../api/billing", () => ({
     ),
     plan(4, "enterprise", "Enterprise", "organization", "enterprise", 4900),
   ],
-  getSubscription: async () => ({ owner_type: "personal", subscription: null }),
+  getSubscription: async () => h.subscription,
   getEntitlements: async () => null,
   listInvoices: async () => [],
   getUsage: async () => null,
@@ -75,7 +77,7 @@ vi.mock("../../api/billing", () => ({
     country: "US",
     publishable_key: "pk_test_x",
   }),
-  getOrganizationBilling: async () => null,
+  getOrganizationBilling: async () => h.org,
   cancelSubscription: vi.fn(),
   createPaymentMethodSetupIntent: vi.fn(),
   setDefaultPaymentMethod: vi.fn(),
@@ -98,7 +100,10 @@ const renderBilling = async () => {
       <Billing />
     </MemoryRouter>
   );
-  await screen.findByText("Advanced Organization");
+  await screen.findByRole("heading", {
+    name: "Advanced Organization",
+    level: 3,
+  });
 };
 
 const cardButton = (planName: string) => {
@@ -122,6 +127,8 @@ beforeEach(() => {
   h.user = { account_type: "personal", scope: "personal", email: "a@b.c" };
   h.switchMode.mockResolvedValue(undefined);
   h.refresh.mockResolvedValue(undefined);
+  h.subscription = { owner_type: "personal", subscription: null };
+  h.org = null;
   window.HTMLElement.prototype.scrollIntoView = vi.fn();
 });
 
@@ -190,6 +197,40 @@ describe("organization upgrade", () => {
     );
     expect(h.startInlineSubscription).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Organization name")).toBeTruthy();
+  });
+
+  it("charges an organization for each of its users", async () => {
+    h.subscription = {
+      owner_type: "organization",
+      subscription: {
+        id: 1,
+        status: "active",
+        current_period_end: null,
+        cancel_at_period_end: false,
+        plan_code: "organization",
+        plan_name: "Advanced Organization",
+        amount_cents: 1200,
+        currency: "usd",
+        billing_interval: "month",
+      },
+    };
+    h.org = {
+      organization: { id: 5, name: "Acme", slug: "acme" },
+      seats_used: 3,
+      seat_limit: 100,
+      plan_code: "organization",
+      plan_active: true,
+    };
+    await renderBilling();
+
+    expect(await screen.findByText("3 × 12.00 USD")).toBeTruthy();
+    expect(screen.getByText("36.00 USD / month")).toBeTruthy();
+  });
+
+  it("states the per-user price before upgrading", async () => {
+    await renderBilling();
+    fireEvent.click(cardButton("Advanced Organization"));
+    expect(screen.getByText(/12\.00 USD per user \/ month/)).toBeTruthy();
   });
 
   it("requires a name", async () => {
