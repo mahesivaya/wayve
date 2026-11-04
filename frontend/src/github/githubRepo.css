@@ -2287,6 +2287,8 @@
 /* Empty / loading states for the per-project viewer (no repo linked yet). */
 .github-empty-state {
   display: grid;
+  /* Otherwise the column grows to fit the card's rows and runs off a phone. */
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
 }
 
@@ -2399,6 +2401,31 @@
   font-size: var(--text-sm);
   color: var(--color-text-muted);
   text-align: center;
+}
+
+@media (max-width: 520px) {
+  .github-add-repo {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 20px 16px;
+  }
+
+  .github-add-repo-row,
+  .github-add-repo-alt {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .github-add-repo-input {
+    flex: none;
+    /* iOS zooms the whole page into any field smaller than 16px. */
+    font-size: 16px;
+  }
+
+  .github-add-repo-btn,
+  .github-add-repo-import-btn {
+    white-space: normal;
+  }
 }
 
 /* Personal repo selector: a card at the top of the viewer's left rail (above
