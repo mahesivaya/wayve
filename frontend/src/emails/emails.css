@@ -86,9 +86,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  height: 100%;
   min-height: 0;
-  overflow: hidden;
 }
 
 /* Wraps in a narrow split pane, so what doesn't fit moves to the next line

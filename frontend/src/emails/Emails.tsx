@@ -790,11 +790,11 @@ export default function Emails() {
   }, [activeAccount, accountsLoaded, displayedAccounts, setActiveAccount]);
 
   return (
-    <div className="emails-root">
+    <div className="emails-root page-card-frame">
       <div
         ref={mainRef}
         className={[
-          "main",
+          "main page-card",
           isNarrow ? "narrow" : "",
           effectiveLayout === "list" ? "email-list-view" : "email-split-view",
         ]
