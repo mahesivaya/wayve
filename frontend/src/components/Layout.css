@@ -14,10 +14,9 @@
    🔝 HEADER
 ============================== */
 .header {
-  /* Track the same themeable surface as the sidebar so the header follows the
-     active/custom theme background instead of a fixed midgray. Text uses the
-     themeable ink token so contrast flips with the surface too. */
-  background: var(--color-surface-soft);
+  /* Same surface as the sidebar, in every theme. Text uses the themeable ink
+     token so contrast flips with the surface too. */
+  background: var(--color-chrome-surface);
   color: var(--color-text-primary);
   display: flex;
   align-items: center;
@@ -560,16 +559,11 @@ html.is-titlebar-inset .header-brand .sidebar-collapse-icon {
 ============================== */
 .sidebar {
   width: 220px;
-  /* Track the themeable soft surface so the sidebar matches the active theme's
-     background in every theme. The old --color-surface-cool-faint aliases the
-     non-themeable --color-canvas (#0a1730 navy), so on a near-black custom
-     theme the sidebar stayed blue. (Default dark is unchanged: surface-soft is
-     also #0a1730 there.) */
-  /* A step darker than the content beside it, so the menu reads as its own
-     area. Mixed from the surface so it follows light custom themes; dark themes
-     override this below. */
-  --sidebar-surface: color-mix(in oklab, var(--color-surface-soft) 94%, black);
-  --sidebar-hover: color-mix(in oklab, var(--color-surface-soft) 88%, black);
+  /* Darker than the content beside it, so the menu reads as its own area. Shared
+     with the header. The hover is mixed from the surface so it follows light
+     custom themes; dark themes override it below. */
+  --sidebar-surface: var(--color-chrome-surface);
+  --sidebar-hover: color-mix(in oklab, var(--color-surface-soft) 82%, black);
 
   background: var(--sidebar-surface);
   border-right: 1px solid var(--color-border);
@@ -1886,7 +1880,6 @@ html.is-titlebar-inset .header-brand .sidebar-collapse-icon {
    is also #0a1730 there.
    ============================================================ */
 :root[data-theme="dark"] .header {
-  background: var(--color-surface-soft);
   border-bottom: 1px solid var(--color-border-dark);
   color: var(--color-surface-tint-slate);
 }
@@ -1902,10 +1895,6 @@ html.is-titlebar-inset .header-brand .sidebar-collapse-icon {
   color: var(--color-primary-border);
 }
 :root[data-theme="dark"] .sidebar {
-  /* Themeable soft surface (was the non-themeable --color-surface-darken navy
-     #0a1730, which stayed blue on a near-black custom theme). Default dark is
-     unchanged: surface-soft is also #0a1730. */
-  --sidebar-surface: var(--color-surface-soft);
   --sidebar-hover: var(--color-surface-hover);
 
   border-right: 1px solid var(--color-border-dark);

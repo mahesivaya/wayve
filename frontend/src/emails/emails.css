@@ -1059,14 +1059,13 @@
   flex-shrink: 0;
 }
 
-/* Row palette tuned against the new lightsteelblue list background:
-   - Read row (no class):  inherits the list bg (lightsteelblue)
-   - Unread row:           white — pops sharply against the steel-blue base
-   - Hover on read:        a notch lighter than steel-blue so the hover
-                           reads even on the darker surface
+/* Row palette against the list background:
+   - Read row (no class):  inherits the list bg
+   - Unread row:           white — lighter than the list bg
+   - Hover on read:        a cool blue, so the hover reads on the list bg
    - Hover on unread:      slate-50, the familiar near-white hover state
-   - Active (selected):    pale primary panel, distinct from BOTH the steel-
-                           blue base AND the white unread row, with an
+   - Active (selected):    pale primary panel, distinct from BOTH the list
+                           bg AND the white unread row, with an
                            accented left bar for confirmation. */
 .email-item:hover {
   background: var(--color-surface-cool-blue);

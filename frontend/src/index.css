@@ -16,8 +16,18 @@
      (primary button, danger button, etc.). Stays white in both light and
      dark mode — unlike --color-surface which flips. */
   --color-on-primary: #ffffff;
-  --color-surface-soft: #f8fafc;
-  --color-surface-hover: #f3f4f6;
+  --color-surface-soft: #f1f5f9;
+  --color-surface-hover: #e9edf3;
+  /* The one color for the menu, header and footer. --color-chrome-surface follows
+     the app theme, including custom themes. Public pages have their own theme
+     switch, so they pick the fixed light or dark value themselves. */
+  --color-chrome-surface: color-mix(
+    in oklab,
+    var(--color-surface-soft) 88%,
+    black
+  );
+  --color-chrome-light: color-mix(in oklab, #f1f5f9 88%, black);
+  --color-chrome-dark: color-mix(in oklab, #0a1730 50%, black);
   --color-text-black: black;
   --color-text-primary: #111827;
   --color-text-ink: #1f2937;
@@ -126,8 +136,8 @@
   --color-surface-deep: #0f172a;
   --color-surface-deepest: #0b1220;
   --color-surface-deep-navy: #0d1b2a;
-  --color-canvas: lightsteelblue;
-  --color-pane: #d7e4f4;
+  --color-canvas: var(--color-surface-soft);
+  --color-pane: var(--color-surface-hover);
   --color-resizer-hover: #9fb4cd;
   --color-overlay-soft: rgba(255, 255, 255, 0.55);
   --color-overlay-strong: rgba(255, 255, 255, 0.65);
@@ -481,6 +491,11 @@
   --color-on-primary: #ffffff;
   --color-surface-soft: #0a1730;
   --color-surface-hover: #17284c;
+  --color-chrome-surface: color-mix(
+    in oklab,
+    var(--color-surface-soft) 50%,
+    black
+  );
   --color-text-black: #f8fafc;
   --color-text-primary: #f1f5f9;
   --color-text-ink: #e2e8f0;

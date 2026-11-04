@@ -50,11 +50,11 @@ describe("Appearance card", () => {
     await user.click(screen.getByRole("button", { name: "Dark" }));
     expect(pressed("Dark")).toBe("true");
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
-    // Dark is plain black: a near-black canvas with no hue (chroma 0), not a
-    // tinted dark preset.
+    // Dark is neutral: a dark gray canvas with no hue (chroma 0), not a tinted
+    // dark preset.
     const canvas =
       document.documentElement.style.getPropertyValue("--color-canvas");
-    expect(canvas).toMatch(/^oklch\(0\.0\d+ 0\.000 /);
+    expect(canvas).toMatch(/^oklch\(0\.[01]\d+ 0\.000 /);
 
     await user.click(screen.getByRole("button", { name: "Light" }));
     expect(pressed("Light")).toBe("true");

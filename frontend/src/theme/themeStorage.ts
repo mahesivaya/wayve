@@ -2,7 +2,13 @@
 // the format and the v1→v2 migration. v1 stored a bare ThemeChoice; v2 wraps it
 // as { v: 2, active, library, ui }. Old v1 blobs are migrated forward on read.
 
-import { BW_DARK_INPUT } from "./blackAndWhite";
+import {
+  BW_DARK_INPUT,
+  BW_LIGHT_INPUT,
+  OLD_BW_DARK_DEPTH,
+  OLD_BW_LIGHT_DEPTH,
+  isBwInput,
+} from "./blackAndWhite";
 import type {
   PersistedTheme,
   SavedTheme,
@@ -59,6 +65,16 @@ export const EMPTY_PERSISTED: PersistedTheme = {
 // Accounts can still hold these two presets, which no longer exist. Unknown
 // presets paint as light, which would put "default-dark" accounts on white.
 function upgradeChoice(choice: ThemeChoice): ThemeChoice {
+  // Only the exact old values, so a depth set by hand on the slider is kept.
+  if (choice.kind === "custom" && isBwInput(choice.input)) {
+    if (choice.mode === "light" && choice.input.depth === OLD_BW_LIGHT_DEPTH) {
+      return { ...choice, input: BW_LIGHT_INPUT };
+    }
+    if (choice.mode === "dark" && choice.input.depth === OLD_BW_DARK_DEPTH) {
+      return { ...choice, input: BW_DARK_INPUT };
+    }
+    return choice;
+  }
   if (choice.kind !== "preset") return choice;
   if (choice.presetId === "default-light") return { kind: "default" };
   if (choice.presetId === "default-dark") {
