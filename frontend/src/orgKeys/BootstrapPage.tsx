@@ -32,12 +32,12 @@ export default function BootstrapPage() {
     // can restore from whichever they prefer.
     const numbered = words.map((w, i) => `${i + 1}. ${w}`).join("\n");
     const phrase = words.join(" ");
-    const body = `Fluxze organization recovery key\nGenerated ${new Date().toISOString()}\n\n${numbered}\n\nPhrase:\n${phrase}\n`;
+    const body = `Hadal organization recovery key\nGenerated ${new Date().toISOString()}\n\n${numbered}\n\nPhrase:\n${phrase}\n`;
     const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `fluxze-org-recovery-key.txt`;
+    a.download = `hadal-org-recovery-key.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -158,7 +158,7 @@ export default function BootstrapPage() {
             <h2>Recovery key already set up</h2>
             <p>
               Your organization recovery key was bootstrapped on a previous
-              visit. The 24-word phrase is shown only once at creation — Fluxze
+              visit. The 24-word phrase is shown only once at creation — Hadal
               cannot display it again. If you didn't save it, contact your
               platform administrator to rotate the key.
             </p>
@@ -185,8 +185,8 @@ export default function BootstrapPage() {
             <h2>Recovery key saved</h2>
             <p>
               Your organization master key is bootstrapped. Keep the 24-word
-              phrase you wrote down somewhere safe — Fluxze cannot recover it
-              for you if you lose it.
+              phrase you wrote down somewhere safe — Hadal cannot recover it for
+              you if you lose it.
             </p>
           </header>
           <div className="recovery-actions">
@@ -211,9 +211,9 @@ export default function BootstrapPage() {
             <h2>🔑 Your organization recovery key</h2>
             <p className="recovery-warning">
               Write these 24 words on paper and store them somewhere physically
-              secure. Fluxze cannot recover this for you. Without these words,
-              if you lose access to every browser you've used, you cannot
-              decrypt any departing-member data — ever.
+              secure. Hadal cannot recover this for you. Without these words, if
+              you lose access to every browser you've used, you cannot decrypt
+              any departing-member data — ever.
             </p>
           </header>
 
