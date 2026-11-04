@@ -31,7 +31,7 @@ const renderBar = (collapsible = true) =>
   );
 
 const input = () => screen.queryByRole("searchbox");
-const icon = () => screen.getByRole("button", { name: "Search all emails" });
+const icon = () => screen.getByRole("button", { name: "Search mail" });
 
 beforeEach(() => {
   h.initialQuery = "";
