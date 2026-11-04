@@ -1107,8 +1107,9 @@ html.is-titlebar-inset .header-brand .sidebar-collapse-icon {
 /* =============================
    ▢ PAGE CARD
 ============================== */
-/* A page set in one rounded card, with a margin of slightly darker page around
-   it: Emails, Chat and Calendar. Clipping keeps the panes inside the corners. */
+/* Every page sits in one rounded card, with a margin of slightly darker page
+   around it (renderPaneBody in Layout.tsx). Clipping keeps its panes inside the
+   corners. Pages lay out as they did directly in .split-pane: a flex column. */
 .page-card-frame {
   box-sizing: border-box;
   flex: 1;
@@ -1116,13 +1117,15 @@ html.is-titlebar-inset .header-brand .sidebar-collapse-icon {
   height: 100%;
   min-width: 0;
   min-height: 0;
-  padding: 12px;
+  padding: 4px;
   overflow: hidden;
   background: color-mix(in oklab, var(--color-canvas) 94%, black);
 }
 
 .page-card-frame > .page-card {
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100%;
   min-height: 0;
