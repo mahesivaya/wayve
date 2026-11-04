@@ -1071,6 +1071,19 @@
   background: var(--color-surface-cool-blue);
 }
 
+/* The rows clip their content, which also cut off the `data-tooltip` bubbles
+   of the star and the hover actions. Lift the clip on the row being used, and
+   raise it so the bubble paints over the rows below. Mouse only: a tap leaves
+   :hover stuck on touch screens. */
+@media (hover: hover) {
+  .email-item:hover,
+  .email-item:focus-within {
+    position: relative;
+    z-index: 1;
+    overflow: visible;
+  }
+}
+
 .email-item.unread {
   background: var(--color-surface);
 }
@@ -1189,6 +1202,15 @@
 .email-row-star.is-starred,
 .mobile-email-star.is-starred {
   color: var(--color-star);
+}
+
+/* The phone row's star hugs the list's right edge, so its tooltip opens leftward
+   (as `data-tooltip-align="right"` does) rather than widening the list. */
+.mobile-email-star[data-tooltip]:hover::after,
+.mobile-email-star[data-tooltip]:focus-visible::after {
+  left: auto;
+  right: 0;
+  transform: none;
 }
 
 .email-row-star-slot {
