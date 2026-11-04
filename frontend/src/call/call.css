@@ -346,3 +346,27 @@
     width: 30%;
   }
 }
+
+/* The call UI floats over every page, since the session outlives any one route. */
+.call-global {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 2100;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.call-global .call-banner,
+.call-global .call-active {
+  box-shadow: 0 10px 25px rgb(0, 0, 0, 0.18);
+}
+
+.call-global .call-banner-outgoing,
+.call-global .call-active {
+  background: var(--color-surface);
+}

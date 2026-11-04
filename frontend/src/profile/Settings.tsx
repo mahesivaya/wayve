@@ -13,7 +13,6 @@ import {
 import {
   getProfile,
   putChatEncryptFiles,
-  putMeetingAlertMinutes,
   type ProfileData,
 } from "../api/profile";
 import {
@@ -26,6 +25,7 @@ import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import { cachedLoad } from "../api/cache";
 import { listMyTickets, type SupportTicket } from "../api/support";
+import NotificationSettings from "./NotificationSettings";
 import SupportModal from "../support/SupportModal";
 import SupportTicketView from "../support/SupportTicketView";
 import { fmtDate, fmtShortDate } from "../utils/datetime";
@@ -33,13 +33,6 @@ import { isDesktopApp } from "../utils/desktop";
 import SettingsShell from "./SettingsShell";
 import AppearanceCard from "./AppearanceCard";
 import { useIsNarrow } from "../components/useIsNarrow";
-import {
-  desktopNotificationsEnabled,
-  notificationSupport,
-  requestNotificationPermission,
-  setDesktopNotificationsEnabled,
-  type NotificationSupport,
-} from "../components/desktopNotifications";
 
 type Account = {
   id: number;
@@ -68,12 +61,14 @@ function formatMoney(cents: number, currency: string): string {
   });
 }
 
-// Which settings-rail entry this page renders: General (/settings), Usage
-// (/settings/usage) or Billing (/settings/billing).
-export type SettingsSection = "general" | "usage" | "billing";
+// Which settings-rail entry this page renders: General (/settings),
+// Notifications (/settings/notifications), Usage (/settings/usage) or Billing
+// (/settings/billing).
+export type SettingsSection = "general" | "notifications" | "usage" | "billing";
 
 const SECTION_TITLES: Record<SettingsSection, React.ReactNode> = {
   general: <>Settings &amp; Privacy</>,
+  notifications: <>Notifications</>,
   usage: <>Storage &amp; Usage</>,
   billing: <>Billing</>,
 };
@@ -83,9 +78,11 @@ export default function Settings({
 }: { section?: SettingsSection } = {}) {
   const navigate = useNavigate();
   // Narrow screens drop the settings rail (see SettingsShell), leaving no way
-  // to reach the Usage / Billing entries — so General shows every card there.
+  // to reach the other entries — so General shows every card there.
   const narrow = useIsNarrow();
   const showGeneral = section === "general";
+  const showNotifications =
+    section === "notifications" || (narrow && showGeneral);
   const showUsage = section === "usage" || (narrow && showGeneral);
   const showBillingSection = section === "billing" || (narrow && showGeneral);
   const { user, refresh, logout } = useAuth();
@@ -238,31 +235,6 @@ export default function Settings({
     }
   };
 
-  // Meeting alert lead time. Server-stored so it follows the user across
-  // devices; 0 means meeting alerts are off.
-  const MEETING_LEAD_CHOICES = [0, 5, 10, 15, 30];
-  // Derived from `user` rather than mirrored into state, so there's no effect
-  // resyncing the two. `pendingLead` is the optimistic override shown while the
-  // PUT is in flight; clearing it falls back to whatever the server now says —
-  // which reverts the control automatically if the save failed.
-  const [pendingLead, setPendingLead] = useState<number | null>(null);
-  const [meetingLeadError, setMeetingLeadError] = useState("");
-  const meetingLead = pendingLead ?? user?.meeting_alert_minutes ?? 10;
-  const changeMeetingLead = async (next: number) => {
-    setMeetingLeadError("");
-    setPendingLead(next);
-    try {
-      await putMeetingAlertMinutes(next);
-      await refresh();
-    } catch (err) {
-      setMeetingLeadError(
-        err instanceof Error ? err.message : "Could not update setting"
-      );
-    } finally {
-      setPendingLead(null);
-    }
-  };
-
   // Org sprint (cycle) length in days, 1–90. Same optimistic pattern as the
   // meeting-lead control; the value lives on the organization, not the user.
   const [pendingSprint, setPendingSprint] = useState<number | null>(null);
@@ -284,22 +256,6 @@ export default function Settings({
     } finally {
       setPendingSprint(null);
     }
-  };
-
-  // Desktop (OS-level) notifications are per-device: browser permission plus a
-  // local switch. Deliberately not server-stored — see desktopNotifications.ts.
-  const [notifPermission, setNotifPermission] = useState<NotificationSupport>(
-    () => notificationSupport()
-  );
-  const [desktopNotifs, setDesktopNotifs] = useState(() =>
-    desktopNotificationsEnabled()
-  );
-  const enableDesktopNotifs = async () => {
-    setNotifPermission(await requestNotificationPermission());
-  };
-  const toggleDesktopNotifs = (next: boolean) => {
-    setDesktopNotificationsEnabled(next);
-    setDesktopNotifs(next);
   };
 
   const saveOrgName = async () => {
@@ -467,88 +423,10 @@ export default function Settings({
           here rather than from the profile menu. */}
         {showGeneral && narrow && <AppearanceCard />}
 
+        {showNotifications && <NotificationSettings />}
+
         {showGeneral && (
           <>
-            <section className="settings-card">
-              <h2 className="settings-card-title">Notifications</h2>
-              <div className="settings-rows">
-                <label className="settings-usage-row">
-                  <span>Alert me before a meeting starts</span>
-                  <select
-                    className="settings-select"
-                    value={meetingLead}
-                    disabled={pendingLead !== null}
-                    onChange={(e) =>
-                      void changeMeetingLead(Number(e.target.value))
-                    }
-                  >
-                    {MEETING_LEAD_CHOICES.map((m) => (
-                      <option key={m} value={m}>
-                        {m === 0 ? "Off" : `${m} minutes before`}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label
-                  className="settings-usage-row"
-                  style={{ cursor: "pointer" }}
-                >
-                  <span>
-                    Also show a desktop notification
-                    <small>This device only</small>
-                  </span>
-                  {notifPermission === "granted" ? (
-                    <span
-                      className={`toggle-switch${desktopNotifs ? " on" : ""}`}
-                    >
-                      <input
-                        type="checkbox"
-                        className="toggle-switch-input"
-                        role="switch"
-                        aria-checked={desktopNotifs}
-                        checked={desktopNotifs}
-                        onChange={(e) => toggleDesktopNotifs(e.target.checked)}
-                      />
-                      <span
-                        className="toggle-switch-slider"
-                        aria-hidden="true"
-                      />
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      className="settings-secondary-btn"
-                      disabled={
-                        notifPermission === "denied" ||
-                        notifPermission === "unsupported"
-                      }
-                      onClick={() => void enableDesktopNotifs()}
-                    >
-                      {notifPermission === "denied"
-                        ? "Blocked in browser"
-                        : notifPermission === "unsupported"
-                          ? "Not supported"
-                          : "Enable"}
-                    </button>
-                  )}
-                </label>
-              </div>
-              <p
-                className="settings-support-empty"
-                style={{ textAlign: "left" }}
-              >
-                Meeting alerts appear as a card in the corner of the app.
-                Desktop notifications additionally surface them outside the
-                browser, but only while Wayve is open in a tab.
-                {notifPermission === "denied" &&
-                  " Your browser is blocking notifications for this site — re-allow them in site settings to turn this on."}
-              </p>
-              {meetingLeadError && (
-                <p className="settings-danger-error">{meetingLeadError}</p>
-              )}
-            </section>
-
             {showChatEncrypt && (
               <section className="settings-card">
                 <h2 className="settings-card-title">Privacy</h2>

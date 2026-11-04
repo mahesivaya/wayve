@@ -28,12 +28,17 @@ vi.mock("../../components/desktopNotifications", () => ({
   showDesktopNotification: (...args: unknown[]) =>
     showDesktopNotification(...args),
 }));
+const playChime = vi.fn();
+vi.mock("../../components/notificationSound", () => ({
+  playChime: () => playChime(),
+}));
 
 // Mutable so individual cases can vary the meeting-alert lead time.
 let mockUser: Record<string, unknown> = { id: 1, email: "me@test.local" };
 vi.mock("../../auth/useAuth", () => ({ useAuth: () => ({ user: mockUser }) }));
 
 import ReminderPopups from "../../components/ReminderPopups";
+import { setAlertEnabled } from "../../components/notificationPrefs";
 
 describe("ReminderPopups", () => {
   beforeEach(() => {
@@ -43,8 +48,50 @@ describe("ReminderPopups", () => {
     getMeetings.mockResolvedValue([]);
     showDesktopNotification.mockReset();
     showDesktopNotification.mockReturnValue(true);
+    playChime.mockReset();
     mockUser = { id: 1, email: "me@test.local", meeting_alert_minutes: 10 };
     sessionStorage.clear();
+    localStorage.clear();
+  });
+
+  it("chimes once per due item, even while toasts keep being retried", async () => {
+    // No permission yet: the toast is retried, which mustn't repeat the chime.
+    showDesktopNotification.mockReturnValue(false);
+    getMeetings.mockResolvedValue([
+      { id: 8, title: "Roadmap sync", ...meetingAt(120) },
+    ]);
+    const first = render(<ReminderPopups />);
+    await screen.findByText("Roadmap sync");
+    expect(playChime).toHaveBeenCalledTimes(1);
+
+    // Nor does a reload within the same alert.
+    first.unmount();
+    render(<ReminderPopups />);
+    await screen.findByText("Roadmap sync");
+    expect(playChime).toHaveBeenCalledTimes(1);
+  });
+
+  it("respects the calendar switches in Settings separately", async () => {
+    setAlertEnabled("calendar", "sound", false);
+    getMeetings.mockResolvedValue([
+      { id: 8, title: "Roadmap sync", ...meetingAt(120) },
+    ]);
+    const first = render(<ReminderPopups />);
+    await screen.findByText("Roadmap sync");
+    expect(playChime).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(showDesktopNotification).toHaveBeenCalledTimes(1)
+    );
+    first.unmount();
+
+    sessionStorage.clear();
+    showDesktopNotification.mockClear();
+    setAlertEnabled("calendar", "sound", true);
+    setAlertEnabled("calendar", "notification", false);
+    render(<ReminderPopups />);
+    await screen.findByText("Roadmap sync");
+    expect(playChime).toHaveBeenCalledTimes(1);
+    expect(showDesktopNotification).not.toHaveBeenCalled();
   });
 
   it("pops a reminder due within a minute", async () => {

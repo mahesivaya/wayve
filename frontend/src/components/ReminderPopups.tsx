@@ -4,6 +4,8 @@ import { getReminders, type Reminder } from "../api/reminders";
 import { getMeetings, type ApiMeeting } from "../api/scheduler";
 import { fmtTime } from "../utils/datetime";
 import { showDesktopNotification } from "./desktopNotifications";
+import { alertEnabled } from "./notificationPrefs";
+import { playChime } from "./notificationSound";
 import "./meetingReminders.css";
 
 // Pop a standalone reminder this many seconds before its remind time. Meetings
@@ -22,6 +24,7 @@ const DEFAULT_MEETING_LEAD_MIN = 10;
 const DISMISS_KEY = "rwayve.reminderPopups.dismissed";
 const SNOOZE_KEY = "rwayve.reminderPopups.snoozed";
 const NOTIFIED_KEY = "rwayve.reminderPopups.notified";
+const CHIMED_KEY = "rwayve.reminderPopups.chimed";
 const SNOOZE_OPTIONS = [5, 10, 30] as const;
 
 // Reminders and meetings are separate tables with independent id sequences, so
@@ -124,6 +127,7 @@ export default function ReminderPopups() {
   // affects what renders, and keeping it out of state avoids a setState inside
   // the notify effect (and the cascading render that comes with it).
   const notified = useRef<Set<string>>(loadSet(NOTIFIED_KEY));
+  const chimed = useRef<Set<string>>(loadSet(CHIMED_KEY));
   const [snoozed, setSnoozed] = useState<Record<string, number>>(loadSnoozed);
   const [snoozeMenu, setSnoozeMenu] = useState<string | null>(null);
 
@@ -217,6 +221,16 @@ export default function ReminderPopups() {
   // Raise an OS-level toast the first time each item comes due. Tracked in
   // sessionStorage so a reload mid-window doesn't re-notify for the same item.
   useEffect(() => {
+    // One chime per item, tracked apart from toasts: those are retried until one
+    // appears, and a chime must not repeat on every tick meanwhile.
+    const unchimed = due.filter((i) => !chimed.current.has(i.key));
+    if (unchimed.length > 0) {
+      if (alertEnabled("calendar", "sound")) playChime();
+      for (const i of unchimed) chimed.current.add(i.key);
+      saveSet(CHIMED_KEY, chimed.current);
+    }
+
+    if (!alertEnabled("calendar", "notification")) return;
     const fresh = due.filter((i) => !notified.current.has(i.key));
     if (fresh.length === 0) return;
     for (const i of fresh) {
@@ -252,6 +266,8 @@ export default function ReminderPopups() {
     // Let the snoozed item notify again when it re-surfaces.
     notified.current.delete(key);
     saveSet(NOTIFIED_KEY, notified.current);
+    chimed.current.delete(key);
+    saveSet(CHIMED_KEY, chimed.current);
     setSnoozeMenu(null);
   }, []);
 

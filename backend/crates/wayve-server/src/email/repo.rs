@@ -476,6 +476,25 @@ fn push_folder(
             "social" => {
                 qb.push(" AND 'CATEGORY_SOCIAL' = ANY(e.labels) ");
             }
+            "promotions" => {
+                qb.push(" AND 'CATEGORY_PROMOTIONS' = ANY(e.labels) ");
+            }
+            // Gmail mail out of the inbox, as Gmail has no archive label; other
+            // providers' sync can't say which folder a message is in. A
+            // conversation with a message still in the inbox isn't archived, so
+            // a new reply moves it back rather than listing it in both.
+            "archived" => {
+                qb.push(
+                    " AND a.provider = 'google' \
+                       AND NOT ('INBOX' = ANY(e.labels)) AND NOT ('SENT' = ANY(e.labels)) \
+                       AND NOT ('SPAM' = ANY(e.labels)) AND NOT ('DRAFT' = ANY(e.labels)) \
+                       AND (e.thread_id IS NULL OR NOT EXISTS (\
+                         SELECT 1 FROM emails i WHERE i.thread_id = e.thread_id \
+                           AND 'INBOX' = ANY(i.labels) AND NOT ('TRASH' = ANY(i.labels)))) ",
+                );
+                // PR/review mail belongs to Reviews, not Archived.
+                qb.push(format!(" AND NOT {GITHUB_PR_MATCH} "));
+            }
             "spam" => {
                 qb.push(" AND 'SPAM' = ANY(e.labels) ");
             }

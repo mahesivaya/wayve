@@ -13,6 +13,20 @@ const ENABLED_KEY = "rwayve.desktopNotifications";
 
 export type NotificationSupport = "unsupported" | NotificationPermission;
 
+// Raised toasts by tag, so one can be taken back when its event is over.
+const open = new Map<string, Notification>();
+
+// Whether someone is looking at the app, so a toast would only repeat what's on
+// screen.
+export function appInFocus(): boolean {
+  return document.visibilityState === "visible" && document.hasFocus();
+}
+
+export function closeDesktopNotification(tag: string) {
+  open.get(tag)?.close();
+  open.delete(tag);
+}
+
 export function notificationSupport(): NotificationSupport {
   if (typeof window === "undefined" || !("Notification" in window)) {
     return "unsupported";
@@ -76,6 +90,7 @@ export function showDesktopNotification(
       onClick?.();
       n.close();
     };
+    open.set(tag, n);
     return true;
   } catch {
     // Some browsers throw when constructing a Notification outside a service

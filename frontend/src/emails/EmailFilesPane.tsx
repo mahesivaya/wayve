@@ -23,7 +23,6 @@ export function EmailFilesList({
   selectedFileId,
   onSelectFile,
   onSelectFolder,
-  onShowAttachments,
   width,
 }: {
   files: EmailAttachment[];
@@ -38,7 +37,6 @@ export function EmailFilesList({
   // Same folder chips as the email list header, so the menu doesn't vanish
   // while browsing attachments. Omitted where the sidebar already navigates.
   onSelectFolder?: (folder: EmailFolder) => void;
-  onShowAttachments?: () => void;
   width?: number;
 }) {
   return (
@@ -52,12 +50,7 @@ export function EmailFilesList({
           role="toolbar"
           aria-label="Mail folders"
         >
-          <FolderChips
-            activeFolder={null}
-            onSelectFolder={onSelectFolder}
-            onShowAttachments={onShowAttachments}
-            filesActive
-          />
+          <FolderChips activeFolder={null} onSelectFolder={onSelectFolder} />
         </div>
       )}
       <div className="email-files-header">

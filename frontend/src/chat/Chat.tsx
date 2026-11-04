@@ -50,8 +50,7 @@ import {
   type ChatAttachmentDescriptor,
 } from "./e2ee";
 import { loadPublicKey } from "../crypto/keyStore";
-import CallOverlays from "../call/CallOverlays";
-import { useCallSession } from "../call/useCallSession";
+import { useSharedCall } from "../call/useSharedCall";
 import {
   forgetOpenChat,
   readChatDraft,
@@ -406,7 +405,7 @@ export default function Chat() {
     [wsRef]
   );
 
-  const callSession = useCallSession(user?.id ?? null, user?.email);
+  const callSession = useSharedCall();
   const selectedUser =
     selectedConversation?.type === "user" ? selectedConversation.user : null;
   const selectedUserPresence = selectedUser
@@ -1211,8 +1210,6 @@ export default function Chat() {
           }
           onJoinChannel={joinChannel}
         />
-
-        <CallOverlays session={callSession} />
 
         <div
           className={`chat-content-row${

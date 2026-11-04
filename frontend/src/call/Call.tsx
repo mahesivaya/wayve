@@ -1,13 +1,12 @@
 // Standalone /call page: a tenant-scoped user directory with audio/video buttons. It
-// is a second entry point into the same useCallSession hook that ChatHeader uses, so
+// is a second entry point into the same shared session that ChatHeader uses, so
 // signaling state has exactly one owner either way.
 
 import { useEffect, useMemo, useState } from "react";
 import { apiFetchJson } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { logger } from "../utils/logger";
-import CallOverlays from "./CallOverlays";
-import { useCallSession } from "./useCallSession";
+import { useSharedCall } from "./useSharedCall";
 import "./call.css";
 
 const log = logger.scope("call");
@@ -20,8 +19,7 @@ type DirectoryUser = {
 export default function Call() {
   const { user } = useAuth();
   const myId = user?.id ?? null;
-  const session = useCallSession(myId, user?.email);
-  const { callState, connected, startCall } = session;
+  const { callState, connected, startCall } = useSharedCall();
 
   const [users, setUsers] = useState<DirectoryUser[]>([]);
   const [usersError, setUsersError] = useState<string | null>(null);
@@ -58,8 +56,6 @@ export default function Call() {
           {connected ? "Connected" : "Offline"}
         </span>
       </header>
-
-      <CallOverlays session={session} />
 
       {callState.kind !== "active" && (
         <div className="call-directory">

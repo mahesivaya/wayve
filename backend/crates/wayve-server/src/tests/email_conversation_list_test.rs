@@ -444,6 +444,150 @@ mod tests {
         cleanup(&pool, &[me.user, stranger.user]).await;
     }
 
+    // Archived is Gmail mail out of the inbox: not sent, spam, drafts, trash or
+    // PR mail, and not a conversation with a message still in the inbox.
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn archived_lists_gmail_mail_outside_the_inbox() {
+        let pool = test_pool().await;
+        let me = mailbox(&pool).await;
+        let from = "Ann <ann@x.com>";
+
+        let lone = email(
+            &pool,
+            me.account,
+            None,
+            from,
+            &["Label_1"],
+            "2026-09-01 09:00",
+        )
+        .await;
+        let done = thread(&pool, me.account).await;
+        email(&pool, me.account, Some(done), from, &[], "2026-09-02 09:00").await;
+        let done_newest = email(&pool, me.account, Some(done), from, &[], "2026-09-03 09:00").await;
+        // Its only inbox message was deleted, so nothing keeps it in the inbox.
+        let emptied = thread(&pool, me.account).await;
+        email(
+            &pool,
+            me.account,
+            Some(emptied),
+            from,
+            &["INBOX", "TRASH"],
+            "2026-09-04 09:00",
+        )
+        .await;
+        let emptied_rest = email(
+            &pool,
+            me.account,
+            Some(emptied),
+            from,
+            &[],
+            "2026-09-04 08:00",
+        )
+        .await;
+
+        // A reply brought this one back to the inbox.
+        let revived = thread(&pool, me.account).await;
+        email(
+            &pool,
+            me.account,
+            Some(revived),
+            from,
+            &[],
+            "2026-09-05 09:00",
+        )
+        .await;
+        email(
+            &pool,
+            me.account,
+            Some(revived),
+            from,
+            &["INBOX"],
+            "2026-09-06 09:00",
+        )
+        .await;
+        for labels in [
+            &["INBOX"][..],
+            &["SENT"][..],
+            &["SPAM"][..],
+            &["DRAFT"][..],
+            &["TRASH"][..],
+            &["WAYVE_GITHUB_PR"][..],
+        ] {
+            email(&pool, me.account, None, from, labels, "2026-09-07 09:00").await;
+        }
+
+        let ids = |rows: Vec<EmailListRow>| -> Vec<i32> { rows.iter().map(|r| r.id).collect() };
+        let f = filters(me.user, me.account, "archived", true);
+        assert_eq!(
+            ids(list(&pool, f.clone()).await),
+            vec![emptied_rest, done_newest, lone]
+        );
+        let total = repo::count(&pool, &f)
+            .await
+            .unwrap_or_else(|e| panic!("count: {e}"));
+        assert_eq!(total, 3);
+
+        // Outlook and IMAP sync can't say which folder a message is in.
+        let other = mailbox_on(&pool, "outlook").await;
+        email(&pool, other.account, None, from, &[], "2026-09-01 09:00").await;
+        let rows = list(&pool, filters(other.user, other.account, "archived", true)).await;
+        assert!(rows.is_empty(), "outlook: {:?}", ids(rows));
+
+        cleanup(&pool, &[me.user, other.user]).await;
+    }
+
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn promotions_lists_the_gmail_category() {
+        let pool = test_pool().await;
+        let me = mailbox(&pool).await;
+        let from = "Shop <deals@x.com>";
+
+        let in_inbox = email(
+            &pool,
+            me.account,
+            None,
+            from,
+            &["INBOX", "CATEGORY_PROMOTIONS"],
+            "2026-09-01 09:00",
+        )
+        .await;
+        let archived = email(
+            &pool,
+            me.account,
+            None,
+            from,
+            &["CATEGORY_PROMOTIONS"],
+            "2026-09-02 09:00",
+        )
+        .await;
+        email(
+            &pool,
+            me.account,
+            None,
+            from,
+            &["INBOX"],
+            "2026-09-03 09:00",
+        )
+        .await;
+        email(
+            &pool,
+            me.account,
+            None,
+            from,
+            &["CATEGORY_PROMOTIONS", "TRASH"],
+            "2026-09-04 09:00",
+        )
+        .await;
+
+        let rows = list(&pool, filters(me.user, me.account, "promotions", true)).await;
+        let ids: Vec<i32> = rows.iter().map(|r| r.id).collect();
+        assert_eq!(ids, vec![archived, in_inbox]);
+
+        cleanup(&pool, &[me.user]).await;
+    }
+
     // Sync pulls all of Gmail, so archived and filter-skipped mail is stored
     // too. Only INBOX-labelled Gmail mail belongs in the Inbox and its chips,
     // as in Gmail; a provider without labels (IMAP) keeps the sender rule.

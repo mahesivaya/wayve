@@ -1500,6 +1500,10 @@
   outline-offset: -1px;
 }
 
+.email-folder-more {
+  position: relative;
+}
+
 .email-bulk-master {
   width: 14px;
   height: 14px;

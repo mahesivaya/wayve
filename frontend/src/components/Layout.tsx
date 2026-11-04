@@ -19,6 +19,7 @@ import {
 import SearchProvider from "../search/SearchProvider";
 import SearchBar from "../search/SearchBar";
 import ProfileMenu from "./ProfileMenu";
+import NotificationPrompt from "./NotificationPrompt";
 import ReminderPopups from "./ReminderPopups";
 import NotificationBell from "./NotificationBell";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
@@ -1619,6 +1620,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     !isNarrow &&
     [
       "/settings",
+      "/settings/notifications",
       "/settings/usage",
       "/settings/billing",
       "/profile",
@@ -1657,6 +1659,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
     <SplitControlContext.Provider value={splitControl}>
       <div className="app">
         <ReminderPopups />
+        <NotificationPrompt />
         <SearchProvider>
           <div className="header">
             <div
