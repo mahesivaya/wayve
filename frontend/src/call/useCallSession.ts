@@ -1,5 +1,5 @@
-// Single source of truth for the 1-on-1 calling lifecycle, used by the /call page
-// and the /chat page's audio/video buttons. Calls are peer-to-peer with no media
+// Single source of truth for the 1-on-1 calling lifecycle, run once for the whole
+// app by CallProvider (see CallContext.tsx). Calls are peer-to-peer with no media
 // server, so 1-on-1 only. The hook owns the /ws/call WebSocket (signaling relay
 // only), the RTCPeerConnection, local media tracks, and the state machine; the
 // returned refs are attached to <audio>/<video> elements by whichever UI renders
@@ -417,8 +417,8 @@ export function useCallSession(
 
   // One WS for the lifetime of the host component, reconnected with backoff if it
   // drops (a network change, laptop sleep, a server restart); without that, the
-  // tab silently stopped receiving calls until a reload. Torn down on unmount so
-  // a route change doesn't leak the connection.
+  // tab silently stopped receiving calls until a reload. Torn down when the user
+  // changes: the host outlives a logout, so it must not keep a call on screen.
   useEffect(() => {
     if (myId === null) return;
     let cancelled = false;
@@ -468,6 +468,8 @@ export function useCallSession(
       if (reconnectTimer) clearTimeout(reconnectTimer);
       wsRef.current?.close();
       teardownPeer();
+      setConnected(false);
+      setCallState({ kind: "idle" });
     };
     // teardownPeer is stable; the socket must not be rebuilt when it changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps

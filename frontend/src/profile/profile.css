@@ -884,3 +884,31 @@
     min-width: 0;
   }
 }
+
+/* Settings › Notifications: one row per kind of alert, one switch per channel. */
+.settings-alert-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px 72px;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-md);
+  color: var(--color-text-muted);
+}
+
+.settings-alert-row > span:not(:first-child) {
+  display: flex;
+  justify-content: center;
+}
+
+.settings-alert-row small {
+  display: block;
+  font-size: var(--text-sm);
+}
+
+.settings-alert-row.is-head {
+  padding-top: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}

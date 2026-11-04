@@ -62,10 +62,6 @@ vi.mock("../../chat/e2ee", () => ({
   decryptChatMessages: vi.fn(async (m: unknown) => m),
 }));
 vi.mock("../../crypto/keyStore", () => ({ loadPublicKey: vi.fn() }));
-vi.mock("../../call/useCallSession", () => ({
-  useCallSession: () => ({ connected: false, callState: { kind: "idle" } }),
-}));
-vi.mock("../../call/CallOverlays", () => ({ default: () => null }));
 vi.mock("../../chat/hooks/useChatSocket", () => ({
   useChatSocket: () => ({
     wsRef: { current: null },

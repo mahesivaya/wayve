@@ -37,6 +37,7 @@ ringing.
 | [backend/.../models/callmodel.rs](../../backend/crates/wayve-server/src/models/callmodel.rs) | `SignalMessage` envelope + `IceCandidate` (camelCase rename is load-bearing). |
 | [backend/.../call/turn.rs](../../backend/crates/wayve-server/src/call/turn.rs) | Proxies Cloudflare to mint short-lived ICE/TURN credentials. |
 | [frontend/.../call/useCallSession.ts](../../frontend/src/call/useCallSession.ts) | The whole client side: WS, `RTCPeerConnection`, media, and the call state machine. |
+| [frontend/.../call/CallContext.tsx](../../frontend/src/call/CallContext.tsx) | `CallProvider`: runs the one session above the routes, rings, raises the notification, renders the overlays. `useSharedCall()` reads it. |
 | [frontend/.../call/CallOverlays.tsx](../../frontend/src/call/CallOverlays.tsx) | Pure UI: incoming/outgoing banners + active-call panel (video, mute, camera, duration). |
 | [frontend/.../call/Call.tsx](../../frontend/src/call/Call.tsx) | Standalone `/call` directory page. |
 | [frontend/.../api/turn.ts](../../frontend/src/api/turn.ts) | Fetches + caches ICE servers, STUN-only fallback. |
@@ -101,7 +102,19 @@ for 8 minutes (under the 10-minute TTL).
 - **`/call`** — standalone page: a tenant-scoped user directory with Audio/Video
   buttons.
 - **Chat DM** — `ChatHeader` shows the same Audio/Video buttons for a 1:1
-  conversation; both entry points share the single `useCallSession` hook.
+  conversation; both entry points read the one session through `useSharedCall()`.
+
+`CallProvider` wraps the whole app in `main.tsx`, so a signed-in tab is reachable on
+every page and a call survives navigating away. Don't call `useCallSession` from a
+page: a second socket in one tab would ring twice.
+
+## Alerts
+
+While a call is incoming, `CallProvider` plays the ringtone, and raises a desktop
+notification if the app isn't focused. Both are per-device switches in Settings ›
+Notifications (`notificationPrefs.ts`). The ringtone is synthesized
+(`notificationSound.ts`), and a browser keeps it silent until the page's first user
+gesture. Nothing rings once the app is closed: there is no background push.
 
 ## Multiple tabs and devices
 

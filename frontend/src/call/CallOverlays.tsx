@@ -1,5 +1,5 @@
-// Pure UI for the call state machine, rendered by both the /call page and Chat so the
-// same banners appear wherever the call started. The host owns the useCallSession hook
+// Pure UI for the call state machine, rendered once by CallProvider so the same
+// banners float over whichever page is open. The host owns the useCallSession hook
 // and passes its output straight through.
 
 import { useEffect, useState } from "react";

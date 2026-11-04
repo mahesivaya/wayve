@@ -386,6 +386,10 @@ export default function App() {
               <Route path="/profile" element={<Profile />} />
               <Route path="/settings" element={<Settings />} />
               <Route
+                path="/settings/notifications"
+                element={<Settings section="notifications" />}
+              />
+              <Route
                 path="/settings/usage"
                 element={<Settings section="usage" />}
               />

@@ -169,3 +169,21 @@
 .meeting-reminder-snooze-item:hover {
   background: var(--color-surface-hover);
 }
+
+/* Asks once for permission to raise desktop notifications. Clear of the alert
+   cards, which stack up from the bottom right. */
+.notification-prompt {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  z-index: 2000;
+  width: min(360px, calc(100vw - 40px));
+  padding: 12px 14px;
+  transform: translateX(-50%);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 12px);
+  box-shadow:
+    0 10px 25px rgb(0, 0, 0, 0.12),
+    0 4px 6px rgb(0, 0, 0, 0.06);
+}

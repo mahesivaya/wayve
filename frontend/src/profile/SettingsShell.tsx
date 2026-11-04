@@ -49,6 +49,14 @@ function SettingsSideNav() {
           </button>
           <button
             type="button"
+            className={linkClass("/settings/notifications")}
+            onClick={() => void navigate("/settings/notifications")}
+          >
+            <span className="settings-account-link-icon">🔔</span>
+            <span>Notifications</span>
+          </button>
+          <button
+            type="button"
             className={linkClass("/settings/usage")}
             onClick={() => void navigate("/settings/usage")}
           >
