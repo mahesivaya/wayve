@@ -18,6 +18,9 @@ export type TeamMember = {
   name: string;
   role: string | null;
   email: string | null;
+  joined_at?: string | null;
+  // Every team in the org this person is on, matched by email.
+  teams?: string[];
 };
 
 export type Team = {

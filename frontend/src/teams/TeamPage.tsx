@@ -9,19 +9,13 @@ import {
   removeTeamMember,
   type Team,
 } from "../api/workspace";
-import { PersonIcon } from "../icons";
+import { PlusIcon } from "../icons";
+import TeamMembersTable, { type Member } from "./TeamMembersTable";
 import "./teams.css";
 
 // A team's roster is saved server-side (team_members) and comes back with the
 // team from /api/teams/<slug>.
-type Member = {
-  id: number;
-  name: string;
-  role: string;
-  email: string;
-};
-
-type Draft = Omit<Member, "id">;
+type Draft = Pick<Member, "name" | "role" | "email">;
 const EMPTY_DRAFT: Draft = { name: "", role: "", email: "" };
 
 export default function TeamPage() {
@@ -113,9 +107,8 @@ export default function TeamPage() {
     setAdding(false);
   };
 
-  const removeMember = async (index: number) => {
-    const member = members[index];
-    if (!member || !team) return;
+  const removeMember = async (member: Member) => {
+    if (!team) return;
     if (!window.confirm(`Remove ${member.name} from ${team.name}?`)) return;
     setRosterError("");
     setRosterBusy(true);
@@ -129,7 +122,7 @@ export default function TeamPage() {
       return;
     }
     setRosterBusy(false);
-    setMembers((prev) => prev.filter((_, i) => i !== index));
+    setMembers((prev) => prev.filter((m) => m.id !== member.id));
   };
 
   const removeTeam = async () => {
@@ -182,20 +175,19 @@ export default function TeamPage() {
     <div className="team-page u-page-shell">
       <section className="team-members u-panel">
         {/* The page is the member list and nothing else, so this row carries
-            both the count and the add action the header used to hold. */}
+            the add action the header used to hold. */}
         <div className="team-members-head">
-          <h2 className="team-section-title">
-            Members <span className="team-member-count">{members.length}</span>
-          </h2>
+          <h2 className="team-section-title">Members</h2>
           {/* Add-member action — visible only to a team admin / manager. */}
           {canManageMembers && (
             <button
               type="button"
-              className="team-add-btn"
+              className="team-members-add"
               onClick={() => setAdding((open) => !open)}
               aria-expanded={adding}
             >
-              ＋ Add member
+              <PlusIcon size={16} aria-hidden="true" />
+              Add member
             </button>
           )}
           {isOwner && (
@@ -272,35 +264,14 @@ export default function TeamPage() {
           </form>
         )}
 
-        <ul className="team-member-list">
-          {members.map((m, i) => (
-            <li key={`${m.email || m.name}-${i}`} className="team-member">
-              <span className="team-avatar" aria-hidden="true">
-                <PersonIcon size={22} />
-              </span>
-              <span className="team-member-info">
-                <span className="team-member-name">{m.name}</span>
-                <span className="team-member-role">{m.role}</span>
-              </span>
-              {m.email && (
-                <a className="team-member-email" href={`mailto:${m.email}`}>
-                  {m.email}
-                </a>
-              )}
-              {canManageMembers && (
-                <button
-                  type="button"
-                  className="team-member-remove"
-                  onClick={() => void removeMember(i)}
-                  disabled={rosterBusy}
-                  aria-label={`Delete ${m.name}`}
-                >
-                  Delete
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
+        {/* Keyed so a team's search and filters don't carry over to the next. */}
+        <TeamMembersTable
+          key={team.id}
+          members={members}
+          canManage={canManageMembers}
+          busy={rosterBusy}
+          onRemove={(member) => void removeMember(member)}
+        />
       </section>
     </div>
   );
@@ -311,11 +282,15 @@ function toMember(m: {
   name: string;
   role: string | null;
   email: string | null;
+  joined_at?: string | null;
+  teams?: string[];
 }): Member {
   return {
     id: m.id,
     name: m.name,
     role: m.role || "Member",
     email: m.email ?? "",
+    joinedAt: m.joined_at ?? null,
+    teams: m.teams ?? [],
   };
 }

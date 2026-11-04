@@ -103,7 +103,7 @@ describe("team page: delete team", () => {
     getTeam.mockResolvedValue(REAL_TEAM);
     renderAt("engineering");
 
-    await screen.findByText(/members/i);
+    await screen.findByRole("heading", { name: "Members" });
     expect(screen.queryByRole("button", { name: /delete team/i })).toBeNull();
   });
 
@@ -112,7 +112,7 @@ describe("team page: delete team", () => {
     getTeam.mockResolvedValue(REAL_TEAM);
     renderAt("engineering");
 
-    await screen.findByText(/members/i);
+    await screen.findByRole("heading", { name: "Members" });
     expect(screen.queryByRole("button", { name: /delete team/i })).toBeNull();
   });
 });
