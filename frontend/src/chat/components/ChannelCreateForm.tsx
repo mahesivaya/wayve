@@ -3,6 +3,8 @@ import type { ChannelVisibility } from "../types";
 type Props = {
   channelName: string;
   visibility: ChannelVisibility;
+  // False in organizations and on the platform, where every channel is public.
+  canChooseVisibility: boolean;
   error: string;
   onChannelNameChange: (value: string) => void;
   onVisibilityChange: (value: ChannelVisibility) => void;
@@ -13,6 +15,7 @@ type Props = {
 export default function ChannelCreateForm({
   channelName,
   visibility,
+  canChooseVisibility,
   error,
   onChannelNameChange,
   onVisibilityChange,
@@ -26,23 +29,24 @@ export default function ChannelCreateForm({
         <input
           value={channelName}
           onChange={(e) => onChannelNameChange(e.target.value)}
-          placeholder="project-updates"
         />
       </label>
 
-      <label className="channel-field">
-        <span>Visibility</span>
-        <select
-          value={visibility}
-          onChange={(e) =>
-            onVisibilityChange(e.target.value as ChannelVisibility)
-          }
-          aria-label="Channel visibility"
-        >
-          <option value="public">Public group</option>
-          <option value="private">Private group</option>
-        </select>
-      </label>
+      {canChooseVisibility && (
+        <label className="channel-field">
+          <span>Visibility</span>
+          <select
+            value={visibility}
+            onChange={(e) =>
+              onVisibilityChange(e.target.value as ChannelVisibility)
+            }
+            aria-label="Channel visibility"
+          >
+            <option value="public">Public group</option>
+            <option value="private">Private group</option>
+          </select>
+        </label>
+      )}
 
       {error && <div className="channel-error">{error}</div>}
 

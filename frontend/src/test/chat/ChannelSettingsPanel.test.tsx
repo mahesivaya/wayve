@@ -20,7 +20,11 @@ const channel = (overrides: Partial<ChatChannel> = {}): ChatChannel => ({
   ...overrides,
 });
 
-const renderPanel = (ch: ChatChannel, isAdmin: boolean) => {
+const renderPanel = (
+  ch: ChatChannel,
+  isAdmin: boolean,
+  canChooseVisibility = true
+) => {
   const handlers = {
     onChangeRole: vi.fn(),
     onLeave: vi.fn(),
@@ -36,6 +40,7 @@ const renderPanel = (ch: ChatChannel, isAdmin: boolean) => {
       users={ch.member_emails}
       subjectDraft={ch.name}
       visibilityDraft={ch.visibility}
+      canChooseVisibility={canChooseVisibility}
       addUserRole="user"
       addUserEmails=""
       error=""
@@ -168,5 +173,16 @@ describe("ChannelSettingsPanel close", () => {
       screen.getByRole("button", { name: "Close channel settings" })
     );
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves out Privacy where every channel is public", () => {
+    renderPanel(channel({ visibility: "public" }), true, false);
+    expect(screen.queryByRole("radiogroup", { name: "Privacy" })).toBeNull();
+    expect(screen.queryByText("Privacy")).toBeNull();
+  });
+
+  it("keeps Privacy for personal accounts", () => {
+    renderPanel(channel(), true, true);
+    expect(screen.getByRole("radiogroup", { name: "Privacy" })).toBeTruthy();
   });
 });

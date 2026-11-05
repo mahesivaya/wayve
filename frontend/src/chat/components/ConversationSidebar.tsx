@@ -19,10 +19,15 @@ type Props = {
   myUserId: number;
   users: ChatUser[];
   channels: ChatChannel[];
+  // Organization and platform accounts see every channel in their tenant. When
+  // set, the list starts with just the ones the user belongs to, and "Browse
+  // channels" reveals the rest to join.
+  myChannelsByDefault: boolean;
   selectedConversation: Conversation | null;
   creatingChannel: boolean;
   channelName: string;
   channelVisibility: ChannelVisibility;
+  canChooseVisibility: boolean;
   channelError: string;
   onToggleCreateChannel: () => void;
   onChannelNameChange: (value: string) => void;
@@ -42,10 +47,12 @@ export default function ConversationSidebar({
   myUserId,
   users,
   channels,
+  myChannelsByDefault,
   selectedConversation,
   creatingChannel,
   channelName,
   channelVisibility,
+  canChooseVisibility,
   channelError,
   onToggleCreateChannel,
   onChannelNameChange,
@@ -61,6 +68,19 @@ export default function ConversationSidebar({
 }: Props) {
   const { setSearchQuery } = useGlobalSearch();
   const [startingChat, setStartingChat] = useState(false);
+  const [browsingChannels, setBrowsingChannels] = useState(false);
+
+  const selectedChannelId =
+    selectedConversation?.type === "channel"
+      ? selectedConversation.channel.id
+      : null;
+  const otherChannels = channels.filter((c) => !c.is_member);
+  const showOnlyMine = myChannelsByDefault && !browsingChannels;
+  // The open channel stays listed even before joining it, so the row for what
+  // is on screen never disappears.
+  const listedChannels = showOnlyMine
+    ? channels.filter((c) => c.is_member || c.id === selectedChannelId)
+    : channels;
 
   // Messages has no search input; clear any query carried over from another
   // page so it can't silently filter the conversation lists below.
@@ -103,6 +123,7 @@ export default function ConversationSidebar({
         <ChannelCreateForm
           channelName={channelName}
           visibility={channelVisibility}
+          canChooseVisibility={canChooseVisibility}
           error={channelError}
           onChannelNameChange={onChannelNameChange}
           onVisibilityChange={onChannelVisibilityChange}
@@ -112,11 +133,28 @@ export default function ConversationSidebar({
       )}
 
       <ChannelList
-        channels={channels}
+        channels={listedChannels}
         selectedConversation={selectedConversation}
         onSelect={onSelectChannel}
         onJoin={onJoinChannel}
       />
+
+      {showOnlyMine && listedChannels.length === 0 && (
+        <p className="conversation-empty">You're not in any channels yet.</p>
+      )}
+
+      {myChannelsByDefault && otherChannels.length > 0 && (
+        <button
+          type="button"
+          className="conversation-browse-btn"
+          onClick={() => setBrowsingChannels((open) => !open)}
+          aria-expanded={browsingChannels}
+        >
+          {browsingChannels
+            ? "Show only my channels"
+            : `Browse channels (${otherChannels.length} more)`}
+        </button>
+      )}
 
       <div className="conversation-section-header">
         <span className="conversation-section-title">Users</span>

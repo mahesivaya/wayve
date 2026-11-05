@@ -117,3 +117,15 @@ pub fn normalize_channel_visibility(visibility: Option<&str>) -> &'static str {
         _ => "public",
     }
 }
+
+/// The visibility a channel gets in `scope`. Organization (including
+/// enterprise) and platform channels are always public within their tenant, so
+/// any member can find and join them; only personal accounts may keep one
+/// private.
+pub fn channel_visibility_for(scope: Scope, requested: Option<&str>) -> &'static str {
+    if scope == Scope::Personal {
+        normalize_channel_visibility(requested)
+    } else {
+        "public"
+    }
+}

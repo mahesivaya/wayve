@@ -3,7 +3,7 @@ use wayve_security::jwt::get_user_id_from_request;
 
 use super::dto::{UpdateChannelSubjectInput, UpdateChannelVisibilityInput};
 use super::helpers::{can_manage_channel, lock_channel};
-use wayve_security::rbac::resolve_role_context_moded;
+use wayve_security::rbac::{Scope, resolve_role_context_moded};
 
 use actix_web::{delete, patch};
 use tracing::{instrument, warn};
@@ -63,6 +63,11 @@ pub async fn update_channel_visibility(
         })));
     }
 
+    if ctx.scope != Scope::Personal && input.visibility != "public" {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "error": "Channels are always public in organizations and on the platform"
+        })));
+    }
     let visibility = match input.visibility.as_str() {
         "public" => "public",
         _ => "private",

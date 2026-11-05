@@ -1921,3 +1921,27 @@
   font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
+
+/* Organization and platform sidebars list only your channels at first; this
+   toggles the rest of the tenant's channels in, to join. */
+.conversation-browse-btn {
+  display: block;
+  margin: 2px 14px 6px;
+  padding: 4px 0;
+  border: none;
+  background: none;
+  color: var(--color-primary-action);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.conversation-browse-btn:hover {
+  text-decoration: underline;
+}
+
+.conversation-empty {
+  margin: 2px 14px 4px;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}

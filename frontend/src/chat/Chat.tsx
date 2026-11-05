@@ -59,6 +59,7 @@ import {
   rememberOpenChat,
 } from "./openChatSession";
 import type { ChannelRole, ChannelVisibility, Conversation } from "./types";
+import { channelsAlwaysPublic, usesStandardChatEncryption } from "./chatPolicy";
 import {
   getChannelAdmins,
   getChannelUsers,
@@ -461,11 +462,17 @@ export default function Chat() {
 
     let encryptedContent: string;
     try {
-      const recipientKeys = await recipientPublicKeysFor(selectedConversation);
-      if (!recipientKeys || recipientKeys.size === 0) {
-        throw new Error("No chat encryption keys are available");
+      if (usesStandardChatEncryption(user)) {
+        // Standard encryption, as in sendMessage: the server encrypts at rest.
+        encryptedContent = plaintext;
+      } else {
+        const recipientKeys =
+          await recipientPublicKeysFor(selectedConversation);
+        if (!recipientKeys || recipientKeys.size === 0) {
+          throw new Error("No chat encryption keys are available");
+        }
+        encryptedContent = await encryptChatContent(plaintext, recipientKeys);
       }
-      encryptedContent = await encryptChatContent(plaintext, recipientKeys);
     } catch (err) {
       logger.error("Thread reply encryption failed", err);
       return;
@@ -784,10 +791,11 @@ export default function Chat() {
     let attachmentIds: number[] = [];
     let descriptors: ChatAttachmentDescriptor[] = [];
 
-    // Enterprise-tier orgs opt out of E2E: plaintext crosses the backend boundary
-    // and is protected only by the server-side AES at-rest layer. This is the sole
-    // path where that is allowed, and only for text — attachments always stay E2E.
-    const standardEncryption = user.current_plan?.tier === "enterprise";
+    // Organization and platform accounts use standard encryption: plaintext
+    // crosses the backend boundary (over TLS) and is protected by the server-side
+    // AES at-rest layer, so sending never waits on a recipient's key. Only text
+    // goes this way; attachments still ride in an E2E envelope.
+    const standardEncryption = usesStandardChatEncryption(user);
 
     try {
       if (files.length === 0 && standardEncryption) {
@@ -1149,10 +1157,12 @@ export default function Chat() {
         myUserId={user?.id ?? 0}
         users={visibleUsers}
         channels={visibleChannels}
+        myChannelsByDefault={!isPersonalAccount && !normalizedSearchQuery}
         selectedConversation={selectedConversation}
         creatingChannel={creatingChannel}
         channelName={channelName}
         channelVisibility={channelVisibility}
+        canChooseVisibility={!channelsAlwaysPublic(user)}
         channelError={channelError}
         onToggleCreateChannel={() => setCreatingChannel((open) => !open)}
         onChannelNameChange={setChannelName}
@@ -1286,6 +1296,7 @@ export default function Chat() {
               users={getChannelUsers(selectedChannel)}
               subjectDraft={subjectDraft}
               visibilityDraft={visibilityDraft}
+              canChooseVisibility={!channelsAlwaysPublic(user)}
               addUserRole={addUserRole}
               addUserEmails={addUserEmails}
               error={settingsError}
