@@ -38,7 +38,10 @@ export function SidebarPicker<T extends string | number>({
     };
   }, [open]);
 
-  const current = options.find((option) => option.value === value)?.label ?? "";
+  // A choice missing from the list still names itself on the button.
+  const current =
+    options.find((option) => option.value === value)?.label ??
+    String(value ?? "");
 
   return (
     <div className="github-sidebar-branch" ref={rootRef}>

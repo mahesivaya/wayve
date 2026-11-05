@@ -57,6 +57,7 @@ import {
   type DraftStore,
 } from "./openRepoSession";
 import { importAllRepos, repoNameFromUrl } from "./repoImport";
+import { fetchBranches, orderBranches, type Branch } from "./branchList";
 import { SectionNav } from "./SectionNav";
 import { SidebarPicker } from "./SidebarPicker";
 import { useRepoScroll } from "./useRepoScroll";
@@ -87,11 +88,6 @@ type Repo = {
   open_issues_count: number;
   updated_at: string;
   visibility: string;
-};
-
-type Branch = {
-  name: string;
-  commit: { sha: string };
 };
 
 type ContentItem = {
@@ -1044,9 +1040,7 @@ export function GitHubRepoViewer({
       // Only the repo fetch is fatal. Branches are best-effort: an empty repo
       // legitimately has none, so failing there must not blank the view.
       const repoData = await githubJson<Repo>(API_BASE);
-      const branchData = await githubJson<Branch[]>(
-        `${API_BASE}/branches?per_page=50`
-      ).catch(() => [] as Branch[]);
+      const branchData = await fetchBranches(API_BASE);
       setBranches(branchData);
       // Set together, once the branches are known: everything loads per branch,
       // so starting on the default and then switching would load it all twice.
@@ -1997,10 +1991,11 @@ export function GitHubRepoViewer({
               listLabel="Branches"
               icon={<GitBranchIcon size={14} aria-hidden="true" />}
               value={branch}
-              options={branches.map((item) => ({
-                value: item.name,
-                label: item.name,
-              }))}
+              options={orderBranches(
+                branches,
+                repo?.default_branch,
+                branch
+              ).map((name) => ({ value: name, label: name }))}
               onChange={setBranch}
             />
           </div>

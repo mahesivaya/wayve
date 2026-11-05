@@ -74,4 +74,9 @@ describe("SidebarPicker", () => {
     renderPicker(null);
     expect(trigger().textContent).not.toContain("api");
   });
+
+  it("names a choice that isn't in the list", () => {
+    renderPicker(99);
+    expect(trigger().textContent).toContain("99");
+  });
 });
