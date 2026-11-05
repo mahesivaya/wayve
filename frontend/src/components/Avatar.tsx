@@ -60,7 +60,12 @@ export default function Avatar({ src, size = 32, className }: AvatarProps) {
     overflow: "hidden",
     flexShrink: 0,
     color: "#fff",
-    background: objectUrl ? "transparent" : "#94a3b8",
+    // An uploaded picture can be a logo on a transparent background, usually dark
+    // ink drawn for a light page. It sits on white so it stays visible in dark
+    // mode and in any custom palette, and the ring gives the circle an edge where
+    // the surface is white too. Opaque photos cover the backing completely.
+    background: objectUrl ? "#fff" : "#94a3b8",
+    boxShadow: objectUrl ? "0 0 0 1px var(--color-border)" : undefined,
     userSelect: "none",
   };
 
