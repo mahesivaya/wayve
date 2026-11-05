@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { CloseCommentIcon, LineCommentIcon, SendCommentIcon } from "../icons";
 import {
@@ -10,6 +10,7 @@ import {
 import { DEFAULT_DIFF_PREFS, type DiffPrefs } from "./diffPrefs";
 import type { DraftStore } from "./openRepoSession";
 import { FileTypeIcon } from "./FileTypeIcon";
+import { languageFor, tokenizeLines, type CodeToken } from "./syntaxHighlight";
 import "./githubRepo.css";
 
 // Commit-diff rendering, extracted from GitHubRepo.tsx so both the Code Repo
@@ -407,27 +408,102 @@ function toUnifiedRows(items: PatchItem[]): UnifiedRow[] {
 
 const MARK = { add: "+", del: "-", ctx: " " } as const;
 
-// Wraps each case-insensitive occurrence of `query` in a <mark>.
-function highlight(text: string, query: string): ReactNode {
-  if (!query) return text;
+// The syntax colours for one side of a diff, by line number.
+type SideTokens = Map<number, CodeToken[]>;
+
+// Each stretch of continuous code is coloured on its own: a comment left open at
+// the end of one hunk says nothing about the lines after the gap.
+function tokenizeDiff(
+  items: PatchItem[],
+  language: string | null
+): { old: SideTokens; new: SideTokens } {
+  const tokens = { old: new Map(), new: new Map() } as {
+    old: SideTokens;
+    new: SideTokens;
+  };
+  if (!language) return tokens;
+
+  const runs: { old: DiffLine[]; new: DiffLine[] } = { old: [], new: [] };
+  const flush = () => {
+    for (const side of ["old", "new"] as const) {
+      const lines = tokenizeLines(
+        runs[side].map((line) => line.text),
+        language
+      );
+      runs[side].forEach((line, idx) => {
+        if (lines?.[idx]) tokens[side].set(line.no, lines[idx]);
+      });
+      runs[side] = [];
+    }
+  };
+  for (const item of items) {
+    if (item.type === "ctx") {
+      runs.old.push(item.old);
+      runs.new.push(item.new);
+    } else if (item.type === "change") {
+      runs.old.push(...item.dels);
+      runs.new.push(...item.adds);
+    } else {
+      flush();
+    }
+  }
+  flush();
+  return tokens;
+}
+
+// One line of code: its syntax colours, with each case-insensitive occurrence of
+// `query` in a <mark>, even where a match runs across differently coloured parts.
+export function CodeTokens({
+  text,
+  tokens,
+  query = "",
+}: {
+  text: string;
+  tokens?: CodeToken[];
+  query?: string;
+}) {
+  const parts = tokens ?? [{ text }];
+  const slice = (start: number, end: number) => {
+    const out: ReactNode[] = [];
+    let offset = 0;
+    for (const part of parts) {
+      const from = Math.max(start, offset);
+      const to = Math.min(end, offset + part.text.length);
+      if (from < to) {
+        const piece = part.text.slice(from - offset, to - offset);
+        out.push(
+          part.className ? (
+            <span key={from} className={part.className}>
+              {piece}
+            </span>
+          ) : (
+            piece
+          )
+        );
+      }
+      offset += part.text.length;
+    }
+    return out;
+  };
+
+  if (!query) return <>{slice(0, text.length)}</>;
   const lower = text.toLowerCase();
   const needle = query.toLowerCase();
-  const parts: ReactNode[] = [];
+  const out: ReactNode[] = [];
   let from = 0;
   let at = lower.indexOf(needle);
   while (at !== -1) {
-    if (at > from) parts.push(text.slice(from, at));
-    parts.push(
-      <mark key={at} className="github-code-match">
-        {text.slice(at, at + needle.length)}
+    out.push(...slice(from, at));
+    out.push(
+      <mark key={`m${at}`} className="github-code-match">
+        {slice(at, at + needle.length)}
       </mark>
     );
     from = at + needle.length;
     at = lower.indexOf(needle, from);
   }
-  if (from === 0) return text;
-  parts.push(text.slice(from));
-  return parts;
+  out.push(...slice(from, text.length));
+  return <>{out}</>;
 }
 
 const GAP_STEP = 20;
@@ -635,12 +711,15 @@ export function LineCommentComposer({
 
 export function CommitPatch({
   patch,
+  filename,
   prefs = DEFAULT_DIFF_PREFS,
   query = "",
   loadLines,
   lineComments,
 }: {
   patch: string;
+  // Picks the syntax colours. Without it the code stays plain.
+  filename?: string;
   prefs?: DiffPrefs;
   // Text to highlight in the code (the Commits "Search within code" box).
   query?: string;
@@ -693,6 +772,11 @@ export function CommitPatch({
   const expanded = loadLines ? withGaps(parsed, lines, reveals) : parsed;
   const items = prefs.hideWhitespace ? ignoreWhitespace(expanded) : expanded;
   const compact = prefs.compact ? " is-compact" : "";
+  const language = filename ? languageFor(filename) : null;
+  const tokens = useMemo(
+    () => tokenizeDiff(items, language),
+    [items, language]
+  );
 
   const gapRow = (key: number, gap: GapItem) => (
     <GapRow
@@ -781,7 +865,16 @@ export function CommitPatch({
               <div className="github-diff-side">
                 {gutter(row.newNo ?? "−", row.anchors[row.anchors.length - 1])}
                 <span className={`github-split-code is-${row.kind}`}>
-                  {MARK[row.kind]} {highlight(row.text, query)}
+                  {MARK[row.kind]}{" "}
+                  <CodeTokens
+                    text={row.text}
+                    tokens={
+                      row.kind === "del"
+                        ? tokens.old.get(row.oldNo ?? 0)
+                        : tokens.new.get(row.newNo ?? 0)
+                    }
+                    query={query}
+                  />
                 </span>
               </div>
               {rowComments(row.anchors)}
@@ -810,13 +903,29 @@ export function CommitPatch({
             <div className="github-diff-side">
               {gutter(row.left.no ?? "", left)}
               <span className={`github-split-code is-${row.left.kind}`}>
-                {row.left.text ? highlight(row.left.text, query) : " "}
+                {row.left.text ? (
+                  <CodeTokens
+                    text={row.left.text}
+                    tokens={tokens.old.get(row.left.no ?? 0)}
+                    query={query}
+                  />
+                ) : (
+                  " "
+                )}
               </span>
             </div>
             <div className="github-diff-side">
               {gutter(row.right.no ?? "", right)}
               <span className={`github-split-code is-${row.right.kind}`}>
-                {row.right.text ? highlight(row.right.text, query) : " "}
+                {row.right.text ? (
+                  <CodeTokens
+                    text={row.right.text}
+                    tokens={tokens.new.get(row.right.no ?? 0)}
+                    query={query}
+                  />
+                ) : (
+                  " "
+                )}
               </span>
             </div>
             {rowComments(anchorsOf(left, right))}
@@ -829,16 +938,19 @@ export function CommitPatch({
 
 export function CommitSplitPatch({
   patch,
+  filename,
   loadLines,
   lineComments,
 }: {
   patch: string;
+  filename?: string;
   loadLines?: () => Promise<string[]>;
   lineComments?: LineComments;
 }) {
   return (
     <CommitPatch
       patch={patch}
+      filename={filename}
       loadLines={loadLines}
       lineComments={lineComments}
     />
@@ -1042,6 +1154,7 @@ export function CommitDiffBody({
                     <CommitPatch
                       key={fileKey}
                       patch={file.patch}
+                      filename={file.filename}
                       prefs={prefs}
                       query={query}
                       loadLines={

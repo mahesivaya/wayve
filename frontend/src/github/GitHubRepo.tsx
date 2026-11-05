@@ -39,6 +39,7 @@ import {
   ChevronIcon,
   type LineComments,
 } from "./commitDiff";
+import { CodeFile } from "./CodeFile";
 import { CommentOptionsIcon, EditCommentIcon } from "../icons";
 import { useDiffPrefs } from "./diffPrefs";
 import {
@@ -2284,7 +2285,7 @@ export function GitHubRepoViewer({
                   {fileLoading ? (
                     <div className="github-empty">Loading file...</div>
                   ) : (
-                    <pre>{fileText || "No preview available."}</pre>
+                    <CodeFile path={selectedFile.path} text={fileText} />
                   )}
                 </section>
               )}
@@ -2345,7 +2346,7 @@ export function GitHubRepoViewer({
                     {fileLoading ? (
                       <div className="github-empty">Loading file...</div>
                     ) : (
-                      <pre>{fileText || "No preview available."}</pre>
+                      <CodeFile path={selectedFile.path} text={fileText} />
                     )}
                   </section>
                 )}
@@ -2988,6 +2989,7 @@ export function GitHubRepoViewer({
                                             <CommitSplitPatch
                                               key={`${fileKey}@${bundle.detail.head.sha}`}
                                               patch={file.patch}
+                                              filename={file.filename}
                                               loadLines={
                                                 canExpandFile(file.status)
                                                   ? () =>

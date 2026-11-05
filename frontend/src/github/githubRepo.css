@@ -26,6 +26,86 @@
   --diff-del-strong: #8a0f08;
 }
 
+/* Dark themes get tints over the page rather than pastel blocks with dark text,
+   and panels that follow the theme: the global tint tokens are always navy. */
+:root[data-theme="dark"] :is(.github-page, .github-split, .github-unified) {
+  --color-surface-tint: var(--color-surface);
+  --color-surface-tint-cool: var(--color-surface-soft);
+  --diff-add-soft: color-mix(in srgb, #2ea043 22%, transparent);
+  --diff-add-strong: #7ee2a0;
+  --diff-del-soft: color-mix(in srgb, #f85149 22%, transparent);
+  --diff-del-strong: #ffaba8;
+}
+
+/* Syntax colours, shared by the file preview and the diffs. The light set stays
+   readable on the diff's pastel add and remove rows too. */
+:root {
+  --code-comment: #4b5563;
+  --code-keyword: #a40e26;
+  --code-string: #0a3069;
+  --code-number: #0550ae;
+  --code-function: #5b30ad;
+  --code-type: #7c3a00;
+  --code-tag: #116329;
+}
+
+:root[data-theme="dark"] {
+  --code-comment: #8b9a84;
+  --code-keyword: #d7a0d3;
+  --code-string: #e0a68c;
+  --code-number: #b5cea8;
+  --code-function: #dcdcaa;
+  --code-type: #5fd4bb;
+  --code-tag: #8cc8f0;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag {
+  color: var(--code-keyword);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition {
+  color: var(--code-string);
+}
+
+.hljs-number,
+.hljs-literal,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-variable.constant_ {
+  color: var(--code-number);
+}
+
+.hljs-title.function_,
+.hljs-section,
+.hljs-selector-class,
+.hljs-selector-id {
+  color: var(--code-function);
+}
+
+.hljs-type,
+.hljs-built_in,
+.hljs-title.class_,
+.hljs-meta {
+  color: var(--code-type);
+}
+
+.hljs-tag,
+.hljs-name,
+.hljs-attr,
+.hljs-attribute,
+.hljs-property {
+  color: var(--code-tag);
+}
+
 .github-page *,
 .github-page *::before,
 .github-page *::after {
@@ -688,6 +768,33 @@
   tab-size: 2;
 }
 
+/* The numbers set each row's height, so blank lines keep theirs. Sized to the
+   longest line, so a row's background runs the whole scrolled width. */
+.github-preview pre.github-code-file {
+  display: grid;
+  grid-template-columns: auto minmax(max-content, 1fr);
+  align-content: start;
+  padding: 10px 0;
+}
+
+.github-code-file-line {
+  display: contents;
+}
+
+.github-code-file-no {
+  position: sticky;
+  left: 0;
+  padding: 0 14px 0 12px;
+  background: var(--color-surface-tint);
+  color: var(--color-text-muted);
+  text-align: right;
+  user-select: none;
+}
+
+.github-code-file-text {
+  padding-right: 14px;
+}
+
 .github-empty {
   padding: 22px;
   color: var(--color-text-muted);
@@ -1331,6 +1438,7 @@
   padding: 2px 12px;
   background: var(--color-surface-tint);
   color: var(--color-text-muted);
+  text-align: left;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -1553,18 +1661,18 @@
 .github-split-code {
   padding: 0 12px 0 8px;
   border-left: 1px solid var(--color-border);
+  text-align: left;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
+/* The row's background says added or removed; the text keeps its syntax colours. */
 .github-split-code.is-add {
   background: var(--diff-add-soft, #e6ffec);
-  color: var(--diff-add-strong, #1a7f37);
 }
 
 .github-split-code.is-del {
   background: var(--diff-del-soft, #ffebe9);
-  color: var(--diff-del-strong, #82071e);
 }
 
 /* The blank counterpart of an unpaired add/remove — faintly tinted so the
