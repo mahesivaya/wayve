@@ -270,16 +270,15 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 4px 4px 0;
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-text-muted);
 }
 
-.github-sidebar-branch-label {
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: var(--text-xs);
+/* Just the two fields, so they take little room above the sections. */
+.github-branch-card,
+.github-repo-switch {
+  padding: 6px;
 }
 
 /* Custom branch dropdown trigger (replaces the native select). */
@@ -293,6 +292,7 @@
   border: 1px solid var(--color-border-muted);
   border-radius: 6px;
   background: var(--color-surface);
+  color: var(--color-text-muted);
   cursor: pointer;
   font-size: var(--text-md);
   font-weight: 500;
@@ -304,6 +304,8 @@
 
 /* Branch names use the standard primary text color (adapts to light/dark). */
 .github-branch-name {
+  flex: 1;
+  text-align: left;
   color: var(--color-text-primary);
   font-weight: 600;
   white-space: nowrap;
@@ -327,8 +329,8 @@
 .github-branch-menu {
   position: absolute;
   top: 100%;
-  left: 4px;
-  right: 4px;
+  left: 0;
+  right: 0;
   margin: 4px 0 0;
   padding: 4px;
   list-style: none;
@@ -564,8 +566,25 @@
     width: 100%;
     position: static;
   }
-  .github-sidebar-card {
-    width: 100%;
+  /* Repository, branch and the tabs each get a row. Prefixed to beat these
+     fields' own rules, further down the file. */
+  .github-sidebar .github-repo-switch {
+    flex-flow: row wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .github-sidebar .github-repo-switch > .github-sidebar-branch {
+    flex: 1 1 100px;
+    min-width: 0;
+  }
+  .github-sidebar .github-repo-switch-add {
+    flex: 0 0 auto;
+    width: auto;
+    padding: 6px 10px;
+  }
+  .github-sidebar .github-repo-switch-form,
+  .github-sidebar .github-repo-switch-conn {
+    flex: 1 0 100%;
   }
   .github-section-nav {
     position: relative;
@@ -2654,18 +2673,6 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.github-repo-switch-select {
-  width: 100%;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  border-radius: 6px;
-  padding: 7px 9px;
-  font-size: var(--text-md);
-  font-weight: 600;
-  cursor: pointer;
 }
 
 .github-repo-switch-add {

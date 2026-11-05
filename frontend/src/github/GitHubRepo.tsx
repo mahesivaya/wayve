@@ -39,7 +39,13 @@ import {
   type LineComments,
 } from "./commitDiff";
 import { CodeFile } from "./CodeFile";
-import { CommentOptionsIcon, CopyIcon, EditCommentIcon } from "../icons";
+import {
+  CommentOptionsIcon,
+  CopyIcon,
+  EditCommentIcon,
+  GitBranchIcon,
+  RepoIcon,
+} from "../icons";
 import { useDiffPrefs } from "./diffPrefs";
 import {
   draftStore,
@@ -52,6 +58,7 @@ import {
 } from "./openRepoSession";
 import { importAllRepos, repoNameFromUrl } from "./repoImport";
 import { SectionNav } from "./SectionNav";
+import { SidebarPicker } from "./SidebarPicker";
 import { useRepoScroll } from "./useRepoScroll";
 import {
   canExpandFile,
@@ -832,29 +839,6 @@ export function GitHubRepoViewer({
   const [branch, setBranch] = useState("main");
   // A custom dropdown rather than a native <select> so the list reliably opens
   // downward and the branch names can be themed.
-  const [branchMenuOpen, setBranchMenuOpen] = useState(false);
-  const branchMenuRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!branchMenuOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if (
-        branchMenuRef.current &&
-        !branchMenuRef.current.contains(e.target as Node)
-      ) {
-        setBranchMenuOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setBranchMenuOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [branchMenuOpen]);
   const [treeItems, setTreeItems] = useState<DirectoryCache>({});
   // The folder being listed, unless a file is open over it.
   const [currentDir, setCurrentDir] = useState("");
@@ -2007,51 +1991,18 @@ export function GitHubRepoViewer({
             feels at home with the rest of the app's chrome. */}
         <aside className="github-sidebar" aria-label="GitHub sections">
           {repoSwitcher}
-          <div className="github-sidebar-card">
-            <div className="github-sidebar-branch" ref={branchMenuRef}>
-              <span className="github-sidebar-branch-label">Branch</span>
-              <button
-                type="button"
-                className="github-branch-trigger"
-                aria-haspopup="listbox"
-                aria-expanded={branchMenuOpen}
-                onClick={() => setBranchMenuOpen((open) => !open)}
-              >
-                <span className="github-branch-name">{branch}</span>
-                <span
-                  className={`github-branch-caret ${branchMenuOpen ? "open" : ""}`}
-                  aria-hidden="true"
-                >
-                  ⌄
-                </span>
-              </button>
-              {branchMenuOpen && (
-                <ul
-                  className="github-branch-menu"
-                  role="listbox"
-                  aria-label="Branches"
-                >
-                  {branches.map((item) => (
-                    <li
-                      key={item.name}
-                      role="option"
-                      aria-selected={item.name === branch}
-                    >
-                      <button
-                        type="button"
-                        className={`github-branch-option ${item.name === branch ? "active" : ""}`}
-                        onClick={() => {
-                          setBranch(item.name);
-                          setBranchMenuOpen(false);
-                        }}
-                      >
-                        <span className="github-branch-name">{item.name}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+          <div className="github-sidebar-card github-branch-card">
+            <SidebarPicker
+              label="Branch"
+              listLabel="Branches"
+              icon={<GitBranchIcon size={14} aria-hidden="true" />}
+              value={branch}
+              options={branches.map((item) => ({
+                value: item.name,
+                label: item.name,
+              }))}
+              onChange={setBranch}
+            />
           </div>
 
           <SectionNav
@@ -3843,19 +3794,17 @@ function PersonalRepoManager() {
   // Injected into the viewer's left rail via the repoSwitcher prop.
   const switcher = (
     <div className="github-sidebar-card github-repo-switch">
-      <span className="github-sidebar-branch-label">Repository</span>
-      <select
-        className="github-repo-switch-select"
-        value={selectedId ?? ""}
-        onChange={(e) => setSelectedId(Number(e.target.value))}
-        aria-label="Select a repository"
-      >
-        {projects?.map((p) => (
-          <option key={p.id} value={p.id}>
-            {repoLabel(p)}
-          </option>
-        ))}
-      </select>
+      <SidebarPicker
+        label="Select a repository"
+        listLabel="Repositories"
+        icon={<RepoIcon size={14} aria-hidden="true" />}
+        value={selectedId}
+        options={(projects ?? []).map((p) => ({
+          value: p.id,
+          label: repoLabel(p),
+        }))}
+        onChange={setSelectedId}
+      />
       <button
         type="button"
         className="github-add-repo-btn github-repo-switch-add"
@@ -4127,19 +4076,17 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
 
   const switcher = (
     <div className="github-sidebar-card github-repo-switch">
-      <span className="github-sidebar-branch-label">Repository</span>
-      <select
-        className="github-repo-switch-select"
+      <SidebarPicker
+        label="Select a repository"
+        listLabel="Repositories"
+        icon={<RepoIcon size={14} aria-hidden="true" />}
         value={selectedId}
-        onChange={(e) => setSelectedId(Number(e.target.value))}
-        aria-label="Select a repository"
-      >
-        {projects.map((p) => (
-          <option key={p.id} value={p.id}>
-            {repoLabel(p)}
-          </option>
-        ))}
-      </select>
+        options={projects.map((p) => ({
+          value: p.id,
+          label: repoLabel(p),
+        }))}
+        onChange={setSelectedId}
+      />
       {canLink && (
         <>
           <button
@@ -4296,30 +4243,30 @@ function PlatformRepoManager() {
   const switcher =
     hasRepos || canConnect ? (
       <div className="github-sidebar-card github-repo-switch">
-        <span className="github-sidebar-branch-label">Repository</span>
         {hasRepos && (
-          <select
-            className="github-repo-switch-select"
+          // Shows just the repo name (not owner/repo); the value keeps the full
+          // name so the lookup still resolves owner + repo. The current/default
+          // repo stays listed even if the list doesn't include it (e.g. the token
+          // can read but not enumerate it).
+          <SidebarPicker
+            label="Select a repository"
+            listLabel="Repositories"
+            icon={<RepoIcon size={14} aria-hidden="true" />}
             value={selectedFullName}
-            onChange={(e) => {
-              const hit = repos?.find((r) => r.full_name === e.target.value);
+            options={[
+              ...(repos?.some((r) => r.full_name === selectedFullName)
+                ? []
+                : [{ value: selectedFullName, label: selected.repo }]),
+              ...(repos ?? []).map((r) => ({
+                value: r.full_name,
+                label: r.name,
+              })),
+            ]}
+            onChange={(fullName) => {
+              const hit = repos?.find((r) => r.full_name === fullName);
               if (hit) setSelected({ owner: hit.owner.login, repo: hit.name });
             }}
-            aria-label="Select a repository"
-          >
-            {/* Show just the repo name (not owner/repo); the option value keeps the
-            full name so the onChange lookup still resolves owner + repo.
-            Keep the current/default repo selectable even if the list doesn't
-            include it (e.g. the token can read but not enumerate it). */}
-            {repos?.some((r) => r.full_name === selectedFullName) ? null : (
-              <option value={selectedFullName}>{selected.repo}</option>
-            )}
-            {repos?.map((r) => (
-              <option key={r.full_name} value={r.full_name}>
-                {r.name}
-              </option>
-            ))}
-          </select>
+          />
         )}
         {canConnect && (!ghConn?.connected || connErr) && (
           <div className="github-repo-switch-conn">
