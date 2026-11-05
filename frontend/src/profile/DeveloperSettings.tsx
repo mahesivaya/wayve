@@ -3,7 +3,13 @@ import { useNavigate } from "react-router-dom";
 import SettingsShell from "./SettingsShell";
 import { useAuth } from "../auth/useAuth";
 import { canAccessApiKeyAdmin } from "../auth/permissions";
-import { DocsIcon, ApiRefIcon, LibrariesIcon, ApiKeysIcon } from "../icons";
+import {
+  DocsIcon,
+  ApiRefIcon,
+  LibrariesIcon,
+  ApiKeysIcon,
+  DevelopersIcon,
+} from "../icons";
 
 // The developer references — docs, API, SDK, keys — as one settings page.
 // They used to be a collapsible group in the main sidebar, which put five rows
@@ -52,6 +58,15 @@ export default function DeveloperSettings() {
       description: "Issue and revoke scoped keys for service access.",
       action: "Manage keys",
       icon: <ApiKeysIcon size={16} />,
+      visible: canAccessApiKeyAdmin(user),
+    },
+    {
+      path: "/developer-apps",
+      label: "App registration",
+      description:
+        "Register an integration so other teams can connect to your app.",
+      action: "Manage apps",
+      icon: <DevelopersIcon size={16} />,
       visible: canAccessApiKeyAdmin(user),
     },
   ].filter((entry) => entry.visible);
