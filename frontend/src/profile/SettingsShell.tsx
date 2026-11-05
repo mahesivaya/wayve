@@ -19,8 +19,12 @@ function SettingsSideNav() {
   const location = useLocation();
   const { user, logout } = useAuth();
 
+  // A repository's own settings page still counts as Repositories.
+  const current = location.pathname.startsWith("/settings/repositories/")
+    ? "/settings/repositories"
+    : location.pathname;
   const linkClass = (path: string) =>
-    `settings-account-link${location.pathname === path ? " active" : ""}`;
+    `settings-account-link${current === path ? " active" : ""}`;
 
   return (
     <aside className="settings-side">

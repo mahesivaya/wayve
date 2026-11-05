@@ -1616,17 +1616,18 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // sidebar on a page without the rail would leave no way back.
   const settingsTakeover =
     !isNarrow &&
-    [
-      "/settings",
-      "/settings/notifications",
-      "/settings/usage",
-      "/settings/billing",
-      "/profile",
-      "/integrations",
-      "/appearance",
-      "/settings/statuses",
-      "/settings/repositories",
-    ].includes(location.pathname);
+    (location.pathname.startsWith("/settings/repositories/") ||
+      [
+        "/settings",
+        "/settings/notifications",
+        "/settings/usage",
+        "/settings/billing",
+        "/profile",
+        "/integrations",
+        "/appearance",
+        "/settings/statuses",
+        "/settings/repositories",
+      ].includes(location.pathname));
 
   const headerActions = (
     <>

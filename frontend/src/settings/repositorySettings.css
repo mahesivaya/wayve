@@ -149,6 +149,18 @@
   text-decoration: none;
 }
 
+.repo-settings-back {
+  display: inline-block;
+  margin-bottom: 12px;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.repo-settings-back:hover {
+  color: var(--color-text-primary);
+}
+
 .repo-settings-remove {
   color: var(--color-danger);
 }

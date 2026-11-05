@@ -15,6 +15,7 @@ import { RepoImportList, RepoUrlForm } from "../github/AddRepoForms";
 import { linkedRepoNames } from "../github/repoImport";
 import CodeSettingsCard from "../profile/CodeSettingsCard";
 import SettingsShell from "../profile/SettingsShell";
+import { canManageRepoAccess } from "./repoAccessGate";
 import "./repositorySettings.css";
 
 const messageOf = (err: unknown, fallback: string) =>
@@ -23,12 +24,27 @@ const messageOf = (err: unknown, fallback: string) =>
 const fullNameOf = (p: Project) =>
   p.github_owner && p.github_repo ? `${p.github_owner}/${p.github_repo}` : null;
 
+function RepoSettingsLink({ fullName }: { fullName: string }) {
+  const [owner, name] = fullName.split("/");
+  return (
+    <Link
+      className="settings-secondary-btn repo-settings-open"
+      aria-label={`Settings for ${fullName}`}
+      to={`/settings/repositories/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`}
+    >
+      Settings
+    </Link>
+  );
+}
+
 // Personal accounts and organizations: repositories are linked projects.
 function ProjectRepositories({
   canManage,
+  canManageAccess,
   isPersonal,
 }: {
   canManage: boolean;
+  canManageAccess: boolean;
   isPersonal: boolean;
 }) {
   const [projects, setProjects] = useState<Project[] | null>(null);
@@ -122,6 +138,9 @@ function ProjectRepositories({
                   >
                     Open in Code Repo
                   </Link>
+                  {canManageAccess && (
+                    <RepoSettingsLink fullName={fullNameOf(project)!} />
+                  )}
                   {canManage && (
                     <button
                       type="button"
@@ -150,7 +169,13 @@ function ProjectRepositories({
 
 // Platform staff don't have projects to add to: Code Repo lists what the server's
 // GitHub token can see, and an owner can connect GitHub to add their own.
-function PlatformRepositories({ canConnect }: { canConnect: boolean }) {
+function PlatformRepositories({
+  canConnect,
+  canManageAccess,
+}: {
+  canConnect: boolean;
+  canManageAccess: boolean;
+}) {
   const [repos, setRepos] = useState<GithubRepo[] | null>(null);
   const [conn, setConn] = useState<GithubConnection | null>(null);
   const [error, setError] = useState("");
@@ -218,12 +243,17 @@ function PlatformRepositories({ canConnect }: { canConnect: boolean }) {
                     <span className="repo-settings-private">Private</span>
                   )}
                 </span>
-                <Link
-                  className="settings-secondary-btn repo-settings-open"
-                  to={`/github?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(name)}`}
-                >
-                  Open in Code Repo
-                </Link>
+                <span className="repo-settings-actions">
+                  <Link
+                    className="settings-secondary-btn repo-settings-open"
+                    to={`/github?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(name)}`}
+                  >
+                    Open in Code Repo
+                  </Link>
+                  {canManageAccess && (
+                    <RepoSettingsLink fullName={repo.full_name} />
+                  )}
+                </span>
               </li>
             );
           })}
@@ -245,6 +275,7 @@ export default function RepositorySettings() {
   const isPlatform = user?.scope === "platform";
   const isPersonal = user?.account_type === "personal";
   const isOwner = user?.effective_role === "owner";
+  const canManageAccess = canManageRepoAccess(user);
 
   return (
     <SettingsShell title="Repositories">
@@ -257,10 +288,14 @@ export default function RepositorySettings() {
       ) : (
         <>
           {isPlatform ? (
-            <PlatformRepositories canConnect={isOwner} />
+            <PlatformRepositories
+              canConnect={isOwner}
+              canManageAccess={canManageAccess}
+            />
           ) : (
             <ProjectRepositories
               canManage={isPersonal || isOwner}
+              canManageAccess={canManageAccess}
               isPersonal={isPersonal}
             />
           )}
