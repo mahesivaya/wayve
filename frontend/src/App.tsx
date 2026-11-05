@@ -110,6 +110,7 @@ const ScimTokens = lazy(() => import("./settings/ScimTokens"));
 const PlanAdmin = lazy(() => import("./settings/PlanAdmin"));
 const AiSettings = lazy(() => import("./settings/AiSettings"));
 const TaskStatuses = lazy(() => import("./settings/TaskStatuses"));
+const RepositorySettings = lazy(() => import("./settings/RepositorySettings"));
 const AiUsageGovernance = lazy(() => import("./settings/AiUsageGovernance"));
 const SecureMessageView = lazy(() => import("./emails/SecureMessageView"));
 const AuditSecurity = lazy(() => import("./settings/AuditSecurity"));
@@ -549,6 +550,10 @@ export default function App() {
               {/* Readable by anyone in the scope — the page itself hides the
                   editing affordances without `task_statuses:manage`. */}
               <Route path="/settings/statuses" element={<TaskStatuses />} />
+              <Route
+                path="/settings/repositories"
+                element={<RepositorySettings />}
+              />
               <Route
                 path="/settings/ai/usage"
                 element={<AiUsageGovernance />}

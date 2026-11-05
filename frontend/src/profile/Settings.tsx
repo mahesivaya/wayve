@@ -430,6 +430,24 @@ export default function Settings({
           <>
             <CodeSettingsCard />
 
+            {/* Narrow screens have no settings rail to reach it from. */}
+            {narrow && user?.effective_role !== "guest" && (
+              <section className="settings-card">
+                <div className="settings-rows">
+                  <div className="settings-usage-row">
+                    <span>Repositories</span>
+                    <button
+                      type="button"
+                      className="settings-billing-link"
+                      onClick={() => navigate("/settings/repositories")}
+                    >
+                      Open
+                    </button>
+                  </div>
+                </div>
+              </section>
+            )}
+
             {showChatEncrypt && (
               <section className="settings-card">
                 <h2 className="settings-card-title">Privacy</h2>
