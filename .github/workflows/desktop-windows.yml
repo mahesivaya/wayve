@@ -16,7 +16,11 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     defaults:
       run:
@@ -46,11 +50,22 @@ jobs:
           "sha256: $((Get-FileHash $exe.FullName -Algorithm SHA256).Hash)"
           "signature: $((Get-AuthenticodeSignature $exe.FullName).Status)"
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxze-windows-unsigned-${{ matrix.os }}
+          path: desktop/dist/Fluxze-Setup-*.exe
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Install, launch and uninstall
         shell: pwsh
         run: |
           $exe = Get-ChildItem dist/Fluxze-Setup-*.exe | Select-Object -First 1
           $install = Start-Process $exe.FullName -ArgumentList "/S" -PassThru -Wait
+          "installer exit code: $($install.ExitCode)"
+          Get-WinEvent -FilterHashtable @{ LogName = "Application"; Id = 1000, 1001 } -MaxEvents 4 -ErrorAction SilentlyContinue |
+            ForEach-Object { $_.Message.Substring(0, [Math]::Min(500, $_.Message.Length)) }
+          Get-ChildItem "$env:LOCALAPPDATA\Programs\Fluxze", "$env:ProgramFiles\Fluxze" -ErrorAction SilentlyContinue | Select-Object -First 8 -ExpandProperty FullName
           if ($install.ExitCode -ne 0) { throw "installer exited with $($install.ExitCode)" }
 
           $dirs = @("$env:LOCALAPPDATA\Programs\Fluxze", "$env:ProgramFiles\Fluxze")
@@ -73,9 +88,3 @@ jobs:
           if (Test-Path "$dir\Fluxze.exe") { throw "Fluxze.exe still present after uninstall" }
           "uninstalled"
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: fluxze-windows-unsigned
-          path: desktop/dist/Fluxze-Setup-*.exe
-          if-no-files-found: error
-          retention-days: 14
