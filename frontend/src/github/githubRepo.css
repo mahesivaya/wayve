@@ -2613,10 +2613,6 @@
   font-size: var(--text-xs);
 }
 
-.github-repo-switch-conn-who {
-  color: var(--color-text-muted);
-}
-
 /* Inline preview of an opened workflow .yml inside the Workflows panel (which,
    unlike Files, has no side-by-side split). */
 .github-workflow.active {

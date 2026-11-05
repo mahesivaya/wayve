@@ -104,9 +104,9 @@ describe("platform Code Repo GitHub connect", () => {
       login: "owner-login",
     });
     renderPage();
-    expect(await screen.findByText(/@owner-login/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
-    expect(screen.getByRole("option", { name: "secret" })).toBeTruthy();
+    expect(await screen.findByRole("option", { name: "secret" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Disconnect" })).toBeNull();
+    expect(screen.queryByText(/@owner-login/)).toBeNull();
     expect(screen.getByRole("option", { name: "shared" })).toBeTruthy();
   });
 

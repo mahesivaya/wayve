@@ -4343,16 +4343,6 @@ function PlatformRepoManager() {
       );
   };
 
-  const disconnect = () => {
-    setConnErr("");
-    void disconnectGithub()
-      .then(() => {
-        setGhConn({ connected: false });
-        loadRepos();
-      })
-      .catch(() => setConnErr("Couldn't disconnect GitHub. Try again."));
-  };
-
   const selectedFullName = `${selected.owner}/${selected.repo}`;
   const hasRepos = (repos?.length ?? 0) > 0;
 
@@ -4385,21 +4375,9 @@ function PlatformRepoManager() {
             ))}
           </select>
         )}
-        {canConnect && (
+        {canConnect && (!ghConn?.connected || connErr) && (
           <div className="github-repo-switch-conn">
-            {ghConn?.connected ? (
-              <span className="github-repo-switch-conn-who">
-                @{ghConn.login}
-                {" · "}
-                <button
-                  type="button"
-                  className="github-link-btn"
-                  onClick={disconnect}
-                >
-                  Disconnect
-                </button>
-              </span>
-            ) : (
+            {!ghConn?.connected && (
               <button
                 type="button"
                 className="github-link-btn"
