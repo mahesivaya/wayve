@@ -51,6 +51,7 @@ import {
   type DraftStore,
 } from "./openRepoSession";
 import { importAllRepos, repoNameFromUrl } from "./repoImport";
+import { SectionNav } from "./SectionNav";
 import { useRepoScroll } from "./useRepoScroll";
 import {
   canExpandFile,
@@ -2053,97 +2054,47 @@ export function GitHubRepoViewer({
             </div>
           </div>
 
-          <div className="github-sidebar-card">
-            <button
-              type="button"
-              className={`github-sidebar-link ${activeSection === "description" ? "active" : ""}`}
-              onClick={() => setActiveSection("description")}
-            >
-              <span className="github-sidebar-icon" aria-hidden="true">
-                📖
-              </span>
-              <span className="github-sidebar-label">Description</span>
-            </button>
-            <button
-              type="button"
-              className={`github-sidebar-link ${activeSection === "files" ? "active" : ""}`}
-              onClick={() => setActiveSection("files")}
-            >
-              <span className="github-sidebar-icon" aria-hidden="true">
-                📁
-              </span>
-              <span className="github-sidebar-label">Files</span>
-            </button>
-            <button
-              type="button"
-              className={`github-sidebar-link ${activeSection === "workflows" ? "active" : ""}`}
-              onClick={() => setActiveSection("workflows")}
-            >
-              <span className="github-sidebar-icon" aria-hidden="true">
-                ⚙️
-              </span>
-              <span className="github-sidebar-label">Workflows</span>
-              <span className="github-sidebar-count">{workflows.length}</span>
-            </button>
-            <button
-              type="button"
-              className={`github-sidebar-link ${activeSection === "commits" ? "active" : ""}`}
-              onClick={() => setActiveSection("commits")}
-            >
-              <span className="github-sidebar-icon" aria-hidden="true">
-                📝
-              </span>
-              <span className="github-sidebar-label">Commits</span>
-              <span className="github-sidebar-count">
-                {commitsTotal ?? commits.length}
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`github-sidebar-link ${activeSection === "pulls" ? "active" : ""}`}
-              onClick={() => setActiveSection("pulls")}
-            >
-              <span className="github-sidebar-icon" aria-hidden="true">
-                🔀
-              </span>
-              <span className="github-sidebar-label">Pull Requests</span>
-              <span className="github-sidebar-count">
-                {/* Open PRs, as GitHub counts them, not every PR ever. */}
-                {pullCounts.open ??
-                  (pullFilter === "open" ? filteredPulls.length : null)}
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`github-sidebar-link ${activeSection === "actions" ? "active" : ""}`}
-              onClick={() => setActiveSection("actions")}
-            >
-              <span className="github-sidebar-icon" aria-hidden="true">
-                ▶
-              </span>
-              <span className="github-sidebar-label">Actions</span>
-              <span className="github-sidebar-count">
-                {runsTotal || runs.length}
-              </span>
-            </button>
-            {canManageAccess && (
-              <button
-                type="button"
-                className={`github-sidebar-link ${activeSection === "access" ? "active" : ""}`}
-                onClick={() => setActiveSection("access")}
-              >
-                <span className="github-sidebar-icon" aria-hidden="true">
-                  👥
-                </span>
-                <span className="github-sidebar-label">Access</span>
-              </button>
-            )}
-          </div>
+          <SectionNav
+            active={activeSection}
+            onSelect={setActiveSection}
+            items={[
+              { id: "description", label: "Description", icon: "📖" },
+              { id: "files", label: "Files", icon: "📁" },
+              {
+                id: "workflows",
+                label: "Workflows",
+                icon: "⚙️",
+                count: workflows.length,
+              },
+              {
+                id: "commits",
+                label: "Commits",
+                icon: "📝",
+                count: commitsTotal ?? commits.length,
+              },
+              {
+                id: "pulls",
+                label: "Pull Requests",
+                icon: "🔀",
+                // Open PRs, as GitHub counts them, not every PR ever.
+                count:
+                  pullCounts.open ??
+                  (pullFilter === "open" ? filteredPulls.length : null),
+              },
+              {
+                id: "actions",
+                label: "Actions",
+                icon: "▶",
+                count: runsTotal || runs.length,
+              },
+              ...(canManageAccess
+                ? [{ id: "access" as const, label: "Access", icon: "👥" }]
+                : []),
+            ]}
+          />
         </aside>
 
-        {/* Right pane — only the active section is rendered. The Files
-            view keeps its existing 2-pane (tree + preview) layout
-            because file browsing benefits from both being visible. */}
+        {/* Right pane — only the active section is rendered. */}
         <div className="github-content" ref={contentRef}>
           {activeSection === "description" && (
             <main
