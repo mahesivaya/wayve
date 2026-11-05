@@ -1,0 +1,81 @@
+name: desktop-windows
+
+# Build the Windows installer for the Electron shell in desktop/ and test it on
+# a real Windows runner: silent install, launch, uninstall. The output is
+# UNSIGNED for now, so it's a CI artifact only; don't publish it to S3 until
+# code signing is wired up (see desktop/SIGNING.md).
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "desktop/**"
+      - ".github/workflows/desktop-windows.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build installer
+        run: npx electron-builder --win --x64 --publish never
+
+      - name: Report installer details
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem dist/Fluxze-Setup-*.exe | Select-Object -First 1
+          if (-not $exe) { throw "installer was not produced" }
+          "file: $($exe.Name)"
+          "size: $($exe.Length)"
+          "sha256: $((Get-FileHash $exe.FullName -Algorithm SHA256).Hash)"
+          "signature: $((Get-AuthenticodeSignature $exe.FullName).Status)"
+
+      - name: Install, launch and uninstall
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem dist/Fluxze-Setup-*.exe | Select-Object -First 1
+          $install = Start-Process $exe.FullName -ArgumentList "/S" -PassThru -Wait
+          if ($install.ExitCode -ne 0) { throw "installer exited with $($install.ExitCode)" }
+
+          $dirs = @("$env:LOCALAPPDATA\Programs\Fluxze", "$env:ProgramFiles\Fluxze")
+          $dir = $dirs | Where-Object { Test-Path "$_\Fluxze.exe" } | Select-Object -First 1
+          if (-not $dir) { throw "Fluxze.exe not found in: $($dirs -join ', ')" }
+          "installed to: $dir"
+
+          $app = Start-Process "$dir\Fluxze.exe" -PassThru
+          Start-Sleep -Seconds 20
+          if ($app.HasExited) { throw "app exited early with $($app.ExitCode)" }
+          "app still running after 20s"
+          Get-Process Fluxze -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep -Seconds 3
+
+          $uninstaller = Get-ChildItem "$dir\Uninstall*.exe" | Select-Object -First 1
+          if (-not $uninstaller) { throw "uninstaller not found in $dir" }
+          Start-Process $uninstaller.FullName -ArgumentList "/S" -Wait
+          # The NSIS uninstaller re-launches itself, so poll instead of trusting -Wait.
+          for ($i = 0; $i -lt 30 -and (Test-Path "$dir\Fluxze.exe"); $i++) { Start-Sleep -Seconds 2 }
+          if (Test-Path "$dir\Fluxze.exe") { throw "Fluxze.exe still present after uninstall" }
+          "uninstalled"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fluxze-windows-unsigned
+          path: desktop/dist/Fluxze-Setup-*.exe
+          if-no-files-found: error
+          retention-days: 14

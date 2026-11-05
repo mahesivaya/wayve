@@ -58,8 +58,14 @@ AWS_PROFILE=claude_ec2 aws s3 cp dist/Fluxze-0.1.0.dmg \
   s3://fluxze-desktop-downloads/Fluxze-mac-x64.dmg --content-type application/x-apple-diskimage
 ```
 
-## Windows (later, out of scope for now)
+## Windows
 
-Needs an **Authenticode** code-signing certificate (OV/EV) and a Windows build
-environment (can't build on macOS without wine). Best done in CI with a
-`windows-latest` runner; the cert goes in as a secret (`CSC_LINK`/`CSC_KEY_PASSWORD`).
+`.github/workflows/desktop-windows.yml` builds the installer on a
+`windows-latest` runner (can't build on macOS without wine), tests a silent
+install, launch and uninstall, and uploads it as the `fluxze-windows-unsigned`
+artifact. Run it from the Actions tab, or push a change under `desktop/`.
+
+The build is **unsigned**, so Windows warns on download. Don't publish it or add
+it to the download menu (`frontend/src/home/DownloadApp.tsx`) until it's signed.
+Signing needs an **Authenticode** certificate or a cloud signing service, with
+the credentials stored as CI secrets.
