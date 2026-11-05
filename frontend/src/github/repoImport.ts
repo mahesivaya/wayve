@@ -7,6 +7,16 @@ export function repoNameFromUrl(raw: string): string {
   return match ? match[2] : cleaned;
 }
 
+// The owner/repo pairs already added, lowercased to compare with GitHub's or
+// what's pasted.
+export function linkedRepoNames(projects: Project[]): Set<string> {
+  return new Set(
+    projects
+      .filter((p) => p.github_owner && p.github_repo)
+      .map((p) => `${p.github_owner}/${p.github_repo}`.toLowerCase())
+  );
+}
+
 // One project per visible repo, deduped by `owner/repo` against existing
 // projects. Best-effort: a repo that fails to link is skipped rather than
 // aborting the whole import.
@@ -18,11 +28,7 @@ export async function importAllRepos(
   if (!connected) {
     throw new Error("Connect your GitHub account to import your repositories.");
   }
-  const alreadyLinked = new Set(
-    existing
-      .filter((p) => p.github_owner && p.github_repo)
-      .map((p) => `${p.github_owner}/${p.github_repo}`.toLowerCase())
-  );
+  const alreadyLinked = linkedRepoNames(existing);
   const toAdd = repos.filter(
     (r) => !alreadyLinked.has(r.full_name.toLowerCase())
   );

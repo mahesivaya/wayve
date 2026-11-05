@@ -99,9 +99,18 @@ function injectCancelButton(webContents) {
       position: "fixed", top: "0", left: "0", right: "0", height: "38px",
       pointerEvents: "none", webkitAppRegion: "drag",
     });
-    const host = document.body || document.documentElement;
-    host.appendChild(strip);
-    host.appendChild(btn);
+    const place = () => {
+      const parent = document.body || document.documentElement;
+      if (!strip.isConnected) parent.appendChild(strip);
+      if (!btn.isConnected) parent.appendChild(btn);
+    };
+    place();
+    // Google swaps the page's contents without a full load, which can take the
+    // pill with it.
+    new MutationObserver(place).observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
   })();`;
   webContents.executeJavaScript(js).catch(() => {});
 }
@@ -168,13 +177,19 @@ function createWindow() {
   // Any full page load that isn't the app (i.e. an external auth page such as
   // Google sign-in) gets the floating cancel pill, so there is always a way
   // back if the flow fails or the user changes their mind.
-  mainWindow.webContents.on("did-finish-load", () => {
-    sendFullScreen();
+  const offerWayBack = () => {
     const url = mainWindow.webContents.getURL();
     if (/^https?:/i.test(url) && !isAppUrl(url)) {
       injectCancelButton(mainWindow.webContents);
     }
+  };
+  mainWindow.webContents.on("did-finish-load", () => {
+    sendFullScreen();
+    offerWayBack();
   });
+  // Sooner than the full load, and again on screens that never trigger one.
+  mainWindow.webContents.on("dom-ready", offerWayBack);
+  mainWindow.webContents.on("did-navigate-in-page", offerWayBack);
 
   // Offline / unreachable fallback. errorCode -3 is an aborted load (e.g. a
   // redirect superseding the request) — not a real failure, so ignore it.

@@ -111,6 +111,7 @@ const PlanAdmin = lazy(() => import("./settings/PlanAdmin"));
 const AiSettings = lazy(() => import("./settings/AiSettings"));
 const TaskStatuses = lazy(() => import("./settings/TaskStatuses"));
 const RepositorySettings = lazy(() => import("./settings/RepositorySettings"));
+const RepoSettingsPage = lazy(() => import("./settings/RepoSettingsPage"));
 const AiUsageGovernance = lazy(() => import("./settings/AiUsageGovernance"));
 const SecureMessageView = lazy(() => import("./emails/SecureMessageView"));
 const AuditSecurity = lazy(() => import("./settings/AuditSecurity"));
@@ -553,6 +554,10 @@ export default function App() {
               <Route
                 path="/settings/repositories"
                 element={<RepositorySettings />}
+              />
+              <Route
+                path="/settings/repositories/:owner/:repo"
+                element={<RepoSettingsPage />}
               />
               <Route
                 path="/settings/ai/usage"

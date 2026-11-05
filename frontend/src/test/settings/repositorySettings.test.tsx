@@ -201,6 +201,30 @@ describe("removing", () => {
   });
 });
 
+describe("the code settings", () => {
+  it("are on this page for every account that can see code", async () => {
+    renderPage();
+    expect(await screen.findByLabelText("Code theme")).toBeTruthy();
+    cleanup();
+
+    mockAuth.user = {
+      id: 4,
+      account_type: "platform_admin",
+      scope: "platform",
+      effective_role: "member",
+    };
+    getVisibleProjects.mockResolvedValue({ unrestricted: false, repos: [] });
+    renderPage();
+    expect(await screen.findByLabelText("Code theme")).toBeTruthy();
+  });
+
+  it("aren't shown to guests, who can't see code", () => {
+    mockAuth.user = { ...personal, effective_role: "guest" };
+    renderPage();
+    expect(screen.queryByLabelText("Code theme")).toBeNull();
+  });
+});
+
 describe("who gets what", () => {
   it("lets an organization owner add", async () => {
     mockAuth.user = {

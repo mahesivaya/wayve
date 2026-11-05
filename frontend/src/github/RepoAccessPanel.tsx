@@ -1,14 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  listOrganizationMembers,
+  listPlatformMembers,
+  type Member,
+} from "../api/rbac";
+import {
   getRepoAccess,
   removeRepoAccess,
   setRepoAccess,
   type RepoAccessResponse,
   type RepoAccessRow,
 } from "../api/repoAccess";
+import { useAuth } from "../auth/useAuth";
 import "./repoAccess.css";
 
 type Level = "read" | "write";
+
+// These roles reach every repository without a grant, and guests never can, so
+// granting any of them would change nothing. Matches the server's gates.
+const NOT_GRANTABLE = new Set(["owner", "super_admin", "admin", "guest"]);
 
 // Adding a member grants Wayve dashboard visibility and, best-effort, adds them
 // as a GitHub collaborator where the token has admin on the repo.
@@ -19,6 +29,12 @@ export default function RepoAccessPanel({
   owner: string;
   repo: string;
 }) {
+  const { user } = useAuth();
+  const organizationId = user?.organization_id ?? null;
+  const isPersonal = user?.scope === "personal";
+  const isPlatform = user?.scope === "platform";
+  const [members, setMembers] = useState<Member[]>([]);
+  const [addMember, setAddMember] = useState("");
   const [data, setData] = useState<RepoAccessResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -44,6 +60,24 @@ export default function RepoAccessPanel({
 
   const canManage = data?.can_manage ?? false;
 
+  // Without the list, the GitHub username form below still works.
+  useEffect(() => {
+    if (!canManage) return;
+    const rows = isPlatform
+      ? listPlatformMembers()
+      : organizationId !== null
+        ? listOrganizationMembers(organizationId)
+        : null;
+    void rows?.then(setMembers).catch(() => {});
+  }, [canManage, isPlatform, organizationId]);
+
+  const withDashboardAccess = new Set(
+    (data?.rows ?? []).filter((r) => r.in_dashboard).map((r) => r.user_id)
+  );
+  const grantable = members.filter(
+    (m) => !NOT_GRANTABLE.has(m.role) && !withDashboardAccess.has(m.user_id)
+  );
+
   const apply = async (fn: () => Promise<{ note?: string }>) => {
     setBusy(true);
     setError(null);
@@ -68,6 +102,19 @@ export default function RepoAccessPanel({
         level: addLevel,
       });
       setAddLogin("");
+      return res;
+    });
+  };
+
+  const addSelectedMember = () => {
+    const userId = Number(addMember);
+    if (!userId) return;
+    void apply(async () => {
+      const res = await setRepoAccess(owner, repo, {
+        user_id: userId,
+        level: addLevel,
+      });
+      setAddMember("");
       return res;
     });
   };
@@ -111,17 +158,58 @@ export default function RepoAccessPanel({
         </p>
       )}
 
+      {!isPersonal && (
+        <p className="repo-access-muted">
+          Owners and admins always have access. Everyone else sees only the
+          repositories granted to them here.
+        </p>
+      )}
+      {isPersonal && (
+        <p className="repo-access-muted">
+          Personal repositories aren&apos;t shared inside Wayve: adding someone
+          makes them a collaborator on GitHub.
+        </p>
+      )}
+
+      {canManage && grantable.length > 0 && (
+        <div className="repo-access-add">
+          <select
+            className="repo-access-select repo-access-member"
+            aria-label="Member"
+            value={addMember}
+            onChange={(e) => setAddMember(e.target.value)}
+          >
+            <option value="">Choose a member…</option>
+            {grantable.map((m) => (
+              <option key={m.user_id} value={m.user_id}>
+                {m.username ? `${m.username} (${m.email})` : m.email}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="repo-access-btn repo-access-btn--primary"
+            onClick={addSelectedMember}
+            disabled={busy || !addMember}
+          >
+            {busy ? "Working…" : "Add member"}
+          </button>
+        </div>
+      )}
+
       {canManage && (
         <div className="repo-access-add">
           <input
             className="repo-access-input"
             placeholder="GitHub username"
+            aria-label="GitHub username"
             value={addLogin}
             onChange={(e) => setAddLogin(e.target.value)}
             autoComplete="off"
           />
           <select
             className="repo-access-select"
+            aria-label="Access level"
             value={addLevel}
             onChange={(e) => setAddLevel(e.target.value as Level)}
           >
