@@ -26,6 +26,86 @@
   --diff-del-strong: #8a0f08;
 }
 
+/* Dark themes get tints over the page rather than pastel blocks with dark text,
+   and panels that follow the theme: the global tint tokens are always navy. */
+:root[data-theme="dark"] :is(.github-page, .github-split, .github-unified) {
+  --color-surface-tint: var(--color-surface);
+  --color-surface-tint-cool: var(--color-surface-soft);
+  --diff-add-soft: color-mix(in srgb, #2ea043 22%, transparent);
+  --diff-add-strong: #7ee2a0;
+  --diff-del-soft: color-mix(in srgb, #f85149 22%, transparent);
+  --diff-del-strong: #ffaba8;
+}
+
+/* Syntax colours, shared by the file preview and the diffs. The light set stays
+   readable on the diff's pastel add and remove rows too. */
+:root {
+  --syntax-comment: #4b5563;
+  --syntax-keyword: #a40e26;
+  --syntax-string: #0a3069;
+  --syntax-number: #0550ae;
+  --syntax-function: #5b30ad;
+  --syntax-type: #7c3a00;
+  --syntax-tag: #116329;
+}
+
+:root[data-theme="dark"] {
+  --syntax-comment: #8b9a84;
+  --syntax-keyword: #d7a0d3;
+  --syntax-string: #e0a68c;
+  --syntax-number: #b5cea8;
+  --syntax-function: #dcdcaa;
+  --syntax-type: #5fd4bb;
+  --syntax-tag: #8cc8f0;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--syntax-comment);
+  font-style: var(--syntax-comment-style, italic);
+}
+
+.hljs-keyword,
+.hljs-selector-tag {
+  color: var(--syntax-keyword);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition {
+  color: var(--syntax-string);
+}
+
+.hljs-number,
+.hljs-literal,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-variable.constant_ {
+  color: var(--syntax-number);
+}
+
+.hljs-title.function_,
+.hljs-section,
+.hljs-selector-class,
+.hljs-selector-id {
+  color: var(--syntax-function);
+}
+
+.hljs-type,
+.hljs-built_in,
+.hljs-title.class_,
+.hljs-meta {
+  color: var(--syntax-type);
+}
+
+.hljs-tag,
+.hljs-name,
+.hljs-attr,
+.hljs-attribute,
+.hljs-property {
+  color: var(--syntax-tag);
+}
+
 .github-page *,
 .github-page *::before,
 .github-page *::after {
@@ -371,70 +451,21 @@
   background: var(--color-surface);
 }
 
-/* Files view has two layouts driven by selection state:
-     .is-single — no file open. Browser fills the whole content width.
-     .is-split  — a file is open. Browser shrinks to a left rail and
-                  the preview takes the larger right column.
-   `width: 100%` is defensive — without it, a single-column grid inside a
-   flex-direction:column parent can collapse to its intrinsic content
-   width (longest file row) instead of stretching, leaving wasted space
-   to the right of the panel on wide screens. */
+/* One column, showing a folder or a file. `width: 100%` is defensive — without
+   it, a single-column grid inside a flex-direction:column parent can collapse to
+   its intrinsic content width (longest file row) instead of stretching, leaving
+   wasted space to the right of the panel on wide screens. */
 .github-grid {
   display: grid;
   gap: 8px;
   width: 100%;
+  grid-template-columns: minmax(0, 1fr);
   /* Single full-height row so the browser/preview panels stretch to fill
      the grid (which itself fills the content column). */
   grid-template-rows: minmax(0, 1fr);
 }
 
-.github-grid.is-single {
-  /* Single-pane file list fills the entire content width — no wasted
-     space when no preview is open. */
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.github-grid.is-split {
-  /* When a file is open the tree shrinks to a narrow fixed rail and
-     the preview claims the remaining width — code reads better with
-     room than the file list does. The inline `gridTemplateColumns` set
-     by the component overrides this default once the user drags the
-     resize handle; this rule is the fallback before any inline style
-     applies. `column-gap: 0` so the only space between the file tree
-     and the preview is the 5px resize handle column — anything more
-     reads as wasted whitespace. */
-  grid-template-columns: 280px 5px minmax(0, 1fr);
-  column-gap: 0;
-}
-
-/* Drag handle that sits between the file tree and the preview when the
-   layout is in split mode. Visually a 1px line (centered in a 5px-wide
-   grid column for a comfortable hitbox) that tints on hover/active so
-   the resize affordance is discoverable. */
-.github-grid-resize {
-  cursor: col-resize;
-  position: relative;
-  z-index: 3;
-  touch-action: none;
-  align-self: stretch;
-}
-
-.github-grid-resize::after {
-  content: "";
-  position: absolute;
-  inset: 0 2px;
-  background: var(--color-border);
-  border-radius: 1px;
-  transition: background 0.12s ease;
-}
-
-.github-grid-resize:hover::after,
-.github-grid-resize:active::after {
-  background: var(--color-primary-action);
-}
-
-/* Close button in the preview header — sits in the title row alongside
-   the file size so the user can return to the single-pane list. */
+/* Close button in the file header, beside the size; returns to the folder. */
 .github-panel-head-trail {
   display: inline-flex;
   align-items: center;
@@ -520,6 +551,75 @@
   gap: 10px;
 }
 
+/* "Files", then the path, wrapping under itself when it's long. */
+.github-files-head {
+  justify-content: flex-start;
+}
+
+.github-files-head h2 {
+  flex-shrink: 0;
+}
+
+.github-files-head .github-panel-head-trail {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.github-path {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 4px;
+  min-width: 0;
+  font-size: var(--text-md);
+}
+
+.github-path .github-path-sep {
+  color: var(--color-text-muted);
+}
+
+.github-path .github-path-current {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.github-path-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primary-action);
+  font: inherit;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.github-path-link:hover {
+  text-decoration: underline;
+}
+
+.github-path-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-left: 4px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.github-path-copy:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
 .github-panel-head h2 {
   margin: 0;
   font-size: var(--text-md);
@@ -557,20 +657,19 @@
 /* ============================================================
  * Repo browser — file/folder row
  *
- * Layout: [chevron 16] [icon 18] [name flex] [size 72]
+ * Layout: [icon 18] [name flex] [size 72]
  * Hierarchy: folders bold-ish, files normal; size right-aligned in
- * tabular-num for clean column edges; depth indentation via the
- * --tree-depth CSS variable set by the React component.
+ * tabular-num for clean column edges.
  * ============================================================ */
 
 .github-file-row {
   width: 100%;
   min-height: 32px;
   display: grid;
-  grid-template-columns: 16px 18px minmax(0, 1fr) 64px;
+  grid-template-columns: 18px minmax(0, 1fr) 64px;
   gap: 8px;
   align-items: center;
-  padding: 4px 10px 4px calc(8px + (var(--tree-depth, 0) * 18px));
+  padding: 4px 10px 4px 8px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -580,14 +679,6 @@
   transition:
     background 0.12s ease,
     color 0.12s ease;
-}
-
-.github-tree-node {
-  min-width: 0;
-}
-
-.github-tree-children {
-  min-width: 0;
 }
 
 /* Chevron rotates from right (collapsed) to down (expanded). The SVG
@@ -607,7 +698,7 @@
 }
 
 .github-tree-loading {
-  padding: 8px 12px 8px calc(48px + (var(--tree-depth, 0) * 18px));
+  padding: 8px 12px;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
 }
@@ -619,11 +710,6 @@
 .github-file-row:focus-visible {
   outline: 2px solid var(--color-primary-action);
   outline-offset: -2px;
-}
-
-.github-file-row.active {
-  background: var(--color-primary-soft);
-  color: var(--color-primary-action-hover);
 }
 
 .github-file-kind {
@@ -686,6 +772,58 @@
   word-break: normal;
   overflow-wrap: normal;
   tab-size: 2;
+}
+
+/* Sized to the longest line, so a row's background runs the whole scrolled width. */
+.github-preview pre.github-code-file {
+  display: grid;
+  grid-template-columns: auto minmax(max-content, 1fr);
+  align-content: start;
+  padding: 10px 0;
+  background: var(--syntax-bg, var(--color-surface-tint));
+  color: var(--syntax-fg, var(--color-text-primary));
+}
+
+.github-preview pre.github-code-file.is-wrapped {
+  grid-template-columns: auto minmax(0, 1fr);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.github-preview pre.github-code-file.no-line-numbers {
+  grid-template-columns: minmax(max-content, 1fr);
+}
+
+.github-preview pre.github-code-file.is-wrapped.no-line-numbers {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.github-code-file.no-line-numbers .github-code-file-no {
+  display: none;
+}
+
+.github-code-file.no-line-numbers .github-code-file-text {
+  padding-left: 14px;
+}
+
+.github-code-file-line {
+  display: contents;
+}
+
+.github-code-file-no {
+  position: sticky;
+  left: 0;
+  padding: 0 14px 0 12px;
+  background: var(--syntax-bg, var(--color-surface-tint));
+  color: var(--syntax-gutter, var(--color-text-muted));
+  text-align: right;
+  user-select: none;
+}
+
+/* The height keeps blank lines when there's no number beside them. */
+.github-code-file-text {
+  min-height: calc(var(--syntax-line-height, 1.5) * 1em);
+  padding-right: 14px;
 }
 
 .github-empty {
@@ -1329,8 +1467,9 @@
 .github-split-hunk {
   grid-column: 1 / -1;
   padding: 2px 12px;
-  background: var(--color-surface-tint);
-  color: var(--color-text-muted);
+  background: var(--syntax-bg, var(--color-surface-tint));
+  color: var(--syntax-gutter, var(--color-text-muted));
+  text-align: left;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -1544,33 +1683,35 @@
   position: relative;
   padding: 0 8px;
   text-align: right;
-  color: var(--color-text-muted);
-  background: var(--color-surface-tint-cool, transparent);
+  color: var(--syntax-gutter, var(--color-text-muted));
+  background: var(--syntax-bg, var(--color-surface-tint-cool, transparent));
   white-space: nowrap;
   user-select: none;
 }
 
 .github-split-code {
   padding: 0 12px 0 8px;
-  border-left: 1px solid var(--color-border);
+  border-left: 1px solid var(--syntax-border, var(--color-border));
+  background: var(--syntax-bg, transparent);
+  color: var(--syntax-fg, inherit);
+  text-align: left;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
+/* The row's background says added or removed; the text keeps its syntax colours. */
 .github-split-code.is-add {
-  background: var(--diff-add-soft, #e6ffec);
-  color: var(--diff-add-strong, #1a7f37);
+  background: var(--syntax-add-bg, var(--diff-add-soft, #e6ffec));
 }
 
 .github-split-code.is-del {
-  background: var(--diff-del-soft, #ffebe9);
-  color: var(--diff-del-strong, #82071e);
+  background: var(--syntax-del-bg, var(--diff-del-soft, #ffebe9));
 }
 
 /* The blank counterpart of an unpaired add/remove — faintly tinted so the
    eye reads it as "nothing here on this side". */
 .github-split-code.is-empty {
-  background: var(--color-surface-tint, #f6f8fa);
+  background: var(--syntax-bg, var(--color-surface-tint, #f6f8fa));
 }
 
 /* Full-diff fallback — opt-in fetch via the proxy's `?media=diff`
@@ -1934,8 +2075,8 @@
     grid-template-columns: 1fr;
   }
 
-  /* Stacked (tree above preview) on narrow screens — let rows size to
-     content and the page scroll, rather than squeezing into one 1fr row. */
+  /* Let rows size to content and the page scroll, rather than squeezing into
+     one 1fr row. */
   .github-content > .github-grid {
     flex: 0 0 auto;
     grid-template-rows: none;
@@ -1961,7 +2102,7 @@
   }
 
   .github-file-row {
-    grid-template-columns: 18px 22px minmax(0, 1fr);
+    grid-template-columns: 22px minmax(0, 1fr);
   }
 
   .github-file-size {
@@ -2476,10 +2617,6 @@
   padding-top: 8px;
   border-top: 1px solid var(--color-border);
   font-size: var(--text-xs);
-}
-
-.github-repo-switch-conn-who {
-  color: var(--color-text-muted);
 }
 
 /* Inline preview of an opened workflow .yml inside the Workflows panel (which,
@@ -3021,6 +3158,24 @@
   overflow-x: auto;
 }
 
+/* The choices from Code on the settings page, shared by every code surface. */
+.github-split,
+.github-unified,
+.github-commit-patch,
+.github-preview pre.github-code-file {
+  font-family: var(--syntax-font-family, var(--mono));
+  font-size: var(--syntax-font-size, var(--text-md));
+  font-weight: var(--syntax-font-weight, 400);
+  font-variant-ligatures: var(--syntax-ligatures, none);
+  line-height: var(--syntax-line-height, 1.5);
+  tab-size: var(--syntax-tab-size, 2);
+}
+
+.github-split,
+.github-unified {
+  background: var(--syntax-bg, transparent);
+}
+
 .github-split.is-compact,
 .github-unified.is-compact {
   line-height: 1.2;
@@ -3066,7 +3221,10 @@
 }
 
 .github-code-match {
-  background: var(--diff-edit-soft, #fff8c5);
+  background: var(
+    --diff-edit-soft,
+    color-mix(in srgb, #e3b341 35%, transparent)
+  );
   color: inherit;
   border-radius: 2px;
   outline: 1px solid var(--diff-edit-strong, #9a6700);

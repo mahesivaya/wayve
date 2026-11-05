@@ -100,6 +100,16 @@ function SettingsSideNav() {
             <span className="settings-account-link-icon">🎨</span>
             <span>Appearance</span>
           </button>
+          {user?.effective_role !== "guest" && (
+            <button
+              type="button"
+              className={linkClass("/settings/repositories")}
+              onClick={() => void navigate("/settings/repositories")}
+            >
+              <span className="settings-account-link-icon">📦</span>
+              <span>Repositories</span>
+            </button>
+          )}
           {/* Docs / API / SDK / keys used to be a collapsible group in the main
             sidebar. Same gate the group carried: not for personal accounts. */}
           {user?.account_type !== "personal" && (

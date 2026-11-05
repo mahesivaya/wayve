@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { fmtDateTime } from "../utils/datetime";
-import { useResizableWidth } from "../components/useResizableWidth";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import { getAuthToken } from "../auth/token";
@@ -39,7 +38,8 @@ import {
   ChevronIcon,
   type LineComments,
 } from "./commitDiff";
-import { CommentOptionsIcon, EditCommentIcon } from "../icons";
+import { CodeFile } from "./CodeFile";
+import { CommentOptionsIcon, CopyIcon, EditCommentIcon } from "../icons";
 import { useDiffPrefs } from "./diffPrefs";
 import {
   draftStore,
@@ -50,6 +50,7 @@ import {
   rememberRepoView,
   type DraftStore,
 } from "./openRepoSession";
+import { importAllRepos, repoNameFromUrl } from "./repoImport";
 import { useRepoScroll } from "./useRepoScroll";
 import {
   canExpandFile,
@@ -58,39 +59,6 @@ import {
   type CommitFile,
   type IssueComment,
 } from "./commitDiffData";
-
-// One project per visible repo, deduped by `owner/repo` against existing
-// projects. Best-effort: a repo that fails to link is skipped rather than
-// aborting the whole import.
-async function importAllRepos(
-  existing: Project[],
-  onProgress?: (done: number) => void
-): Promise<Project[]> {
-  const { connected, repos } = await listImportableRepos();
-  if (!connected) {
-    throw new Error("Connect your GitHub account to import your repositories.");
-  }
-  const alreadyLinked = new Set(
-    existing
-      .filter((p) => p.github_owner && p.github_repo)
-      .map((p) => `${p.github_owner}/${p.github_repo}`.toLowerCase())
-  );
-  const toAdd = repos.filter(
-    (r) => !alreadyLinked.has(r.full_name.toLowerCase())
-  );
-  const created: Project[] = [];
-  for (const repo of toAdd) {
-    try {
-      created.push(
-        await createProject(repo.name, `https://github.com/${repo.full_name}`)
-      );
-    } catch {
-      // Skip this repo; the rest of the import still proceeds.
-    }
-    onProgress?.(created.length);
-  }
-  return created;
-}
 
 // Repo shown by the bare /github route when no project is selected.
 const FALLBACK_OWNER = "mahesivaya";
@@ -490,6 +458,80 @@ function formatDuration(start: string | null, end: string | null): string {
 
 // Directories first, then files, alphabetical within each group. The Contents
 // API returns items in arbitrary repository order.
+// The path beside the "Files" heading: the repo and each folder go back to that
+// level, and the last part is where you are.
+function RepoPath({
+  repoName,
+  path,
+  onOpenFolder,
+}: {
+  repoName: string;
+  path: string;
+  onOpenFolder: (path: string) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const parts = path ? path.split("/") : [];
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(path);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard blocked: the path is still on screen to select.
+    }
+  };
+
+  return (
+    <nav className="github-path" aria-label="File path">
+      {parts.length === 0 ? (
+        <span className="github-path-current" aria-current="page">
+          {repoName}
+        </span>
+      ) : (
+        <button
+          type="button"
+          className="github-path-link"
+          onClick={() => onOpenFolder("")}
+        >
+          {repoName}
+        </button>
+      )}
+      {parts.map((part, idx) => (
+        <Fragment key={parts.slice(0, idx + 1).join("/")}>
+          <span className="github-path-sep" aria-hidden="true">
+            /
+          </span>
+          {idx === parts.length - 1 ? (
+            <span className="github-path-current" aria-current="page">
+              {part}
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="github-path-link"
+              onClick={() => onOpenFolder(parts.slice(0, idx + 1).join("/"))}
+            >
+              {part}
+            </button>
+          )}
+        </Fragment>
+      ))}
+      {path && (
+        <button
+          type="button"
+          className="github-path-copy"
+          aria-label={copied ? "Path copied" : "Copy path"}
+          data-tooltip={copied ? "Copied" : "Copy path"}
+          onClick={() => void copy()}
+        >
+          <CopyIcon size={14} aria-hidden="true" />
+        </button>
+      )}
+    </nav>
+  );
+}
+
 function sortContents(items: ContentItem[]): ContentItem[] {
   return [...items].sort((a, b) => {
     const aDir = a.type === "dir" ? 0 : 1;
@@ -813,7 +855,8 @@ export function GitHubRepoViewer({
     };
   }, [branchMenuOpen]);
   const [treeItems, setTreeItems] = useState<DirectoryCache>({});
-  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+  // The folder being listed, unless a file is open over it.
+  const [currentDir, setCurrentDir] = useState("");
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
   const [selectedFile, setSelectedFile] = useState<ContentItem | null>(null);
   const [fileText, setFileText] = useState("");
@@ -1008,15 +1051,6 @@ export function GitHubRepoViewer({
       // ignore
     }
   }, [pullFilter]);
-
-  // Resizable split between the file tree and the preview panel.
-  const { width: filesPaneWidth, startResize: handleFilesPaneResize } =
-    useResizableWidth({
-      storageKey: "rwayve.github.filesPaneWidth",
-      defaultWidth: 280,
-      min: 180,
-      max: 720,
-    });
 
   const loadRepo = useCallback(async () => {
     setError("");
@@ -1763,7 +1797,7 @@ export function GitHubRepoViewer({
   useEffect(() => {
     if (!repo) return;
     setTreeItems({});
-    setExpandedPaths(new Set());
+    setCurrentDir("");
     setSelectedFile(null);
     setFileText("");
     void loadDirectory("", branch);
@@ -1831,7 +1865,9 @@ export function GitHubRepoViewer({
     place:
       activeSection === "pulls" && selectedPull !== null
         ? `pulls#${selectedPull}`
-        : activeSection,
+        : activeSection === "files"
+          ? `files:${currentDir}`
+          : activeSection,
     file: selectedFile?.path ?? null,
     ready: repo !== null,
   });
@@ -1869,9 +1905,10 @@ export function GitHubRepoViewer({
     if (pull !== null) openPull(pull);
     // Files and folders belong to their branch, which may have been deleted.
     if (branch !== restoredView.branch) return;
-    if (folders.length > 0) {
-      setExpandedPaths(new Set(folders));
-      for (const folder of folders) void loadDirectory(folder, branch);
+    const folder = folders[folders.length - 1];
+    if (folder) {
+      setCurrentDir(folder);
+      void loadDirectory(folder, branch);
     }
     if (file !== null) {
       restoringFile.current = file;
@@ -1895,7 +1932,7 @@ export function GitHubRepoViewer({
       pull: selectedPull,
       // Still on its way back: leaving now must not lose it.
       file: selectedFile?.path ?? restoringFile.current,
-      folders: [...expandedPaths],
+      folders: currentDir ? [currentDir] : [],
       commits: [...diffs.expandedShas],
       commitsPage,
       pullsPage,
@@ -1915,9 +1952,9 @@ export function GitHubRepoViewer({
     branch,
     commitCommentDraft,
     commitsPage,
+    currentDir,
     diffs.collapsedFiles,
     diffs.expandedShas,
-    expandedPaths,
     fullName,
     pullBundleByNumber,
     pullCommentDraft,
@@ -1928,75 +1965,17 @@ export function GitHubRepoViewer({
     user?.id,
   ]);
 
-  function toggleDirectory(item: ContentItem) {
-    setExpandedPaths((current) => {
-      const next = new Set(current);
-      if (next.has(item.path)) {
-        next.delete(item.path);
-      } else {
-        next.add(item.path);
-        if (!treeItems[item.path]) {
-          void loadDirectory(item.path, branch);
-        }
-      }
-      return next;
-    });
+  // Leaves any open file, as every way into a folder should.
+  function openDirectory(path: string) {
+    setSelectedFile(null);
+    setFileText("");
+    setCurrentDir(path);
+    if (!treeItems[path]) void loadDirectory(path, branch);
   }
 
-  function renderTree(parentPath = "", depth = 0): React.ReactNode {
-    const nodes = sortContents(treeItems[parentPath] ?? []);
+  const parentOf = (path: string) => path.split("/").slice(0, -1).join("/");
 
-    if (loadingPaths.has(parentPath) && nodes.length === 0) {
-      return <div className="github-tree-loading">Loading...</div>;
-    }
-
-    return nodes.map((item) => {
-      const isDirectory = item.type === "dir";
-      const isExpanded = expandedPaths.has(item.path);
-      const isLoading = loadingPaths.has(item.path);
-      const isActive = selectedFile?.path === item.path;
-
-      return (
-        <div key={item.path} className="github-tree-node">
-          <button
-            type="button"
-            className={`github-file-row ${isDirectory ? "is-dir" : "is-file"} ${isActive ? "active" : ""}`}
-            style={{ "--tree-depth": depth } as React.CSSProperties}
-            onClick={() => {
-              if (isDirectory) {
-                toggleDirectory(item);
-              } else {
-                void openFile(item);
-              }
-            }}
-          >
-            <span
-              className={`github-tree-toggle ${isExpanded ? "open" : ""}`}
-              aria-hidden="true"
-            >
-              {isDirectory ? <ChevronIcon /> : null}
-            </span>
-            <span className="github-file-kind" aria-hidden="true">
-              {isDirectory ? <FolderIcon /> : <FileIcon />}
-            </span>
-            <span className="github-file-name">{item.name}</span>
-            <span className="github-file-size">
-              {item.type === "file" ? formatSize(item.size) : ""}
-            </span>
-          </button>
-          {isDirectory && isExpanded && (
-            <div className="github-tree-children">
-              {isLoading && !treeItems[item.path] ? (
-                <div className="github-tree-loading">Loading...</div>
-              ) : (
-                renderTree(item.path, depth + 1)
-              )}
-            </div>
-          )}
-        </div>
-      );
-    });
-  }
+  const dirItems = sortContents(treeItems[currentDir] ?? []);
 
   if (loading) {
     return (
@@ -2225,69 +2204,92 @@ export function GitHubRepoViewer({
           )}
 
           {activeSection === "files" && (
-            // The tree is a single full-width list until a file is opened, then
-            // the layout splits into tree plus preview. In split mode the grid
-            // columns are set inline so the drag handle can resize live.
-            <main
-              className={`github-grid ${selectedFile ? "is-split" : "is-single"}`}
-              style={
-                selectedFile
-                  ? {
-                      gridTemplateColumns: `${filesPaneWidth}px 5px minmax(0, 1fr)`,
-                    }
-                  : undefined
-              }
-            >
-              <section className="github-browser" aria-label="Repository files">
-                <div className="github-panel-head">
+            // One folder or one file at a time, at full width, like GitHub: a
+            // split left too little room to read code beside the app's other pane.
+            <main className="github-grid">
+              <section
+                className={selectedFile ? "github-preview" : "github-browser"}
+                aria-label={selectedFile ? "File preview" : "Repository files"}
+              >
+                <div className="github-panel-head github-files-head">
                   <h2>Files</h2>
-                </div>
-                <div className="github-file-list">
-                  {renderTree()}
-                  {!loadingPaths.has("") &&
-                    (treeItems[""] ?? []).length === 0 && (
-                      <div className="github-empty">No files found.</div>
-                    )}
-                </div>
-              </section>
-
-              {selectedFile && (
-                <div
-                  className="github-grid-resize"
-                  role="separator"
-                  aria-orientation="vertical"
-                  aria-label="Resize files pane"
-                  onPointerDown={handleFilesPaneResize}
-                />
-              )}
-
-              {selectedFile && (
-                <section className="github-preview" aria-label="File preview">
-                  <div className="github-panel-head">
-                    <h2>{selectedFile.name}</h2>
+                  <RepoPath
+                    repoName={repoName}
+                    path={selectedFile?.path ?? currentDir}
+                    onOpenFolder={openDirectory}
+                  />
+                  {selectedFile && (
                     <span className="github-panel-head-trail">
                       <span>{formatSize(selectedFile.size)}</span>
                       <button
                         type="button"
                         className="github-preview-close"
-                        onClick={() => {
-                          setSelectedFile(null);
-                          setFileText("");
-                        }}
+                        onClick={() =>
+                          openDirectory(parentOf(selectedFile.path))
+                        }
                         aria-label="Close file preview"
-                        data-tooltip="Close preview"
+                        data-tooltip="Close file"
+                        data-tooltip-align="right"
                       >
                         ✕
                       </button>
                     </span>
-                  </div>
-                  {fileLoading ? (
+                  )}
+                </div>
+                {selectedFile ? (
+                  fileLoading ? (
                     <div className="github-empty">Loading file...</div>
                   ) : (
-                    <pre>{fileText || "No preview available."}</pre>
-                  )}
-                </section>
-              )}
+                    <CodeFile path={selectedFile.path} text={fileText} />
+                  )
+                ) : (
+                  // Keyed so each folder starts at its own scroll position.
+                  <div key={currentDir} className="github-file-list">
+                    {currentDir && (
+                      <button
+                        type="button"
+                        className="github-file-row is-dir"
+                        aria-label="Parent folder"
+                        onClick={() => openDirectory(parentOf(currentDir))}
+                      >
+                        <span className="github-file-kind" aria-hidden="true">
+                          <FolderIcon />
+                        </span>
+                        <span className="github-file-name">..</span>
+                        <span className="github-file-size" />
+                      </button>
+                    )}
+                    {dirItems.map((item) => {
+                      const isDirectory = item.type === "dir";
+                      return (
+                        <button
+                          key={item.path}
+                          type="button"
+                          className={`github-file-row ${isDirectory ? "is-dir" : "is-file"}`}
+                          onClick={() => {
+                            if (isDirectory) openDirectory(item.path);
+                            else void openFile(item);
+                          }}
+                        >
+                          <span className="github-file-kind" aria-hidden="true">
+                            {isDirectory ? <FolderIcon /> : <FileIcon />}
+                          </span>
+                          <span className="github-file-name">{item.name}</span>
+                          <span className="github-file-size">
+                            {item.type === "file" ? formatSize(item.size) : ""}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {dirItems.length === 0 &&
+                      (loadingPaths.has(currentDir) ? (
+                        <div className="github-tree-loading">Loading...</div>
+                      ) : (
+                        <div className="github-empty">No files found.</div>
+                      ))}
+                  </div>
+                )}
+              </section>
             </main>
           )}
 
@@ -2345,7 +2347,7 @@ export function GitHubRepoViewer({
                     {fileLoading ? (
                       <div className="github-empty">Loading file...</div>
                     ) : (
-                      <pre>{fileText || "No preview available."}</pre>
+                      <CodeFile path={selectedFile.path} text={fileText} />
                     )}
                   </section>
                 )}
@@ -2988,6 +2990,7 @@ export function GitHubRepoViewer({
                                             <CommitSplitPatch
                                               key={`${fileKey}@${bundle.detail.head.sha}`}
                                               patch={file.patch}
+                                              filename={file.filename}
                                               loadLines={
                                                 canExpandFile(file.status)
                                                   ? () =>
@@ -3749,12 +3752,6 @@ function repoLabel(p: Project): string {
 
 // The repo segment of a pasted URL becomes the project name, so there is no
 // separate "name" field to fill in.
-function repoNameFromUrl(raw: string): string {
-  const cleaned = raw.trim().replace(/\.git$/, "");
-  const match = cleaned.match(/([^/:]+)\/([^/]+)\/?$/);
-  return match ? match[2] : cleaned;
-}
-
 // In-page repo manager for personal accounts at the bare `/github` route. The
 // repo selector renders in the viewer's left rail via the `repoSwitcher` prop.
 // The project to show: the current one, else the one left open earlier this
@@ -4341,16 +4338,6 @@ function PlatformRepoManager() {
       );
   };
 
-  const disconnect = () => {
-    setConnErr("");
-    void disconnectGithub()
-      .then(() => {
-        setGhConn({ connected: false });
-        loadRepos();
-      })
-      .catch(() => setConnErr("Couldn't disconnect GitHub. Try again."));
-  };
-
   const selectedFullName = `${selected.owner}/${selected.repo}`;
   const hasRepos = (repos?.length ?? 0) > 0;
 
@@ -4383,21 +4370,9 @@ function PlatformRepoManager() {
             ))}
           </select>
         )}
-        {canConnect && (
+        {canConnect && (!ghConn?.connected || connErr) && (
           <div className="github-repo-switch-conn">
-            {ghConn?.connected ? (
-              <span className="github-repo-switch-conn-who">
-                @{ghConn.login}
-                {" · "}
-                <button
-                  type="button"
-                  className="github-link-btn"
-                  onClick={disconnect}
-                >
-                  Disconnect
-                </button>
-              </span>
-            ) : (
+            {!ghConn?.connected && (
               <button
                 type="button"
                 className="github-link-btn"

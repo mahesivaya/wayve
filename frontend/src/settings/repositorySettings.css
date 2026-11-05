@@ -1,0 +1,122 @@
+.repo-settings-card {
+  text-align: left;
+}
+
+.repo-settings-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.repo-settings-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.repo-settings-input {
+  flex: 1 1 240px;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+}
+
+.repo-settings-primary {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-action);
+  color: var(--color-on-primary, #fff);
+  font-size: var(--text-md);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.repo-settings-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.repo-settings-hint {
+  margin: 8px 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.repo-settings-muted {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.repo-settings-error {
+  margin: 8px 0 0;
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+.repo-settings-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A connected account can hold hundreds of repositories. */
+.repo-settings-scroll {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.repo-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.repo-settings-row:last-child {
+  border-bottom: none;
+}
+
+.repo-settings-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+}
+
+.repo-settings-private {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs, 11px);
+}
+
+.repo-settings-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.repo-settings-open {
+  flex-shrink: 0;
+  text-decoration: none;
+}
+
+.repo-settings-remove {
+  color: var(--color-danger);
+}

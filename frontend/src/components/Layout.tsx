@@ -1625,6 +1625,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       "/integrations",
       "/appearance",
       "/settings/statuses",
+      "/settings/repositories",
     ].includes(location.pathname);
 
   const headerActions = (
