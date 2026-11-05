@@ -41,30 +41,13 @@ and add `mac.notarize` in `package.json`'s `build` block.
 ## Updates
 
 Web app changes need nothing here: a deploy reaches the app on its next load. A
-change to the shell itself updates through `electron-updater`. The app checks the
-feed on launch and every 4 hours, downloads a newer build in the background, and
-the web app shows "Restart to update"; otherwise it installs on quit.
+change to the shell itself ships as a new build that the app installs itself:
+it downloads in the background and the web app shows "Restart to update".
 
-To release, bump `version` in `package.json`, then for each of `arm64` and `x64`:
-
-1. `electron-builder --mac zip --<arch>` with `APPLE_*` unset. Not `--mac dir`: a
-   `dir` build leaves out `app-update.yml`, and an app without it never updates.
-2. Notarize the app and staple it.
-3. `electron-builder --mac dmg zip --<arch> --prepackaged <app> --publish never`.
-4. `mv dist/latest-mac.yml dist/latest-mac-<arch>.yml`, as the next arch overwrites it.
-
-Then combine the two feeds and upload to the `fluxze-desktop-downloads` bucket:
-
-```bash
-node merge-update-feed.cjs dist/latest-mac-arm64.yml dist/latest-mac-x64.yml > dist/latest-mac.yml
-```
-
-Upload each arch's DMG as `Fluxze-mac-<arch>.dmg`, plus both `.zip` and
-`.zip.blockmap` files under their built names. **Upload `latest-mac.yml` last, with
-`--cache-control no-cache`**: that upload is what starts the rollout, so test the
-build first. Installs from before 0.2.0 can't update themselves and need the DMG
-once; set `SELF_UPDATING_BUILD_PUBLISHED` in `frontend/src/utils/desktop.ts` after
-publishing it, which shows those installs a download prompt.
+**[RELEASING.md](RELEASING.md)** covers how this works and every step of a
+release: building, notarizing, publishing to S3, the one-time 0.2.0 rollout,
+testing, rolling back and troubleshooting. Never build a release with
+`--mac dir`; it can't update itself.
 
 ## App icon
 
@@ -82,5 +65,6 @@ Drop a 1024×1024 source in and re-run if you want a custom icon.
 |---------------|---------------------------------------------------------------------|
 | `main.cjs`    | Main process: window, menu, external-link + media-permission handling, offline fallback. |
 | `preload.cjs` | Minimal isolated bridge (exposes `window.fluxzeDesktop`).           |
+| `RELEASING.md` | How to release a new version, step by step. |
 | `merge-update-feed.cjs` | Combines each arch's update feed into the one `latest-mac.yml`. |
 | `make-icon.cjs` | Generates `build/icon.icns` from the brand favicon.               |
