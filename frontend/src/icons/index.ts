@@ -54,6 +54,7 @@ export {
   Paperclip as AttachmentIcon,
   Smile as EmojiIcon,
   Trash2 as TrashIcon,
+  Copy as CopyIcon,
   ArchiveRestore as RestoreIcon,
   Star as StarIcon,
   Clock as SnoozeIcon,
