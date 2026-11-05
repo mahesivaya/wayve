@@ -559,8 +559,38 @@
 /* Narrow page: the sidebar goes above the content, and the sections become one
    row of tabs like GitHub's, underlined when open, with the rest under "More". */
 @container github-page (max-width: 768px) {
+  /* Everything scrolls together here, so repository, branch and the tabs move
+     away with the content instead of holding on to scarce height. The panels
+     grow to fit theirs rather than scrolling inside themselves; the prefixes beat
+     their own rules, further down the file. */
   .github-layout {
     flex-direction: column;
+    overflow: hidden auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+  }
+  .github-layout .github-sidebar,
+  .github-layout .github-content,
+  .github-layout .github-content > .github-grid,
+  .github-layout .github-content > .github-panel,
+  .github-layout .github-description {
+    flex: 0 0 auto;
+  }
+  .github-layout .github-content > .github-grid {
+    grid-template-rows: none;
+  }
+  .github-layout .github-content > .github-panel,
+  .github-layout .github-description,
+  .github-layout .github-file-list {
+    overflow: visible;
+  }
+  .github-layout .github-file-list {
+    flex: 0 0 auto;
+  }
+  /* Long lines still scroll sideways, within the file. */
+  .github-layout .github-preview pre {
+    flex: 0 0 auto;
+    max-height: none;
   }
   .github-sidebar {
     width: 100%;
@@ -2171,13 +2201,6 @@
   .github-grid,
   .github-lower-grid {
     grid-template-columns: 1fr;
-  }
-
-  /* Let rows size to content and the page scroll, rather than squeezing into
-     one 1fr row. */
-  .github-content > .github-grid {
-    flex: 0 0 auto;
-    grid-template-rows: none;
   }
 
   .github-stats {
