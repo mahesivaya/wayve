@@ -2,9 +2,8 @@ use crate::prelude::*;
 use wayve_security::jwt::get_user_id_from_request;
 
 use super::dto::CreateChannelInput;
-use super::helpers::{
-    normalize_channel_role, normalize_channel_visibility, normalize_invite_emails,
-};
+use super::helpers::{channel_visibility_for, normalize_channel_role, normalize_invite_emails};
+use wayve_security::rbac;
 
 use sqlx::Row;
 use tracing::{error, instrument};
@@ -26,7 +25,10 @@ pub async fn create_channel(
     }
 
     let invite_role = normalize_channel_role(input.invite_role.as_deref());
-    let visibility = normalize_channel_visibility(input.visibility.as_deref());
+    let scope = rbac::resolve_role_context(pool.get_ref(), user_id)
+        .await?
+        .scope;
+    let visibility = channel_visibility_for(scope, input.visibility.as_deref());
     let invite_emails = normalize_invite_emails(&input.invite_emails.clone().unwrap_or_default());
 
     let invited_users = if invite_emails.is_empty() {

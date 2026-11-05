@@ -10,6 +10,9 @@ type Props = {
   users: string[];
   subjectDraft: string;
   visibilityDraft: ChannelVisibility;
+  // False in organizations and on the platform, where every channel is public,
+  // so the Privacy section is left out.
+  canChooseVisibility: boolean;
   addUserRole: ChannelRole;
   addUserEmails: string;
   error: string;
@@ -38,6 +41,7 @@ export default function ChannelSettingsPanel({
   users,
   subjectDraft,
   visibilityDraft,
+  canChooseVisibility,
   addUserRole,
   addUserEmails,
   error,
@@ -118,47 +122,49 @@ export default function ChannelSettingsPanel({
       </div>
 
       {/* Privacy — a two-option radio, saved on change. */}
-      <div className="channel-settings-section">
-        <span className="channel-settings-label">Privacy</span>
-        {isAdmin ? (
-          <div
-            className="channel-radio-group"
-            role="radiogroup"
-            aria-label="Privacy"
-          >
-            <label className="channel-radio">
-              <input
-                type="radio"
-                name="channel-privacy"
-                checked={visibilityDraft === "private"}
-                onChange={() => setVisibility("private")}
-              />
-              <span className="channel-radio-copy">
-                <span className="channel-radio-title">Private</span>
-                <span className="channel-radio-hint">Invite only</span>
-              </span>
-            </label>
-            <label className="channel-radio">
-              <input
-                type="radio"
-                name="channel-privacy"
-                checked={visibilityDraft === "public"}
-                onChange={() => setVisibility("public")}
-              />
-              <span className="channel-radio-copy">
-                <span className="channel-radio-title">Public</span>
-                <span className="channel-radio-hint">
-                  Anyone in your org can join
+      {canChooseVisibility && (
+        <div className="channel-settings-section">
+          <span className="channel-settings-label">Privacy</span>
+          {isAdmin ? (
+            <div
+              className="channel-radio-group"
+              role="radiogroup"
+              aria-label="Privacy"
+            >
+              <label className="channel-radio">
+                <input
+                  type="radio"
+                  name="channel-privacy"
+                  checked={visibilityDraft === "private"}
+                  onChange={() => setVisibility("private")}
+                />
+                <span className="channel-radio-copy">
+                  <span className="channel-radio-title">Private</span>
+                  <span className="channel-radio-hint">Invite only</span>
                 </span>
-              </span>
-            </label>
-          </div>
-        ) : (
-          <strong>
-            {channel.visibility === "public" ? "Public" : "Private"}
-          </strong>
-        )}
-      </div>
+              </label>
+              <label className="channel-radio">
+                <input
+                  type="radio"
+                  name="channel-privacy"
+                  checked={visibilityDraft === "public"}
+                  onChange={() => setVisibility("public")}
+                />
+                <span className="channel-radio-copy">
+                  <span className="channel-radio-title">Public</span>
+                  <span className="channel-radio-hint">
+                    Anyone in your org can join
+                  </span>
+                </span>
+              </label>
+            </div>
+          ) : (
+            <strong>
+              {channel.visibility === "public" ? "Public" : "Private"}
+            </strong>
+          )}
+        </div>
+      )}
 
       {/* Members — single list; admins tagged, everyone else "Member". */}
       <div className="channel-settings-section">

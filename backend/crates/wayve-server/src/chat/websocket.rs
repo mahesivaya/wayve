@@ -108,9 +108,9 @@ pub struct ChatSession {
     pub pool: PgPool,
     pub user_id: i32,
     pub cache: Option<Cache>,
-    // Enterprise senders use standard, server-readable encryption, so plaintext
-    // is accepted from them instead of an E2E envelope. Resolved once at connect,
-    // so a tier change applies on the next reconnect.
+    // Organization and platform senders use standard, server-readable
+    // encryption, so plaintext is accepted from them instead of an E2E envelope.
+    // Resolved once at connect, so a scope change applies on the next reconnect.
     pub uses_standard_encryption: bool,
     // Resolved once at connect so channel broadcasts carry a sender label without
     // a per-row user lookup.
@@ -148,7 +148,7 @@ pub async fn chat_ws(
 
     // Resolved here because the actor cannot await.
     let uses_standard_encryption =
-        crate::encryption_policy::uses_standard_encryption(pool.get_ref(), user_id).await;
+        crate::encryption_policy::chat_uses_standard_encryption(pool.get_ref(), user_id).await;
 
     let sender_name: String =
         sqlx::query_scalar("SELECT COALESCE(NULLIF(username, ''), email) FROM users WHERE id = $1")
@@ -335,9 +335,9 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                         return;
                     }
 
-                    // The server must never see chat plaintext: only enterprise
-                    // senders may send it, everyone else must supply an E2E
-                    // envelope. The server-AES layer below wraps whatever arrives
+                    // Only standard-encryption senders (organization and platform
+                    // accounts) may send plaintext; personal accounts must supply
+                    // an E2E envelope. The server-AES layer below wraps whatever arrives
                     // for storage at rest and is not the confidentiality boundary.
                     if !uses_standard && !content.starts_with(CHAT_E2E_PREFIX) {
                         error!(
@@ -345,7 +345,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                             sender_id,
                             receiver_id = ?receiver_id,
                             channel_id = ?channel_id,
-                            "rejected plaintext chat message from non-enterprise sender"
+                            "rejected plaintext chat message from an end-to-end sender"
                         );
                         return;
                     }

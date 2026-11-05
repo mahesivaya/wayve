@@ -23,6 +23,7 @@ type Props = {
   creatingChannel: boolean;
   channelName: string;
   channelVisibility: ChannelVisibility;
+  canChooseVisibility: boolean;
   channelError: string;
   onToggleCreateChannel: () => void;
   onChannelNameChange: (value: string) => void;
@@ -46,6 +47,7 @@ export default function ConversationSidebar({
   creatingChannel,
   channelName,
   channelVisibility,
+  canChooseVisibility,
   channelError,
   onToggleCreateChannel,
   onChannelNameChange,
@@ -103,6 +105,7 @@ export default function ConversationSidebar({
         <ChannelCreateForm
           channelName={channelName}
           visibility={channelVisibility}
+          canChooseVisibility={canChooseVisibility}
           error={channelError}
           onChannelNameChange={onChannelNameChange}
           onVisibilityChange={onChannelVisibilityChange}

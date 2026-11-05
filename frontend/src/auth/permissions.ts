@@ -182,7 +182,7 @@ type ScopedUser = {
 // `scope` is the authority; account_type is only a fallback for before it
 // resolves. The two use different vocabularies, so the account_type
 // discriminators have to be mapped onto scopes here.
-function resolveScope(user: ScopedUser): string | undefined {
+export function resolveScope(user: ScopedUser): string | undefined {
   return (
     user.scope ??
     {

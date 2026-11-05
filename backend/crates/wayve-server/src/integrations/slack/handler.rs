@@ -222,9 +222,11 @@ pub async fn link_channel(
         .to_string();
 
     let mut tx = pool.begin().await?;
+    // Imports are enterprise-only, so they land in an organization, where every
+    // channel is public (see chat::helpers::channel_visibility_for).
     let row = sqlx::query(
         "INSERT INTO channels (name, created_by, visibility)
-         VALUES ($1, $2, 'private') RETURNING id",
+         VALUES ($1, $2, 'public') RETURNING id",
     )
     .bind(&chan_name)
     .bind(user_id)
