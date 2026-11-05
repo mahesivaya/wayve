@@ -40,40 +40,40 @@
 /* Syntax colours, shared by the file preview and the diffs. The light set stays
    readable on the diff's pastel add and remove rows too. */
 :root {
-  --code-comment: #4b5563;
-  --code-keyword: #a40e26;
-  --code-string: #0a3069;
-  --code-number: #0550ae;
-  --code-function: #5b30ad;
-  --code-type: #7c3a00;
-  --code-tag: #116329;
+  --syntax-comment: #4b5563;
+  --syntax-keyword: #a40e26;
+  --syntax-string: #0a3069;
+  --syntax-number: #0550ae;
+  --syntax-function: #5b30ad;
+  --syntax-type: #7c3a00;
+  --syntax-tag: #116329;
 }
 
 :root[data-theme="dark"] {
-  --code-comment: #8b9a84;
-  --code-keyword: #d7a0d3;
-  --code-string: #e0a68c;
-  --code-number: #b5cea8;
-  --code-function: #dcdcaa;
-  --code-type: #5fd4bb;
-  --code-tag: #8cc8f0;
+  --syntax-comment: #8b9a84;
+  --syntax-keyword: #d7a0d3;
+  --syntax-string: #e0a68c;
+  --syntax-number: #b5cea8;
+  --syntax-function: #dcdcaa;
+  --syntax-type: #5fd4bb;
+  --syntax-tag: #8cc8f0;
 }
 
 .hljs-comment,
 .hljs-quote {
-  color: var(--code-comment);
-  font-style: italic;
+  color: var(--syntax-comment);
+  font-style: var(--syntax-comment-style, italic);
 }
 
 .hljs-keyword,
 .hljs-selector-tag {
-  color: var(--code-keyword);
+  color: var(--syntax-keyword);
 }
 
 .hljs-string,
 .hljs-regexp,
 .hljs-addition {
-  color: var(--code-string);
+  color: var(--syntax-string);
 }
 
 .hljs-number,
@@ -81,21 +81,21 @@
 .hljs-symbol,
 .hljs-bullet,
 .hljs-variable.constant_ {
-  color: var(--code-number);
+  color: var(--syntax-number);
 }
 
 .hljs-title.function_,
 .hljs-section,
 .hljs-selector-class,
 .hljs-selector-id {
-  color: var(--code-function);
+  color: var(--syntax-function);
 }
 
 .hljs-type,
 .hljs-built_in,
 .hljs-title.class_,
 .hljs-meta {
-  color: var(--code-type);
+  color: var(--syntax-type);
 }
 
 .hljs-tag,
@@ -103,7 +103,7 @@
 .hljs-attr,
 .hljs-attribute,
 .hljs-property {
-  color: var(--code-tag);
+  color: var(--syntax-tag);
 }
 
 .github-page *,
@@ -768,13 +768,36 @@
   tab-size: 2;
 }
 
-/* The numbers set each row's height, so blank lines keep theirs. Sized to the
-   longest line, so a row's background runs the whole scrolled width. */
+/* Sized to the longest line, so a row's background runs the whole scrolled width. */
 .github-preview pre.github-code-file {
   display: grid;
   grid-template-columns: auto minmax(max-content, 1fr);
   align-content: start;
   padding: 10px 0;
+  background: var(--syntax-bg, var(--color-surface-tint));
+  color: var(--syntax-fg, var(--color-text-primary));
+}
+
+.github-preview pre.github-code-file.is-wrapped {
+  grid-template-columns: auto minmax(0, 1fr);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.github-preview pre.github-code-file.no-line-numbers {
+  grid-template-columns: minmax(max-content, 1fr);
+}
+
+.github-preview pre.github-code-file.is-wrapped.no-line-numbers {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.github-code-file.no-line-numbers .github-code-file-no {
+  display: none;
+}
+
+.github-code-file.no-line-numbers .github-code-file-text {
+  padding-left: 14px;
 }
 
 .github-code-file-line {
@@ -785,13 +808,15 @@
   position: sticky;
   left: 0;
   padding: 0 14px 0 12px;
-  background: var(--color-surface-tint);
-  color: var(--color-text-muted);
+  background: var(--syntax-bg, var(--color-surface-tint));
+  color: var(--syntax-gutter, var(--color-text-muted));
   text-align: right;
   user-select: none;
 }
 
+/* The height keeps blank lines when there's no number beside them. */
 .github-code-file-text {
+  min-height: calc(var(--syntax-line-height, 1.5) * 1em);
   padding-right: 14px;
 }
 
@@ -1436,8 +1461,8 @@
 .github-split-hunk {
   grid-column: 1 / -1;
   padding: 2px 12px;
-  background: var(--color-surface-tint);
-  color: var(--color-text-muted);
+  background: var(--syntax-bg, var(--color-surface-tint));
+  color: var(--syntax-gutter, var(--color-text-muted));
   text-align: left;
   white-space: pre-wrap;
   word-break: break-word;
@@ -1652,15 +1677,17 @@
   position: relative;
   padding: 0 8px;
   text-align: right;
-  color: var(--color-text-muted);
-  background: var(--color-surface-tint-cool, transparent);
+  color: var(--syntax-gutter, var(--color-text-muted));
+  background: var(--syntax-bg, var(--color-surface-tint-cool, transparent));
   white-space: nowrap;
   user-select: none;
 }
 
 .github-split-code {
   padding: 0 12px 0 8px;
-  border-left: 1px solid var(--color-border);
+  border-left: 1px solid var(--syntax-border, var(--color-border));
+  background: var(--syntax-bg, transparent);
+  color: var(--syntax-fg, inherit);
   text-align: left;
   white-space: pre-wrap;
   word-break: break-word;
@@ -1668,17 +1695,17 @@
 
 /* The row's background says added or removed; the text keeps its syntax colours. */
 .github-split-code.is-add {
-  background: var(--diff-add-soft, #e6ffec);
+  background: var(--syntax-add-bg, var(--diff-add-soft, #e6ffec));
 }
 
 .github-split-code.is-del {
-  background: var(--diff-del-soft, #ffebe9);
+  background: var(--syntax-del-bg, var(--diff-del-soft, #ffebe9));
 }
 
 /* The blank counterpart of an unpaired add/remove — faintly tinted so the
    eye reads it as "nothing here on this side". */
 .github-split-code.is-empty {
-  background: var(--color-surface-tint, #f6f8fa);
+  background: var(--syntax-bg, var(--color-surface-tint, #f6f8fa));
 }
 
 /* Full-diff fallback — opt-in fetch via the proxy's `?media=diff`
@@ -3129,6 +3156,24 @@
   overflow-x: auto;
 }
 
+/* The choices from Code on the settings page, shared by every code surface. */
+.github-split,
+.github-unified,
+.github-commit-patch,
+.github-preview pre.github-code-file {
+  font-family: var(--syntax-font-family, var(--mono));
+  font-size: var(--syntax-font-size, var(--text-md));
+  font-weight: var(--syntax-font-weight, 400);
+  font-variant-ligatures: var(--syntax-ligatures, none);
+  line-height: var(--syntax-line-height, 1.5);
+  tab-size: var(--syntax-tab-size, 2);
+}
+
+.github-split,
+.github-unified {
+  background: var(--syntax-bg, transparent);
+}
+
 .github-split.is-compact,
 .github-unified.is-compact {
   line-height: 1.2;
@@ -3174,7 +3219,10 @@
 }
 
 .github-code-match {
-  background: var(--diff-edit-soft, #fff8c5);
+  background: var(
+    --diff-edit-soft,
+    color-mix(in srgb, #e3b341 35%, transparent)
+  );
   color: inherit;
   border-radius: 2px;
   outline: 1px solid var(--diff-edit-strong, #9a6700);

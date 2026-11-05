@@ -7,6 +7,7 @@ import {
   type CommitFile,
   type IssueComment,
 } from "./commitDiffData";
+import "./codeSettings";
 import { DEFAULT_DIFF_PREFS, type DiffPrefs } from "./diffPrefs";
 import type { DraftStore } from "./openRepoSession";
 import { FileTypeIcon } from "./FileTypeIcon";

@@ -1,0 +1,77 @@
+.code-settings {
+  text-align: left;
+}
+
+.code-settings-row {
+  gap: 16px;
+  cursor: pointer;
+}
+
+.code-settings-row:last-child {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.code-settings-input {
+  flex: 0 1 220px;
+  min-width: 0;
+  font-weight: 400;
+  cursor: text;
+}
+
+.code-settings-group summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+  cursor: pointer;
+}
+
+.code-settings-summary {
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The chevron, on the right where the summary ends. */
+.code-settings-group summary::after {
+  content: "›";
+  color: var(--color-text-muted);
+  transition: transform 0.15s ease;
+}
+
+.code-settings-group[open] summary::after {
+  transform: rotate(90deg);
+}
+
+.code-settings-preview-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.code-settings-reset {
+  margin-left: auto;
+}
+
+/* Sits on the card rather than filling a pane, as .github-preview otherwise does. */
+.code-settings-preview {
+  margin-top: 8px;
+  max-height: 300px;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+
+.code-settings-preview pre.github-code-file {
+  overflow: visible;
+}

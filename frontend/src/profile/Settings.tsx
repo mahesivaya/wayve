@@ -32,6 +32,7 @@ import { fmtDate, fmtShortDate } from "../utils/datetime";
 import { isDesktopApp } from "../utils/desktop";
 import SettingsShell from "./SettingsShell";
 import AppearanceCard from "./AppearanceCard";
+import CodeSettingsCard from "./CodeSettingsCard";
 import { useIsNarrow } from "../components/useIsNarrow";
 
 type Account = {
@@ -427,6 +428,8 @@ export default function Settings({
 
         {showGeneral && (
           <>
+            <CodeSettingsCard />
+
             {showChatEncrypt && (
               <section className="settings-card">
                 <h2 className="settings-card-title">Privacy</h2>
