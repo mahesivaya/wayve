@@ -1,22 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 
+import { MAC_ARM64_DOWNLOAD, MAC_X64_DOWNLOAD } from "../utils/desktop";
+
 type BuildKey = "mac-arm64" | "mac-x64";
 
-// Installers are hosted on S3 (public-read, Content-Disposition: attachment so
-// they download cross-origin). Shipping a new build is a re-upload to this
-// bucket; no frontend redeploy needed.
-const S3 = "https://fluxze-desktop-downloads.s3.us-east-1.amazonaws.com";
-
+// Installers are public-read with Content-Disposition: attachment so they download
+// cross-origin. Shipping a new build is a re-upload; no frontend redeploy needed.
 const BUILDS: Record<BuildKey, { href: string; label: string; sub: string }> = {
   "mac-arm64": {
-    // The original Fluxze-arm64/x64.dmg objects are write-locked on S3, so
-    // current builds publish under these keys instead.
-    href: `${S3}/Fluxze-mac-arm64.dmg`,
+    href: MAC_ARM64_DOWNLOAD,
     label: "macOS",
     sub: "Apple Silicon",
   },
   "mac-x64": {
-    href: `${S3}/Fluxze-mac-x64.dmg`,
+    href: MAC_X64_DOWNLOAD,
     label: "macOS",
     sub: "Intel",
   },

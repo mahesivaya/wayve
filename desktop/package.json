@@ -1,6 +1,6 @@
 {
   "name": "fluxze-desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Fluxze desktop app — native macOS shell around https://fluxze.com",
   "private": true,
   "author": "Fluxze",
@@ -14,15 +14,23 @@
     "dist:all": "electron-builder -mwl",
     "icon": "node make-icon.cjs"
   },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
   "devDependencies": {
     "@electron/notarize": "^2.5.0",
     "electron": "^33.2.0",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "js-yaml": "^4.1.0"
   },
   "build": {
     "appId": "com.fluxze.desktop",
     "productName": "Fluxze",
     "afterSign": "notarize.cjs",
+    "publish": {
+      "provider": "generic",
+      "url": "https://fluxze-desktop-downloads.s3.us-east-1.amazonaws.com"
+    },
     "files": [
       "main.cjs",
       "preload.cjs",
@@ -41,6 +49,10 @@
       "target": [
         {
           "target": "dmg",
+          "arch": ["arm64", "x64"]
+        },
+        {
+          "target": "zip",
           "arch": ["arm64", "x64"]
         }
       ]

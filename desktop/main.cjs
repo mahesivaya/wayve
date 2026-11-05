@@ -9,7 +9,15 @@
 // Override the target with FLUXZE_URL (e.g. FLUXZE_URL=http://localhost:5173
 // npm start) to point the shell at a local dev server.
 
-const { app, BrowserWindow, Menu, session, shell } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  Menu,
+  session,
+  shell,
+} = require("electron");
+const { autoUpdater } = require("electron-updater");
 const path = require("path");
 
 const APP_URL = process.env.FLUXZE_URL || "https://fluxze.com";
@@ -117,6 +125,45 @@ function injectCancelButton(webContents) {
 
 let mainWindow = null;
 
+// Self-update for the shell itself; web app changes arrive with a deploy. Only a
+// packaged, signed Mac build can replace itself, and a Mac build is all we ship.
+const canAutoUpdate = app.isPackaged && isMac;
+const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
+// The version downloaded and waiting for a restart. It also installs on quit.
+let readyUpdateVersion = null;
+
+function checkForUpdate() {
+  if (!canAutoUpdate) return;
+  // Being offline or the feed being down is not worth telling anyone about: the
+  // next check tries again.
+  autoUpdater.checkForUpdates().catch((err) => {
+    console.warn("update check failed:", err?.message ?? err);
+  });
+}
+
+function setUpAutoUpdate() {
+  // The Google sign-in pages share this window and its preload, so only the
+  // app itself may ask.
+  ipcMain.handle("fluxze:get-ready-update", () => readyUpdateVersion);
+  ipcMain.handle("fluxze:install-update", (event) => {
+    if (readyUpdateVersion && isAppUrl(event.senderFrame?.url ?? "")) {
+      autoUpdater.quitAndInstall();
+    }
+  });
+  if (!canAutoUpdate) return;
+
+  // Without a listener, a failed update would surface as an uncaught exception.
+  autoUpdater.on("error", (err) => {
+    console.warn("update failed:", err?.message ?? err);
+  });
+  autoUpdater.on("update-downloaded", ({ version }) => {
+    readyUpdateVersion = version;
+    mainWindow?.webContents.send("fluxze:update-ready", version);
+  });
+  checkForUpdate();
+  setInterval(checkForUpdate, UPDATE_CHECK_INTERVAL_MS);
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -139,6 +186,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       preload: path.join(__dirname, "preload.cjs"),
+      additionalArguments: [`--fluxze-version=${app.getVersion()}`],
       spellcheck: true,
       // Enable Chromium's built-in PDF viewer so in-app PDF previews (Drive's
       // blob: <iframe>) render inline. With plugins disabled (Electron's
@@ -235,11 +283,12 @@ function offlinePage(detail) {
  * "Update" for this thin shell = reload the live web app, bypassing the HTTP
  * cache so the freshly-deployed index.html (and its new hashed assets) is
  * fetched. Covers every frontend/backend deploy without rebuilding the .dmg.
- * (Only changes to the Electron shell itself need a new installer.)
+ * Also looks for a newer shell, which downloads in the background.
  */
 function reloadLatest() {
   const win = mainWindow ?? BrowserWindow.getFocusedWindow();
   win?.webContents.reloadIgnoringCache();
+  checkForUpdate();
 }
 
 /** A fresh menu-item literal each call (don't share one object across menus). */
@@ -359,6 +408,7 @@ app.whenReady().then(() => {
 
   buildMenu();
   createWindow();
+  setUpAutoUpdate();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

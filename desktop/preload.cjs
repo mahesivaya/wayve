@@ -5,11 +5,26 @@
 
 const { contextBridge, ipcRenderer } = require("electron");
 
+const versionArg = process.argv.find((arg) =>
+  arg.startsWith("--fluxze-version="),
+);
+
 contextBridge.exposeInMainWorld("fluxzeDesktop", {
   isDesktop: true,
-  version: process.env.npm_package_version || "0.1.0",
+  version: versionArg?.split("=")[1] ?? "0.0.0",
   platform: process.platform,
   titleBarInset: process.platform === "darwin",
+  // A newer shell has downloaded and is waiting for a restart. Absent on older
+  // installs, which can't update themselves.
+  update: {
+    getReadyVersion: () => ipcRenderer.invoke("fluxze:get-ready-update"),
+    onReady: (listener) => {
+      const handler = (_event, version) => listener(version);
+      ipcRenderer.on("fluxze:update-ready", handler);
+      return () => ipcRenderer.removeListener("fluxze:update-ready", handler);
+    },
+    install: () => ipcRenderer.invoke("fluxze:install-update"),
+  },
 });
 
 // The DOM is shared with the page, so a class is all the web app's CSS needs.
