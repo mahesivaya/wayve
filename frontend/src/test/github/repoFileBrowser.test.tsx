@@ -156,6 +156,11 @@ describe("the Files tab", () => {
     expect(screen.getByRole("button", { name: "Path copied" })).toBeTruthy();
   });
 
+  it("names the branch picker now that it has no visible label", async () => {
+    await openFilesTab();
+    expect(screen.getByRole("button", { name: "Branch: main" })).toBeTruthy();
+  });
+
   it("remembers the folder", async () => {
     await openFilesTab();
     await userEvent.click(await row(/\.github/));

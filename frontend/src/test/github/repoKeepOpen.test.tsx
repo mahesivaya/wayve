@@ -315,26 +315,20 @@ describe("Code Repo keeps its place", () => {
 
     rememberOpenRepo(USER, 2);
     renderPage();
-    await screen.findByRole("combobox", { name: "Select a repository" });
     expect(
-      (
-        screen.getByRole("combobox", {
-          name: "Select a repository",
-        }) as HTMLSelectElement
-      ).value
-    ).toBe("2");
+      await screen.findByRole("button", {
+        name: /^Select a repository: .*second/,
+      })
+    ).toBeTruthy();
     cleanup();
 
     rememberOpenRepo(USER, 99);
     renderPage();
-    await screen.findByRole("combobox", { name: "Select a repository" });
     expect(
-      (
-        screen.getByRole("combobox", {
-          name: "Select a repository",
-        }) as HTMLSelectElement
-      ).value
-    ).toBe("1");
+      await screen.findByRole("button", {
+        name: /^Select a repository: .*first/,
+      })
+    ).toBeTruthy();
   });
 });
 

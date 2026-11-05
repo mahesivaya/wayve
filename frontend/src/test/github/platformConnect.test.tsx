@@ -4,6 +4,7 @@
 // keep the shared token's list and get no connect control.
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 let mockUser: Record<string, unknown> = {};
@@ -67,6 +68,14 @@ const renderPage = () =>
     </MemoryRouter>
   );
 
+// The list only exists once opened, and only holds the repos once they've loaded.
+const openRepoList = async (repoName: string) => {
+  await userEvent.click(
+    await screen.findByRole("button", { name: /^Select a repository/ })
+  );
+  await screen.findByRole("option", { name: repoName });
+};
+
 describe("platform Code Repo GitHub connect", () => {
   beforeEach(() => {
     listImportableRepos.mockReset();
@@ -104,7 +113,7 @@ describe("platform Code Repo GitHub connect", () => {
       login: "owner-login",
     });
     renderPage();
-    expect(await screen.findByRole("option", { name: "secret" })).toBeTruthy();
+    await openRepoList("secret");
     expect(screen.queryByRole("button", { name: "Disconnect" })).toBeNull();
     expect(screen.queryByText(/@owner-login/)).toBeNull();
     expect(screen.getByRole("option", { name: "shared" })).toBeTruthy();
@@ -113,7 +122,7 @@ describe("platform Code Repo GitHub connect", () => {
   it("keeps other platform roles on the shared list, with no connect", async () => {
     mockUser = { id: 2, scope: "platform", effective_role: "member" };
     renderPage();
-    expect(await screen.findByRole("option", { name: "shared" })).toBeTruthy();
+    await openRepoList("shared");
     expect(
       screen.queryByRole("button", {
         name: "Connect GitHub to import your repos",

@@ -55,6 +55,8 @@ export {
   Smile as EmojiIcon,
   Trash2 as TrashIcon,
   Copy as CopyIcon,
+  GitBranch as GitBranchIcon,
+  BookMarked as RepoIcon,
   ArchiveRestore as RestoreIcon,
   Star as StarIcon,
   Clock as SnoozeIcon,
