@@ -44,6 +44,38 @@
   cursor: not-allowed;
 }
 
+/* Not settings-secondary-btn: Code Repo doesn't load the profile styles. */
+.repo-settings-secondary {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.repo-settings-secondary:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.repo-settings-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.repo-settings-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-accent, #2563eb);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .repo-settings-hint {
   margin: 8px 0;
   color: var(--color-text-muted);
@@ -119,4 +151,40 @@
 
 .repo-settings-remove {
   color: var(--color-danger);
+}
+
+/* Clone or import, on the Code Repo page. */
+.repo-add-tabs {
+  text-align: left;
+}
+
+.repo-add-tablist {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.repo-add-tab {
+  margin-bottom: -1px;
+  padding: 7px 12px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.repo-add-tab.is-active {
+  border-bottom-color: var(--color-primary-action);
+  color: var(--color-text-primary);
+}
+
+@media (max-width: 520px) {
+  /* iOS zooms the whole page into any field smaller than 16px. */
+  .repo-settings-input {
+    font-size: 16px;
+  }
 }

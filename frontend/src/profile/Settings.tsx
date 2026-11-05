@@ -32,7 +32,6 @@ import { fmtDate, fmtShortDate } from "../utils/datetime";
 import { isDesktopApp } from "../utils/desktop";
 import SettingsShell from "./SettingsShell";
 import AppearanceCard from "./AppearanceCard";
-import CodeSettingsCard from "./CodeSettingsCard";
 import { useIsNarrow } from "../components/useIsNarrow";
 
 type Account = {
@@ -428,8 +427,6 @@ export default function Settings({
 
         {showGeneral && (
           <>
-            <CodeSettingsCard />
-
             {/* Narrow screens have no settings rail to reach it from. */}
             {narrow && user?.effective_role !== "guest" && (
               <section className="settings-card">

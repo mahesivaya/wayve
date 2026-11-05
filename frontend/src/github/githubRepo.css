@@ -612,7 +612,6 @@
     width: auto;
     padding: 6px 10px;
   }
-  .github-sidebar .github-repo-switch-form,
   .github-sidebar .github-repo-switch-conn {
     flex: 1 0 100%;
   }
@@ -2620,51 +2619,6 @@
   font-size: var(--text-md);
 }
 
-/* "or import all" alternative below the paste-URL row. */
-.github-add-repo-alt {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.github-add-repo-or {
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.github-add-repo-import-btn {
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  border-radius: 6px;
-  padding: 9px 14px;
-  font-size: var(--text-md);
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.github-add-repo-import-btn:hover:not(:disabled) {
-  background: var(--color-surface-muted, var(--color-surface));
-}
-
-.github-add-repo-import-btn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-/* "Connected as @login · Disconnect" line under the connect/import options. */
-.github-add-repo-conn {
-  margin: 12px 0 0;
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  text-align: center;
-}
-
 @media (max-width: 520px) {
   .github-add-repo {
     width: 100%;
@@ -2672,8 +2626,7 @@
     padding: 20px 16px;
   }
 
-  .github-add-repo-row,
-  .github-add-repo-alt {
+  .github-add-repo-row {
     flex-direction: column;
     align-items: stretch;
   }
@@ -2684,8 +2637,7 @@
     font-size: 16px;
   }
 
-  .github-add-repo-btn,
-  .github-add-repo-import-btn {
+  .github-add-repo-btn {
     white-space: normal;
   }
 }
@@ -2703,18 +2655,6 @@
   width: 100%;
   text-align: center;
   padding: 7px 16px;
-}
-
-.github-repo-switch-form {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-top: 6px;
-  border-top: 1px solid var(--color-border);
-}
-
-.github-repo-switch-form .github-add-repo-error {
-  margin: 0;
 }
 
 /* GitHub account controls inside the repo switcher (import more / disconnect). */

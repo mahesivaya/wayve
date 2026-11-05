@@ -6,12 +6,7 @@ import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import { getAuthToken } from "../auth/token";
 import RepoAccessPanel from "./RepoAccessPanel";
-import {
-  listProjects,
-  createProject,
-  linkProjectRepo,
-  type Project,
-} from "../api/workspace";
+import { listProjects, linkProjectRepo, type Project } from "../api/workspace";
 import {
   approvePullRequest,
   mergePullRequest,
@@ -23,7 +18,6 @@ import {
   listImportableRepos,
   getGithubConnection,
   getGithubConnectUrl,
-  disconnectGithub,
   type GithubConnection,
   type MergeMethod,
 } from "../api/github";
@@ -56,7 +50,9 @@ import {
   rememberRepoView,
   type DraftStore,
 } from "./openRepoSession";
-import { importAllRepos, repoNameFromUrl } from "./repoImport";
+import Modal from "../components/Modal";
+import { AddRepoTabs, type AddRepoTab } from "./AddRepoForms";
+import { importAllRepos } from "./repoImport";
 import { fetchBranches, orderBranches, type Branch } from "./branchList";
 import { SectionNav } from "./SectionNav";
 import { SidebarPicker } from "./SidebarPicker";
@@ -3672,89 +3668,58 @@ function PersonalRepoManager() {
   useEffect(() => {
     if (selectedId !== null) rememberOpenRepo(user?.id, selectedId);
   }, [selectedId, user?.id]);
-  const [adding, setAdding] = useState(false);
-  const [url, setUrl] = useState("");
-  const [busy, setBusy] = useState(false);
+  // The open add dialog's tab, or null while it's closed.
+  const [addTab, setAddTab] = useState<AddRepoTab | null>(null);
   const [err, setErr] = useState("");
   const [importing, setImporting] = useState(false);
   const [importCount, setImportCount] = useState(0);
-  // Null while the connection status is still loading.
-  const [ghConn, setGhConn] = useState<{
-    connected: boolean;
-    login?: string;
-  } | null>(null);
 
-  const refreshConnection = useCallback(() => {
-    void getGithubConnection()
-      .then(setGhConn)
-      .catch(() => setGhConn({ connected: false }));
+  const showAdded = useCallback((created: Project[]) => {
+    setProjects((prev) => [...created, ...(prev ?? [])]);
+    setSelectedId(created[0].id);
+    setAddTab(null);
   }, []);
 
-  const runImport = useCallback((existing: Project[]) => {
-    setImporting(true);
-    setImportCount(0);
-    setErr("");
-    void importAllRepos(existing, setImportCount)
-      .then((created) => {
-        if (created.length === 0) {
-          setErr("No new repositories to import.");
-          return;
-        }
-        setProjects((prev) => [...created, ...(prev ?? [])]);
-        setSelectedId(created[0].id);
-        setAdding(false);
-      })
-      .catch((e) =>
-        setErr(
-          e instanceof Error
-            ? e.message
-            : "Couldn't reach GitHub — check the connection."
+  const runImport = useCallback(
+    (existing: Project[]) => {
+      setImporting(true);
+      setImportCount(0);
+      setErr("");
+      void importAllRepos(existing, setImportCount)
+        .then((created) => {
+          if (created.length === 0) {
+            setErr("No new repositories to import.");
+            return;
+          }
+          showAdded(created);
+        })
+        .catch((e) =>
+          setErr(
+            e instanceof Error
+              ? e.message
+              : "Couldn't reach GitHub — check the connection."
+          )
         )
-      )
-      .finally(() => setImporting(false));
-  }, []);
+        .finally(() => setImporting(false));
+    },
+    [showAdded]
+  );
 
-  // Re-check after the OAuth redirect, which bounces back to
-  // /github#connected=true. A first connect with no repos yet imports them
-  // straight away, so the user lands on their code rather than an empty panel.
+  // Back from the OAuth redirect, which bounces to /github#connected=true. A
+  // first connect with no repos yet imports them straight away, so the user lands
+  // on their code; otherwise they return to picking one to import.
   useEffect(() => {
-    refreshConnection();
     if (window.location.hash.includes("connected=true")) {
       history.replaceState(null, "", window.location.pathname);
       void Promise.all([getGithubConnection(), listProjects()])
         .then(([conn, rows]) => {
-          if (conn.connected && rows.length === 0) runImport(rows);
+          if (!conn.connected) return;
+          if (rows.length === 0) runImport(rows);
+          else setAddTab("import");
         })
         .catch(() => {});
     }
-  }, [refreshConnection, runImport]);
-
-  const connectGithub = () => {
-    setErr("");
-    void getGithubConnectUrl()
-      .then((u) => {
-        window.location.href = u;
-      })
-      .catch((e) =>
-        setErr(
-          e instanceof Error
-            ? e.message
-            : "Couldn't start the GitHub connect flow."
-        )
-      );
-  };
-
-  const disconnect = () => {
-    void disconnectGithub()
-      .then(() => setGhConn({ connected: false }))
-      .catch(() => {});
-  };
-
-  // Adds every accessible repo in one click, instead of pasting URLs one by one.
-  const importAll = () => {
-    if (busy || importing) return;
-    runImport(projects ?? []);
-  };
+  }, [runImport]);
 
   // No synchronous setState here; it would trip react-hooks/set-state-in-effect.
   useEffect(() => {
@@ -3765,24 +3730,6 @@ function PersonalRepoManager() {
       })
       .catch(() => setProjects([]));
   }, [user?.id]);
-
-  const submitAdd = () => {
-    const value = url.trim();
-    if (!value || busy) return;
-    setBusy(true);
-    setErr("");
-    void createProject(repoNameFromUrl(value), value)
-      .then((created) => {
-        setProjects((prev) => (prev ? [created, ...prev] : [created]));
-        setSelectedId(created.id);
-        setUrl("");
-        setAdding(false);
-      })
-      .catch((e) =>
-        setErr(e instanceof Error ? e.message : "Failed to add repository")
-      )
-      .finally(() => setBusy(false));
-  };
 
   const hasRepos = (projects?.length ?? 0) > 0;
 
@@ -3803,39 +3750,10 @@ function PersonalRepoManager() {
       <button
         type="button"
         className="github-add-repo-btn github-repo-switch-add"
-        onClick={() => {
-          setErr("");
-          setUrl("");
-          setAdding((a) => !a);
-        }}
+        onClick={() => setAddTab("clone")}
       >
-        {adding ? "Cancel" : "+ Add"}
+        + Add
       </button>
-      {adding && (
-        <div className="github-repo-switch-form">
-          <input
-            className="github-add-repo-input"
-            type="text"
-            value={url}
-            placeholder="https://github.com/owner/repo"
-            onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submitAdd();
-            }}
-            disabled={busy}
-            autoFocus
-          />
-          <button
-            type="button"
-            className="github-add-repo-btn"
-            onClick={submitAdd}
-            disabled={busy || !url.trim()}
-          >
-            {busy ? "Adding…" : "Add repository"}
-          </button>
-          {err && <p className="github-add-repo-error">{err}</p>}
-        </div>
-      )}
     </div>
   );
 
@@ -3847,67 +3765,20 @@ function PersonalRepoManager() {
         <div className="github-add-repo">
           <h2 className="github-add-repo-title">Add a repository</h2>
           <p className="github-add-repo-help">
-            Paste a public GitHub repository URL to browse its code, commits and
+            Clone by URL or import from GitHub to browse its code, commits and
             Actions here.
           </p>
-          <div className="github-add-repo-row">
-            <input
-              className="github-add-repo-input"
-              type="text"
-              value={url}
-              placeholder="https://github.com/owner/repo"
-              onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submitAdd();
-              }}
-              disabled={busy || importing}
-              autoFocus
-            />
-            <button
-              type="button"
-              className="github-add-repo-btn"
-              onClick={submitAdd}
-              disabled={busy || importing || !url.trim()}
-            >
-              {busy ? "Adding…" : "Add repository"}
-            </button>
-          </div>
-          <div className="github-add-repo-alt">
-            <span className="github-add-repo-or">or</span>
-            {ghConn?.connected ? (
-              <button
-                type="button"
-                className="github-add-repo-import-btn"
-                onClick={importAll}
-                disabled={busy || importing}
-              >
-                {importing
-                  ? `Importing your repositories… (${importCount})`
-                  : "Import all my repositories"}
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="github-add-repo-import-btn"
-                onClick={connectGithub}
-                disabled={busy || ghConn === null}
-              >
-                Connect GitHub to import your repos
-              </button>
-            )}
-          </div>
-          {ghConn?.connected && (
-            <p className="github-add-repo-conn">
-              Connected as @{ghConn.login}
-              {" · "}
-              <button
-                type="button"
-                className="github-link-btn"
-                onClick={disconnect}
-              >
-                Disconnect
-              </button>
+          {importing ? (
+            <p className="github-add-repo-help">
+              Importing your repositories… ({importCount})
             </p>
+          ) : (
+            <AddRepoTabs
+              projects={projects ?? []}
+              isPersonal
+              initialTab={addTab ?? "clone"}
+              onAdded={showAdded}
+            />
           )}
           {err && <p className="github-add-repo-error">{err}</p>}
         </div>
@@ -3917,11 +3788,25 @@ function PersonalRepoManager() {
 
   if (selectedId == null) return null;
   return (
-    <GitHubRepoProject
-      key={selectedId}
-      projectId={selectedId}
-      repoSwitcher={switcher}
-    />
+    <>
+      <GitHubRepoProject
+        key={selectedId}
+        projectId={selectedId}
+        repoSwitcher={switcher}
+      />
+      <Modal
+        isOpen={addTab !== null}
+        onClose={() => setAddTab(null)}
+        title="Add a repository"
+      >
+        <AddRepoTabs
+          projects={projects ?? []}
+          isPersonal
+          initialTab={addTab ?? "clone"}
+          onAdded={showAdded}
+        />
+      </Modal>
+    </>
   );
 }
 
@@ -3936,37 +3821,6 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
     if (selectedId !== null) rememberOpenRepo(user?.id, selectedId);
   }, [selectedId, user?.id]);
   const [adding, setAdding] = useState(false);
-  const [url, setUrl] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  const [importing, setImporting] = useState(false);
-  const [importCount, setImportCount] = useState(0);
-
-  // Owner-only, the same gate as the paste-URL form.
-  const importAll = () => {
-    if (busy || importing) return;
-    setImporting(true);
-    setImportCount(0);
-    setErr("");
-    void importAllRepos(projects ?? [], setImportCount)
-      .then((created) => {
-        if (created.length === 0) {
-          setErr("No new repositories to import.");
-          return;
-        }
-        setProjects((prev) => [...created, ...(prev ?? [])]);
-        setSelectedId(created[0].id);
-        setAdding(false);
-      })
-      .catch((e) =>
-        setErr(
-          e instanceof Error
-            ? e.message
-            : "Couldn't reach GitHub — check the connection."
-        )
-      )
-      .finally(() => setImporting(false));
-  };
 
   useEffect(() => {
     void listProjects()
@@ -3977,24 +3831,10 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
       .catch(() => setProjects([]));
   }, [user?.id]);
 
-  // Creates the org project and links the repo in one owner-gated call. Mirrors
-  // PersonalRepoManager.submitAdd.
-  const submitAdd = () => {
-    const value = url.trim();
-    if (!value || busy) return;
-    setBusy(true);
-    setErr("");
-    void createProject(repoNameFromUrl(value), value)
-      .then((created) => {
-        setProjects((prev) => (prev ? [created, ...prev] : [created]));
-        setSelectedId(created.id);
-        setUrl("");
-        setAdding(false);
-      })
-      .catch((e) =>
-        setErr(e instanceof Error ? e.message : "Failed to add repository")
-      )
-      .finally(() => setBusy(false));
+  const showAdded = (created: Project[]) => {
+    setProjects((prev) => [...created, ...(prev ?? [])]);
+    setSelectedId(created[0].id);
+    setAdding(false);
   };
 
   if (projects === null) {
@@ -4005,7 +3845,7 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
     );
   }
   if (projects.length === 0) {
-    // Owners get the one-step import form; everyone else a read-only hint.
+    // Owners get the add form; everyone else a read-only hint.
     if (!canLink) {
       return (
         <div className="github-page github-empty-state">
@@ -4024,45 +3864,14 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
         <div className="github-add-repo">
           <h2 className="github-add-repo-title">Add a repository</h2>
           <p className="github-add-repo-help">
-            Paste a public GitHub repository URL to create a project and browse
+            Clone by URL or import from GitHub to create a project and browse
             its code, commits and Actions here.
           </p>
-          <div className="github-add-repo-row">
-            <input
-              className="github-add-repo-input"
-              type="text"
-              value={url}
-              placeholder="https://github.com/owner/repo"
-              onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submitAdd();
-              }}
-              disabled={busy || importing}
-              autoFocus
-            />
-            <button
-              type="button"
-              className="github-add-repo-btn"
-              onClick={submitAdd}
-              disabled={busy || importing || !url.trim()}
-            >
-              {busy ? "Adding…" : "Add repository"}
-            </button>
-          </div>
-          <div className="github-add-repo-alt">
-            <span className="github-add-repo-or">or</span>
-            <button
-              type="button"
-              className="github-add-repo-import-btn"
-              onClick={importAll}
-              disabled={busy || importing}
-            >
-              {importing
-                ? `Importing all repositories… (${importCount})`
-                : "Import all repositories"}
-            </button>
-          </div>
-          {err && <p className="github-add-repo-error">{err}</p>}
+          <AddRepoTabs
+            projects={projects}
+            isPersonal={false}
+            onAdded={showAdded}
+          />
         </div>
       </div>
     );
@@ -4083,55 +3892,37 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
         onChange={setSelectedId}
       />
       {canLink && (
-        <>
-          <button
-            type="button"
-            className="github-add-repo-btn github-repo-switch-add"
-            onClick={() => {
-              setErr("");
-              setUrl("");
-              setAdding((a) => !a);
-            }}
-          >
-            {adding ? "Cancel" : "+ Add"}
-          </button>
-          {adding && (
-            <div className="github-repo-switch-form">
-              <input
-                className="github-add-repo-input"
-                type="text"
-                value={url}
-                placeholder="https://github.com/owner/repo"
-                onChange={(e) => setUrl(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") submitAdd();
-                }}
-                disabled={busy}
-                autoFocus
-              />
-              <button
-                type="button"
-                className="github-add-repo-btn"
-                onClick={submitAdd}
-                disabled={busy || !url.trim()}
-              >
-                {busy ? "Adding…" : "Add repository"}
-              </button>
-              {err && <p className="github-add-repo-error">{err}</p>}
-            </div>
-          )}
-        </>
+        <button
+          type="button"
+          className="github-add-repo-btn github-repo-switch-add"
+          onClick={() => setAdding(true)}
+        >
+          + Add
+        </button>
       )}
     </div>
   );
 
   return (
-    <GitHubRepoProject
-      key={selectedId}
-      projectId={selectedId}
-      repoSwitcher={switcher}
-      canLink={canLink}
-    />
+    <>
+      <GitHubRepoProject
+        key={selectedId}
+        projectId={selectedId}
+        repoSwitcher={switcher}
+        canLink={canLink}
+      />
+      <Modal
+        isOpen={adding}
+        onClose={() => setAdding(false)}
+        title="Add a repository"
+      >
+        <AddRepoTabs
+          projects={projects}
+          isPersonal={false}
+          onAdded={showAdded}
+        />
+      </Modal>
+    </>
   );
 }
 
