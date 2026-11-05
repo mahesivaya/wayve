@@ -11,6 +11,7 @@ function LegacyServiceRedirect() {
 
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
+import DesktopUpdateBanner from "./components/DesktopUpdateBanner";
 import RouteErrorBoundary from "./components/RouteErrorBoundary";
 import RequirePricingAccess from "./components/RequirePricingAccess";
 import Register from "./auth/Register";
@@ -149,6 +150,7 @@ export default function App() {
 
   return (
     <RouteErrorBoundary>
+      <DesktopUpdateBanner />
       <Suspense
         fallback={
           <div style={{ padding: 40, textAlign: "center", color: "#6b7280" }}>

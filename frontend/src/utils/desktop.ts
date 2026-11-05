@@ -11,9 +11,28 @@ declare global {
       // This shell hides the native title bar and floats the window controls
       // over the page. Absent on older installs.
       titleBarInset?: boolean;
+      // Absent on installs from before the shell could update itself.
+      update?: {
+        // The version downloaded and waiting for a restart, if any.
+        getReadyVersion: () => Promise<string | null>;
+        // Returns the unsubscribe function.
+        onReady: (listener: (version: string) => void) => () => void;
+        install: () => Promise<void>;
+      };
     };
   }
 }
+
+// Installers are hosted on S3. The original Fluxze-arm64/x64.dmg objects are
+// write-locked, so current builds publish under these keys instead.
+const DOWNLOADS = "https://fluxze-desktop-downloads.s3.us-east-1.amazonaws.com";
+export const MAC_ARM64_DOWNLOAD = `${DOWNLOADS}/Fluxze-mac-arm64.dmg`;
+export const MAC_X64_DOWNLOAD = `${DOWNLOADS}/Fluxze-mac-x64.dmg`;
+
+// Whether the download above is a build that can update itself. Older installs
+// are prompted to get it once, so flip this only after publishing that build, or
+// the prompt sends them to the installer they already have.
+export const SELF_UPDATING_BUILD_PUBLISHED = false;
 
 export function isDesktopApp(): boolean {
   return (
