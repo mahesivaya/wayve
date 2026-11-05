@@ -1157,6 +1157,7 @@ export default function Chat() {
         myUserId={user?.id ?? 0}
         users={visibleUsers}
         channels={visibleChannels}
+        myChannelsByDefault={!isPersonalAccount && !normalizedSearchQuery}
         selectedConversation={selectedConversation}
         creatingChannel={creatingChannel}
         channelName={channelName}
