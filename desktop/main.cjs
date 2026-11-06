@@ -17,6 +17,7 @@ const {
   Notification,
   session,
   shell,
+  systemPreferences,
 } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const path = require("path");
@@ -399,12 +400,32 @@ app.whenReady().then(() => {
 
   // Grant camera/mic (calls), notifications and clipboard reads to fluxze.com;
   // deny everything else.
+  // On macOS, granting "media" here isn't enough: the OS has its own
+  // camera/mic gate, so ask it too. That shows the system "Fluxze would like to
+  // access the microphone" prompt once; the answer lives in System Settings >
+  // Privacy & Security. It needs the device entitlements and usage strings in
+  // package.json / build/entitlements.mac.plist, or macOS denies without asking.
   session.defaultSession.setPermissionRequestHandler(
-    (webContents, permission, callback) => {
+    (webContents, permission, callback, details) => {
       const allowed = ["media", "notifications", "clipboard-read"];
       const ok =
         allowed.includes(permission) && isInWindowUrl(webContents.getURL());
-      callback(ok);
+      if (!ok || permission !== "media" || !isMac) {
+        callback(ok);
+        return;
+      }
+      const types = details.mediaTypes || [];
+      const wanted = [];
+      if (types.includes("audio")) wanted.push("microphone");
+      if (types.includes("video")) wanted.push("camera");
+      (async () => {
+        for (const device of wanted) {
+          if (!(await systemPreferences.askForMediaAccess(device))) return false;
+        }
+        return true;
+      })()
+        .then(callback)
+        .catch(() => callback(false));
     },
   );
 
