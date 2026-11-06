@@ -9,7 +9,10 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-width: min(320px, calc(100vw - 40px));
+  /* Standard toast width (matches .notification-prompt). A fixed width rather
+     than a max keeps the card from shrinking to its content and wrapping the
+     Snooze / Join buttons. */
+  width: min(360px, calc(100vw - 40px));
   pointer-events: none;
 }
 
