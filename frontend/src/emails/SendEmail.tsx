@@ -11,6 +11,7 @@ import {
   type WayveRecipient,
 } from "../api/email";
 import { useAuth } from "../auth/useAuth";
+import { emailBasicEncryptionOnly } from "./emailPolicy";
 import { loadPublicKey } from "../crypto/keyStore";
 import {
   buildInternalEnvelope,
@@ -72,6 +73,7 @@ export default function SendEmail({
   onSent,
 }: SendEmailProps) {
   const { user } = useAuth();
+  const basicOnly = emailBasicEncryptionOnly(user);
   // Which connected mailbox external (SMTP) sends go out from. Defaults to
   // whichever account was active when Compose opened; only surfaced as a
   // picker when there's more than one to choose from (see the From field
@@ -661,162 +663,169 @@ export default function SendEmail({
         }}
       />
 
-      {/* Encryption (optional). No "Standard" radio — leaving both unselected
+      {/* Organization and platform accounts get basic encryption only, so
+          the three encryption options are left out and every send takes the
+          standard path. See emailPolicy.ts. */}
+      {!basicOnly && (
+        <>
+          {/* Encryption (optional). No "Standard" radio — leaving both unselected
           IS standard delivery (a plain email to the recipient's real mailbox).
           Secure send (below) overrides routing, so dim this while it's on. */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 6,
-          padding: 10,
-          border: "1px solid #d1d5db",
-          borderRadius: 6,
-          background: "#f9fafb",
-          fontSize: 13,
-          // Secure send overrides the mode outright; Fluxze-only forces it to
-          // "e2e", so in both cases the radio is not the user's to change.
-          opacity: secureSend || fluxzeOnly ? 0.5 : 1,
-          pointerEvents: secureSend || fluxzeOnly ? "none" : "auto",
-        }}
-      >
-        <span style={{ fontWeight: 600, color: "#374151" }}>
-          Advanced Encryption
-        </span>
-
-        <label
-          style={{
-            display: "flex",
-            alignItems: "flex-start",
-            gap: 8,
-            cursor: "pointer",
-          }}
-        >
-          <input
-            type="checkbox"
-            // A checkbox, not a radio: there is no separate "Standard" option
-            // to belong to a group with — this is a standalone on/off toggle.
-            checked={encryptionMode === "e2e"}
-            onChange={() =>
-              setEncryptionMode((m) => (m === "e2e" ? "standard" : "e2e"))
-            }
-            style={{ marginTop: 2 }}
-          />
-          <span>
-            <strong>🛡️ End-to-End Encryption</strong>
-          </span>
-        </label>
-
-        <small style={{ color: "#6b7280", lineHeight: 1.4 }}>
-          {encryptionMode === "e2e"
-            ? fluxzeOnly
-              ? "Required by Fluxze-only, so it can’t be switched off here."
-              : "Encrypted in your browser — delivered inside Fluxze. Recipients who aren’t on Fluxze get a standard email instead."
-            : "Secured and readable by Gmail and other mail service."}
-        </small>
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 6,
-          padding: 10,
-          border: "1px solid #d1d5db",
-          borderRadius: 6,
-          background: "#f9fafb",
-          fontSize: 13,
-          opacity: secureSend ? 0.5 : 1,
-          pointerEvents: secureSend ? "none" : "auto",
-        }}
-      >
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            cursor: "pointer",
-            fontWeight: 600,
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={fluxzeOnly}
-            onChange={(e) => {
-              setFluxzeOnly(e.target.checked);
-              // Independent of the End-to-End checkbox: `needsLookup` above
-              // already ORs in `fluxzeOnly` directly, so the envelope/lookup
-              // path works whether or not `encryptionMode` is separately set
-              // to "e2e" — no need to force it here.
-              clearBlockingStatus();
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              padding: 10,
+              border: "1px solid #d1d5db",
+              borderRadius: 6,
+              background: "#f9fafb",
+              fontSize: 13,
+              // Secure send overrides the mode outright; Fluxze-only forces it to
+              // "e2e", so in both cases the radio is not the user's to change.
+              opacity: secureSend || fluxzeOnly ? 0.5 : 1,
+              pointerEvents: secureSend || fluxzeOnly ? "none" : "auto",
             }}
-          />
-          <span>🏢 Fluxze-only (never leaves Fluxze)</span>
-        </label>
-        <small style={{ color: "#6b7280", lineHeight: 1.4 }}>
-          {fluxzeOnly
-            ? "Readable only after signing in at fluxze.com. A recipient who isn’t a Fluxze account blocks the send — nothing is emailed to them."
-            : "Readable only inside Fluxze. Blocks the send if any recipient isn’t a Fluxze account, so content can never reach Gmail or another mail service."}
-        </small>
-      </div>
+          >
+            <span style={{ fontWeight: 600, color: "#374151" }}>
+              Advanced Encryption
+            </span>
 
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 6,
-          padding: 10,
-          border: "1px solid #d1d5db",
-          borderRadius: 6,
-          background: "#f9fafb",
-          fontSize: 13,
-        }}
-      >
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            cursor: "pointer",
-            fontWeight: 600,
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={secureSend}
-            onChange={(e) => {
-              setSecureSend(e.target.checked);
-              // Two different channels; letting both claim the send would be
-              // ambiguous, so the newer one yields.
-              if (e.target.checked) setFluxzeOnly(false);
-            }}
-          />
-          <span>🔒 Secure send (end-to-end via Fluxze magic link)</span>
-        </label>
-        {secureSend && (
-          <>
-            <input
-              type="password"
-              placeholder="Passphrase (share with recipient via Signal, SMS, or in person)"
-              value={passphrase}
-              onChange={(e) => setPassphrase(e.target.value)}
-              autoComplete="off"
+            <label
               style={{
-                padding: "8px",
-                borderRadius: 5,
-                border: "1px solid #ccc",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 8,
+                cursor: "pointer",
               }}
-            />
+            >
+              <input
+                type="checkbox"
+                // A checkbox, not a radio: there is no separate "Standard" option
+                // to belong to a group with — this is a standalone on/off toggle.
+                checked={encryptionMode === "e2e"}
+                onChange={() =>
+                  setEncryptionMode((m) => (m === "e2e" ? "standard" : "e2e"))
+                }
+                style={{ marginTop: 2 }}
+              />
+              <span>
+                <strong>🛡️ End-to-End Encryption</strong>
+              </span>
+            </label>
+
             <small style={{ color: "#6b7280", lineHeight: 1.4 }}>
-              The recipient gets a plain email with a link only. They click it
-              and enter this passphrase to decrypt your message in their
-              browser. <strong>Fluxze never sees the passphrase</strong> — if
-              you share it in the same email, you defeat the encryption. Use
-              Signal, SMS, or in-person.
+              {encryptionMode === "e2e"
+                ? fluxzeOnly
+                  ? "Required by Fluxze-only, so it can’t be switched off here."
+                  : "Encrypted in your browser — delivered inside Fluxze. Recipients who aren’t on Fluxze get a standard email instead."
+                : "Secured and readable by Gmail and other mail service."}
             </small>
-          </>
-        )}
-      </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              padding: 10,
+              border: "1px solid #d1d5db",
+              borderRadius: 6,
+              background: "#f9fafb",
+              fontSize: 13,
+              opacity: secureSend ? 0.5 : 1,
+              pointerEvents: secureSend ? "none" : "auto",
+            }}
+          >
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={fluxzeOnly}
+                onChange={(e) => {
+                  setFluxzeOnly(e.target.checked);
+                  // Independent of the End-to-End checkbox: `needsLookup` above
+                  // already ORs in `fluxzeOnly` directly, so the envelope/lookup
+                  // path works whether or not `encryptionMode` is separately set
+                  // to "e2e" — no need to force it here.
+                  clearBlockingStatus();
+                }}
+              />
+              <span>🏢 Fluxze-only (never leaves Fluxze)</span>
+            </label>
+            <small style={{ color: "#6b7280", lineHeight: 1.4 }}>
+              {fluxzeOnly
+                ? "Readable only after signing in at fluxze.com. A recipient who isn’t a Fluxze account blocks the send — nothing is emailed to them."
+                : "Readable only inside Fluxze. Blocks the send if any recipient isn’t a Fluxze account, so content can never reach Gmail or another mail service."}
+            </small>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              padding: 10,
+              border: "1px solid #d1d5db",
+              borderRadius: 6,
+              background: "#f9fafb",
+              fontSize: 13,
+            }}
+          >
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={secureSend}
+                onChange={(e) => {
+                  setSecureSend(e.target.checked);
+                  // Two different channels; letting both claim the send would be
+                  // ambiguous, so the newer one yields.
+                  if (e.target.checked) setFluxzeOnly(false);
+                }}
+              />
+              <span>🔒 Secure send (end-to-end via Fluxze magic link)</span>
+            </label>
+            {secureSend && (
+              <>
+                <input
+                  type="password"
+                  placeholder="Passphrase (share with recipient via Signal, SMS, or in person)"
+                  value={passphrase}
+                  onChange={(e) => setPassphrase(e.target.value)}
+                  autoComplete="off"
+                  style={{
+                    padding: "8px",
+                    borderRadius: 5,
+                    border: "1px solid #ccc",
+                  }}
+                />
+                <small style={{ color: "#6b7280", lineHeight: 1.4 }}>
+                  The recipient gets a plain email with a link only. They click
+                  it and enter this passphrase to decrypt your message in their
+                  browser. <strong>Fluxze never sees the passphrase</strong> —
+                  if you share it in the same email, you defeat the encryption.
+                  Use Signal, SMS, or in-person.
+                </small>
+              </>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Attachments (standard mailbox only — see `forceStandard`). */}
       <input
