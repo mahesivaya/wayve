@@ -14,6 +14,7 @@ const {
   BrowserWindow,
   ipcMain,
   Menu,
+  Notification,
   session,
   shell,
 } = require("electron");
@@ -337,7 +338,7 @@ function buildMenu() {
           click: () => {
             const wc = (mainWindow ?? BrowserWindow.getFocusedWindow())
               ?.webContents;
-            if (wc?.canGoBack()) wc.goBack();
+            if (wc?.navigationHistory.canGoBack()) wc.navigationHistory.goBack();
           },
         },
         {
@@ -346,7 +347,8 @@ function buildMenu() {
           click: () => {
             const wc = (mainWindow ?? BrowserWindow.getFocusedWindow())
               ?.webContents;
-            if (wc?.canGoForward()) wc.goForward();
+            if (wc?.navigationHistory.canGoForward())
+              wc.navigationHistory.goForward();
           },
         },
         { type: "separator" },
@@ -405,6 +407,16 @@ app.whenReady().then(() => {
       callback(ok);
     },
   );
+
+  // Ask macOS for permission to show notifications, so the first launch shows
+  // the standard "Fluxze Notifications: Allow / Don't Allow" prompt like other
+  // Mac apps, instead of waiting for the first alert. Electron 42+ uses Apple's
+  // UNUserNotificationCenter and requests authorization the first time its
+  // notification service starts, which this call does. macOS asks only once per
+  // app; the answer lives in System Settings > Notifications. The prompt needs
+  // a signed app running from an Applications folder; unsigned dev runs
+  // (`npm start`) and builds run from elsewhere are refused without asking.
+  if (isMac) Notification.isSupported();
 
   buildMenu();
   createWindow();
