@@ -46,6 +46,10 @@
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Fluxze uses your microphone for audio and video calls.",
+        "NSCameraUsageDescription": "Fluxze uses your camera for video calls."
+      },
       "target": [
         {
           "target": "dmg",

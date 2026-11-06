@@ -7,6 +7,8 @@ const noop = () => {};
 const IDLE_SESSION: CallSession = {
   callState: { kind: "idle" },
   connected: false,
+  mediaError: null,
+  dismissMediaError: noop,
   startCall: noop,
   acceptCall: noop,
   rejectCall: noop,

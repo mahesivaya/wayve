@@ -44,6 +44,18 @@ export default function CallOverlays({ session }: Props) {
 
   return (
     <>
+      {callState.kind === "idle" && session.mediaError && (
+        <div className="call-banner call-banner-outgoing" role="alert">
+          <div className="call-banner-text">
+            <strong>Call couldn't connect</strong>
+            <span>{session.mediaError}</span>
+          </div>
+          <button className="call-btn" onClick={session.dismissMediaError}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {callState.kind === "incoming" && (
         <div className="call-banner call-banner-incoming" role="alertdialog">
           <div className="call-banner-text">

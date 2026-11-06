@@ -221,6 +221,138 @@ describe("the shared call session", () => {
   });
 });
 
+function Caller() {
+  const { startCall } = useSharedCall();
+  return <button onClick={() => startCall(2, "peer@x.test", "audio")}>call</button>;
+}
+
+describe("starting a call", () => {
+  const getUserMedia = vi.fn();
+  const sentTypes = () =>
+    socket().sent.map((s) => (JSON.parse(s) as { type: string }).type);
+
+  beforeEach(() => {
+    FakeSocket.instances = [];
+    auth.user = { id: 1, email: "me@x.test" };
+    vi.stubGlobal("WebSocket", FakeSocket);
+    vi.stubGlobal("Notification", FakeNotification);
+    getUserMedia.mockReset();
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia },
+    });
+  });
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    delete (navigator as { mediaDevices?: unknown }).mediaDevices;
+  });
+
+  // Holds the permission prompt open until the test resolves it.
+  const pendingPrompt = () => {
+    const stop = vi.fn();
+    let grant: () => void = () => {};
+    getUserMedia.mockReturnValue(
+      new Promise((resolve) => {
+        grant = () => resolve({ getTracks: () => [{ stop }] });
+      })
+    );
+    return { stop, grant: () => act(async () => grant()) };
+  };
+
+  it("asks for the microphone before ringing the peer", async () => {
+    getUserMedia.mockResolvedValue({ getTracks: () => [] });
+    render(
+      <CallProvider>
+        <Caller />
+      </CallProvider>
+    );
+    await act(async () => {
+      screen.getByText("call").click();
+    });
+    expect(getUserMedia).toHaveBeenCalledWith({ audio: true, video: false });
+    expect(sentTypes()).toEqual(["call-invite"]);
+    expect(screen.getByRole("status").textContent).toContain("peer@x.test");
+  });
+
+  it("doesn't ring anyone when the microphone is blocked, and says why", async () => {
+    getUserMedia.mockRejectedValue(
+      new DOMException("denied", "NotAllowedError")
+    );
+    render(
+      <CallProvider>
+        <Caller />
+      </CallProvider>
+    );
+    await act(async () => {
+      screen.getByText("call").click();
+    });
+    expect(sentTypes()).toEqual([]);
+    expect(screen.getByRole("alert").textContent).toContain(
+      "microphone is blocked"
+    );
+    await act(async () => {
+      screen.getByText("Dismiss").click();
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("turns away an incoming call while the prompt is open", async () => {
+    const prompt = pendingPrompt();
+    render(
+      <CallProvider>
+        <Caller />
+      </CallProvider>
+    );
+    await act(async () => {
+      screen.getByText("call").click();
+    });
+    await invite();
+    expect(sentTypes()).toEqual(["call-reject"]);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+
+    await prompt.grant();
+    expect(sentTypes()).toEqual(["call-reject", "call-invite"]);
+  });
+
+  it("drops the call and releases the mic when you log out mid-prompt", async () => {
+    const prompt = pendingPrompt();
+    const { rerender } = render(
+      <CallProvider>
+        <Caller />
+      </CallProvider>
+    );
+    await act(async () => {
+      screen.getByText("call").click();
+    });
+    const first = socket();
+    auth.user = null;
+    rerender(
+      <CallProvider>
+        <Caller />
+      </CallProvider>
+    );
+    await prompt.grant();
+    expect(prompt.stop).toHaveBeenCalled();
+    expect(first.sent).toEqual([]);
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("doesn't open the mic when the call socket is down", async () => {
+    render(
+      <CallProvider>
+        <Caller />
+      </CallProvider>
+    );
+    socket().readyState = FakeSocket.CLOSED;
+    await act(async () => {
+      screen.getByText("call").click();
+    });
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain("Not connected");
+  });
+});
+
 describe("taking back a desktop notification", () => {
   beforeEach(() => {
     FakeNotification.instances = [];

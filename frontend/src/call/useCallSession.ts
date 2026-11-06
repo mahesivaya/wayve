@@ -57,6 +57,9 @@ export type CallState =
 export interface CallSession {
   callState: CallState;
   connected: boolean;
+  // Why the mic/camera couldn't be opened, shown until dismissed or the next try.
+  mediaError: string | null;
+  dismissMediaError: () => void;
   startCall: (peerId: number, peerEmail: string, media: CallMedia) => void;
   acceptCall: () => void;
   rejectCall: () => void;
@@ -75,6 +78,42 @@ export interface CallSession {
 // Outgoing calls auto-cancel after this if the callee never picks up.
 const RING_TIMEOUT_MS = 30_000;
 
+// Triggers the browser's (or macOS's) camera/mic permission prompt.
+// `mediaDevices` is missing outside a secure context (plain http).
+async function requestLocalMedia(media: CallMedia): Promise<MediaStream> {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new DOMException("mediaDevices unavailable", "NotSupportedError");
+  }
+  return navigator.mediaDevices.getUserMedia({
+    audio: true,
+    video: media === "video",
+  });
+}
+
+export function describeMediaError(err: unknown, media: CallMedia): string {
+  const devices = media === "video" ? "camera and microphone" : "microphone";
+  // DOMException isn't an Error subclass in every runtime, so read `name` directly.
+  const name =
+    typeof err === "object" && err !== null && "name" in err
+      ? String((err as { name: unknown }).name)
+      : "";
+  switch (name) {
+    case "NotAllowedError":
+    case "SecurityError":
+      return `Access to your ${devices} is blocked. Allow it in your browser's site settings (on a Mac, also System Settings › Privacy & Security), then try again.`;
+    case "NotFoundError":
+    case "OverconstrainedError":
+      return `No ${devices} found. Connect one and try again.`;
+    case "NotReadableError":
+    case "AbortError":
+      return `Your ${devices} is in use by another app. Close it and try again.`;
+    case "NotSupportedError":
+      return `Calls need a secure (https) connection to use your ${devices}.`;
+    default:
+      return `Couldn't open your ${devices}. Try again.`;
+  }
+}
+
 export function useCallSession(
   myId: number | null,
   myEmail: string | undefined
@@ -90,8 +129,17 @@ export function useCallSession(
   // that arrive early are buffered here and flushed once setRemoteDescription resolves.
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
+  // Set while startCall waits on the permission prompt, so a second click
+  // doesn't start a second call.
+  const startingRef = useRef(false);
+  // Bumped whenever the socket session is torn down (logout, user switch), so a
+  // startCall that was waiting on the prompt knows not to resume.
+  const sessionGenRef = useRef(0);
+
   const [connected, setConnected] = useState(false);
   const [callState, setCallState] = useState<CallState>({ kind: "idle" });
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const dismissMediaError = useCallback(() => setMediaError(null), []);
 
   const sendSignal = useCallback((signal: CallSignal) => {
     const ws = wsRef.current;
@@ -184,12 +232,12 @@ export function useCallSession(
     }
   }, []);
 
+  // The caller already holds a stream from startCall (acquired before ringing);
+  // the callee acquires one here, on Accept.
   const attachLocalMedia = useCallback(
     async (pc: RTCPeerConnection, media: CallMedia) => {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: media === "video",
-      });
+      const stream =
+        localStreamRef.current ?? (await requestLocalMedia(media));
       localStreamRef.current = stream;
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
       if (media === "video" && localVideoRef.current) {
@@ -199,9 +247,36 @@ export function useCallSession(
     []
   );
 
+  // Ask for the mic (and camera) before ringing anyone, so the permission prompt
+  // shows when you press Call, and a blocked device never reaches the peer as a
+  // call that dies the moment they pick up.
   const startCall = useCallback(
-    (peerId: number, peerEmail: string, media: CallMedia) => {
-      if (callState.kind !== "idle") return;
+    async (peerId: number, peerEmail: string, media: CallMedia) => {
+      if (callState.kind !== "idle" || startingRef.current) return;
+      // The invite would be dropped, leaving a dead "Calling…" with the mic on.
+      if (wsRef.current?.readyState !== WebSocket.OPEN) {
+        setMediaError("Not connected to the call service. Try again in a moment.");
+        return;
+      }
+      startingRef.current = true;
+      setMediaError(null);
+      const gen = sessionGenRef.current;
+      let stream: MediaStream;
+      try {
+        stream = await requestLocalMedia(media);
+      } catch (err) {
+        log.error("could not get local media", err);
+        setMediaError(describeMediaError(err, media));
+        return;
+      } finally {
+        startingRef.current = false;
+      }
+      // Logged out (or switched user) while the prompt was open.
+      if (gen !== sessionGenRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      localStreamRef.current = stream;
       setCallState({ kind: "outgoing", peerId, peerEmail, media });
       sendSignal({
         type: "call-invite",
@@ -240,6 +315,10 @@ export function useCallSession(
       });
     } catch (err) {
       log.error("acceptCall failed", err);
+      // getUserMedia rejects with a DOMException; anything else isn't a device issue.
+      if (err instanceof DOMException) {
+        setMediaError(describeMediaError(err, media));
+      }
       sendSignal({ type: "call-reject", to: peerId });
       teardownPeer();
       setCallState({ kind: "idle" });
@@ -298,7 +377,9 @@ export function useCallSession(
 
       switch (signal.type) {
         case "call-invite": {
-          if (callState.kind !== "idle") {
+          // Dialing out (permission prompt open) counts as busy too, or the
+          // resumed startCall would overwrite this incoming call.
+          if (callState.kind !== "idle" || startingRef.current) {
             // Busy: auto-reject so the caller's UI doesn't hang.
             sendSignal({ type: "call-reject", to: from });
             return;
@@ -465,6 +546,7 @@ export function useCallSession(
 
     return () => {
       cancelled = true;
+      sessionGenRef.current += 1;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       wsRef.current?.close();
       teardownPeer();
@@ -490,6 +572,8 @@ export function useCallSession(
   return {
     callState,
     connected,
+    mediaError,
+    dismissMediaError,
     startCall,
     acceptCall,
     rejectCall,
