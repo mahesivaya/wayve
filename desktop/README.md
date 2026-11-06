@@ -45,7 +45,7 @@ change to the shell itself ships as a new build that the app installs itself:
 it downloads in the background and the web app shows "Restart to update".
 
 **[RELEASING.md](RELEASING.md)** covers how this works and every step of a
-release: building, notarizing, publishing to S3, the one-time 0.2.0 rollout,
+release: building, notarizing, publishing to S3, the one-time 0.3.0 rollout,
 testing, rolling back and troubleshooting. Never build a release with
 `--mac dir`; it can't update itself.
 

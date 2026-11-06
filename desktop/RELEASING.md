@@ -11,7 +11,7 @@ Apple developer account and the AWS account.
 - [4. Deploying the website side](#4-deploying-the-website-side)
 - [5. Building and notarizing a release](#5-building-and-notarizing-a-release)
 - [6. Publishing a release](#6-publishing-a-release)
-- [7. The first self-updating release (0.2.0)](#7-the-first-self-updating-release-020)
+- [7. The first self-updating release (0.3.0)](#7-the-first-self-updating-release-030)
 - [8. What people see](#8-what-people-see)
 - [9. Testing an update before going live](#9-testing-an-update-before-going-live)
 - [10. Stopping or undoing a release](#10-stopping-or-undoing-a-release)
@@ -27,7 +27,7 @@ people see in it comes from two places, which ship differently.
 | You changed | Lives in | Ships by | People get it |
 |---|---|---|---|
 | The web app or backend | `frontend/`, `backend/` | A normal production deploy | When the app next loads a page, or with **Check for Updates** (`Cmd + U`). No install. |
-| The window itself: menus, the cancel button on Google pages, which sites stay in the window, the updater | `desktop/` | A new signed and notarized build, uploaded to S3 | Through self-update (section 8). Installs from before 0.2.0 need one manual download. |
+| The window itself: menus, the cancel button on Google pages, which sites stay in the window, the updater | `desktop/` | A new signed and notarized build, uploaded to S3 | Through self-update (section 8). Installs from before 0.3.0 need one manual download. |
 
 Most changes are the first kind. Only follow sections 5–6 when something under
 `desktop/` changed.
@@ -85,6 +85,24 @@ Things worth knowing:
   zip. Keep old zips and blockmaps on S3 for this.
 - **Uploading `latest-mac.yml` is what releases.** Until it changes, no app is
   offered anything, whatever else is in the bucket.
+
+### Notifications
+
+From 0.3.0 the app runs on Electron 42, which shows notifications through
+Apple's `UNUserNotificationCenter`. At launch, `main.cjs` calls
+`Notification.isSupported()`, which asks macOS for permission, so the first
+launch shows the standard **"Fluxze" Notifications: Allow / Don't Allow** prompt
+like other Mac apps.
+
+- macOS asks once per app. The answer lives in System Settings → Notifications,
+  where people can change it.
+- The app can't tell whether someone chose **Don't Allow**: the web page always
+  sees notifications as allowed, and alerts simply don't appear.
+- macOS only grants permission to a **signed** app running from an
+  **Applications folder**. An unsigned run (`npm start`) or a build run from
+  `/tmp` or `dist/` is refused with "Notifications are not allowed for this
+  application", without asking.
+- Electron 42 needs **macOS 12 or newer**. Electron 33 (0.1.0) ran on macOS 11.
 
 ## 3. One-time setup
 
@@ -198,7 +216,12 @@ spctl --assess --type execute -vv dist/mac-arm64/Fluxze.app   # "accepted", "Not
 
 ### Step 6. Make the DMG and the release zip from the notarized app
 
+Delete the zip from step 2 first. The `--prepackaged` build keeps an existing
+zip instead of rebuilding it, so without this the update zip would hold the app
+from before stapling.
+
 ```bash
+rm -f dist/Fluxze-*-arm64-mac.zip* dist/Fluxze-*-arm64.dmg*
 npx electron-builder --mac dmg zip --arm64 \
   --prepackaged dist/mac-arm64/Fluxze.app --publish never
 mv dist/latest-mac.yml dist/latest-mac-arm64.yml
@@ -206,9 +229,15 @@ mv dist/latest-mac.yml dist/latest-mac-arm64.yml
 
 Rename the feed straight away: the next arch's build overwrites
 `dist/latest-mac.yml`. Then check that `dist/latest-mac-arm64.yml` names the new
-version and the zip you just made.
+version and the zip you just made, and that the zip holds the stapled app (it
+lists `Contents/CodeResources`):
 
-Now repeat steps 2–6 with `x64` and `dist/mac/Fluxze.app`.
+```bash
+unzip -l dist/Fluxze-*-arm64-mac.zip | grep -c 'Contents/CodeResources$'   # 1
+```
+
+Now repeat steps 2–6 with `x64` and `dist/mac/Fluxze.app`. For x64 the files to
+delete first are `dist/Fluxze-*-mac.zip*` without `arm64`, and `dist/Fluxze-<v>.dmg*`.
 
 ### Step 7. Combine the feeds
 
@@ -300,13 +329,15 @@ On a Mac with the previous version installed, press `Cmd + U`. The **Update
 ready** banner should appear within a minute or two; click **Restart to update**
 and check **About Fluxze** afterwards.
 
-## 7. The first self-updating release (0.2.0)
+## 7. The first self-updating release (0.3.0)
 
-Installs from before 0.2.0 have no updater, so this release is different once.
+Installs from before 0.3.0 have no updater, so this release is different once.
+0.2.0 was built but never published; 0.3.0 contains all of its changes plus
+Electron 42 and the notification prompt, so nobody ever has 0.2.0.
 
 1. **Deploy the website** with the banner (section 4). Nobody sees anything yet:
    the older-install prompt is off and no update is published.
-2. **Build, notarize and publish 0.2.0** (sections 5 and 6). `latest-mac.yml`
+2. **Build, notarize and publish 0.3.0** (sections 5 and 6). `latest-mac.yml`
    doesn't exist yet, so step 1 of section 6 has nothing to keep.
 3. **Install it yourself** from the website's Download App link and check it.
 4. **Turn on the prompt for older installs.** In
@@ -314,11 +345,12 @@ Installs from before 0.2.0 have no updater, so this release is different once.
    ```ts
    export const SELF_UPDATING_BUILD_PUBLISHED = true;
    ```
-   Commit, merge and deploy (section 4). Never do this before 0.2.0 is on S3,
+   Commit, merge and deploy (section 4). Never do this before 0.3.0 is on S3,
    or the prompt sends people the installer they already have.
 5. People on 0.1.0 now see **Update available** with **Apple Silicon** and
    **Intel** buttons. Each opens the DMG in their browser; they drag Fluxze into
-   Applications, replacing the old one. From then on, updates are automatic.
+   Applications, replacing the old one. On first launch macOS asks about
+   notifications. From then on, updates are automatic.
 
 ## 8. What people see
 
@@ -330,7 +362,8 @@ Installs from before 0.2.0 have no updater, so this release is different once.
 | They click **Restart to update** | The button reads **Restarting…**, the app closes, installs, and reopens on the new version within seconds |
 | They click **Later** | The card hides until the app next starts; the update installs when they quit |
 | Another, newer version arrives after **Later** | The card comes back |
-| They're on a version from before 0.2.0, and the prompt is on | **Update available** card with download buttons, until they install 0.2.0 |
+| They're on a version from before 0.3.0, and the prompt is on | **Update available** card with download buttons, until they install 0.3.0 |
+| First launch of 0.3.0 or later | macOS asks once: **"Fluxze" Notifications — Allow / Don't Allow** |
 | fluxze.com in a normal browser | Nothing, ever |
 
 The card is inside the app window, not a macOS notification, so it shows only
@@ -372,6 +405,33 @@ to update**; it reopens as 9.0.1. Afterwards stop the server and delete
 - Don't click in the test window while a script drives it: a click on **Restart
   to update** makes a test look like the app quit by itself.
 
+**Testing the notification prompt.** Build with a test app id so the real app's
+setting is never touched, copy the app into `~/Applications`, and give it its own
+profile folder:
+
+```bash
+npx electron-builder --mac zip --arm64 --publish never \
+  -c.appId=com.fluxze.desktop.test1 -c.directories.output=/tmp/fluxze-test/out
+ditto /tmp/fluxze-test/out/mac-arm64/Fluxze.app ~/Applications/FluxzeTest1.app
+ELECTRON_DEBUG_NOTIFICATIONS=1 ~/Applications/FluxzeTest1.app/Contents/MacOS/Fluxze \
+  --user-data-dir=/tmp/fluxze-test/profile
+```
+
+The terminal prints `Notification authorization granted: 1` after **Allow**.
+
+- macOS asks only once per app id; use a new id (`test2`, …) to see the prompt
+  again.
+- Run from `~/Applications`, not from `/tmp` or `dist/`, or macOS refuses
+  without asking.
+- Without `--user-data-dir`, a test build shares
+  `~/Library/Application Support/Fluxze` with the installed app: only one of the
+  two can run, and a newer Electron upgrades the profile the installed app reads.
+- VS Code's terminal sets `ELECTRON_RUN_AS_NODE=1`, which makes the app start as
+  plain Node (`bad option: …`). Unset it, or use Terminal.
+- If signing fails in a terminal ("Above command failed, retrying"), look for a
+  keychain dialog asking to let `codesign` use the key and choose **Always
+  Allow**, or unlock the keychain with `security unlock-keychain`.
+
 ## 10. Stopping or undoing a release
 
 **Stop a rollout** that isn't finished, so copies that haven't updated aren't
@@ -386,7 +446,7 @@ Also put the previous DMGs back under `Fluxze-mac-arm64.dmg` and
 `Fluxze-mac-x64.dmg` if the new ones are bad.
 
 **Copies that already updated stay on it.** The updater never moves to a lower
-version. Fix forward: release a higher version (for example `0.2.2`) with the fix.
+version. Fix forward: release a higher version (for example `0.3.1`) with the fix.
 
 **Copies that downloaded but haven't restarted** install it when they quit. They
 can't be called back; the fix-forward release replaces it.
@@ -414,7 +474,9 @@ in `~/Library/Caches/fluxze-desktop-updater/pending/`.
 | Finds nothing although you uploaded a release | Its version isn't higher, or a cached feed | Check `version:` in the live feed; upload it with `--cache-control no-cache` |
 | Error about the code signature, or the update is rejected | The update was signed with a different identity, or not signed | Build on the Mac with the Developer ID certificate; check with `codesign --verify` |
 | Install fails | The app is running from the DMG, or from a folder the user can't write to | Move Fluxze into Applications |
-| The banner never shows, but the log says it downloaded | The installed app is from before 0.2.0, or the website without the banner is deployed | Check **About Fluxze**; deploy the website (section 4) |
+| The banner never shows, but the log says it downloaded | The installed app is from before 0.3.0, or the website without the banner is deployed | Check **About Fluxze**; deploy the website (section 4) |
+| No notification prompt, and notifications never appear | Someone chose **Don't Allow**, or the app isn't in an Applications folder or isn't signed | System Settings → Notifications → Fluxze; move the app into Applications |
+| `Error requesting notification authorization: Notifications are not allowed for this application` (with `ELECTRON_DEBUG_NOTIFICATIONS=1`) | Running from outside an Applications folder, unsigned, or denied earlier | Section 9, "Testing the notification prompt" |
 | `Cannot download differentially, fallback to full download` | The previous version's blockmap isn't on S3 | Harmless; keep zips and blockmaps on S3 from now on |
 | macOS says Fluxze "is damaged" after downloading the DMG | The app wasn't notarized or stapled | Section 5, steps 3–5 |
 | Notarization submission vanished, or stays In Progress | An interrupted upload | Submit again with `--no-s3-acceleration`; trust only "Successfully uploaded file" |
@@ -449,14 +511,18 @@ account `339713009139`, bucket `fluxze-desktop-downloads`, region `us-east-1`.
 
 ## 13. Not yet proven
 
-As of 0.2.0 (November 2026), the updater has been tested end to end only with
-locally signed Apple Silicon builds and a feed on localhost (section 9). Not yet
-exercised:
+As of 0.3.0 (November 2026), the updater has been tested end to end only with
+locally signed Apple Silicon builds on Electron 33 and a feed on localhost
+(section 9). The Electron 42 notification prompt has been tested with locally
+signed Apple Silicon builds run from `~/Applications`. Not yet exercised:
 
 - The notarize-then-`--prepackaged` path in section 5, and whether its
   `latest-mac.yml` comes out as expected.
 - An Intel Mac updating.
 - An update served from S3, including whether new uploads are public by default.
 - The **Update available** prompt on a real 0.1.0 install.
+- An update from an Electron 42 build to the next one, and Google sign-in,
+  calls and PDF previews on Electron 42.
+- The notification prompt on a notarized build installed from the DMG.
 
-Check each of these on the 0.2.0 release, and update this section afterwards.
+Check each of these on the 0.3.0 release, and update this section afterwards.
