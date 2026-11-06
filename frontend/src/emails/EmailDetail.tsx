@@ -902,17 +902,6 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
                 >
                   Mark as Noise
                 </button>
-                {["test2", "test3"].map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    role="menuitem"
-                    className="email-detail-more-item"
-                    onClick={() => setMoreOpen(false)}
-                  >
-                    {item}
-                  </button>
-                ))}
               </div>
             )}
           </div>
