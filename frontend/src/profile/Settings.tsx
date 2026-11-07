@@ -5,6 +5,7 @@ import "./profile.css";
 
 import { deleteAccount, getAccounts } from "../api/email";
 import {
+  getOrganizationBilling,
   getSubscription,
   listInvoices,
   type SubscriptionResponse,
@@ -32,6 +33,8 @@ import { fmtDate, fmtShortDate } from "../utils/datetime";
 import { isDesktopApp } from "../utils/desktop";
 import SettingsShell from "./SettingsShell";
 import AppearanceCard from "./AppearanceCard";
+import Billing from "../billing/Billing";
+import { planName } from "../billing/planCatalog";
 import { useIsNarrow } from "../components/useIsNarrow";
 
 type Account = {
@@ -129,6 +132,7 @@ export default function Settings({
   const [subscription, setSubscription] = useState<SubscriptionResponse | null>(
     null
   );
+  const [orgPlanCode, setOrgPlanCode] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
@@ -344,6 +348,17 @@ export default function Settings({
       setAccounts(accs);
       setProfile(prof);
       setSubscription(sub);
+      // An organization on its free tier has no subscription row; its plan
+      // lives on the org billing record. Best effort — without it the card
+      // falls back to a generic "Free".
+      if (sub.owner_type === "organization" && !sub.subscription) {
+        try {
+          const org = await getOrganizationBilling();
+          setOrgPlanCode(org.plan_code);
+        } catch {
+          setOrgPlanCode(null);
+        }
+      }
     } finally {
       setLoaded(true);
     }
@@ -630,7 +645,10 @@ export default function Settings({
               <div className="settings-usage-row">
                 <span>Current Plan</span>
                 <strong>
-                  {subscription?.subscription?.plan_name ?? "Basic User Free"}
+                  {subscription?.subscription?.plan_name ??
+                    (subscription?.owner_type === "organization"
+                      ? planName(orgPlanCode)
+                      : "Basic User Free")}
                 </strong>
               </div>
               <div className="settings-usage-row">
@@ -711,6 +729,12 @@ export default function Settings({
             )}
           </section>
         )}
+
+        {/* The full plan picker (/billing), so plans can be compared and
+          changed without leaving Settings. Only on the Billing entry itself,
+          not on the narrow-screen General page that stacks every card. It
+          applies its own org-role access check. */}
+        {section === "billing" && !isPlatformUser && <Billing embedded />}
 
         {showGeneral && (
           <>
