@@ -1,0 +1,514 @@
+import { useNavigate } from "react-router-dom";
+import { useEffect, useState, type KeyboardEvent } from "react";
+import { useAuth } from "../auth/useAuth";
+import { hasPermission } from "../auth/permissions";
+import { useGlobalSearch } from "../search/SearchContext";
+import { matchesTileSearch } from "../search/tileSearch";
+import { getUsersSummary, type UsersSummary } from "../api/platformTeam";
+import { listAdminOrganizations, type AdminOrganization } from "../api/admin";
+import {
+  getPlatformBillingOverview,
+  type PlatformBillingOverview,
+} from "../api/platformBilling";
+import { adminListPlans } from "../api/billing";
+import { listPlatformMembers } from "../api/rbac";
+import { adminListTickets } from "../api/support";
+import { listApiKeys } from "../api/apiKeys";
+import { listAuditLogs } from "../api/audit";
+import { listScimTokens } from "../api/scim";
+import { getAiUsage, type AiUsage } from "../api/aiProvider";
+import { getApiCatalogue } from "../api/openapi";
+import { formatBytes } from "../utils/bytes";
+import "./admin-ui.css";
+import "./platformAdmin.css";
+
+type CardStat = { value: string; label: string };
+
+function fmtMoney(cents: number, currency = "USD"): string {
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
+}
+
+// `visible` is UI gating only, never authorization: the backend re-checks every
+// call. Cards the user can't see are filtered out before render.
+type ConsoleCard = {
+  key: string;
+  label: string;
+  description: string;
+  path: string;
+  visible: boolean;
+};
+
+// The platform console cards (Users, Business, Enterprise, Billing, Plans, API,
+// …) with their headline stats. Shown on the Analytics page; each card opens
+// its own console.
+export default function PlatformConsoleCards() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { searchQuery, normalizedSearchQuery } = useGlobalSearch();
+  const canManageMembers = hasPermission(user, "members:manage");
+  const canManageApiKeys = hasPermission(user, "api_keys:manage");
+  const canReadMembers = hasPermission(user, "members:read");
+  const canSeePlatformBilling =
+    hasPermission(user, "billing:read") ||
+    hasPermission(user, "billing:manage");
+  const canSeeAnalytics = hasPermission(user, "members:read");
+  const canSeeOrganizations = canManageMembers || canManageApiKeys;
+  const canSeeScim = hasPermission(user, "webhooks:manage");
+  const canManagePlans = hasPermission(user, "billing:manage");
+  // AI usage is a platform-owner-only endpoint (`require_ai_owner` gates it to
+  // the platform Owner), so mirror that gate for the card. UI gating only.
+  const canSeeAiUsage =
+    (user?.scope === "platform" || user?.account_type === "platform_admin") &&
+    user?.effective_role === "owner";
+  // The endpoint catalogue is the platform's own surface area — visible to
+  // platform staff, and gated the same way by the page itself.
+  const canSeeApis = user?.scope === "platform";
+
+  const [usersSummary, setUsersSummary] = useState<UsersSummary | null>(null);
+  // The Business and Enterprise cards both aggregate this admin-org list.
+  const [orgs, setOrgs] = useState<AdminOrganization[] | null>(null);
+  const [billing, setBilling] = useState<PlatformBillingOverview | null>(null);
+  const [plansCount, setPlansCount] = useState<number | null>(null);
+  const [membersCount, setMembersCount] = useState<number | null>(null);
+  const [ticketsCount, setTicketsCount] = useState<number | null>(null);
+  const [apiKeysCount, setApiKeysCount] = useState<number | null>(null);
+  const [auditCount, setAuditCount] = useState<number | null>(null);
+  const [scimCount, setScimCount] = useState<number | null>(null);
+  const [aiUsage, setAiUsage] = useState<AiUsage | null>(null);
+  const [endpointCount, setEndpointCount] = useState<number | null>(null);
+
+  const canSeeOrgStats = canManageMembers || canManageApiKeys;
+  const canSeeBilling =
+    hasPermission(user, "billing:read") ||
+    hasPermission(user, "billing:manage");
+  const canManagePlansPerm = hasPermission(user, "billing:manage");
+  const canManageTickets = hasPermission(user, "tickets:manage");
+  const canReadAudit = hasPermission(user, "audit:read");
+
+  useEffect(() => {
+    if (!canReadMembers) return;
+    let cancelled = false;
+    getUsersSummary()
+      .then((s) => {
+        if (!cancelled) setUsersSummary(s);
+      })
+      .catch(() => {
+        if (!cancelled) setUsersSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canReadMembers]);
+
+  useEffect(() => {
+    if (!canSeeOrgStats) return;
+    let cancelled = false;
+    listAdminOrganizations()
+      .then((items) => {
+        if (!cancelled) setOrgs(items);
+      })
+      .catch(() => {
+        if (!cancelled) setOrgs(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canSeeOrgStats]);
+
+  useEffect(() => {
+    if (!canSeeBilling) return;
+    let cancelled = false;
+    getPlatformBillingOverview()
+      .then((o) => {
+        if (!cancelled) setBilling(o);
+      })
+      .catch(() => {
+        if (!cancelled) setBilling(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canSeeBilling]);
+
+  useEffect(() => {
+    if (!canManagePlansPerm) return;
+    let cancelled = false;
+    adminListPlans()
+      .then((plans) => {
+        if (!cancelled) setPlansCount(plans.length);
+      })
+      .catch(() => {
+        if (!cancelled) setPlansCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canManagePlansPerm]);
+
+  useEffect(() => {
+    if (!canReadMembers) return;
+    let cancelled = false;
+    listPlatformMembers()
+      .then((m) => !cancelled && setMembersCount(m.length))
+      .catch(() => !cancelled && setMembersCount(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [canReadMembers]);
+
+  useEffect(() => {
+    if (!canManageTickets) return;
+    let cancelled = false;
+    adminListTickets()
+      .then((t) => !cancelled && setTicketsCount(t.length))
+      .catch(() => !cancelled && setTicketsCount(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [canManageTickets]);
+
+  useEffect(() => {
+    if (!canManageApiKeys) return;
+    let cancelled = false;
+    listApiKeys()
+      .then((k) => !cancelled && setApiKeysCount(k.length))
+      .catch(() => !cancelled && setApiKeysCount(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [canManageApiKeys]);
+
+  // Counts the endpoints the API card advertises. The spec is served with an
+  // ETag and a 5-minute cache, so this is a cheap conditional request.
+  useEffect(() => {
+    if (!canSeeApis) return;
+    let cancelled = false;
+    getApiCatalogue()
+      .then((c) => !cancelled && setEndpointCount(c.endpoints.length))
+      .catch(() => !cancelled && setEndpointCount(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [canSeeApis]);
+
+  useEffect(() => {
+    if (!canReadAudit) return;
+    let cancelled = false;
+    listAuditLogs({ limit: 500 })
+      .then((rows) => !cancelled && setAuditCount(rows.length))
+      .catch(() => !cancelled && setAuditCount(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [canReadAudit]);
+
+  useEffect(() => {
+    if (!canSeeAiUsage) return;
+    let cancelled = false;
+    getAiUsage()
+      .then((u) => !cancelled && setAiUsage(u))
+      .catch(() => !cancelled && setAiUsage(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [canSeeAiUsage]);
+
+  useEffect(() => {
+    if (!canSeeScim) return;
+    let cancelled = false;
+    listScimTokens()
+      .then((t) => !cancelled && setScimCount(t.length))
+      .catch(() => !cancelled && setScimCount(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [canSeeScim]);
+
+  const tierTotals = (list: AdminOrganization[]) =>
+    list.reduce(
+      (acc, o) => ({
+        members: acc.members + (o.user_count ?? 0),
+        storage: acc.storage + (o.storage_used_bytes ?? 0),
+        emailAccounts: acc.emailAccounts + (o.email_account_count ?? 0),
+      }),
+      { members: 0, storage: 0, emailAccounts: 0 }
+    );
+
+  // This split must match the one on the two dedicated pages.
+  const businessOrgs = (orgs ?? []).filter((o) => o.tier !== "enterprise");
+  const enterpriseOrgs = (orgs ?? []).filter((o) => o.tier === "enterprise");
+  const businessTotals = tierTotals(businessOrgs);
+  const enterpriseTotals = tierTotals(enterpriseOrgs);
+
+  // Null until that card's data loads, in which case the card falls back to its
+  // description.
+  const statsForCard = (key: string): CardStat[] | null => {
+    if (key === "users" && usersSummary) {
+      return [
+        {
+          value: usersSummary.users_total.toLocaleString(),
+          label: "Total users",
+        },
+        {
+          value: formatBytes(usersSummary.storage_used_bytes),
+          label: "Memory used",
+        },
+        { value: usersSummary.emails_total.toLocaleString(), label: "Emails" },
+        {
+          value: `+${usersSummary.users_new_1m.toLocaleString()}`,
+          label: "New this month",
+        },
+      ];
+    }
+    if (key === "business" && orgs) {
+      return [
+        { value: businessOrgs.length.toLocaleString(), label: "Businesses" },
+        { value: businessTotals.members.toLocaleString(), label: "Members" },
+        { value: formatBytes(businessTotals.storage), label: "Memory used" },
+        {
+          value: businessTotals.emailAccounts.toLocaleString(),
+          label: "Email accounts",
+        },
+      ];
+    }
+    if (key === "enterprise" && orgs) {
+      return [
+        { value: enterpriseOrgs.length.toLocaleString(), label: "Enterprises" },
+        { value: formatBytes(enterpriseTotals.storage), label: "Memory used" },
+        {
+          value: enterpriseTotals.emailAccounts.toLocaleString(),
+          label: "Email accounts",
+        },
+      ];
+    }
+    if (key === "billing" && billing) {
+      return [
+        { value: fmtMoney(billing.mrr_cents, billing.currency), label: "MRR" },
+        {
+          value: fmtMoney(billing.paid_invoices_30d_cents, billing.currency),
+          label: "Paid (30d)",
+        },
+        {
+          value: (
+            billing.active_user_subscriptions +
+            billing.active_organization_subscriptions
+          ).toLocaleString(),
+          label: "Active subscriptions",
+        },
+      ];
+    }
+    if (key === "plans" && plansCount != null) {
+      return [{ value: plansCount.toLocaleString(), label: "Plans" }];
+    }
+    if (key === "members" && membersCount != null) {
+      return [{ value: membersCount.toLocaleString(), label: "Members" }];
+    }
+    if (key === "support" && ticketsCount != null) {
+      return [{ value: ticketsCount.toLocaleString(), label: "Tickets" }];
+    }
+    if (key === "developer" && apiKeysCount != null) {
+      return [{ value: apiKeysCount.toLocaleString(), label: "API keys" }];
+    }
+    if (key === "api") {
+      const stats: CardStat[] = [];
+      if (endpointCount != null) {
+        stats.push({
+          value: endpointCount.toLocaleString(),
+          label: "Endpoints",
+        });
+      }
+      if (apiKeysCount != null) {
+        stats.push({ value: apiKeysCount.toLocaleString(), label: "API keys" });
+      }
+      return stats.length > 0 ? stats : null;
+    }
+    if (key === "security" && auditCount != null) {
+      return [
+        {
+          value: auditCount >= 500 ? "500+" : auditCount.toLocaleString(),
+          label: "Recent events",
+        },
+      ];
+    }
+    if (key === "scim" && scimCount != null) {
+      return [{ value: scimCount.toLocaleString(), label: "SCIM tokens" }];
+    }
+    if (key === "ai" && aiUsage) {
+      const { input_tokens, output_tokens } = aiUsage.totals;
+      return [
+        {
+          value: (input_tokens + output_tokens).toLocaleString(),
+          label: "Total tokens (30d)",
+        },
+        { value: input_tokens.toLocaleString(), label: "Input tokens" },
+        { value: output_tokens.toLocaleString(), label: "Output tokens" },
+      ];
+    }
+    return null;
+  };
+
+  const consoles: ConsoleCard[] = [
+    {
+      key: "users",
+      label: "Users",
+      description:
+        "Browse the total number of users registered on the platform.",
+      path: "/platform/users",
+      visible: canSeeAnalytics,
+    },
+    {
+      key: "business",
+      label: "Business",
+      description:
+        "Create tenants, browse existing business organizations and manage their API keys.",
+      path: "/platform/organizations",
+      visible: canSeeOrganizations,
+    },
+    {
+      key: "enterprise",
+      label: "Enterprise",
+      description: "Browse all enterprises provisioned on the platform.",
+      path: "/platform/enterprise",
+      visible: canSeeOrganizations,
+    },
+    {
+      key: "billing",
+      label: "Billing",
+      description: "Revenue, customer subscriptions, invoices and payroll.",
+      path: "/platform/billing",
+      visible: canSeePlatformBilling,
+    },
+    {
+      key: "plans",
+      label: "Plans & pricing",
+      description:
+        "Create, edit and deactivate the plans shown on /pricing. Set price, storage, notes and Stripe price IDs.",
+      path: "/settings/plans",
+      visible: canManagePlans,
+    },
+    {
+      key: "api",
+      label: "API",
+      description:
+        "Every endpoint the platform publishes, grouped by area with its required scope.",
+      path: "/platform/api",
+      visible: canSeeApis,
+    },
+    {
+      key: "scim",
+      label: "SCIM provisioning",
+      description: "Mint bearer tokens so Okta / Entra can provision users.",
+      path: "/settings/scim",
+      visible: canSeeScim,
+    },
+    {
+      key: "ai",
+      label: "AI usage",
+      description:
+        "Claude API token consumption over the last 30 days, by member and by model.",
+      path: "/settings/ai/usage",
+      visible: canSeeAiUsage,
+    },
+  ];
+
+  // Explicit row layout, one inner array per row. Cards not named below flow
+  // into trailing rows of up to three. Filtering happens before rows are laid
+  // out, so hidden and unmatched cards drop out and empty rows are skipped.
+  const permitted = consoles.filter((c) => c.visible);
+  const matched = permitted.filter((c) =>
+    matchesTileSearch(normalizedSearchQuery, c.label, c.description)
+  );
+  const byKey = new Map(matched.map((c) => [c.key, c]));
+  const ROW_KEYS: string[][] = [
+    ["users", "business", "enterprise"],
+    ["billing", "plans"],
+    ["api", "members", "support", "developer"],
+  ];
+  const namedKeys = new Set(ROW_KEYS.flat());
+
+  const rows: ConsoleCard[][] = ROW_KEYS.map((keys) =>
+    keys.map((k) => byKey.get(k)).filter((c): c is ConsoleCard => Boolean(c))
+  ).filter((row) => row.length > 0);
+
+  const remaining = matched.filter((c) => !namedKeys.has(c.key));
+  for (let i = 0; i < remaining.length; i += 3) {
+    rows.push(remaining.slice(i, i + 3));
+  }
+
+  const hasAnyConsole = permitted.length > 0;
+  const noSearchMatches = hasAnyConsole && rows.length === 0;
+
+  // Makes the article behave like a button for keyboard and screen-reader users.
+  // preventDefault on Space stops the page from scrolling.
+  const handleCardKeyDown = (
+    event: KeyboardEvent<HTMLElement>,
+    path: string
+  ) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      void navigate(path);
+    }
+  };
+
+  return (
+    <>
+      {noSearchMatches && (
+        <section className="platform-admin-panel u-panel">
+          <p className="platform-admin-empty">
+            Nothing here matches “{searchQuery.trim()}”.
+          </p>
+        </section>
+      )}
+
+      {hasAnyConsole && !noSearchMatches && (
+        <section className="platform-admin-panel u-panel">
+          <div className="platform-console-rows">
+            {rows.map((row, rowIdx) => (
+              <div
+                key={rowIdx}
+                className={`organization-name-list platform-console-list platform-console-row platform-console-row--${row.length}`}
+              >
+                {row.map((c) => (
+                  <article
+                    key={c.path}
+                    className="u-card-interactive"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Open ${c.label}`}
+                    onClick={() => navigate(c.path)}
+                    onKeyDown={(event) => handleCardKeyDown(event, c.path)}
+                  >
+                    <strong>{c.label}</strong>
+                    {(() => {
+                      const stats = statsForCard(c.key);
+                      return stats ? (
+                        <div className="platform-card-stats">
+                          {stats.map((s) => (
+                            <div className="platform-card-stat" key={s.label}>
+                              <span className="platform-card-stat-value">
+                                {s.value}
+                              </span>
+                              <span className="platform-card-stat-label">
+                                {s.label}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <span>{c.description}</span>
+                      );
+                    })()}
+                  </article>
+                ))}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </>
+  );
+}
