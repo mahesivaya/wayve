@@ -11,6 +11,8 @@ import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import { SupportSummary, getSupportSummary } from "../api/platformTeam";
 import { fmtDate } from "../utils/datetime";
+import UserStoriesSummaryCard from "../organization/UserStoriesSummaryCard";
+import PlatformConsoleCards from "../organization/PlatformConsoleCards";
 import "./platformTeam.css";
 
 const AppLogs = lazy(() => import("./PlatformLogs"));
@@ -72,6 +74,14 @@ export default function PlatformAnalytics() {
       </header>
 
       {error && <div className="pt-banner">{error}</div>}
+
+      {/* Sprint chart and console cards, moved here from the platform home. */}
+      <div className="platform-admin-home">
+        <section className="platform-admin-panel u-panel">
+          <UserStoriesSummaryCard />
+        </section>
+        <PlatformConsoleCards />
+      </div>
 
       <div className="pt-log-blocks">
         <LogBlock title="Overview" defaultOpen>
