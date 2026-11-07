@@ -346,6 +346,23 @@
 /* Desktop shell with no native title bar (macOS): the header is the title bar,
    with the window controls floating over its left end and the toggle right next
    to them. Border-box keeps the brand lined up with the sidebar below it. */
+/* Thinner than the web header. 32px is the tallest thing in it (the split
+   button), so nothing is cropped. */
+html.is-titlebar-inset .header {
+  height: 32px;
+}
+
+/* The native window controls are 14pt circles placed 11pt from the top
+   (trafficLightPosition in desktop/main.cjs), so their centre is 18pt down,
+   2pt below the 32px header's centre. Drop the toggle beside them by the same
+   2pt so it lines up with them. Full screen hides the controls, so there it
+   stays centred in the bar. */
+html.is-titlebar-inset:not(.is-fullscreen) .header-brand .header-collapse-btn,
+html.is-titlebar-inset:not(.is-fullscreen) .header-brand .sidebar-toggle-btn {
+  position: relative;
+  top: 2px;
+}
+
 html.is-titlebar-inset .header-brand {
   box-sizing: border-box;
   min-width: max-content;
