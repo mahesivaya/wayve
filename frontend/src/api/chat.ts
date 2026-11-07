@@ -65,6 +65,9 @@ export type ChatUser = {
   id: number;
   email: string;
   public_key?: number[] | null;
+  // Set by the exact-email lookup only: false when the scope rules forbid a DM
+  // with this person (see directory_scope::dm_allowed on the backend).
+  can_message?: boolean;
 };
 
 // Reactions are NOT end-to-end encrypted (message content is): they are

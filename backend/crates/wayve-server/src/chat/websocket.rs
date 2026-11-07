@@ -550,41 +550,29 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                     };
 
                     let fut = async move {
-                        // Tenant isolation: a DM is allowed only between accounts
-                        // sharing a scope. User ids are guessable, so the boundary
-                        // cannot live in the people-picker alone.
-                        let same_scope = sqlx::query_scalar::<_, bool>(
-                            r#"
-                            SELECT COALESCE(
-                                (s.account_type = 'personal'
-                                    AND r.account_type = 'personal')
-                             OR (s.account_type = 'platform_admin'
-                                    AND r.account_type = 'platform_admin')
-                             OR (s.account_type IN ('organization', 'organization_admin')
-                                    AND r.account_type IN ('organization', 'organization_admin')
-                                    AND s.organization_id = r.organization_id),
-                            false)
-                            FROM
-                                (SELECT account_type, organization_id
-                                   FROM users WHERE id = $1) s,
-                                (SELECT account_type, organization_id
-                                   FROM users WHERE id = $2) r
-                            "#,
-                        )
+                        // Tenant isolation: who may DM whom is the shared rule
+                        // in directory_scope::dm_allowed (same scope, plus
+                        // platform support ↔ personal and organization admins).
+                        // User ids are guessable, so the boundary cannot live in
+                        // the people-picker alone.
+                        let allowed = sqlx::query_scalar::<_, bool>(&format!(
+                            "SELECT COALESCE((SELECT {rule} FROM users s, users r \
+                             WHERE s.id = $1 AND r.id = $2), false)",
+                            rule = crate::directory_scope::dm_allowed("s", "r"),
+                        ))
                         .bind(sender_id)
                         .bind(receiver_id)
-                        .fetch_optional(&pool)
-                        .await?
-                        .unwrap_or(false);
+                        .fetch_one(&pool)
+                        .await?;
 
-                        if !same_scope {
+                        if !allowed {
                             warn!(
                                 target: "ws",
                                 sender_id,
                                 receiver_id,
                                 "rejected cross-scope direct message"
                             );
-                            return Err(sqlx::Error::RowNotFound);
+                            return Ok(None);
                         }
 
                         let row = sqlx::query(
@@ -649,12 +637,34 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                         )
                         .await;
 
-                        Ok::<_, sqlx::Error>(row)
+                        Ok::<_, sqlx::Error>(Some(row))
                     };
 
                     ctx.spawn(actix::fut::wrap_future(fut).map(
                         move |res, _act, ctx: &mut WebsocketContext<Self>| {
-                            if let Ok(row) = res {
+                            // Nothing was stored: tell the sending tab, so its
+                            // optimistic bubble doesn't pose as a sent message.
+                            let failure = match &res {
+                                Ok(None) => Some(
+                                    "You can't message this person. Direct messages \
+                                     are limited to your own organization (or other \
+                                     personal accounts), plus platform support.",
+                                ),
+                                Err(_) => Some("Message could not be sent. Try again."),
+                                Ok(Some(_)) => None,
+                            };
+                            if let Some(reason) = failure {
+                                ctx.text(
+                                    serde_json::json!({
+                                        "type": "send_failed",
+                                        "client_id": client_id,
+                                        "receiver_id": receiver_id,
+                                        "message": reason,
+                                    })
+                                    .to_string(),
+                                );
+                            }
+                            if let Ok(Some(row)) = res {
                                 let message_id: i32 = row.get("id");
                                 let created_naive: chrono::NaiveDateTime = row.get("created_at");
                                 let created_at =
