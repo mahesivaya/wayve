@@ -162,6 +162,11 @@ export default function Chat() {
   // optimistic copy; an own message with any other id was sent from elsewhere and
   // is appended like an inbound one.
   const localClientIds = useRef<Set<string>>(new Set());
+  // What each unconfirmed send contained, by client_id, so a refused send can
+  // be put back in the composer instead of being lost.
+  const pendingSends = useRef<Map<string, { text: string; files: File[] }>>(
+    new Map()
+  );
   const containerRef = useRef<HTMLDivElement | null>(null);
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const scrollTopRef = useRef(restored?.scrollTop ?? 0);
@@ -249,6 +254,7 @@ export default function Chat() {
         decrypted.client_id &&
         localClientIds.current.has(decrypted.client_id)
       ) {
+        pendingSends.current.delete(decrypted.client_id);
         // Status only ever upgrades, so a late 'delivered' cannot clobber a 'read'.
         const rank: Record<string, number> = { sent: 0, delivered: 1, read: 2 };
         const mergeStatus = (current: ChatMessage["status"]) =>
@@ -380,6 +386,23 @@ export default function Chat() {
     []
   );
 
+  // The server stored nothing (it refused the DM), so drop the optimistic bubble
+  // and hand the text and files back to the composer with the reason.
+  const handleSendFailed = useCallback((clientId: string, reason: string) => {
+    const pending = pendingSends.current.get(clientId);
+    pendingSends.current.delete(clientId);
+    setMessages((prev) => prev.filter((m) => m.client_id !== clientId));
+    if (pending) {
+      setInput((current) => (current.trim() ? current : pending.text));
+      if (pending.files.length) {
+        setPendingFiles((current) =>
+          current.length ? current : pending.files
+        );
+      }
+    }
+    setComposeError(reason);
+  }, []);
+
   const {
     wsRef,
     isConnected: isChatSocketConnected,
@@ -393,7 +416,8 @@ export default function Chat() {
     // Any inbound DM can change an unread count or recency.
     refreshSummary,
     applyPresenceEvent,
-    handleReactionUpdate
+    handleReactionUpdate,
+    handleSendFailed
   );
 
   // Fire-and-forget: the pill updates on the server's `reaction_updated` echo, so
@@ -881,7 +905,10 @@ export default function Chat() {
       ...(attachmentIds.length ? { attachment_ids: attachmentIds } : {}),
     };
 
-    if (wire.client_id) localClientIds.current.add(wire.client_id);
+    if (wire.client_id) {
+      localClientIds.current.add(wire.client_id);
+      pendingSends.current.set(wire.client_id, { text: plaintext, files });
+    }
     wsRef.current.send(JSON.stringify(wire));
     setMessages((prev) => [
       ...prev,

@@ -2,8 +2,8 @@
 //! have exchanged.
 //!
 //! - `GET /api/chat/users/{id}/profile`: the peer's public profile fields,
-//!   presence status and the channels you both belong to. Only for people the
-//!   caller may already see in the chat directory, or has a DM with.
+//!   presence status and the channels you both belong to. Only for people in
+//!   the caller's chat people list.
 //! - `GET /api/chat/direct-messages/{peer_id}/files`: the DM messages that carry
 //!   attachments, newest first and paged by `before_id`. File names, sizes and
 //!   per-file keys live inside each message's E2E envelope, so the rows come back
@@ -61,9 +61,9 @@ pub async fn get_peer_profile(
     let peer_id = path.into_inner();
     let ctx = rbac::resolve_role_context(pool.get_ref(), caller_id).await?;
 
-    // Same visibility as the chat people-picker, widened to anyone the caller
-    // already has a DM with (a conversation can outlive a tenant change). Anyone
-    // else is a 404, so the endpoint can't be used to probe for accounts.
+    // Exactly who the chat people list shows (get_all_users): the caller's
+    // directory plus platform support and existing DM partners they may still
+    // message. Anyone else is a 404, so the endpoint can't probe for accounts.
     let row = sqlx::query(&format!(
         r#"
         SELECT u.id, u.email, u.first_name, u.last_name, u.username,
@@ -73,14 +73,10 @@ pub async fn get_peer_profile(
         FROM users u
         LEFT JOIN organizations o ON o.id = u.organization_id
         WHERE u.id = $4
-          AND ( {visible_users}
-                OR EXISTS (
-                    SELECT 1 FROM messages dm
-                    WHERE (dm.sender_id = $1 AND dm.receiver_id = u.id)
-                       OR (dm.sender_id = u.id AND dm.receiver_id = $1)
-                ) )
+          AND ( {visible_users} OR {chat_contacts} )
         "#,
         visible_users = crate::directory_scope::VISIBLE_USERS,
+        chat_contacts = crate::directory_scope::chat_contacts(),
     ))
     .bind(caller_id)
     .bind(ctx.scope.as_str())

@@ -16,6 +16,7 @@ mod chat_multi_session_test;
 mod contacts_test;
 mod desktop_downloads_test;
 mod dm_details_test;
+mod dm_scope_rules_test;
 mod documents_rbac_test;
 mod email_account_tokens_test;
 mod email_body_seal_test;

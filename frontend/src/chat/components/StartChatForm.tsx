@@ -38,6 +38,10 @@ export default function StartChatForm({
         setError("No account is associated with this email address.");
       } else if (found.id === myUserId) {
         setError("That's your own email.");
+      } else if (found.can_message === false) {
+        setError(
+          "You can't message this person. Direct messages are limited to your own organization (or other personal accounts), plus platform support."
+        );
       } else {
         onFound(found);
       }

@@ -32,7 +32,10 @@ export function useChatSocket(
     messageId: number,
     isChannel: boolean,
     reactions: ReactionGroup[]
-  ) => void
+  ) => void,
+  // The server refused a message this tab sent (a DM the scope rules don't
+  // allow) and stored nothing, so the optimistic bubble must not stay.
+  onSendFailed?: (clientId: string, reason: string) => void
 ) {
   const wsRef = useRef<WebSocket | null>(null);
   const [readyState, setReadyState] = useState<number>(WebSocket.CLOSED);
@@ -49,6 +52,10 @@ export function useChatSocket(
   const onInboundRef = useRef(onInbound);
   const onPresenceRef = useRef(onPresence);
   const onReactionRef = useRef(onReaction);
+  const onSendFailedRef = useRef(onSendFailed);
+  useEffect(() => {
+    onSendFailedRef.current = onSendFailed;
+  }, [onSendFailed]);
   useEffect(() => {
     onMessageRef.current = onMessage;
   }, [onMessage]);
@@ -132,6 +139,16 @@ export function useChatSocket(
         if (msg.type === "status_update") {
           if (msg.message_id != null && msg.status) {
             onStatusUpdateRef.current?.(msg.message_id, msg.status);
+          }
+          return;
+        }
+        if (msg.type === "send_failed") {
+          if (msg.client_id) {
+            onSendFailedRef.current?.(
+              msg.client_id,
+              (msg as unknown as { message?: string }).message ??
+                "Message could not be sent."
+            );
           }
           return;
         }
