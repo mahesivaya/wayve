@@ -9,6 +9,15 @@
   background: var(--color-canvas);
 }
 
+/* Inside Settings › Billing: the settings shell already scrolls and paints the
+   canvas, so this flows as part of that page. */
+.billing-page.billing-page--embedded {
+  height: auto;
+  overflow: visible;
+  padding: 0;
+  background: transparent;
+}
+
 .billing-page::-webkit-scrollbar {
   width: 10px;
 }

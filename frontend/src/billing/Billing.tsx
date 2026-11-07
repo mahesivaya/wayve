@@ -119,8 +119,16 @@ function loadStripeScript(): Promise<void> {
   });
 }
 
-function BillingInner() {
+// `embedded`: rendered inside Settings › Billing instead of as the /billing
+// page. Drops the full-page scroll container, and skips the invoice tables
+// because Settings' Transaction history card already lists the same invoices.
+type BillingProps = { embedded?: boolean };
+
+function BillingInner({ embedded = false }: BillingProps) {
   const { user, refresh, switchMode } = useAuth();
+  // Stripe redirects (3DS, saved card) come back to whichever page hosts this
+  // component — /billing or /settings/billing.
+  const returnPath = embedded ? "/settings/billing" : "/billing";
   const [params] = useSearchParams();
   const navigate = useNavigate();
 
@@ -483,7 +491,7 @@ function BillingInner() {
       const result = await stripe.confirmPayment({
         elements,
         confirmParams: {
-          return_url: `${window.location.origin}/billing?checkout=success${
+          return_url: `${window.location.origin}${returnPath}?checkout=success${
             pendingOrgUpgradeId.current
               ? `&org_upgrade=${pendingOrgUpgradeId.current}`
               : ""
@@ -630,7 +638,7 @@ function BillingInner() {
       const result = await stripe.confirmSetup({
         elements,
         confirmParams: {
-          return_url: `${window.location.origin}/billing?pm=saved`,
+          return_url: `${window.location.origin}${returnPath}?pm=saved`,
         },
         redirect: "if_required",
       });
@@ -694,7 +702,7 @@ function BillingInner() {
         await setDefaultPaymentMethod(pmId);
         if (cancelled) return;
         setPaymentSuccess("Payment method saved.");
-        window.history.replaceState({}, "", "/billing");
+        window.history.replaceState({}, "", returnPath);
         await reload();
       } catch (err) {
         if (cancelled) return;
@@ -709,7 +717,7 @@ function BillingInner() {
     return () => {
       cancelled = true;
     };
-  }, [params, stripeStatus, reload]);
+  }, [params, stripeStatus, reload, returnPath]);
 
   const cancel = async () => {
     setBusy("cancel");
@@ -724,8 +732,12 @@ function BillingInner() {
     }
   };
 
+  const pageClass = embedded
+    ? "billing-page billing-page--embedded"
+    : "billing-page";
+
   if (loading) {
-    return <div className="billing-page">Loading billing…</div>;
+    return <div className={pageClass}>Loading billing…</div>;
   }
 
   const visiblePlans = [...plans].sort((a, b) => {
@@ -824,7 +836,7 @@ function BillingInner() {
   };
 
   return (
-    <div className="billing-page">
+    <div className={pageClass}>
       <header className="billing-header">
         <div>
           <h1>{hasPaidPlan ? "Billing & Plans" : "Choose a plan"}</h1>
@@ -946,65 +958,67 @@ function BillingInner() {
             )}
           </section>
 
-          <section className="billing-card">
-            <h2>Billing history</h2>
-            {invoices.length > 0 ? (
-              <table className="billing-table">
-                <thead>
-                  <tr>
-                    <th>Month</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                    <th>Receipt</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoices.map((invoice) => (
-                    <tr key={invoice.id}>
-                      <td>{formatMonth(invoice.created_at)}</td>
-                      <td>
-                        {formatMoney(
-                          invoice.amount_paid_cents,
-                          invoice.currency
-                        )}
-                      </td>
-                      <td>{invoice.status}</td>
-                      <td className="billing-receipt-links">
-                        {invoice.invoice_pdf && (
-                          <a
-                            href={invoice.invoice_pdf}
-                            target="_blank"
-                            rel="noreferrer"
-                            download
-                          >
-                            Download
-                          </a>
-                        )}
-                        {invoice.hosted_invoice_url && (
-                          <a
-                            href={invoice.hosted_invoice_url}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            View
-                          </a>
-                        )}
-                        {!invoice.invoice_pdf &&
-                          !invoice.hosted_invoice_url && (
-                            <span className="billing-muted">—</span>
-                          )}
-                      </td>
+          {!embedded && (
+            <section className="billing-card">
+              <h2>Billing history</h2>
+              {invoices.length > 0 ? (
+                <table className="billing-table">
+                  <thead>
+                    <tr>
+                      <th>Month</th>
+                      <th>Amount</th>
+                      <th>Status</th>
+                      <th>Receipt</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="billing-empty">
-                No bills yet. Monthly receipts will appear here after your first
-                charge.
-              </p>
-            )}
-          </section>
+                  </thead>
+                  <tbody>
+                    {invoices.map((invoice) => (
+                      <tr key={invoice.id}>
+                        <td>{formatMonth(invoice.created_at)}</td>
+                        <td>
+                          {formatMoney(
+                            invoice.amount_paid_cents,
+                            invoice.currency
+                          )}
+                        </td>
+                        <td>{invoice.status}</td>
+                        <td className="billing-receipt-links">
+                          {invoice.invoice_pdf && (
+                            <a
+                              href={invoice.invoice_pdf}
+                              target="_blank"
+                              rel="noreferrer"
+                              download
+                            >
+                              Download
+                            </a>
+                          )}
+                          {invoice.hosted_invoice_url && (
+                            <a
+                              href={invoice.hosted_invoice_url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              View
+                            </a>
+                          )}
+                          {!invoice.invoice_pdf &&
+                            !invoice.hosted_invoice_url && (
+                              <span className="billing-muted">—</span>
+                            )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="billing-empty">
+                  No bills yet. Monthly receipts will appear here after your
+                  first charge.
+                </p>
+              )}
+            </section>
+          )}
         </>
       )}
 
@@ -1338,7 +1352,7 @@ function BillingInner() {
         </section>
       )}
 
-      {hasPaidPlan && !isOrg && (
+      {hasPaidPlan && !isOrg && !embedded && (
         <section className="billing-card">
           <h2>Invoices</h2>
           {invoices.length > 0 ? (
@@ -1387,8 +1401,11 @@ function BillingInner() {
 // a "no access" screen. Leaving BillingInner unmounted keeps its many fetches
 // (which the backend would 403 anyway) from firing. Personal and platform
 // accounts always pass through.
-export default function Billing() {
+export default function Billing({ embedded = false }: BillingProps = {}) {
   const { user } = useAuth();
+  const pageClass = embedded
+    ? "billing-page billing-page--embedded"
+    : "billing-page";
   const isOrg = user?.scope === "organization";
   const [denied, setDenied] = useState(false);
   const [checked, setChecked] = useState(!isOrg);
@@ -1417,11 +1434,11 @@ export default function Billing() {
   }, [isOrg, role]);
 
   if (isOrg && !checked) {
-    return <div className="billing-page billing-loading">Loading…</div>;
+    return <div className={`${pageClass} billing-loading`}>Loading…</div>;
   }
   if (denied) {
     return (
-      <div className="billing-page">
+      <div className={pageClass}>
         <div className="billing-card">
           <h2>Billing</h2>
           <p className="billing-empty">
@@ -1432,5 +1449,5 @@ export default function Billing() {
       </div>
     );
   }
-  return <BillingInner />;
+  return <BillingInner embedded={embedded} />;
 }
