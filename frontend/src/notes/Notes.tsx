@@ -9,7 +9,6 @@ import {
   type Note,
 } from "../api/notes";
 import { useGlobalSearch } from "../search/SearchContext";
-import SearchBar from "../search/SearchBar";
 import { useAuth } from "../auth/useAuth";
 import { logger } from "../utils/logger";
 import { decryptForSelf } from "../crypto/selfEncrypt";
@@ -220,10 +219,6 @@ export default function Notes() {
   return (
     <div className="notes-app">
       <main className="notes-main">
-        <div className="notes-toolbar">
-          <SearchBar />
-        </div>
-
         <div className="notes-header notes-header--actions-only">
           <div className="notes-header-actions">
             <span className="notes-count">{notes.length} total</span>
