@@ -1,36 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage, ChatAttachmentMeta } from "../../api/chat";
-import { downloadChatAttachment } from "../../api/chat";
-import { unwrapChatKey, decryptChatFile } from "../e2ee";
 import { logger } from "../../utils/logger";
-
-function fmtSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-const isImage = (mime: string | null) => !!mime && mime.startsWith("image/");
-
-// Resolve an attachment to a Blob with its real mime: use the local file on the
-// sender's own optimistic bubble, else download (and decrypt when e2e).
-async function resolveBlob(
-  att: ChatAttachmentMeta,
-  message: ChatMessage,
-  localFile: File | undefined,
-  currentUserId?: number
-): Promise<Blob> {
-  if (localFile) return localFile;
-
-  const bytes = await downloadChatAttachment(att.id);
-  if (att.iv && message._envelope && currentUserId != null) {
-    const key = await unwrapChatKey(message._envelope, currentUserId);
-    if (!key) throw new Error("Cannot decrypt this attachment on this device");
-    const plain = await decryptChatFile(key, bytes, att.iv);
-    return new Blob([plain], att.mime ? { type: att.mime } : undefined);
-  }
-  return new Blob([bytes], att.mime ? { type: att.mime } : undefined);
-}
+import {
+  downloadAttachment,
+  fmtSize,
+  isImage,
+  resolveBlob,
+} from "../attachmentFiles";
 
 function AttachmentItem({
   att,
@@ -81,15 +57,7 @@ function AttachmentItem({
     setError("");
     setBusy(true);
     try {
-      const blob = await resolveBlob(att, message, localFile, currentUserId);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = att.name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      await downloadAttachment(att, message, currentUserId, localFile);
     } catch (e) {
       setError("Download failed");
       logger.warn("attachment download failed", e);

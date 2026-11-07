@@ -143,3 +143,29 @@ describe("ChatHeader channel name", () => {
     expect(screen.queryByRole("button", { name: "general" })).toBeNull();
   });
 });
+
+describe("ChatHeader on a direct message", () => {
+  it("opens the person's profile when their name is clicked", async () => {
+    const onToggleSettings = vi.fn();
+    render(
+      <ChatHeader
+        title="peer@x.test"
+        selectedChannel={null}
+        isDirect
+        presence={null}
+        settingsOpen={false}
+        onAudioCall={null}
+        onVideoCall={null}
+        onBack={vi.fn()}
+        onToggleSettings={onToggleSettings}
+        addMember={null}
+        onJoinChannel={vi.fn()}
+      />
+    );
+
+    const name = screen.getByRole("button", { name: "peer@x.test" });
+    expect(name.getAttribute("aria-expanded")).toBe("false");
+    await userEvent.click(name);
+    expect(onToggleSettings).toHaveBeenCalledTimes(1);
+  });
+});

@@ -158,6 +158,36 @@ export type ChatChannel = {
   }>;
 };
 
+// The DM details panel. Only for people in the caller's chat directory or
+// with whom they have a DM; anyone else is a 404.
+export type PeerProfile = {
+  id: number;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  username: string | null;
+  has_avatar: boolean;
+  chat_status: string;
+  last_seen: string | null;
+  organization_name: string | null;
+  member_since: string | null;
+  shared_channels: { id: number; name: string }[];
+};
+
+export const getPeerProfile = (userId: number) =>
+  apiFetchJson<PeerProfile>(`/api/chat/users/${userId}/profile`);
+
+// DM messages with attachments, newest first, as envelopes to decrypt like the
+// history fetch. Pass the last message_id of a page as `beforeId` for the next.
+export const DM_FILES_PAGE = 50;
+export const getDmFiles = (peerId: number, beforeId?: number) => {
+  const params = new URLSearchParams({ limit: String(DM_FILES_PAGE) });
+  if (beforeId !== undefined) params.set("before_id", String(beforeId));
+  return apiFetchJson<ChatMessage[]>(
+    `/api/chat/direct-messages/${peerId}/files?${params}`
+  );
+};
+
 export const getChatUsers = async () =>
   apiFetchJson<ChatUser[]>("/api/users/all");
 
