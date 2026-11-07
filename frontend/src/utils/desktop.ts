@@ -1,3 +1,5 @@
+import { getApiBase } from "../config/env";
+
 // Detect whether the web app is running inside the Fluxze desktop (Electron)
 // shell. The desktop preload bridge exposes `window.fluxzeDesktop`
 // (see desktop/preload.cjs); the plain browser app has no such object.
@@ -28,6 +30,13 @@ declare global {
 const DOWNLOADS = "https://fluxze-desktop-downloads.s3.us-east-1.amazonaws.com";
 export const MAC_ARM64_DOWNLOAD = `${DOWNLOADS}/Fluxze-mac-arm64.dmg`;
 export const MAC_X64_DOWNLOAD = `${DOWNLOADS}/Fluxze-mac-x64.dmg`;
+
+// The site's Download App menu goes through the backend, which counts the
+// download (for platform Analytics) and redirects to the installer above.
+export type DesktopBuild = "mac-arm64" | "mac-x64";
+export function trackedDownloadUrl(build: DesktopBuild): string {
+  return `${getApiBase()}/api/desktop/download/${build}`;
+}
 
 // Whether the download above is a build that can update itself. Older installs
 // are prompted to get it once, so flip this only after publishing that build, or

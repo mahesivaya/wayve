@@ -7,6 +7,7 @@ pub mod auth;
 pub mod auth_scheme;
 pub mod chat_keys;
 pub mod config;
+pub mod desktop_downloads;
 pub mod email;
 pub mod error_logs;
 pub mod health;
@@ -38,6 +39,7 @@ pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     support::routes(cfg);
     error_logs::routes(cfg);
     visits::routes(cfg);
+    desktop_downloads::routes(cfg);
     chat_keys::routes(cfg);
     tracing::routes(cfg);
 }

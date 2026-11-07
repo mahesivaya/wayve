@@ -1,19 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 
-import { MAC_ARM64_DOWNLOAD, MAC_X64_DOWNLOAD } from "../utils/desktop";
+import {
+  isDesktopApp,
+  trackedDownloadUrl,
+  type DesktopBuild,
+} from "../utils/desktop";
 
-type BuildKey = "mac-arm64" | "mac-x64";
+type BuildKey = DesktopBuild;
 
-// Installers are public-read with Content-Disposition: attachment so they download
-// cross-origin. Shipping a new build is a re-upload; no frontend redeploy needed.
-const BUILDS: Record<BuildKey, { href: string; label: string; sub: string }> = {
+// Each link goes through the backend, which counts the download and redirects to
+// the S3 installer (public-read, Content-Disposition: attachment). Shipping a new
+// build is a re-upload; no frontend redeploy needed.
+const BUILDS: Record<BuildKey, { label: string; sub: string }> = {
   "mac-arm64": {
-    href: MAC_ARM64_DOWNLOAD,
     label: "macOS",
     sub: "Apple Silicon",
   },
   "mac-x64": {
-    href: MAC_X64_DOWNLOAD,
     label: "macOS",
     sub: "Intel",
   },
@@ -106,6 +109,10 @@ export default function DownloadApp() {
     return () => document.removeEventListener("pointerdown", close);
   }, [open]);
 
+  // Already in the app. Its update banner handles new builds, and a tracked
+  // link would be downloaded in-window rather than opened in the browser.
+  if (isDesktopApp()) return null;
+
   return (
     <span className="hx-download" ref={ref}>
       <button
@@ -131,7 +138,7 @@ export default function DownloadApp() {
                 key={k}
                 role="menuitem"
                 className={`hx-download-item ${k === primary ? "is-detected" : ""}`}
-                href={b.href}
+                href={trackedDownloadUrl(k)}
                 download
                 onClick={() => setOpen(false)}
               >
