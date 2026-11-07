@@ -1481,6 +1481,25 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           >
             <AccessRequestsIcon size={16} /> Requests
           </Link>
+          {/* The organization's sprint chart; platform staff have their own
+              Analytics under Platform. A plain page, not a split-pane app. */}
+          {user.scope === "organization" && (
+            <Link
+              to="/organization/analytics"
+              title="Analytics"
+              className={[
+                "sidebar-project-label",
+                "sidebar-project-label--icon",
+                location.pathname === "/organization/analytics" ? "active" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              onClick={() => setNavOpen(false)}
+            >
+              <AnalyticsIcon size={16} />
+              <span>Analytics</span>
+            </Link>
+          )}
         </div>
       ),
     },

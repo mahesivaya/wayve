@@ -17,7 +17,6 @@ import { hasPermission } from "../auth/permissions";
 import { useGlobalSearch } from "../search/SearchContext";
 import { matchesTileSearch } from "../search/tileSearch";
 import AIChat from "../aichat/AIChat";
-import UserStoriesSummaryCard from "./UserStoriesSummaryCard";
 import { getOrgKeys } from "../orgKeys/api";
 import { listOrganizationMembers } from "../api/rbac";
 import { getOrganizationBilling } from "../api/billing";
@@ -362,9 +361,7 @@ export default function OrganizationAdminHome() {
         </div>
       </section>
 
-      <section className="organization-admin-panel u-panel">
-        <UserStoriesSummaryCard />
-      </section>
+      {/* The User Stories sprint chart lives on /organization/analytics. */}
 
       {hasAnyConsole && (
         <section className="organization-admin-panel u-panel">
