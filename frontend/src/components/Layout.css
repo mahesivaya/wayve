@@ -758,6 +758,22 @@ html.is-titlebar-inset .header-brand .sidebar-collapse-icon {
   cursor: pointer;
 }
 
+/* Sub-item with an SVG icon (Code & reviews' </>): a flex row so the icon is
+   centred on the label, not sat on its baseline. */
+.sidebar-subitems .sidebar-project-label--icon {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.sidebar-subitems .sidebar-project-label--icon > svg {
+  flex-shrink: 0;
+}
+.sidebar-subitems .sidebar-project-label--icon > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Row wraps the project link + its (hover-revealed) rename button. */
 .sidebar-project-row {
   display: flex;

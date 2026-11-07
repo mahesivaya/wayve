@@ -115,7 +115,12 @@ const WORKSPACE_ITEMS = [
   },
   { link: "Tickets", page: "tickets page", title: "Tickets", path: "/tickets" },
   { link: "Skills", page: "skills page", title: "Skills", path: "/skills" },
-  { link: "Code Repo", page: "repo page", title: "GitHub", path: "/github" },
+  {
+    link: "Code & reviews",
+    page: "repo page",
+    title: "GitHub",
+    path: "/github",
+  },
   {
     link: "Requests",
     page: "requests page",

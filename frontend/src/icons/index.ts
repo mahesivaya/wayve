@@ -86,6 +86,7 @@ export {
   Plug as IntegrationsIcon,
   LayoutDashboard as PlatformIcon,
   Code2 as DevelopersIcon,
+  CodeXml as CodeReviewIcon,
   Building2 as OrganizationIcon,
 } from "lucide-react";
 

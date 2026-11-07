@@ -71,7 +71,7 @@ import {
   AuditIcon,
   TeamsIcon,
   ApiKeysIcon,
-  GitLogoIcon,
+  CodeReviewIcon,
   BugReportIcon,
   WorkspaceIcon,
   PlatformIcon,
@@ -1440,11 +1440,16 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           {user.effective_role !== "guest" && (
             <Link
               to="/github"
-              title="Code Repo"
-              className={workspaceLinkClass("github", "/github")}
+              title="Code & reviews"
+              className={workspaceLinkClass(
+                "github",
+                "/github",
+                "sidebar-project-label--icon"
+              )}
               {...splitAppLinkProps("github")}
             >
-              <GitLogoIcon size={14} /> Code Repo
+              <CodeReviewIcon size={16} />
+              <span>Code &amp; reviews</span>
             </Link>
           )}
           {/* Moved down here from the top-level app list — a workspace tool, not
@@ -1820,8 +1825,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   renderSidebarItem(
                     "/github",
                     "github",
-                    "Code Repo",
-                    <GitLogoIcon size={18} />
+                    "Code & reviews",
+                    <CodeReviewIcon size={18} />
                   )}
                 {/* Test Access and Access Requests moved into the Workspace
                     section below. */}
