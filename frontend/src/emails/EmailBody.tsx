@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 import { isHtmlBody } from "./bodyUtils";
+import { routeEmailWheel } from "./emailWheel";
 import { renderEmailBody } from "./renderUtils";
 
 // Links inside a sanitized email open in a new tab and can never reach back
@@ -123,25 +124,23 @@ function HtmlEmail({ html }: { html: string }) {
       }
     });
 
-    // The iframe is sized to its full content, so it can't scroll itself, and a
-    // same-origin content-sized frame doesn't reliably chain wheel/touchpad
-    // scroll to the parent. Forward wheel deltas to the reading pane so scrolling
-    // with the pointer over the email body moves the pane. Re-bound on every
-    // load; changing srcDoc discards the old document (and its listener).
+    // The iframe is sized to its full content height, and a same-origin
+    // content-sized frame doesn't reliably chain wheel/touchpad scroll to the
+    // parent. Forward vertical scroll to the reading pane, and keep horizontal
+    // scroll in the frame for emails wider than the pane (routeEmailWheel).
+    // Re-bound on every load; changing srcDoc discards the old document (and
+    // its listener).
     if (frame) {
       const scroller = scrollableAncestor(frame);
       if (scroller) {
         doc.addEventListener(
           "wheel",
           (event) => {
-            const factor =
-              event.deltaMode === 1
-                ? 16
-                : event.deltaMode === 2
-                  ? scroller.clientHeight
-                  : 1;
-            scroller.scrollTop += event.deltaY * factor;
-            scroller.scrollLeft += event.deltaX * factor;
+            routeEmailWheel(
+              event,
+              scroller,
+              doc.scrollingElement as HTMLElement | null
+            );
             event.preventDefault();
           },
           { passive: false }
