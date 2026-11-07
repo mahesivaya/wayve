@@ -830,6 +830,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_email_labels_platform_name
 CREATE INDEX IF NOT EXISTS idx_email_labels_org
     ON email_labels(organization_id);
 
+-- A mailbox's own labels as the provider names them (Gmail user labels such as
+-- "[Superhuman]/AI/Marketing"; "/" nests them). `emails.labels` only carries
+-- the ids (Label_123), and ids repeat across accounts, so a label is keyed by
+-- (account_id, label_id). Refreshed from Gmail's labels.list during sync (see
+-- email/labels.rs) and listed in the email sidebar's Labels tree. Not per-user
+-- RLS: access is decided in SQL by the account, as for the emails themselves.
+CREATE TABLE IF NOT EXISTS mailbox_labels (
+    account_id INTEGER NOT NULL REFERENCES email_accounts(id) ON DELETE CASCADE,
+    label_id   TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    -- Gmail's label colour (backgroundColor), when the user set one.
+    color      TEXT,
+    synced_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (account_id, label_id)
+);
+
 
 
 

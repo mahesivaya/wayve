@@ -107,6 +107,9 @@ export {
   FolderGit2 as ProjectsTileIcon,
 } from "lucide-react";
 
+// Emails: the "New message" button, and renaming a mailbox in the sidebar.
+export { Pencil as ComposeIcon, Pencil as RenameIcon } from "lucide-react";
+
 // Code Repo line comments
 export {
   MessageSquarePlus as LineCommentIcon,

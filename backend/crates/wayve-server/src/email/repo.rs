@@ -561,9 +561,80 @@ fn push_folder(
                 // PR/review mail belongs to Reviews, not Noise.
                 qb.push(format!(" AND NOT {GITHUB_PR_MATCH} "));
             }
-            _ => {}
+            // Gmail's Forums category.
+            "forums" => {
+                qb.push(" AND 'CATEGORY_FORUMS' = ANY(e.labels) ");
+            }
+            // One mailbox's own label (sidebar Labels tree). Label ids repeat
+            // across accounts, so the folder names the account too.
+            other => {
+                if let Some((account_id, label_id)) = parse_label_folder(other) {
+                    qb.push(" AND e.account_id = ");
+                    qb.push_bind(account_id);
+                    qb.push(" AND e.labels @> ARRAY[");
+                    qb.push_bind(label_id.to_string());
+                    qb.push("]::text[] AND NOT ('SPAM' = ANY(e.labels)) ");
+                }
+            }
         }
     }
+}
+
+/// `label:<account_id>:<label_id>`, the folder value for one mailbox label in
+/// the sidebar's Labels tree. `None` for anything else.
+pub fn parse_label_folder(folder: &str) -> Option<(i32, &str)> {
+    let rest = folder.strip_prefix("label:")?;
+    let (account, label) = rest.split_once(':')?;
+    let account_id = account.parse().ok()?;
+    (!label.is_empty()).then_some((account_id, label))
+}
+
+/// Folders whose sidebar badge is the unread count, as in Gmail. Drafts shows
+/// its total instead (see `sidebar_counts`).
+pub const UNREAD_COUNT_FOLDERS: &[&str] = &[
+    "inbox",
+    "spam",
+    "updates",
+    "social",
+    "promotions",
+    "forums",
+    "github",
+];
+
+/// Sidebar badges: unread mail per folder in `UNREAD_COUNT_FOLDERS`, plus the
+/// number of drafts. Each count runs the folder's own list filter, so a badge
+/// always matches what opening that folder lists. Per email, not per
+/// conversation.
+pub async fn sidebar_counts(
+    pool: &PgPool,
+    user_id: i32,
+    account_id: Option<i32>,
+) -> sqlx::Result<Vec<(String, i64)>> {
+    let mut tx = begin_as_user(pool, user_id).await?;
+    let mut counts = Vec::with_capacity(UNREAD_COUNT_FOLDERS.len() + 1);
+    for folder in UNREAD_COUNT_FOLDERS.iter().copied().chain(["drafts"]) {
+        let filters = EmailListFilters {
+            user_id,
+            account_id,
+            folder: Some(folder.to_string()),
+            inbox_status: None,
+            search: None,
+            before: None,
+            page_size: 0,
+            group_threads: false,
+        };
+        let mut qb = QueryBuilder::new("SELECT COUNT(*)");
+        push_scope(&mut qb, user_id);
+        push_account_and_status(&mut qb, &filters);
+        push_folder(&mut qb, &filters, true);
+        if folder != "drafts" {
+            qb.push(" AND e.is_read IS NOT TRUE ");
+        }
+        let n: i64 = qb.build_query_scalar().fetch_one(&mut *tx).await?;
+        counts.push((folder.to_string(), n));
+    }
+    tx.commit().await?;
+    Ok(counts)
 }
 
 fn push_search(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFilters) {

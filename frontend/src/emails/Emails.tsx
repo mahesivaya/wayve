@@ -29,6 +29,7 @@ import {
   rememberOpenEmail,
 } from "./openEmailSession";
 import { FolderChips } from "./FolderChips";
+import { ComposeIcon } from "../icons";
 import SearchBar from "../search/SearchBar";
 import { SearchFilterMenu } from "./SearchFilterMenu";
 import { logger } from "../utils/logger";
@@ -796,6 +797,8 @@ export default function Emails() {
         ref={mainRef}
         className={[
           "main",
+          // The sidebar's folder menu replaces the folder chips on wide screens.
+          showToolbar ? "has-folder-nav" : "",
           isNarrow ? "narrow" : "",
           effectiveLayout === "list" ? "email-list-view" : "email-split-view",
         ]
@@ -827,9 +830,10 @@ export default function Emails() {
             </div>
           </div>
         )}
-        {/* Org and platform pages just read the unified inbox, so the sidebar and
-            its resizer are hidden and the list takes the full width. */}
-        {isPersonalScope && showToolbar && (
+        {/* Every scope gets the sidebar with the folder and label menu (see
+            MailFolderNav). Below 700px it is hidden by CSS and the folder
+            chips in the list header take over. */}
+        {showToolbar && (
           <>
             <EmailSidebar
               accounts={displayedAccounts}
@@ -850,7 +854,6 @@ export default function Emails() {
               showAccountFilter={showAccountFilter}
               showAccountManagement={showAccountManagement}
               showComposeButton={isPersonalScope && showToolbar}
-              showFolderNav={isPersonalScope}
             />
 
             <div
@@ -881,6 +884,7 @@ export default function Emails() {
                   onClick={() => setComposeOpen(true)}
                   data-tooltip="New message"
                 >
+                  <ComposeIcon size={16} aria-hidden="true" />
                   New message
                 </button>
               )}
