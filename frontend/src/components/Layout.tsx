@@ -410,7 +410,24 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // Icons always show; collapsing only hides the labels. Narrow screens keep
   // their own (unpersisted) expand state, so a wide-screen "expanded" preference
   // doesn't open a phone with the labels covering the page.
-  const railCollapsed = isNarrow ? !navOpen : sidebarCollapsed;
+  // Hovering the collapsed desktop rail "peeks" it open: full labels, drawn
+  // over the content (see .sidebar.peek) so the page doesn't shift. The saved
+  // collapse preference is untouched. A short open delay keeps the menu from
+  // flashing open when the pointer merely crosses the rail.
+  const [railHover, setRailHover] = useState(false);
+  const railHoverTimer = useRef<number | undefined>(undefined);
+  const peeking = railHover && sidebarCollapsed && !isNarrow;
+  const startRailPeek = () => {
+    window.clearTimeout(railHoverTimer.current);
+    railHoverTimer.current = window.setTimeout(() => setRailHover(true), 150);
+  };
+  const endRailPeek = () => {
+    window.clearTimeout(railHoverTimer.current);
+    setRailHover(false);
+  };
+  useEffect(() => () => window.clearTimeout(railHoverTimer.current), []);
+
+  const railCollapsed = isNarrow ? !navOpen : sidebarCollapsed && !peeking;
 
   useEffect(() => {
     try {
@@ -1762,12 +1779,23 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           <div className="body">
             <nav
               ref={sidebarRef}
-              className={`sidebar ${isNarrow && navOpen ? "open" : ""} ${railCollapsed ? "collapsed" : ""} ${settingsTakeover ? "takeover-hidden" : ""}`.trim()}
+              className={`sidebar ${isNarrow && navOpen ? "open" : ""} ${railCollapsed ? "collapsed" : ""} ${peeking ? "peek" : ""} ${settingsTakeover ? "takeover-hidden" : ""}`.trim()}
               style={
-                !sidebarCollapsed && !isNarrow
-                  ? { width: `${sidebarWidth}px` }
-                  : undefined
+                peeking
+                  ? {
+                      // Widen to the user's expanded width; the matching
+                      // negative margin keeps the rail's 56px footprint.
+                      width: `${sidebarWidth}px`,
+                      marginRight: `${56 - sidebarWidth}px`,
+                    }
+                  : !sidebarCollapsed && !isNarrow
+                    ? { width: `${sidebarWidth}px` }
+                    : undefined
               }
+              onMouseEnter={
+                sidebarCollapsed && !isNarrow ? startRailPeek : undefined
+              }
+              onMouseLeave={endRailPeek}
               aria-label="Primary navigation"
             >
               <div className="sidebar-section">

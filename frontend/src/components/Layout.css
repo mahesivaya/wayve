@@ -578,9 +578,22 @@ html.is-titlebar-inset .header-brand .sidebar-collapse-icon {
      which swallows most of the 56px collapsed rail. Keep it thin and on-theme. */
   scrollbar-width: thin;
   scrollbar-color: var(--color-border) transparent;
+  /* margin-right moves with width so a hover peek (below) opens and closes
+     without nudging the content beside it. */
   transition:
     transform 0.2s ease,
-    width 0.25s ease;
+    width 0.25s ease,
+    margin-right 0.25s ease;
+}
+
+/* Collapsed rail opened by hover: full labels drawn OVER the page. Width and
+   the negative margin are set inline from the expanded width, so the rail's
+   footprint stays 56px. Border-box to match the collapsed rail it grows from. */
+.sidebar.peek {
+  position: relative;
+  z-index: 200;
+  box-sizing: border-box;
+  box-shadow: 6px 0 18px rgb(0, 0, 0, 0.18);
 }
 
 .sidebar-section {
