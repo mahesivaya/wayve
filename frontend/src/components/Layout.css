@@ -888,11 +888,21 @@ html.is-titlebar-inset .header-brand .sidebar-collapse-icon {
   min-height: 8px;
 }
 
-/* Settings row pinned to the bottom of the sidebar (after the flex spacer).
-   A hairline top border separates it from the scrollable nav groups above. */
+/* Account row pinned to the bottom of the sidebar (after the flex spacer).
+   A hairline top border separates it from the nav groups above. When those
+   groups are taller than the window the sidebar scrolls; sticky keeps this row
+   on screen and lets the menu scroll behind it. Sticky stops at the sidebar's
+   12px bottom padding, so the -12px offset, margin and matching padding stretch
+   its background down over that gap; otherwise items show through below it. */
 .sidebar-section-bottom {
+  position: sticky;
+  bottom: -12px;
+  z-index: 1;
+  margin-bottom: -12px;
+  padding-bottom: 12px;
   border-top: 1px solid var(--color-border);
   padding-top: 8px;
+  background: var(--sidebar-surface);
 }
 
 /* Shared base for navigable sidebar rows — both the top-level `.sidebar-link`
