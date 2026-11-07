@@ -1992,6 +1992,30 @@ CREATE INDEX IF NOT EXISTS idx_page_visits_user
     ON page_visits (user_id, created_at DESC)
     WHERE user_id IS NOT NULL;
 
+-- Desktop app downloads: one row per click on the site's "Download App" menu
+-- (repeats of a build from one IP within 10 minutes count once)
+-- (GET /api/desktop/download/{build}, which then redirects to the S3 installer).
+-- Anonymous downloads are counted too. Location is resolved offline (MaxMind
+-- GeoLite2) at write time, like page_visits; NULL for private/unresolvable IPs.
+-- Read by the platform Analytics page via GET /api/platform/desktop-downloads.
+CREATE TABLE IF NOT EXISTS desktop_downloads (
+    id BIGSERIAL PRIMARY KEY,
+    build TEXT NOT NULL,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    ip TEXT,
+    user_agent TEXT,
+    country TEXT,
+    region TEXT,
+    city TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_desktop_downloads_created_at
+    ON desktop_downloads (created_at DESC);
+-- Backs the per-IP repeat check on insert (same IP + build within 10 minutes
+-- is recorded once).
+CREATE INDEX IF NOT EXISTS idx_desktop_downloads_ip_build
+    ON desktop_downloads (ip, build, created_at DESC);
+
 -- ── Activity dashboard (GET /api/home/summary) supporting indexes ──
 -- Partial index on unread emails — both the COUNT and the "5 most recent
 -- unread" preview use this, so the query is an index-only scan even on a

@@ -15,15 +15,17 @@ const openMenu = async (userAgent: string) => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  delete window.fluxzeDesktop;
 });
 
 describe("DownloadApp", () => {
+  // The links go through the backend so each download is counted.
   it("lists only the macOS builds", async () => {
     const items = await openMenu("Mozilla/5.0 (Macintosh)");
 
     expect(items.map((item) => item.getAttribute("href"))).toEqual([
-      expect.stringContaining("Fluxze-mac-arm64.dmg"),
-      expect.stringContaining("Fluxze-mac-x64.dmg"),
+      expect.stringMatching(/\/api\/desktop\/download\/mac-arm64$/),
+      expect.stringMatching(/\/api\/desktop\/download\/mac-x64$/),
     ]);
     expect(screen.queryByText("Windows")).toBeNull();
   });
@@ -32,5 +34,12 @@ describe("DownloadApp", () => {
     await openMenu("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
 
     expect(document.querySelector(".is-detected")).toBeNull();
+  });
+
+  it("is hidden inside the desktop app", () => {
+    window.fluxzeDesktop = { isDesktop: true };
+    render(<DownloadApp />);
+
+    expect(screen.queryByRole("button", { name: /Download App/ })).toBeNull();
   });
 });

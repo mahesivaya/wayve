@@ -15,6 +15,7 @@ import "./platformTeam.css";
 
 const AppLogs = lazy(() => import("./PlatformLogs"));
 const Visitors = lazy(() => import("./PlatformVisitors"));
+const DesktopDownloads = lazy(() => import("./PlatformDesktopDownloads"));
 const UserLogs = lazy(() => import("./PlatformUserLogs"));
 const AuditLogs = lazy(() => import("../settings/AuditSecurity"));
 const UserAudit = lazy(() => import("../settings/UserAudit"));
@@ -33,6 +34,9 @@ export default function PlatformAnalytics() {
       hasPermission(user, "logs:read_limited"));
   const isPlatformOwner =
     user?.scope === "platform" && user?.effective_role === "owner";
+  // Matches the backend gate on /api/platform/desktop-downloads.
+  const canViewDownloads =
+    user?.scope === "platform" && hasPermission(user, "audit:read");
   const canAccessSecurity =
     user?.scope === "platform" && user?.effective_role === "owner";
 
@@ -202,6 +206,11 @@ export default function PlatformAnalytics() {
         {isPlatformOwner && (
           <LogBlock title="Visitors">
             <Visitors embedded />
+          </LogBlock>
+        )}
+        {canViewDownloads && (
+          <LogBlock title="Desktop Downloads">
+            <DesktopDownloads />
           </LogBlock>
         )}
         {canAccessSecurity && (
