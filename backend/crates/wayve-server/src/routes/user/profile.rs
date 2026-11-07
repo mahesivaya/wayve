@@ -54,9 +54,9 @@ pub async fn get_user_by_email(
     query: web::Query<UserLookupQuery>,
 ) -> AppResult {
     // This endpoint exposes user ids and public keys, so it must never be anonymous.
-    if get_user_id_from_request(&req).is_none() {
+    let Some(caller_id) = get_user_id_from_request(&req) else {
         return Ok(HttpResponse::Unauthorized().finish());
-    }
+    };
 
     let email = query.email.trim();
     if email.is_empty() {
@@ -72,6 +72,18 @@ pub async fn get_user_by_email(
 
     match user {
         Some(user) => {
+            // Lets "start a chat by email" say up front that a DM would be
+            // refused (directory_scope::dm_allowed), instead of opening a
+            // conversation whose messages the server then drops.
+            let can_message = sqlx::query_scalar::<_, bool>(&format!(
+                "SELECT COALESCE((SELECT {rule} FROM users me, users them \
+                 WHERE me.id = $1 AND them.id = $2), false)",
+                rule = crate::directory_scope::dm_allowed("me", "them"),
+            ))
+            .bind(caller_id)
+            .bind(user.id)
+            .fetch_one(pool.get_ref())
+            .await?;
             let parsed_key = user
                 .public_key
                 .and_then(|k| serde_json::from_str::<Vec<u8>>(&k).ok());
@@ -79,7 +91,8 @@ pub async fn get_user_by_email(
             Ok(HttpResponse::Ok().json(serde_json::json!({
                 "id": user.id,
                 "email": user.email,
-                "public_key": parsed_key
+                "public_key": parsed_key,
+                "can_message": can_message
             })))
         }
         None => Ok(HttpResponse::Ok().json(serde_json::json!(null))),
@@ -615,9 +628,10 @@ pub async fn get_all_users(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
         r#"
         SELECT id, email, public_key
         FROM users u
-        WHERE {visible_users}
+        WHERE {visible_users} OR {chat_contacts}
         "#,
         visible_users = crate::directory_scope::VISIBLE_USERS,
+        chat_contacts = crate::directory_scope::chat_contacts(),
     ))
     .bind(user_id)
     .bind(ctx.scope.as_str())
