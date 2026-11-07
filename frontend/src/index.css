@@ -1167,7 +1167,8 @@ code {
   top: 0;
   left: 0;
   right: 0;
-  height: 38px;
+  /* Matches the desktop header height (Layout.css, html.is-titlebar-inset). */
+  height: 32px;
   pointer-events: none;
   -webkit-app-region: drag;
 }
