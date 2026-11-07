@@ -25,7 +25,12 @@ export type EmailFolder =
   | "noise"
   // All mail (everything but spam, drafts and trash): the "All mail" folder
   // and every search.
-  | "all";
+  | "all"
+  // Gmail's Forums category.
+  | "forums"
+  // One mailbox's own label from the sidebar's Labels tree:
+  // `label:<account_id>:<gmail label id>` (ids repeat across accounts).
+  | `label:${number}:${string}`;
 
 export type EmailListParams = {
   folder: EmailFolder;
@@ -123,6 +128,29 @@ const emailListPath = ({
 // on every mount. The account mutations are non-GET, so they clear the cache.
 export const getAccounts = async <T = unknown>() =>
   apiFetchJson<T[]>("/api/accounts", { cacheTtlMs: 15_000 });
+
+// A mailbox label in the sidebar's Labels tree. Gmail nests labels with "/"
+// in the name ("[Superhuman]/AI/Marketing").
+export type SidebarLabel = {
+  account_id: number;
+  account_email: string;
+  label_id: string;
+  name: string;
+  color: string | null;
+  unread: number;
+};
+
+export type EmailSidebarData = {
+  // Unread per folder (inbox, spam, updates, social, promotions, forums,
+  // github) plus the total number of drafts.
+  counts: Partial<Record<EmailFolder, number>>;
+  labels: SidebarLabel[];
+};
+
+export const getEmailSidebar = (accountId?: number | null) =>
+  apiFetchJson<EmailSidebarData>(
+    `/api/emails/sidebar${accountId != null ? `?account_id=${accountId}` : ""}`
+  );
 
 export const getEmailsUnreadCount = async (): Promise<number> => {
   const data = await apiFetchJson<{ count: number }>(

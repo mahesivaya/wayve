@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { EmailAccount, EmailFolder } from "./types";
-import { PullRequestIcon } from "../icons";
+import MailFolderNav from "./MailFolderNav";
+import { ComposeIcon, RenameIcon } from "../icons";
 
 interface EmailSidebarProps {
   accounts: EmailAccount[];
@@ -85,6 +86,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
           disabled={composeDisabled}
           data-tooltip={composeDisabled ? "No inbox available" : "New message"}
         >
+          <ComposeIcon size={16} aria-hidden="true" />
           New message
         </button>
       )}
@@ -226,7 +228,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
                         data-tooltip="Edit account name"
                         aria-label={`Edit name for ${acc.email}`}
                       >
-                        ✎
+                        <RenameIcon size={15} aria-hidden="true" />
                       </button>
                     )}
                   </>
@@ -238,112 +240,13 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
       )}
 
       {showFolderNav && (
-        <nav className="mail-filters" aria-label="Mail folders">
-          <button
-            className={`filter-btn ${activeFolder === "inbox" && viewMode === "email" ? "active" : ""}`}
-            onClick={() => setActiveFolder("inbox")}
-          >
-            📥 Inbox
-          </button>
-          <button
-            className={`filter-btn ${activeFolder === "sent" && viewMode === "email" ? "active" : ""}`}
-            onClick={() => setActiveFolder("sent")}
-          >
-            📤 Sent
-          </button>
-          {/* Virtual folder cutting across every account, matched by sender on
-            the backend rather than by label. */}
-          <button
-            className={`filter-btn ${activeFolder === "github" && viewMode === "email" ? "active" : ""}`}
-            onClick={() => setActiveFolder("github")}
-          >
-            <span className="email-chip-label">
-              <PullRequestIcon size={14} /> Reviews
-            </span>
-          </button>
-          {/* Category folders, all filtered on `emails.labels`. */}
-          <button
-            className={`filter-btn ${activeFolder === "starred" && viewMode === "email" ? "active" : ""}`}
-            onClick={() => setActiveFolder("starred")}
-          >
-            ⭐ Starred
-          </button>
-          <button
-            className={`filter-btn ${activeFolder === "snoozed" && viewMode === "email" ? "active" : ""}`}
-            onClick={() => setActiveFolder("snoozed")}
-          >
-            ⏰ Snoozed
-          </button>
-          {/* Gmail's Important marker, not a star: Gmail sets it on its own,
-            and the star is the user's (Starred, above). */}
-          <button
-            className={`filter-btn ${activeFolder === "important" && viewMode === "email" ? "active" : ""}`}
-            onClick={() => setActiveFolder("important")}
-          >
-            » Important
-          </button>
-          <button
-            className={`filter-btn ${activeFolder === "updates" && viewMode === "email" ? "active" : ""}`}
-            onClick={() => setActiveFolder("updates")}
-          >
-            🔔 Updates
-          </button>
-          <button
-            className={`filter-btn ${activeFolder === "social" && viewMode === "email" ? "active" : ""}`}
-            onClick={() => setActiveFolder("social")}
-          >
-            👥 Social
-          </button>
-          {/* Everything but spam, drafts and trash — the one place archived
-            and filter-skipped mail is listed. */}
-          <button
-            className={`filter-btn ${activeFolder === "all" && viewMode === "email" ? "active" : ""}`}
-            onClick={() => setActiveFolder("all")}
-          >
-            🗂️ All mail
-          </button>
-          <button
-            className={`filter-btn ${activeFolder === "drafts" && viewMode === "email" ? "active" : ""}`}
-            onClick={() => setActiveFolder("drafts")}
-          >
-            📝 Drafts
-          </button>
-          <button
-            className={`filter-btn ${activeFolder === "spam" && viewMode === "email" ? "active" : ""}`}
-            onClick={() => setActiveFolder("spam")}
-          >
-            🚫 Spam
-          </button>
-          <button
-            className={`filter-btn ${activeFolder === "trash" && viewMode === "email" ? "active" : ""}`}
-            onClick={() => setActiveFolder("trash")}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="1em"
-              height="1em"
-              fill="none"
-              stroke="#dc2626"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-              style={{ verticalAlign: "-0.15em", marginRight: "0.45em" }}
-            >
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-              <line x1="10" y1="11" x2="10" y2="17" />
-              <line x1="14" y1="11" x2="14" y2="17" />
-            </svg>
-            Trash
-          </button>
-          <button
-            className={`filter-btn ${viewMode === "files" ? "active" : ""}`}
-            onClick={onOpenFiles}
-          >
-            📎 Attachments
-          </button>
-        </nav>
+        <MailFolderNav
+          activeFolder={activeFolder}
+          onSelectFolder={setActiveFolder}
+          onShowAttachments={onOpenFiles}
+          filesActive={viewMode === "files"}
+          accountId={activeAccount}
+        />
       )}
     </div>
   );

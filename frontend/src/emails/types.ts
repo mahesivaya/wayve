@@ -118,6 +118,11 @@ export type EmailFolder =
   // `listFolder`): the inbox leaves out archived and filter-skipped Gmail mail,
   // noise senders and PR notifications, so an in-folder search would miss
   // them — and "Messages from this sender" wants all of that sender's mail.
-  | "all";
+  | "all"
+  // Gmail's Forums category.
+  | "forums"
+  // One mailbox's own label from the sidebar's Labels tree:
+  // `label:<account_id>:<gmail label id>` (ids repeat across accounts).
+  | `label:${number}:${string}`;
 
 export const STUB_EMAIL_FOLDERS: ReadonlyArray<EmailFolder> = ["scheduled"];

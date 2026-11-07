@@ -12,6 +12,7 @@ pub mod imap;
 mod imap_routes;
 pub mod invite;
 pub mod label_history;
+pub mod labels;
 pub mod oauth;
 mod oauth_flow;
 pub mod outlook;
@@ -38,6 +39,7 @@ use actix_web::web;
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(crate::routes::email::get_emails)
         .service(crate::routes::email::get_unread_count)
+        .service(labels::get_sidebar)
         .service(crate::routes::email::search_contacts)
         // Before the `/emails/{id}` routes, so `trash` / `restore` are never read as an id.
         .service(crate::routes::email::trash_emails)

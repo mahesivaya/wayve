@@ -276,6 +276,9 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
             }
         }
 
+        // Label names for the sidebar's Labels tree; throttled inside.
+        crate::email::labels::refresh_gmail_labels(pool, account.id, &token.access_token).await;
+
         // Real Google profile photos for the contacts typeahead. Throttled to a
         // few hours per account inside sync_photos_for_account; reuses the token.
         crate::email::people::sync_photos_for_account(
