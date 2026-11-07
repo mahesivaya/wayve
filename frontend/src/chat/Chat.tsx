@@ -29,6 +29,7 @@ import { asChannelId, asUserId } from "../types/brand";
 import { logger } from "../utils/logger";
 import ChatHeader from "./components/ChatHeader";
 import ChannelSettingsPanel from "./components/ChannelSettingsPanel";
+import DmProfilePanel from "./components/DmProfilePanel";
 import ConversationSidebar from "./components/ConversationSidebar";
 import MessageComposer, {
   type MentionCandidate,
@@ -1286,6 +1287,20 @@ export default function Chat() {
                 width={threadWidth}
               />
             </>
+          )}
+
+          {selectedUser && user && channelSettingsOpen && (
+            <DmProfilePanel
+              key={selectedUser.id}
+              peer={selectedUser}
+              presence={selectedUserPresence}
+              currentUserId={user.id}
+              onClose={() => setChannelSettingsOpen(false)}
+              onOpenChannel={(channelId) => {
+                const channel = channels.find((c) => c.id === channelId);
+                if (channel) void loadChannelMessages(channel);
+              }}
+            />
           )}
 
           {selectedChannel && channelSettingsOpen && (

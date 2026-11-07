@@ -1422,6 +1422,121 @@
   display: none;
 }
 
+/* ---- DM profile panel (click a DM's name) ---- */
+/* Reuses the channel-settings panel shell; these style its contents. */
+
+.dm-profile-identity {
+  align-items: center;
+  text-align: center;
+}
+
+.dm-profile-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.dm-profile-avatar-initial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.dm-profile-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-slate-light);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.dm-profile-error {
+  color: var(--color-danger, #dc2626);
+  font-size: var(--text-sm);
+}
+
+.dm-profile-email {
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.dm-profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dm-profile-channel,
+.dm-profile-file,
+.dm-profile-more {
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dm-profile-channel {
+  padding: 4px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dm-profile-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px;
+}
+
+.dm-profile-channel:hover,
+.dm-profile-file:hover,
+.dm-profile-more:hover {
+  background: var(--color-surface-cool-haze);
+}
+
+.dm-profile-file:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.dm-profile-file-icon {
+  flex: 0 0 auto;
+  font-size: 20px;
+}
+
+.dm-profile-file-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.dm-profile-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.dm-profile-more {
+  padding: 6px;
+  color: var(--color-text-slate-light);
+  font-size: var(--text-sm);
+}
+
 /* ---- Thread side panel ---- */
 
 .thread-panel {

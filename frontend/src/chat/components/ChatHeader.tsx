@@ -9,6 +9,7 @@ type Props = {
   isDirect: boolean;
   // Null until the first presence snapshot, or when this isn't a DM.
   presence: PresenceInfo | null;
+  // The channel settings panel, or on a DM the profile panel.
   settingsOpen: boolean;
   // Calls are 1-on-1 only, so the host passes null on channels to hide the buttons.
   onAudioCall: (() => void) | null;
@@ -67,7 +68,18 @@ export default function ChatHeader({
         </button>
         <div className="chat-header-copy">
           <h3>
-            {selectedChannel?.is_member ? (
+            {isDirect && !selectedChannel ? (
+              // The person's name opens their profile and shared files.
+              <button
+                type="button"
+                className={`chat-header-title-btn${settingsOpen ? " active" : ""}`}
+                onClick={onToggleSettings}
+                aria-expanded={settingsOpen}
+                data-tooltip="View profile and files"
+              >
+                {title}
+              </button>
+            ) : selectedChannel?.is_member ? (
               // The channel name is the settings toggle; there is no gear.
               <button
                 type="button"

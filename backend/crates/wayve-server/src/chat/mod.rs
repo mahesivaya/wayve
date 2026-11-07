@@ -7,6 +7,7 @@ mod channel_queries;
 mod channel_settings;
 mod channels;
 mod direct_messages;
+pub(crate) mod dm_details;
 mod dto;
 pub mod handler;
 mod helpers;
@@ -47,7 +48,9 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
     .service(handler::get_channel_messages)
     .service(handler::get_channel_thread)
     .service(attachments::upload_chat_attachment)
-    .service(attachments::download_chat_attachment);
+    .service(attachments::download_chat_attachment)
+    .service(dm_details::get_peer_profile)
+    .service(dm_details::get_dm_files);
 }
 
 pub fn ws_routes(cfg: &mut web::ServiceConfig) {
