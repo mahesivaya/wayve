@@ -51,13 +51,14 @@ testing, rolling back and troubleshooting. Never build a release with
 
 ## App icon
 
-`build/icon.icns` is generated from the brand favicon:
+`build/icon.icns` is generated from the brand logo,
+`frontend/public/brand/fluxze.png`, by the shared script that also makes the
+iPhone app icon and launch screen. Don't edit the generated files; change the
+logo and re-run:
 
 ```bash
-npm run icon       # rebuilds build/icon.icns from frontend/public/favicon.svg
+npm run icon       # runs ../scripts/make-icons.sh (macOS only)
 ```
-
-Drop a 1024×1024 source in and re-run if you want a custom icon.
 
 ## Files
 
@@ -67,4 +68,3 @@ Drop a 1024×1024 source in and re-run if you want a custom icon.
 | `preload.cjs` | Minimal isolated bridge (exposes `window.fluxzeDesktop`).           |
 | `RELEASING.md` | How to release a new version, step by step. |
 | `merge-update-feed.cjs` | Combines each arch's update feed into the one `latest-mac.yml`. |
-| `make-icon.cjs` | Generates `build/icon.icns` from the brand favicon.               |
