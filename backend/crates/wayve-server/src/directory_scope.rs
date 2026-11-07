@@ -77,3 +77,60 @@ pub const VISIBLE_CHANNELS: &str = r#"(
         )
     ))
 )"#;
+
+/// SQL: whether the `users` row aliased `x` is platform support staff, a
+/// platform account whose platform role is `support`. `x` is a trusted alias
+/// from the calling query, never user input.
+pub fn is_platform_support(x: &str) -> String {
+    format!(
+        "({x}.account_type = 'platform_admin' AND EXISTS (\
+             SELECT 1 FROM platform_members support_pm \
+             WHERE support_pm.user_id = {x}.id AND support_pm.role = 'support'))"
+    )
+}
+
+/// SQL: whether the `users` rows aliased `a` and `b` may exchange direct
+/// messages. The rule is symmetric:
+///
+/// - personal ↔ personal;
+/// - organization members ↔ members of the same organization;
+/// - platform ↔ platform;
+/// - platform support ↔ personal accounts and organization admins (of any
+///   organization), so customers can reach support and support can reach them.
+///
+/// Anything else, such as a personal account and an organization, or a regular
+/// organization member and platform support, is refused. Aliases are trusted
+/// identifiers from the calling query.
+pub fn dm_allowed(a: &str, b: &str) -> String {
+    let a_support = is_platform_support(a);
+    let b_support = is_platform_support(b);
+    format!(
+        "(\
+            ({a}.account_type = 'personal' AND {b}.account_type = 'personal') \
+         OR ({a}.account_type = 'platform_admin' AND {b}.account_type = 'platform_admin') \
+         OR ({a}.account_type IN ('organization', 'organization_admin') \
+             AND {b}.account_type IN ('organization', 'organization_admin') \
+             AND {a}.organization_id = {b}.organization_id) \
+         OR ({a_support} AND {b}.account_type IN ('personal', 'organization_admin')) \
+         OR ({b_support} AND {a}.account_type IN ('personal', 'organization_admin'))\
+        )"
+    )
+}
+
+/// SQL predicate over `users u` for the chat people list, on top of
+/// [`VISIBLE_USERS`] (same `$1` = caller id): people the caller may DM who are
+/// either platform support (so customers can find them) or already in a
+/// conversation with the caller (so support sees who they are talking to).
+pub fn chat_contacts() -> String {
+    let allowed = dm_allowed("me", "u");
+    let support = is_platform_support("u");
+    format!(
+        "EXISTS (\
+            SELECT 1 FROM users me \
+            WHERE me.id = $1 AND me.id <> u.id AND {allowed} \
+              AND ({support} OR EXISTS (\
+                    SELECT 1 FROM messages dm \
+                    WHERE (dm.sender_id = $1 AND dm.receiver_id = u.id) \
+                       OR (dm.sender_id = u.id AND dm.receiver_id = $1))))"
+    )
+}
