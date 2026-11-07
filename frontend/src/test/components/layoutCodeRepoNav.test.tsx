@@ -75,7 +75,9 @@ describe("Code Repo sidebar entry", () => {
     };
     renderLayout();
 
-    expect(screen.getAllByRole("link", { name: "Code Repo" })).toHaveLength(1);
+    expect(
+      screen.getAllByRole("link", { name: "Code & reviews" })
+    ).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
   });
 
@@ -91,7 +93,9 @@ describe("Code Repo sidebar entry", () => {
       effective_role: "owner",
     };
     renderLayout();
-    expect(screen.getAllByRole("link", { name: "Code Repo" })).toHaveLength(1);
+    expect(
+      screen.getAllByRole("link", { name: "Code & reviews" })
+    ).toHaveLength(1);
     expect(screen.queryByText("Canvas")).toBeNull();
   });
 
@@ -103,7 +107,7 @@ describe("Code Repo sidebar entry", () => {
       effective_role: "guest",
     };
     renderLayout();
-    expect(screen.queryByRole("link", { name: "Code Repo" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Code & reviews" })).toBeNull();
   });
 
   it("stays in the Workspace section for organization accounts", async () => {
@@ -124,6 +128,6 @@ describe("Code Repo sidebar entry", () => {
     if (workspace.getAttribute("aria-expanded") !== "true") {
       await user.click(workspace);
     }
-    expect(screen.getByRole("link", { name: /Code Repo/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Code & reviews/ })).toBeTruthy();
   });
 });
