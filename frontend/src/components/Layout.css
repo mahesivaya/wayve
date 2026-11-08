@@ -1525,15 +1525,18 @@ html.is-titlebar-inset .header .split-menu-btn svg {
 
 /* Right-pane tab bar. Keeps the split/tab close control outside the embedded
    app so it cannot overlap app-level controls like "close email". */
+/* Compact, like an editor's tab strip: 32px tall with a 24px close button. */
 .split-pane-toolbar {
-  height: 40px;
+  height: 32px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 0 12px 0 14px;
-  background: var(--color-surface-cool-haze);
+  padding: 0 4px 0 14px;
+  /* Same chrome as the page header above, so the tabs read as part of the
+     app frame. The focused pane's tab overrides this with its indigo tint. */
+  background: var(--color-chrome-surface);
   border-bottom: 1px solid var(--color-border-soft);
 }
 
@@ -1548,14 +1551,15 @@ html.is-titlebar-inset .header .split-menu-btn svg {
 }
 
 .split-close-btn {
-  height: 32px;
+  height: 24px;
+  min-width: 24px;
   flex-shrink: 0;
-  padding: 0 10px;
+  padding: 0 6px;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   cursor: pointer;
   border-radius: var(--radius-sm);
-  font-size: var(--text-lg);
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
   display: flex;
   align-items: center;
