@@ -16,6 +16,7 @@ import {
   replyAllRecipients,
   replyRecipients,
 } from "./replyRecipients";
+import { recipientList, summarizeRecipients } from "./recipientSummary";
 import { EmailItem } from "./types";
 import { SnoozeIcon, StarIcon } from "../icons";
 import { SnoozeMenu } from "./SnoozeMenu";
@@ -84,6 +85,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   const moreRef = useRef<HTMLDivElement | null>(null);
   // Sender chip menu: copy the address, or narrow the list to this sender.
   const [senderMenuOpen, setSenderMenuOpen] = useState(false);
+  // The "to me ▾" line opens a card with From, To, Cc and Date, as in Gmail.
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [senderCopied, setSenderCopied] = useState(false);
   const senderMenuRef = useRef<HTMLDivElement | null>(null);
   // The reading pane is the scroll container for the (auto-height) body iframe.
@@ -238,6 +241,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       // sender's address.
       setSenderMenuOpen(false);
       setSenderCopied(false);
+      setDetailsOpen(false);
     }, 0);
     return () => window.clearTimeout(timer);
   }, [selectedEmail?.id]);
@@ -935,79 +939,150 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
         const initial =
           (senderName || senderEmail || "?").trim().charAt(0).toUpperCase() ||
           "?";
+        const toSummary = summarizeRecipients(
+          selectedEmail.receiver,
+          selectedEmail.cc,
+          ownAddressList
+        );
+        const toList = recipientList(selectedEmail.receiver);
+        const ccList = recipientList(selectedEmail.cc);
         return (
-          <div className="email-meta-row">
-            <div
-              className="email-meta-avatar"
-              aria-hidden="true"
-              style={{ background: avatarColor(senderName || senderEmail) }}
-            >
-              {initial}
-            </div>
-            <div className="email-meta-info">
-              <div className="email-meta-from" ref={senderMenuRef}>
-                {/* The whole from-line is the trigger, not just the address:
+          <div className="email-meta">
+            <div className="email-meta-row">
+              <div
+                className="email-meta-avatar"
+                aria-hidden="true"
+                style={{ background: avatarColor(senderName || senderEmail) }}
+              >
+                {initial}
+              </div>
+              <div className="email-meta-info">
+                <div className="email-meta-from" ref={senderMenuRef}>
+                  {/* The whole from-line is the trigger, not just the address:
                     splitSender puts a name-less sender in `senderName`, so an
                     address-only target would miss those messages entirely. */}
-                <button
-                  type="button"
-                  className="email-meta-sender"
-                  onClick={() => setSenderMenuOpen((open) => !open)}
-                  disabled={!senderEmail}
-                  aria-haspopup="menu"
-                  aria-expanded={senderMenuOpen}
-                  data-tooltip={senderEmail ? "Copy or filter by sender" : ""}
-                >
-                  <span className="email-meta-name">
-                    {senderName || senderEmail || "Unknown sender"}
-                  </span>
-                  {senderName && senderEmail && (
-                    <span className="email-meta-email">
-                      &lt;{senderEmail}&gt;
+                  <button
+                    type="button"
+                    className="email-meta-sender"
+                    onClick={() => setSenderMenuOpen((open) => !open)}
+                    disabled={!senderEmail}
+                    aria-haspopup="menu"
+                    aria-expanded={senderMenuOpen}
+                    data-tooltip={senderEmail ? "Copy or filter by sender" : ""}
+                  >
+                    <span className="email-meta-name">
+                      {senderName || senderEmail || "Unknown sender"}
                     </span>
-                  )}
-                </button>
-                {senderMenuOpen && senderEmail && (
-                  // role="menu" is load-bearing: overlayOpen() keys off it to
-                  // stand the R/F/D shortcuts down while this is open.
-                  <div className="email-sender-menu" role="menu">
-                    <div className="email-sender-menu-head">
-                      <span className="email-sender-menu-address">
-                        {senderEmail}
+                    {senderName && senderEmail && (
+                      <span className="email-meta-email">
+                        &lt;{senderEmail}&gt;
                       </span>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="email-sender-menu-copy"
-                        onClick={() => copySenderAddress(senderEmail)}
-                        data-tooltip={senderCopied ? "Copied!" : "Copy address"}
-                        aria-label={
-                          senderCopied ? "Address copied" : "Copy address"
-                        }
-                      >
-                        {senderCopied ? "✓" : "⧉"}
-                      </button>
-                    </div>
-                    {onFilterBySender && (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="email-sender-menu-item"
-                        onClick={() => filterBySender(senderEmail)}
-                      >
-                        Messages from this sender
-                      </button>
                     )}
-                  </div>
+                  </button>
+                  {senderMenuOpen && senderEmail && (
+                    // role="menu" is load-bearing: overlayOpen() keys off it to
+                    // stand the R/F/D shortcuts down while this is open.
+                    <div className="email-sender-menu" role="menu">
+                      <div className="email-sender-menu-head">
+                        <span className="email-sender-menu-address">
+                          {senderEmail}
+                        </span>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="email-sender-menu-copy"
+                          onClick={() => copySenderAddress(senderEmail)}
+                          data-tooltip={
+                            senderCopied ? "Copied!" : "Copy address"
+                          }
+                          aria-label={
+                            senderCopied ? "Address copied" : "Copy address"
+                          }
+                        >
+                          {senderCopied ? "✓" : "⧉"}
+                        </button>
+                      </div>
+                      {onFilterBySender && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="email-sender-menu-item"
+                          onClick={() => filterBySender(senderEmail)}
+                        >
+                          Messages from this sender
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {/* Narrow screens: the compact time sits under the name
+                  instead of squeezing the name from the right. */}
+                <div className="email-meta-time-inline">
+                  {formatEmailDate(selectedEmail.created_at)}
+                </div>
+                {toSummary && (
+                  <button
+                    type="button"
+                    className="email-meta-to"
+                    onClick={() => setDetailsOpen((open) => !open)}
+                    aria-expanded={detailsOpen}
+                    aria-controls={`email-meta-details-${selectedEmail.id}`}
+                  >
+                    to {toSummary}
+                    <svg
+                      className="email-meta-to-caret"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d={detailsOpen ? "M6 15l6-6 6 6" : "M6 9l6 6 6-6"}
+                      />
+                    </svg>
+                  </button>
                 )}
               </div>
-              {selectedEmail.receiver && (
-                <div className="email-meta-to">to {selectedEmail.receiver}</div>
-              )}
+              <div className="email-meta-time">
+                {formatEmailDateTime(selectedEmail.created_at)}
+              </div>
             </div>
-            <div className="email-meta-time">
-              {formatEmailDateTime(selectedEmail.created_at)}
-            </div>
+            {detailsOpen && (
+              <dl
+                className="email-meta-details"
+                id={`email-meta-details-${selectedEmail.id}`}
+              >
+                <dt>From</dt>
+                <dd>
+                  {senderName && <span>{senderName}</span>}
+                  {senderEmail && (
+                    <span className="email-meta-details-address">
+                      {senderEmail}
+                    </span>
+                  )}
+                </dd>
+                {toList.length > 0 && (
+                  <>
+                    <dt>To</dt>
+                    <dd>
+                      {toList.map((entry) => (
+                        <span key={entry}>{entry}</span>
+                      ))}
+                    </dd>
+                  </>
+                )}
+                {ccList.length > 0 && (
+                  <>
+                    <dt>Cc</dt>
+                    <dd>
+                      {ccList.map((entry) => (
+                        <span key={entry}>{entry}</span>
+                      ))}
+                    </dd>
+                  </>
+                )}
+                <dt>Date</dt>
+                <dd>{formatEmailDateTime(selectedEmail.created_at)}</dd>
+              </dl>
+            )}
           </div>
         );
       })()}

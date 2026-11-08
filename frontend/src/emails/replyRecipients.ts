@@ -88,7 +88,7 @@ export function replyAllRecipients(
 }
 
 // "Ada <ada@x.com>" → "ada@x.com"; a bare address is returned trimmed.
-function addressOf(value: string): string {
+export function addressOf(value: string): string {
   const text = value.trim();
   const match = text.match(/<([^>]+)>/);
   return (match?.[1] || text).trim();
@@ -96,7 +96,7 @@ function addressOf(value: string): string {
 
 // Splits an address header on commas, except inside a quoted display name
 // ("Griffin, Peter" <peter@x.com>) or angle brackets.
-function splitAddressList(value: string): string[] {
+export function splitAddressList(value: string): string[] {
   const parts: string[] = [];
   let current = "";
   let inQuotes = false;
