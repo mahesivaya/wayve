@@ -366,6 +366,14 @@
   margin-top: var(--space-4);
 }
 
+/* The margin spaces the header from the New message button above it. When
+   there is no button (compose lives in the page toolbar), Accounts is the
+   first thing in the sidebar: drop the margin and tighten the sidebar's top
+   padding so it sits near the top edge instead of under a gap. */
+.mail-section-header:first-child {
+  margin-top: calc(var(--space-3) - var(--space-7));
+}
+
 .mail-section-action {
   width: 24px;
   height: 24px;
