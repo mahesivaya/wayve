@@ -134,6 +134,14 @@
   margin-bottom: 20px;
 }
 
+/* Analytics page (/organization/analytics): the sprint chart, then the console
+   tiles, spaced like the AI box and tiles on the home used to be. */
+.org-analytics {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
 .org-ai-chat {
   height: 560px;
   display: flex;

@@ -1,15 +1,17 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import UserStoriesSummaryCard from "./UserStoriesSummaryCard";
+import OrganizationConsoleCards from "./OrganizationConsoleCards";
 import "../platformTeam/platformTeam.css";
 import "./admin-ui.css";
 import "./organizationAdmin.css";
 
 /**
- * The organization's Analytics page. Holds the User Stories sprint chart,
- * moved here from the organization home, so the home keeps only the AI chat
- * and the console tiles. Open to every organization member, as the home was;
- * the user-stories API still applies its own access checks.
+ * The organization's Analytics page: the User Stories sprint chart and the
+ * console tiles with their stats, both moved here from the organization home,
+ * which keeps only the AI chat. Open to every organization member, as the home
+ * was. Each tile shows only to members with its permission, and the APIs
+ * behind the chart and tiles apply their own access checks.
  */
 export default function OrganizationAnalytics() {
   const { user } = useAuth();
@@ -20,12 +22,15 @@ export default function OrganizationAnalytics() {
     <div className="pt-page">
       <header className="pt-header">
         <h1>Analytics</h1>
-        <p>Sprint progress for your organization · {user.email}</p>
+        <p>Sprint progress and consoles for your organization · {user.email}</p>
       </header>
 
-      <section className="organization-admin-panel u-panel">
-        <UserStoriesSummaryCard />
-      </section>
+      <div className="organization-admin-home org-analytics">
+        <section className="organization-admin-panel u-panel">
+          <UserStoriesSummaryCard />
+        </section>
+        <OrganizationConsoleCards />
+      </div>
     </div>
   );
 }

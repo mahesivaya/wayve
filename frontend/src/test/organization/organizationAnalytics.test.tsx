@@ -1,5 +1,5 @@
-// /organization/analytics holds the User Stories sprint chart, moved off the
-// organization home. Every organization member can open it; anyone else is
+// /organization/analytics holds the User Stories sprint chart and the console
+// tiles, moved off the organization home. Every organization member can open it; anyone else is
 // sent back to "/".
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -17,6 +17,10 @@ vi.mock("../../auth/useAuth", () => ({
 // by userStoriesTimeline.test.tsx. Here we only care that the page shows it.
 vi.mock("../../organization/UserStoriesSummaryCard", () => ({
   default: () => <div data-testid="sprint-chart">chart</div>,
+}));
+// The tiles fetch live counts; they're covered by homeSearch.test.tsx.
+vi.mock("../../organization/OrganizationConsoleCards", () => ({
+  default: () => <div data-testid="console-tiles">tiles</div>,
 }));
 
 import OrganizationAnalytics from "../../organization/OrganizationAnalytics";
@@ -40,13 +44,14 @@ describe("OrganizationAnalytics", () => {
     auth.user = null;
   });
 
-  it("shows the sprint chart to an organization member", () => {
+  it("shows the sprint chart and tiles to an organization member", () => {
     auth.user = { email: "member@fluxze.com", scope: "organization" };
     renderAt();
     expect(
       screen.getByRole("heading", { name: "Analytics" })
     ).toBeInTheDocument();
     expect(screen.getByTestId("sprint-chart")).toBeInTheDocument();
+    expect(screen.getByTestId("console-tiles")).toBeInTheDocument();
   });
 
   it.each(["personal", "platform"])("sends a %s user back home", (scope) => {

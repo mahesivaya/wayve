@@ -1,10 +1,12 @@
-// The org home is where an organization member lands after login. It leads
-// with the AI ask-box (same embedded surface the platform home uses), with the
-// console/app tiles below it. The header search box is suppressed on the home
-// routes (see HIDE_SEARCH_PATHS), so it must not render here.
+// The org home is where an organization member lands after login: just the AI
+// ask-box, the same embedded surface the platform home uses. The console tiles
+// moved to the Analytics page (/organization/analytics), where the header
+// search box filters them. The header search box is suppressed on the home
+// routes (see HIDE_SEARCH_PATHS), so it must not render on the home.
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import type { ReactNode } from "react";
 
 vi.mock("../../auth/useAuth", () => ({
   useAuth: () => ({
@@ -67,32 +69,69 @@ vi.mock("../../orgKeys/api", () => ({
 import SearchProvider from "../../search/SearchProvider";
 import SearchBar from "../../search/SearchBar";
 import OrganizationAdminHome from "../../organization/OrganizationAdminHome";
+import OrganizationConsoleCards from "../../organization/OrganizationConsoleCards";
 
 // Mirrors how Layout composes them: the header search box, then the page.
-const renderHome = () =>
+const renderAt = (path: string, page: ReactNode) =>
   render(
-    <MemoryRouter initialEntries={["/organization/home"]}>
+    <MemoryRouter initialEntries={[path]}>
       <SearchProvider>
         <SearchBar />
-        <OrganizationAdminHome />
+        {page}
       </SearchProvider>
     </MemoryRouter>
   );
 
 describe("organization home", () => {
-  it("leads with the AI surface, above the tiles", () => {
-    const { container } = renderHome();
-    const ai = screen.getByTestId("ai-chat");
-    const firstTile = container.querySelector(".org-home-tile");
-    expect(firstTile).toBeTruthy();
-    // FOLLOWING = the tile comes after the AI box in document order.
-    expect(
-      ai.compareDocumentPosition(firstTile!) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
+  it("shows the AI surface and no console tiles", () => {
+    const { container } = renderAt(
+      "/organization/home",
+      <OrganizationAdminHome />
+    );
+    expect(screen.getByTestId("ai-chat")).toBeInTheDocument();
+    expect(container.querySelector(".org-home-tile")).toBeNull();
   });
 
   it("does not render the header search box on this route", () => {
-    renderHome();
+    renderAt("/organization/home", <OrganizationAdminHome />);
     expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+  });
+});
+
+describe("organization console tiles on Analytics", () => {
+  const renderCards = () =>
+    renderAt("/organization/analytics", <OrganizationConsoleCards />);
+
+  it("shows only the tiles the user has permission for", () => {
+    renderCards();
+    for (const label of ["Members & roles", "Billing", "Developer"]) {
+      expect(
+        screen.getByRole("button", { name: `Open ${label}` })
+      ).toBeInTheDocument();
+    }
+    // No webhooks:manage / sso:manage / ai:manage in the mocked permissions.
+    for (const label of ["Webhooks", "SSO", "AI Provider"]) {
+      expect(
+        screen.queryByRole("button", { name: `Open ${label}` })
+      ).not.toBeInTheDocument();
+    }
+  });
+
+  it("filters the tiles with the header search box", () => {
+    renderCards();
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "invoice" },
+    });
+    expect(
+      screen.getByRole("button", { name: "Open Billing" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open Members & roles" })
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "zzz" },
+    });
+    expect(screen.getByText(/Nothing here matches/)).toBeInTheDocument();
   });
 });
