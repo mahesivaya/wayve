@@ -346,8 +346,8 @@
 /* Desktop shell with no native title bar (macOS): the header is the title bar,
    with the window controls floating over its left end and the toggle right next
    to them. Border-box keeps the brand lined up with the sidebar below it. */
-/* Thinner than the web header. 32px is the tallest thing in it (the split
-   button), so nothing is cropped. */
+/* Thinner than the web header. Its controls (sidebar toggle, split button) are
+   20px icons, so nothing is cropped. */
 html.is-titlebar-inset .header {
   height: 32px;
 }
@@ -395,6 +395,34 @@ html.is-titlebar-inset .header-brand .sidebar-collapse-btn:hover {
 }
 
 html.is-titlebar-inset .header-brand .sidebar-collapse-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.7;
+}
+
+/* The split button matches the sidebar toggle at the other end of the title
+   bar: a bare 26×20 icon instead of the web header's 32px bordered box, which
+   filled the bar edge to edge. Active (pane sub-split) keeps a tint. */
+html.is-titlebar-inset .header .split-menu-btn {
+  width: 26px;
+  height: 20px;
+  border: none;
+  background: none;
+  box-shadow: none;
+  color: var(--color-text-secondary);
+}
+
+html.is-titlebar-inset .header .split-menu-btn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-surface-hover);
+}
+
+html.is-titlebar-inset .header .split-menu-btn.active {
+  background: var(--color-accent-indigo-mist);
+  color: var(--color-accent-indigo-deep);
+}
+
+html.is-titlebar-inset .header .split-menu-btn svg {
   width: 16px;
   height: 16px;
   stroke-width: 1.7;
