@@ -128,9 +128,17 @@ function readMoreOpen(): boolean {
   }
 }
 
-function Badge({ count }: { count: number | undefined }) {
+function Badge({ count, rail }: { count: number | undefined; rail?: boolean }) {
   if (!count) return null;
+  // The rail has no room for numbers: a dot on the icon, as Gmail does.
+  if (rail) return <span className="mail-nav-dot" aria-hidden="true" />;
   return <span className="mail-nav-count">{count.toLocaleString()}</span>;
+}
+
+// Rail rows carry their name (and unread count) as the hover tooltip and the
+// accessible name, since the label text isn't drawn.
+function railName(label: string, count: number | undefined): string {
+  return count ? `${label} (${count.toLocaleString()} unread)` : label;
 }
 
 export default function MailFolderNav({
@@ -139,6 +147,7 @@ export default function MailFolderNav({
   onShowAttachments,
   filesActive = false,
   accountId,
+  rail = false,
 }: {
   activeFolder: EmailFolder | null;
   onSelectFolder: (folder: EmailFolder) => void;
@@ -146,6 +155,9 @@ export default function MailFolderNav({
   filesActive?: boolean;
   // Scope the badges and labels to one account; null/undefined = all.
   accountId?: number | null;
+  // Icon-only rail (the emails page inside a split pane): no text, unread as a
+  // dot, names on hover.
+  rail?: boolean;
 }) {
   const [data, setData] = useState<EmailSidebarData | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(readCollapsed);
@@ -237,10 +249,12 @@ export default function MailFolderNav({
           className={`mail-nav-item${active === folder ? " is-active" : ""}${count ? " has-unread" : ""}`}
           aria-current={active === folder ? "page" : undefined}
           onClick={() => onSelectFolder(folder)}
+          title={rail ? railName(label, count) : undefined}
+          aria-label={rail ? railName(label, count) : undefined}
         >
           <Icon name={icon} />
-          <span className="mail-nav-label">{label}</span>
-          <Badge count={count} />
+          {!rail && <span className="mail-nav-label">{label}</span>}
+          <Badge count={count} rail={rail} />
         </button>
       </li>
     );
@@ -256,9 +270,9 @@ export default function MailFolderNav({
         <li key={node.key}>
           <div
             className="mail-nav-label-row"
-            style={{ paddingLeft: `${depth * 14}px` }}
+            style={rail ? undefined : { paddingLeft: `${depth * 14}px` }}
           >
-            {hasChildren ? (
+            {rail ? null : hasChildren ? (
               <button
                 type="button"
                 className="mail-nav-caret"
@@ -277,11 +291,21 @@ export default function MailFolderNav({
               aria-current={folder && active === folder ? "page" : undefined}
               disabled={!folder}
               onClick={() => folder && onSelectFolder(folder)}
-              data-tooltip={node.label?.name}
+              data-tooltip={rail ? undefined : node.label?.name}
+              title={
+                rail
+                  ? railName(node.label?.name ?? node.segment, unread)
+                  : undefined
+              }
+              aria-label={
+                rail
+                  ? railName(node.label?.name ?? node.segment, unread)
+                  : undefined
+              }
             >
               <Icon name="label" color={node.label?.color} />
-              <span className="mail-nav-label">{node.segment}</span>
-              <Badge count={unread} />
+              {!rail && <span className="mail-nav-label">{node.segment}</span>}
+              <Badge count={unread} rail={rail} />
             </button>
           </div>
           {hasChildren && !isCollapsed && (
@@ -294,7 +318,10 @@ export default function MailFolderNav({
     });
 
   return (
-    <nav className="mail-nav" aria-label="Mail folders">
+    <nav
+      className={`mail-nav${rail ? " mail-nav--rail" : ""}`}
+      aria-label="Mail folders"
+    >
       <ul className="mail-nav-list">
         {MAIN_FOLDERS.map(folderRow)}
         <li>
@@ -303,6 +330,8 @@ export default function MailFolderNav({
             className="mail-nav-item mail-nav-more"
             aria-expanded={moreShown}
             onClick={toggleMore}
+            title={rail ? (moreShown ? "Less" : "More") : undefined}
+            aria-label={rail ? (moreShown ? "Less" : "More") : undefined}
           >
             <span
               className="mail-nav-icon mail-nav-more-caret"
@@ -310,9 +339,11 @@ export default function MailFolderNav({
             >
               {moreShown ? "▴" : "▾"}
             </span>
-            <span className="mail-nav-label">
-              {moreShown ? "Less" : "More"}
-            </span>
+            {!rail && (
+              <span className="mail-nav-label">
+                {moreShown ? "Less" : "More"}
+              </span>
+            )}
           </button>
         </li>
         {moreShown && (
@@ -325,9 +356,11 @@ export default function MailFolderNav({
                   className={`mail-nav-item${filesActive ? " is-active" : ""}`}
                   aria-current={filesActive ? "page" : undefined}
                   onClick={onShowAttachments}
+                  title={rail ? "Attachments" : undefined}
+                  aria-label={rail ? "Attachments" : undefined}
                 >
                   <Icon name="attachment" />
-                  <span className="mail-nav-label">Attachments</span>
+                  {!rail && <span className="mail-nav-label">Attachments</span>}
                 </button>
               </li>
             )}
@@ -337,10 +370,10 @@ export default function MailFolderNav({
 
       {accounts.length > 0 && (
         <div className="mail-nav-labels">
-          <div className="mail-nav-heading">Labels</div>
+          {!rail && <div className="mail-nav-heading">Labels</div>}
           {accounts.map((account) => (
             <div key={account.id}>
-              {accounts.length > 1 && (
+              {!rail && accounts.length > 1 && (
                 <div className="mail-nav-account" title={account.email}>
                   {account.email}
                 </div>

@@ -101,3 +101,86 @@ describe("MailFolderNav", () => {
     expect(getEmailSidebar).toHaveBeenCalledWith(4);
   });
 });
+
+// Inside a split pane the menu is a Gmail-style icon rail: no text, unread as
+// a dot, and each icon named for hover and screen readers.
+describe("MailFolderNav as an icon rail", () => {
+  it("draws icons only, with a dot instead of a count", async () => {
+    const { container } = render(
+      <MailFolderNav activeFolder="inbox" onSelectFolder={vi.fn()} rail />
+    );
+    const inbox = await screen.findByRole("button", {
+      name: "Inbox (792 unread)",
+    });
+    expect(inbox.getAttribute("title")).toBe("Inbox (792 unread)");
+    expect(inbox.querySelector(".mail-nav-dot")).toBeTruthy();
+    expect(inbox.textContent).toBe("");
+
+    const starred = screen.getByRole("button", { name: "Starred" });
+    expect(starred.querySelector(".mail-nav-dot")).toBeNull();
+
+    expect(container.querySelector(".mail-nav-label")).toBeNull();
+    expect(container.querySelector(".mail-nav-count")).toBeNull();
+    expect(screen.queryByText("Labels")).toBeNull();
+  });
+
+  it("still opens More and selects a label from its icon", async () => {
+    const onSelectFolder = vi.fn();
+    render(
+      <MailFolderNav
+        activeFolder="inbox"
+        onSelectFolder={onSelectFolder}
+        rail
+      />
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "More" }));
+    expect(screen.getByRole("button", { name: "Trash" })).toBeTruthy();
+
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "[Superhuman]/AI/Marketing (14 unread)",
+      })
+    );
+    expect(onSelectFolder).toHaveBeenCalledWith("label:4:Label_3");
+  });
+});
+
+describe("EmailSidebar menu toggle in a split pane", () => {
+  it("switches between the icon rail and the full menu", async () => {
+    const { EmailSidebar } = await import("../../emails/EmailSidebar");
+    const { useState } = await import("react");
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <EmailSidebar
+          accounts={[]}
+          activeAccount={null}
+          setActiveAccount={vi.fn()}
+          activeFolder="inbox"
+          setActiveFolder={vi.fn()}
+          viewMode="email"
+          onOpenFiles={vi.fn()}
+          onRequestAddAccount={vi.fn()}
+          onCompose={vi.fn()}
+          composeDisabled={false}
+          width={220}
+          onRenameAccount={vi.fn()}
+          showAccountManagement={false}
+          rail={!open}
+          onToggleMenu={() => setOpen((o) => !o)}
+        />
+      );
+    }
+    const { container } = render(<Harness />);
+    expect(container.querySelector(".email-sidebar--rail")).toBeTruthy();
+
+    await userEvent.click(screen.getByRole("button", { name: "Expand menu" }));
+    expect(container.querySelector(".email-sidebar--rail")).toBeNull();
+    expect(await screen.findByText("Inbox")).toBeTruthy();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Collapse menu" })
+    );
+    expect(container.querySelector(".email-sidebar--rail")).toBeTruthy();
+  });
+});

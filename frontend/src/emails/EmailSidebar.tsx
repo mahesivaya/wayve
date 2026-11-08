@@ -29,6 +29,46 @@ interface EmailSidebarProps {
   // copy is hidden to avoid showing two.
   showComposeButton?: boolean;
   showFolderNav?: boolean;
+  // Gmail-style icon rail for the emails page inside a split pane: Compose as
+  // an icon, then the folder and label icons. The accounts list is left out.
+  rail?: boolean;
+  // Split pane only: the ☰ button above Compose that switches between the
+  // icon rail and the full menu with names.
+  onToggleMenu?: () => void;
+}
+
+// ☰ toggle between the icon rail and the full menu (split pane only).
+function MenuToggle({
+  expanded,
+  onClick,
+}: {
+  expanded: boolean;
+  onClick: () => void;
+}) {
+  const label = expanded ? "Collapse menu" : "Expand menu";
+  return (
+    <button
+      type="button"
+      className="email-menu-toggle"
+      onClick={onClick}
+      aria-label={label}
+      aria-expanded={expanded}
+      title={label}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width="20"
+        height="20"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        aria-hidden="true"
+      >
+        <path d="M4 7h16 M4 12h16 M4 17h16" />
+      </svg>
+    </button>
+  );
 }
 
 export const EmailSidebar: React.FC<EmailSidebarProps> = ({
@@ -48,6 +88,8 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
   showAccountManagement = true,
   showComposeButton = true,
   showFolderNav = true,
+  rail = false,
+  onToggleMenu,
 }) => {
   const [editingAccountId, setEditingAccountId] = useState<number | null>(null);
   const [draftName, setDraftName] = useState("");
@@ -77,8 +119,42 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
     }
   };
 
+  if (rail) {
+    return (
+      <div className="email-sidebar email-sidebar--rail">
+        {onToggleMenu && <MenuToggle expanded={false} onClick={onToggleMenu} />}
+        {showComposeButton && (
+          <button
+            type="button"
+            className="compose-btn compose-btn--rail"
+            onClick={onCompose}
+            disabled={composeDisabled}
+            title={composeDisabled ? "No inbox available" : "New message"}
+            aria-label="New message"
+          >
+            <ComposeIcon size={18} aria-hidden="true" />
+          </button>
+        )}
+        {showFolderNav && (
+          <MailFolderNav
+            activeFolder={activeFolder}
+            onSelectFolder={setActiveFolder}
+            onShowAttachments={onOpenFiles}
+            filesActive={viewMode === "files"}
+            accountId={activeAccount}
+            rail
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="email-sidebar" style={{ width }}>
+    <div
+      className={`email-sidebar${onToggleMenu ? " email-sidebar--pane" : ""}`}
+      style={{ width }}
+    >
+      {onToggleMenu && <MenuToggle expanded onClick={onToggleMenu} />}
       {showComposeButton && (
         <button
           className="compose-btn"
