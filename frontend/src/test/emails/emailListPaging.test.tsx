@@ -466,3 +466,30 @@ describe("EmailList page footer", () => {
     slot.remove();
   });
 });
+
+// On a phone each row starts with a small select checkbox, not an avatar.
+describe("the mobile email row", () => {
+  it("shows a select checkbox instead of a profile avatar", async () => {
+    const { container } = render(
+      <EmailList
+        emails={makeEmails(2)}
+        selectedEmailId={null}
+        onOpenEmail={() => {}}
+        hasMore={false}
+        loadMore={vi.fn()}
+        loadingMore={false}
+        activeFolder="inbox"
+        isListView
+        scrollKey="mobile-select"
+        onBulkDelete={vi.fn()}
+      />
+    );
+    expect(container.querySelector(".mobile-email-avatar")).toBeNull();
+    const boxes = screen.getAllByRole("checkbox", { name: /^Select "Subject/ });
+    expect(boxes).toHaveLength(2);
+    expect(boxes[0].closest(".mobile-email-row")).not.toBeNull();
+
+    await userEvent.click(boxes[0]);
+    expect(screen.getByText("1 selected")).toBeTruthy();
+  });
+});

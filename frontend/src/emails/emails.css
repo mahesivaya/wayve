@@ -3178,38 +3178,40 @@ img.email-mention-avatar {
     display: none;
   }
 
-  /* Two lines per email, mobile-mail-app style: a large avatar spanning both,
+  /* Two lines per email, mobile-mail-app style: a small checkbox spanning both,
      sender · attachment pin · time on top, and subject (+ preview flowing into
      the same truncating line) · star below. Named areas (rather than
      source-order columns) so an email with no attachment still lines up with
      one that has one — the pin's area is simply empty. */
   .mobile-email-row {
     display: grid;
-    grid-template-columns: 40px minmax(0, 1fr) auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
     grid-template-areas:
-      "avatar sender pin time"
-      "avatar subject subject star";
+      "select sender pin time"
+      "select subject subject star";
     align-items: center;
     column-gap: 12px;
     row-gap: 4px;
     width: 100%;
   }
 
-  .mobile-email-avatar {
-    grid-area: avatar;
+  /* Small select checkbox in place of an avatar. The span is the tap target
+     (a little larger than the box) so it's easy to hit with a thumb. */
+  .mobile-email-select {
+    grid-area: select;
     align-self: center;
-    width: 40px;
-    height: 40px;
-    font-size: 17px;
-    border-radius: 50%;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: var(--color-surface-warm-tan);
-    color: var(--color-on-primary);
-    font-weight: 800;
-    line-height: 1;
-    overflow: hidden;
+    width: 24px;
+    height: 32px;
+  }
+
+  .mobile-email-checkbox {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
   }
 
   .mobile-email-sender {
@@ -3876,4 +3878,66 @@ img.email-mention-avatar {
   height: 32px;
   padding-top: 0;
   padding-bottom: 0;
+}
+
+/* ---- Phones: folder menu as a drawer (☰ before select-all) ----
+   The folder chips are wider than a phone, so they're hidden there; the ☰
+   button opens the full folder menu as a drawer instead. */
+.email-mobile-menu-btn {
+  display: none;
+}
+
+@media (max-width: 700px) {
+  .main .email-folder-tabs {
+    display: none;
+  }
+
+  .email-mobile-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    margin-right: 4px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--color-text-primary);
+    cursor: pointer;
+  }
+
+  .email-mobile-menu-btn:hover,
+  .email-mobile-menu-btn:focus-visible {
+    background: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+  }
+
+  /* Beats `.main .email-sidebar { display: none }` above and the inline
+     width the sidebar carries on wider screens. */
+  .main .email-sidebar.email-sidebar--drawer {
+    display: flex;
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1001;
+    box-sizing: border-box;
+    width: min(300px, 85vw) !important;
+    min-width: 0;
+    max-width: none;
+    overflow-y: auto;
+    box-shadow: 4px 0 24px rgb(0, 0, 0, 0.35);
+  }
+
+  .email-sidebar--drawer .email-menu-toggle {
+    align-self: flex-start;
+  }
+
+  .email-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgb(0, 0, 0, 0.45);
+  }
 }

@@ -448,6 +448,13 @@ export default function Emails() {
   // In a split pane the email sidebar starts as an icon rail; its ☰ button
   // opens the full menu with names (and closes it again).
   const [paneMenuOpen, setPaneMenuOpen] = useState(false);
+  // Phones: the folder chips are hidden and a ☰ before select-all opens the
+  // folder menu as a drawer instead.
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const closeMenus = () => {
+    setPaneMenuOpen(false);
+    setMobileMenuOpen(false);
+  };
   // A press anywhere outside the expanded menu folds it back, as Gmail's
   // does. Presses inside it (☰, More, a folder) are handled by the menu.
   useEffect(() => {
@@ -868,23 +875,23 @@ export default function Emails() {
               // In a split pane, picking anything from the expanded menu folds
               // it back into the icon rail, as Gmail's does.
               setActiveAccount={(id) => {
-                setPaneMenuOpen(false);
+                closeMenus();
                 setActiveAccount(id);
               }}
               activeFolder={activeFolder}
               setActiveFolder={(f) => {
-                setPaneMenuOpen(false);
+                closeMenus();
                 setViewMode("email");
                 setActiveFolder(f);
               }}
               viewMode={viewMode}
               onOpenFiles={() => {
-                setPaneMenuOpen(false);
+                closeMenus();
                 showFiles();
               }}
               onRequestAddAccount={() => setAddAccountOpen(true)}
               onCompose={() => {
-                setPaneMenuOpen(false);
+                closeMenus();
                 setComposeOpen(true);
               }}
               composeDisabled={accounts.length === 0}
@@ -897,9 +904,14 @@ export default function Emails() {
               showComposeButton={
                 (isPersonalScope || inSplitPane) && showToolbar
               }
-              rail={inSplitPane && !paneMenuOpen}
+              rail={inSplitPane && !paneMenuOpen && !mobileMenuOpen}
+              drawer={mobileMenuOpen}
               onToggleMenu={
-                inSplitPane ? () => setPaneMenuOpen((open) => !open) : undefined
+                mobileMenuOpen
+                  ? () => setMobileMenuOpen(false)
+                  : inSplitPane
+                    ? () => setPaneMenuOpen((open) => !open)
+                    : undefined
               }
             />
 
@@ -914,6 +926,14 @@ export default function Emails() {
               />
             )}
           </>
+        )}
+
+        {mobileMenuOpen && (
+          <div
+            className="email-drawer-backdrop"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-hidden="true"
+          />
         )}
 
         {/* The toolbar (view toggles + search, and org Compose) heads only
@@ -1023,6 +1043,9 @@ export default function Emails() {
                 // there too, so it still sits right before Inbox.
                 selectSlot={
                   !isPersonalScope && !chipsInToolbar ? null : selectSlot
+                }
+                onOpenMenu={
+                  showToolbar ? () => setMobileMenuOpen(true) : undefined
                 }
                 total={total}
                 ownAddresses={ownAddresses}
