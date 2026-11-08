@@ -38,6 +38,10 @@ interface EmailSidebarProps {
 }
 
 // ☰ toggle between the icon rail and the full menu (split pane only).
+// Width of the icon rail (.email-sidebar--rail in emails.css). The expanded
+// menu in a pane keeps this footprint and draws the rest over the list.
+const RAIL_WIDTH_PX = 70;
+
 function MenuToggle({
   expanded,
   onClick,
@@ -152,7 +156,14 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
   return (
     <div
       className={`email-sidebar${onToggleMenu ? " email-sidebar--pane" : ""}`}
-      style={{ width }}
+      style={
+        onToggleMenu
+          ? // In a pane the expanded menu opens OVER the list: the negative
+            // margin keeps the rail's footprint, so the list and its toolbar
+            // (pager included) don't move or wrap.
+            { width, marginRight: RAIL_WIDTH_PX - width }
+          : { width }
+      }
     >
       {onToggleMenu && <MenuToggle expanded onClick={onToggleMenu} />}
       {showComposeButton && (
