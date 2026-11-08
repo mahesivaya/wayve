@@ -252,7 +252,7 @@ export default function OrganizationConsoleCards() {
     {
       icon: <SsoIcon size={26} />,
       label: "SSO",
-      description: "SAML / OIDC sign-in configuration for your team.",
+      description: "OIDC sign-in configuration for your team.",
       path: "/settings/sso",
       visible: canSeeSso,
     },
