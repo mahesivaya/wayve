@@ -26,7 +26,9 @@
   flex-shrink: 0;
   height: 38px;
   position: relative;
-  border-bottom: 1px solid var(--color-border);
+  /* No divider under the header. Transparent rather than none, so the header
+     keeps its height and its contents don't shift. */
+  border-bottom: 1px solid transparent;
 }
 
 .header-brand {
@@ -1968,7 +1970,6 @@ html.is-titlebar-inset .header .split-menu-btn svg {
    is also #0a1730 there.
    ============================================================ */
 :root[data-theme="dark"] .header {
-  border-bottom: 1px solid var(--color-border-dark);
   color: var(--color-surface-tint-slate);
 }
 /* Dark-mode `.logo` override removed — the base rule already pins the
