@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import DOMPurify from "dompurify";
 import { isHtmlBody } from "./bodyUtils";
 import { routeEmailWheel } from "./emailWheel";
+import { FIT_WIDTH_QUERY, fitZoom } from "./emailFitWidth";
 import { renderEmailBody } from "./renderUtils";
 
 // Links inside a sanitized email open in a new tab and can never reach back
@@ -108,9 +109,30 @@ function HtmlEmail({ html }: { html: string }) {
   const fit = () => {
     const doc = ref.current?.contentDocument;
     if (!doc?.documentElement) return;
+    if (doc.body && window.matchMedia?.(FIT_WIDTH_QUERY).matches) {
+      const zoom = fitZoom(doc);
+      if (zoom < 1) doc.body.style.setProperty("zoom", String(zoom));
+    } else {
+      doc.body?.style.removeProperty("zoom");
+    }
     const next = doc.documentElement.scrollHeight;
     if (next > 0) setHeight((prev) => (prev === next ? prev : next));
   };
+
+  // Re-fit when the frame changes width: a phone rotating, or the window
+  // crossing the phone breakpoint.
+  useEffect(() => {
+    const frame = ref.current;
+    if (!frame || typeof ResizeObserver === "undefined") return;
+    let lastWidth = frame.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (frame.clientWidth === lastWidth) return;
+      lastWidth = frame.clientWidth;
+      fit();
+    });
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, []);
 
   const handleLoad = () => {
     fit();

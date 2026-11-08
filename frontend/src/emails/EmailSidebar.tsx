@@ -35,6 +35,8 @@ interface EmailSidebarProps {
   // Split pane only: the ☰ button above Compose that switches between the
   // icon rail and the full menu with names.
   onToggleMenu?: () => void;
+  // Phones: the full menu as a slide-in drawer over the page.
+  drawer?: boolean;
 }
 
 // ☰ toggle between the icon rail and the full menu (split pane only).
@@ -94,6 +96,7 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
   showFolderNav = true,
   rail = false,
   onToggleMenu,
+  drawer = false,
 }) => {
   const [editingAccountId, setEditingAccountId] = useState<number | null>(null);
   const [draftName, setDraftName] = useState("");
@@ -155,9 +158,9 @@ export const EmailSidebar: React.FC<EmailSidebarProps> = ({
 
   return (
     <div
-      className={`email-sidebar${onToggleMenu ? " email-sidebar--pane" : ""}`}
+      className={`email-sidebar${drawer ? " email-sidebar--drawer" : onToggleMenu ? " email-sidebar--pane" : ""}`}
       style={
-        onToggleMenu
+        onToggleMenu && !drawer
           ? // In a pane the expanded menu opens OVER the list: the negative
             // margin keeps the rail's footprint, so the list and its toolbar
             // (pager included) don't move or wrap.

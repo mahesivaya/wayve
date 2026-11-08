@@ -87,6 +87,9 @@ interface EmailListProps {
   // Same idea for the select-all checkbox + its ▾ menu: the page toolbar's
   // slot (before the view buttons) when there is one, else the bulk bar.
   selectSlot?: HTMLElement | null;
+  // Phones: a ☰ button before select-all that opens the folder menu drawer
+  // (the folder chips are hidden there). CSS shows it only on narrow screens.
+  onOpenMenu?: () => void;
   // Rows in this whole view, from the server, for "page / pages". Null when
   // unknown; the pager then shows only the page number.
   total?: number | null;
@@ -160,6 +163,7 @@ export const EmailList: React.FC<EmailListProps> = ({
   scrollKey = "emails",
   pagerSlot = null,
   selectSlot = null,
+  onOpenMenu,
   total = null,
   ownAddresses = [],
 }) => {
@@ -593,6 +597,27 @@ export const EmailList: React.FC<EmailListProps> = ({
     checkedIds.size > 0 || (showFolderTabs && !!onSelectFolder) || !!bulkHint;
   const selectControl = (
     <div className="email-select" ref={selectMenuRef}>
+      {onOpenMenu && (
+        <button
+          type="button"
+          className="email-mobile-menu-btn"
+          onClick={onOpenMenu}
+          aria-label="Open folders menu"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            aria-hidden="true"
+          >
+            <path d="M4 7h16 M4 12h16 M4 17h16" />
+          </svg>
+        </button>
+      )}
       <input
         type="checkbox"
         className="email-bulk-master"
@@ -1049,17 +1074,28 @@ export const EmailList: React.FC<EmailListProps> = ({
                   </span>
                 )}
               </div>
-              {/* Two-line mobile-mail-app row: a large avatar, sender and time
-              on top, then subject and preview flowing together as one
-              truncating line with the star (see `.mobile-email-row` in
+              {/* Two-line mobile-mail-app row: a small select checkbox, sender
+              and time on top, then subject and preview flowing together as
+              one truncating line with the star (see `.mobile-email-row` in
               emails.css). */}
               <div className="mobile-email-row">
-                <div className="mobile-email-avatar" aria-hidden="true">
-                  {conversationSenders(email, ownAddresses, displaySender)
-                    .lead.trim()
-                    .charAt(0)
-                    .toUpperCase()}
-                </div>
+                {selectable && (
+                  // stopPropagation so ticking it doesn't also open the email.
+                  <span
+                    className="mobile-email-select"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      className="mobile-email-checkbox"
+                      checked={checkedIds.has(email.id)}
+                      onChange={() => toggleChecked(email.id)}
+                      // Its own wording: CSS shows either this or the desktop
+                      // row's checkbox, but both are in the DOM.
+                      aria-label={`Select "${email.subject || "(No Subject)"}"`}
+                    />
+                  </span>
+                )}
                 <span className={senderClass("mobile-email-sender", email)}>
                   <SenderNames email={email} ownAddresses={ownAddresses} />
                   <ConversationCount email={email} />
