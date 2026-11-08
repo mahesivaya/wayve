@@ -26,9 +26,7 @@
   flex-shrink: 0;
   height: 38px;
   position: relative;
-  /* No divider under the header. Transparent rather than none, so the header
-     keeps its height and its contents don't shift. */
-  border-bottom: 1px solid transparent;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .header-brand {
@@ -1970,6 +1968,8 @@ html.is-titlebar-inset .header .split-menu-btn svg {
    is also #0a1730 there.
    ============================================================ */
 :root[data-theme="dark"] .header {
+  /* A faint neutral divider, not the navy --color-border-dark. */
+  border-bottom: 1px solid var(--color-overlay-border);
   color: var(--color-surface-tint-slate);
 }
 /* Dark-mode `.logo` override removed — the base rule already pins the
@@ -1986,7 +1986,16 @@ html.is-titlebar-inset .header .split-menu-btn svg {
 :root[data-theme="dark"] .sidebar {
   --sidebar-hover: var(--color-surface-hover);
 
-  border-right: 1px solid var(--color-border-dark);
+  /* A faint neutral divider, matching the header's. */
+  border-right: 1px solid var(--color-overlay-border);
+}
+/* The resize handle's own line would sit beside that border as a second,
+   brighter one, so in dark mode it only shows on hover or drag. It still has
+   to paint: the handle takes up 2px of the row, and left transparent that gap
+   shows the navy page background behind it. Same colour as .page-card-frame,
+   so the gap blends into the page. */
+:root[data-theme="dark"] .sidebar-resize-handle:not(:hover, :active)::after {
+  background: color-mix(in oklab, var(--color-canvas) 94%, black);
 }
 :root[data-theme="dark"] .sidebar-collapse-btn {
   color: var(--color-on-primary);
