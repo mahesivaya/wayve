@@ -3495,7 +3495,14 @@ img.email-mention-avatar {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  margin-top: var(--space-4);
+  /* Tucked close under the mailbox accounts above it. */
+  margin-top: var(--space-1);
+}
+
+/* Nothing above it (no compose button or account list): the sidebar's own
+   padding is the only gap, matching the space at the sides. */
+.mail-nav:first-child {
+  margin-top: 0;
 }
 
 .mail-nav-list {
