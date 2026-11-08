@@ -3021,6 +3021,24 @@ img.email-mention-avatar {
     padding: 0 12px 16px;
     gap: 0;
     box-sizing: border-box;
+    /* The list only ever scrolls vertically on a phone. Anything wider than
+       the screen must wrap or truncate, never open a sideways scroll. */
+    overflow-x: hidden;
+  }
+
+  /* The folder tabs (Inbox … More) are wider than a phone screen. Unwrapped
+     they stretched the bulk bar, and with it the list, so the inbox swiped
+     sideways into empty space. Wrap them onto a second line instead; a
+     scrolling strip would clip the More dropdown. */
+  .email-bulk-bar,
+  .email-bulk-bar .email-folder-tabs {
+    flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .email-bulk-bar .email-folder-tabs {
+    margin-right: 0;
   }
 
   .email-item,
