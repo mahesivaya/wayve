@@ -87,6 +87,9 @@ const PlatformSupport = lazy(() => import("./platformTeam/PlatformSupport"));
 const PlatformAnalytics = lazy(
   () => import("./platformTeam/PlatformAnalytics")
 );
+const OrganizationAnalytics = lazy(
+  () => import("./organization/OrganizationAnalytics")
+);
 const PlatformWelcome = lazy(() => import("./platformTeam/PlatformWelcome"));
 const PlatformSecrets = lazy(() => import("./platformTeam/PlatformSecrets"));
 const PlatformLogs = lazy(() => import("./platformTeam/PlatformLogs"));
@@ -467,6 +470,11 @@ export default function App() {
               <Route
                 path="/platform/analytics"
                 element={<PlatformAnalytics />}
+              />
+              {/* The page gates on organization scope itself. */}
+              <Route
+                path="/organization/analytics"
+                element={<OrganizationAnalytics />}
               />
               <Route path="/platform/welcome" element={<PlatformWelcome />} />
               <Route path="/platform/secrets" element={<PlatformSecrets />} />
