@@ -448,6 +448,18 @@ export default function Emails() {
   // In a split pane the email sidebar starts as an icon rail; its ☰ button
   // opens the full menu with names (and closes it again).
   const [paneMenuOpen, setPaneMenuOpen] = useState(false);
+  // A press anywhere outside the expanded menu folds it back, as Gmail's
+  // does. Presses inside it (☰, More, a folder) are handled by the menu.
+  useEffect(() => {
+    if (!paneMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const menu = mainRef.current?.querySelector(".email-sidebar");
+      if (menu && e.target instanceof Node && menu.contains(e.target)) return;
+      setPaneMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [paneMenuOpen]);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const stored = localStorage.getItem("rwayve.emailSidebar.width");
     const parsed = stored ? Number(stored) : NaN;
@@ -853,16 +865,28 @@ export default function Emails() {
             <EmailSidebar
               accounts={displayedAccounts}
               activeAccount={activeAccount}
-              setActiveAccount={setActiveAccount}
+              // In a split pane, picking anything from the expanded menu folds
+              // it back into the icon rail, as Gmail's does.
+              setActiveAccount={(id) => {
+                setPaneMenuOpen(false);
+                setActiveAccount(id);
+              }}
               activeFolder={activeFolder}
               setActiveFolder={(f) => {
+                setPaneMenuOpen(false);
                 setViewMode("email");
                 setActiveFolder(f);
               }}
               viewMode={viewMode}
-              onOpenFiles={showFiles}
+              onOpenFiles={() => {
+                setPaneMenuOpen(false);
+                showFiles();
+              }}
               onRequestAddAccount={() => setAddAccountOpen(true)}
-              onCompose={() => setComposeOpen(true)}
+              onCompose={() => {
+                setPaneMenuOpen(false);
+                setComposeOpen(true);
+              }}
               composeDisabled={accounts.length === 0}
               width={sidebarWidth}
               onRenameAccount={renameAccount}
