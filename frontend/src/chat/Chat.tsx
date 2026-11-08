@@ -769,8 +769,14 @@ export default function Chat() {
     keys.set(user.id, currentUserPublicKey);
 
     if (conversation.type === "user") {
-      if (conversation.user.public_key?.length) {
-        keys.set(conversation.user.id, conversation.user.public_key);
+      // The directory is loaded once on mount, so a peer who published their key
+      // since then still looks keyless here. Re-check the server before refusing.
+      const peerKey = conversation.user.public_key?.length
+        ? conversation.user.public_key
+        : (await findChatUserByEmail(conversation.user.email).catch(() => null))
+            ?.public_key;
+      if (peerKey?.length) {
+        keys.set(conversation.user.id, peerKey);
       } else {
         throw new Error(
           `Can't send — ${conversation.user.email} hasn't set up encryption yet. ` +
