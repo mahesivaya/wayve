@@ -1049,12 +1049,10 @@ export const EmailList: React.FC<EmailListProps> = ({
                   </span>
                 )}
               </div>
-              {/* Single-line, Gmail-mobile-style row: avatar, sender, then
-              subject and preview flowing together as one truncating line, with
-              the attachment pin and time pinned to the right edge. Sender and
-              subject/preview each get their own fixed-then-flexible grid track
-              (see `.mobile-email-row` in emails.css) so nothing wraps to a
-              second line. */}
+              {/* Two-line mobile-mail-app row: a large avatar, sender and time
+              on top, then subject and preview flowing together as one
+              truncating line with the star (see `.mobile-email-row` in
+              emails.css). */}
               <div className="mobile-email-row">
                 <div className="mobile-email-avatar" aria-hidden="true">
                   {conversationSenders(email, ownAddresses, displaySender)

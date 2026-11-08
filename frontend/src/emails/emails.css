@@ -3021,6 +3021,24 @@ img.email-mention-avatar {
     padding: 0 12px 16px;
     gap: 0;
     box-sizing: border-box;
+    /* The list only ever scrolls vertically on a phone. Anything wider than
+       the screen must wrap or truncate, never open a sideways scroll. */
+    overflow-x: hidden;
+  }
+
+  /* The folder tabs (Inbox … More) are wider than a phone screen. Unwrapped
+     they stretched the bulk bar, and with it the list, so the inbox swiped
+     sideways into empty space. Wrap them onto a second line instead; a
+     scrolling strip would clip the More dropdown. */
+  .email-bulk-bar,
+  .email-bulk-bar .email-folder-tabs {
+    flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .email-bulk-bar .email-folder-tabs {
+    margin-right: 0;
   }
 
   .email-item,
@@ -3028,9 +3046,9 @@ img.email-mention-avatar {
     min-height: 0;
     align-items: stretch;
     justify-content: flex-start;
-    /* Tightened from 8px → 2px so more rows fit on a 640px phone screen;
-       subject + sender are still legible on 13px font. */
-    padding: 2px 0;
+    /* Roomy rows: about ten emails per phone screen, each easy to read and
+       tap, rather than a dense desktop-style list. */
+    padding: 10px 0;
     border-bottom: none;
     background: transparent;
     box-shadow: none;
@@ -3058,24 +3076,29 @@ img.email-mention-avatar {
     display: none;
   }
 
-  /* One line per email, Gmail-mobile-app style: avatar · sender · subject
-     (+ preview flowing into the same truncating line) · attachment pin ·
-     time. Named areas (rather than source-order columns) so an email with
-     no attachment still lines up column-for-column with one that has one —
-     the pin's area is simply empty instead of shifting later columns left. */
+  /* Two lines per email, mobile-mail-app style: a large avatar spanning both,
+     sender · attachment pin · time on top, and subject (+ preview flowing into
+     the same truncating line) · star below. Named areas (rather than
+     source-order columns) so an email with no attachment still lines up with
+     one that has one — the pin's area is simply empty. */
   .mobile-email-row {
     display: grid;
-    grid-template-columns: 26px 130px minmax(0, 1fr) 16px auto 24px;
-    grid-template-areas: "avatar sender subject pin time star";
+    grid-template-columns: 40px minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "avatar sender pin time"
+      "avatar subject subject star";
     align-items: center;
-    column-gap: 8px;
+    column-gap: 12px;
+    row-gap: 4px;
     width: 100%;
   }
 
   .mobile-email-avatar {
     grid-area: avatar;
-    width: 26px;
-    height: 26px;
+    align-self: center;
+    width: 40px;
+    height: 40px;
+    font-size: 17px;
     border-radius: 50%;
     display: inline-flex;
     align-items: center;
@@ -3083,7 +3106,6 @@ img.email-mention-avatar {
     background: var(--color-surface-warm-tan);
     color: var(--color-on-primary);
     font-weight: 800;
-    font-size: 13px;
     line-height: 1;
     overflow: hidden;
   }
@@ -3093,21 +3115,17 @@ img.email-mention-avatar {
     /* #root sets `text-align: center` and this span sits outside
        `.email-primary` (the element that normally cancels that out), so
        without an explicit override each sender name centers inside its own
-       130px track instead of starting flush left — the column reads ragged
-       even though the track edges themselves line up. Same fix as the
-       desktop `.email-list-sender` track. */
+       track instead of starting flush left. Same fix as the desktop
+       `.email-list-sender` track. */
     text-align: left;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--color-text-primary);
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 800;
-    line-height: 1.2;
-    /* Extra breathing room before the subject column, on top of the row's
-       shared 8px column-gap — a gap change here only, not on every track. */
-    padding-right: 22px;
+    line-height: 1.3;
   }
 
   /* Subject and preview are separate spans but both `display: inline`, so
@@ -3121,8 +3139,8 @@ img.email-mention-avatar {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 13px;
-    line-height: 1.2;
+    font-size: 14px;
+    line-height: 1.35;
   }
 
   .mobile-email-subject {
@@ -3146,12 +3164,14 @@ img.email-mention-avatar {
 
   .mobile-email-star {
     grid-area: star;
+    justify-self: end;
   }
 
   .mobile-email-time {
     grid-area: time;
+    justify-self: end;
     color: var(--color-text-slate-mid);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     white-space: nowrap;
   }
