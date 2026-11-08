@@ -2662,13 +2662,17 @@ img.email-mention-avatar {
 /* Sender header row: colored initial avatar, name + email, recipient
    line, and the date pushed to the right. Mirrors Gmail's open-email
    header so users get a familiar reading layout. */
+/* Wraps the sender row and its details card, so the divider sits under both. */
+.email-meta {
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border-soft);
+  margin-bottom: var(--space-5);
+}
+
 .email-meta-row {
   display: flex;
   align-items: flex-start;
   gap: var(--space-4);
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--color-border-soft);
-  margin-bottom: var(--space-5);
 }
 
 .email-meta-avatar {
@@ -2804,11 +2808,101 @@ img.email-mention-avatar {
   overflow-wrap: anywhere;
 }
 
+/* "to me ▾": a short recipient summary that opens the details card. */
 .email-meta-to {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  margin: 2px -4px 0;
+  padding: 2px 4px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.email-meta-to:hover,
+.email-meta-to:focus-visible {
+  background: var(--color-surface-hover);
+}
+
+.email-meta-to-caret {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* From / To / Cc / Date, Gmail's expanded header: labels in a narrow column,
+   each address on its own line. */
+.email-meta-details {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 10px 20px;
+  margin: var(--space-4) 0 0;
+  padding: var(--space-5) var(--space-6, 16px);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-hover);
+  font-size: var(--text-sm);
+}
+
+.email-meta-details dt {
+  color: var(--color-text-muted);
+}
+
+.email-meta-details dd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+.email-meta-details dd > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.email-meta-details-address {
+  color: var(--color-text-muted);
+}
+
+/* The compact time under the name shows only on narrow screens. */
+.email-meta-time-inline {
+  display: none;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
-  margin-top: 2px;
-  overflow-wrap: anywhere;
+}
+
+/* Narrow (mobile): name on its own, time under it, then "to me ▾". The full
+   address and date move into the details card instead of crowding the row. */
+@media (max-width: 700px) {
+  .email-meta-email,
+  .email-meta-time {
+    display: none;
+  }
+
+  .email-meta-time-inline {
+    display: block;
+    margin-top: 2px;
+  }
+
+  .email-meta-details dd {
+    flex-direction: column;
+  }
 }
 
 .email-meta-time {
