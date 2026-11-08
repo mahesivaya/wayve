@@ -4,7 +4,7 @@ import "./emails.css";
 import "./pager.css";
 import "../files/emailFiles.css";
 import SendEmail from "./SendEmail";
-import Modal from "../components/Modal";
+import ComposeWindow from "./ComposeWindow";
 import { EmailSidebar } from "./EmailSidebar";
 import { EmailList } from "./EmailList";
 import { EmailDetail } from "./EmailDetail";
@@ -445,6 +445,9 @@ export default function Emails() {
   // whole menu jumps up next to Compose mid-click. The files pane renders the
   // same bar flush at the top of its pane instead (see EmailDetail).
   const chipsInToolbar = inSplitPane || effectiveLayout === "split";
+  // In a split pane the email sidebar starts as an icon rail; its ☰ button
+  // opens the full menu with names (and closes it again).
+  const [paneMenuOpen, setPaneMenuOpen] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const stored = localStorage.getItem("rwayve.emailSidebar.width");
     const parsed = stored ? Number(stored) : NaN;
@@ -765,17 +768,29 @@ export default function Emails() {
   const isPersonalScope = user?.scope
     ? user.scope === "personal"
     : user?.account_type === "personal";
-  // Any signed-in user may connect and manage their OWN mailbox — the address
-  // they logged in with — so the Accounts panel and add-account button show for
-  // every scope. Shared/domain mailboxes are still managed in /settings/inboxes.
-  const showAccountManagement = !!user;
+  // Organization and platform members read their team mailboxes as one
+  // unified inbox, so the Accounts block (heading, add button and account
+  // list) is left out for them. Their mailboxes are managed in
+  // /settings/inboxes.
+  const isTeamScope =
+    user?.scope === "organization" || user?.scope === "platform";
+  // Every other signed-in user may connect and manage their OWN mailbox — the
+  // address they logged in with — so the Accounts panel and add-account button
+  // show for them.
+  const showAccountManagement = !!user && !isTeamScope;
   // Mirrors the backend gate `require_external_mailbox_actor`: any authenticated
   // account may connect its own mailbox, regardless of scope.
   const canConnectOwnMailbox = !!user;
   // With activeAccount = null the backend returns owned + shared-member + wayve
   // mail, so every scope defaults to the unified inbox but can still drill into a
   // single shared one.
-  const showAccountFilter = displayedAccounts.length > 0;
+  const showAccountFilter = displayedAccounts.length > 0 && !isTeamScope;
+
+  // With no account list to switch back from, an organization or platform
+  // member is always on the unified inbox.
+  useEffect(() => {
+    if (isTeamScope && activeAccount !== null) setActiveAccount(null);
+  }, [isTeamScope, activeAccount, setActiveAccount]);
 
   // If a selected account disappears (e.g. a shared inbox is revoked), fall back
   // to the unified view rather than jumping to some other mailbox.
@@ -853,17 +868,27 @@ export default function Emails() {
               onRenameAccount={renameAccount}
               showAccountFilter={showAccountFilter}
               showAccountManagement={showAccountManagement}
-              showComposeButton={isPersonalScope && showToolbar}
+              // In a split pane the rail carries Compose for every scope, so
+              // the toolbar copy below steps aside there.
+              showComposeButton={
+                (isPersonalScope || inSplitPane) && showToolbar
+              }
+              rail={inSplitPane && !paneMenuOpen}
+              onToggleMenu={
+                inSplitPane ? () => setPaneMenuOpen((open) => !open) : undefined
+              }
             />
 
-            <div
-              className="email-sidebar-resizer"
-              onMouseDown={startSidebarResize}
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="Resize email sidebar"
-              data-tooltip="Drag to resize sidebar"
-            />
+            {!inSplitPane && (
+              <div
+                className="email-sidebar-resizer"
+                onMouseDown={startSidebarResize}
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize email sidebar"
+                data-tooltip="Drag to resize sidebar"
+              />
+            )}
           </>
         )}
 
@@ -878,7 +903,7 @@ export default function Emails() {
                 (meant to appear only below 700px, once the sidebar hides) but
                 showed up duplicated alongside the sidebar's own button, so it's
                 dropped here entirely. */}
-              {!isPersonalScope && (
+              {!isPersonalScope && !inSplitPane && (
                 <button
                   className="compose-btn compose-btn--toolbar"
                   onClick={() => setComposeOpen(true)}
@@ -896,7 +921,8 @@ export default function Emails() {
                 <div className="emails-toolbar-select" ref={setSelectSlot} />
                 {/* Split (pane or list+detail layout): the folder menu sits next to
                   Compose (the list header that normally hosts it is too cramped). */}
-                {chipsInToolbar && !isPersonalScope && (
+                {/* Not in a split pane: the icon rail holds the folders there. */}
+                {chipsInToolbar && !isPersonalScope && !inSplitPane && (
                   <FolderChips
                     activeFolder={viewMode === "email" ? activeFolder : null}
                     onSelectFolder={(f) => {
@@ -1030,21 +1056,6 @@ export default function Emails() {
               />
             )}
 
-            <Modal
-              contained
-              isOpen={composeOpen && composeAccountId !== null}
-              onClose={() => setComposeOpen(false)}
-              title="New Message"
-            >
-              {composeAccountId !== null && (
-                <SendEmail
-                  accountId={composeAccountId}
-                  accounts={displayedAccounts}
-                  onClose={() => setComposeOpen(false)}
-                />
-              )}
-            </Modal>
-
             {showDetail && viewMode === "files" && (
               <EmailFileDetail
                 file={selectedFile}
@@ -1111,6 +1122,20 @@ export default function Emails() {
             </button>
           )}
         </div>
+      )}
+      {/* Gmail-style: docked bottom-right with no backdrop, so the emails
+          behind it can still be opened and read while writing. */}
+      {composeOpen && composeAccountId !== null && (
+        <ComposeWindow
+          title="New Message"
+          onClose={() => setComposeOpen(false)}
+        >
+          <SendEmail
+            accountId={composeAccountId}
+            accounts={displayedAccounts}
+            onClose={() => setComposeOpen(false)}
+          />
+        </ComposeWindow>
       )}
     </div>
   );
