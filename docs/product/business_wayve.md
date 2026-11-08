@@ -308,7 +308,7 @@ exceeds the conversion value.
 | **Wayve Organization** | **$10** | Email + chat + calls + scheduler + drive + notes + tasks + AI + 5M API requests + SCIM + audit export + webhooks |
 | Google Workspace Business Plus | $18 | Email + chat + calls + scheduler + drive (5 TB) + AI (Gemini) + S/MIME, AppSheet |
 | Microsoft 365 Business Premium | $22 | Email + Teams + drive (1 TB) + Office apps + Intune endpoint mgmt |
-| Slack Business+ | $15 | Just chat (search, channels, integrations, SAML) |
+| Slack Business+ | $15 | Just chat (search, channels, integrations, SSO) |
 | Notion Business | $15 | Notes/wiki only |
 | Stitched alternative for an equivalent stack | $50-100 | Multiple invoices, multiple SCIM configs |
 

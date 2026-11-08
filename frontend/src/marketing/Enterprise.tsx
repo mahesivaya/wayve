@@ -97,7 +97,7 @@ export default function Enterprise() {
             <div className="marketing-hero-card-row">
               <span className="marketing-hero-card-icon">💬</span>
               <span className="marketing-hero-card-text">
-                #security: SAML rollout
+                #security: SSO rollout
               </span>
               <span className="marketing-hero-card-meta">9m</span>
             </div>
