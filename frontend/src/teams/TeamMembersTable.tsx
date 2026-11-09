@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import ContactAvatar from "../shared/ContactAvatar";
+import { formatJoined } from "./formatJoined";
 import {
   ListFilterIcon,
   MembersIcon,
@@ -16,20 +17,6 @@ export type Member = {
   joinedAt: string | null;
   teams: string[];
 };
-
-// "Jun 6", with the year once it's not this year. Blank for a missing date.
-function formatJoined(iso: string | null): string {
-  if (!iso) return "";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    ...(date.getFullYear() === new Date().getFullYear()
-      ? {}
-      : { year: "numeric" }),
-  });
-}
 
 // An icon button in the toolbar and the small menu it opens. Stays open while
 // its options are changed; closes on Escape or a click outside.
@@ -97,11 +84,16 @@ export default function TeamMembersTable({
   canManage,
   busy,
   onRemove,
+  selectedId,
+  onSelect,
 }: {
   members: Member[];
   canManage: boolean;
   busy: boolean;
   onRemove: (member: Member) => void;
+  /** The member whose details card is open, if any. */
+  selectedId: number | null;
+  onSelect: (member: Member) => void;
 }) {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string | null>(null);
@@ -237,7 +229,10 @@ export default function TeamMembersTable({
         </thead>
         <tbody>
           {visible.map((m) => (
-            <tr key={m.id}>
+            <tr
+              key={m.id}
+              className={m.id === selectedId ? "is-selected" : undefined}
+            >
               <td>
                 <div className="team-roster-person">
                   <ContactAvatar
@@ -245,15 +240,14 @@ export default function TeamMembersTable({
                     className="team-roster-avatar"
                   />
                   <div className="team-roster-identity">
-                    <span className="team-roster-name">{m.name}</span>
-                    {m.email && (
-                      <a
-                        className="team-roster-email"
-                        href={`mailto:${m.email}`}
-                      >
-                        {m.email}
-                      </a>
-                    )}
+                    <button
+                      type="button"
+                      className="team-roster-name"
+                      onClick={() => onSelect(m)}
+                      aria-expanded={m.id === selectedId}
+                    >
+                      {m.name}
+                    </button>
                   </div>
                 </div>
               </td>

@@ -335,25 +335,146 @@
   min-width: 0;
 }
 
+/* A button: clicking the name opens the details card. Still reads as text. */
 .team-roster-name {
   overflow: hidden;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
   color: var(--color-text-primary);
+  font: inherit;
   font-size: var(--text-md);
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
 }
 
-.team-roster-email {
-  overflow: hidden;
+.team-roster-name:hover {
+  text-decoration: underline;
+}
+
+.team-roster tr.is-selected {
+  background: var(--color-surface-hover);
+}
+
+/* The list and, when a name is clicked, the details card to its right. Sized as
+   a container so a narrow split pane gets the overlay layout below, which a
+   viewport media query couldn't detect. */
+.team-body {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.team-body > .team-members {
+  flex: 1;
+  min-width: 0;
+}
+
+.team-member-card {
+  position: sticky;
+  top: 0;
+  flex: 0 0 300px;
+  box-sizing: border-box;
+  padding: 20px;
+}
+
+.team-member-card-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
-  text-decoration: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  cursor: pointer;
 }
 
-.team-roster-email:hover {
-  text-decoration: underline;
+.team-member-card-close:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.team-member-card-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--color-border-soft);
+  text-align: center;
+}
+
+.team-member-card-avatar {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.team-member-card-name {
+  max-width: 100%;
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.team-member-card-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 16px 0 0;
+}
+
+.team-member-card-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: var(--text-md);
+}
+
+.team-member-card-row dt {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.team-member-card-row dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-primary);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* No room for two columns (phone, split pane): the card opens over the list. */
+@container (max-width: 720px) {
+  .team-member-card {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 20;
+    width: min(300px, 100%);
+    background: var(--color-pane);
+    box-shadow: 4px 0 16px rgb(0, 0, 0, 0.25);
+  }
 }
 
 .team-roster-muted {
