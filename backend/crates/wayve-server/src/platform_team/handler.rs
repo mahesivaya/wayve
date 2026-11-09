@@ -231,7 +231,8 @@ pub async fn support_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppRe
 
     let recent_signups = sqlx::query(
         r#"
-        SELECT id, email, username, account_type, created_at, auth_provider
+        SELECT id, email, username, account_type,
+               created_at AT TIME ZONE 'UTC' AS created_at, auth_provider
           FROM users
          ORDER BY created_at DESC NULLS LAST
          LIMIT 15
@@ -443,7 +444,8 @@ pub async fn platform_users(
     let rows = sqlx::query(
         r#"
         SELECT
-            u.id, u.email, u.username, u.created_at,
+            u.id, u.email, u.username,
+            u.created_at AT TIME ZONE 'UTC' AS created_at,
             (
               (SELECT COALESCE(SUM(octet_length(e.body_encrypted)), 0)::BIGINT FROM emails e
                  JOIN email_accounts ea ON e.account_id = ea.id WHERE ea.user_id = u.id)
