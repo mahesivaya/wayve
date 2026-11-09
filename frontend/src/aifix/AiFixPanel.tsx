@@ -198,6 +198,7 @@ export default function AiFixPanel({
             onClick={() => void start()}
             disabled={busy}
             data-tooltip={`Have Claude propose a fix in CI, then review the diff here`}
+            data-tooltip-align="right"
           >
             {busy
               ? "Starting…"
