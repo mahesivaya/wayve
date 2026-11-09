@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { MNEMONIC_WORD_COUNT } from "../crypto/mnemonic";
 import type { RecoveryMode } from "../auth/authContextValue";
 import { useAuth } from "../auth/useAuth";
+import { copyText } from "../utils/clipboard";
 import "./recoverySeedModal.css";
 
 interface Props {
@@ -29,7 +30,9 @@ export default function RecoverySeedModal({
 }: Props) {
   const { user } = useAuth();
   const words = useMemo(() => mnemonic.split(" "), [mnemonic]);
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
+    "idle"
+  );
   const [downloaded, setDownloaded] = useState(false);
 
   // Keyed to the account scope so personal and platform-team keys land in
@@ -48,26 +51,15 @@ export default function RecoverySeedModal({
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  function copyMnemonic() {
-    void navigator.clipboard?.writeText(mnemonic).then(() => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    });
+  async function copyMnemonic() {
+    const ok = await copyText(mnemonic);
+    setCopyState(ok ? "copied" : "failed");
+    window.setTimeout(() => setCopyState("idle"), 2000);
   }
 
   function downloadMnemonic() {
-    const body = [
-      "Hadal recovery phrase",
-      "=====================",
-      "",
-      "Keep this file somewhere safe and offline. This is the ONLY way",
-      "to recover your account if you forget your password or lose this",
-      "device. Hadal cannot reset it for you.",
-      "",
-      mnemonic,
-      "",
-      `Generated: ${new Date().toISOString()}`,
-    ].join("\n");
+    // Just the phrase, space-separated: exactly what the restore form takes.
+    const body = `${mnemonic}\n`;
     const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -111,10 +103,14 @@ export default function RecoverySeedModal({
           <button
             type="button"
             className="recovery-copy-btn"
-            onClick={copyMnemonic}
+            onClick={() => void copyMnemonic()}
             disabled={busy}
           >
-            {copied ? "Copied ✓" : "Copy"}
+            {copyState === "copied"
+              ? "Copied ✓"
+              : copyState === "failed"
+                ? "Couldn't copy"
+                : "Copy"}
           </button>
           <button
             type="button"
