@@ -1,4 +1,5 @@
 import type { EmailInvite } from "../api/email";
+import { displayLocale, hourOptions } from "../utils/datetime";
 
 // The join link, only when it is an https URL. The server already allows no
 // other, but the link goes into an href, and an invite is written by its
@@ -23,7 +24,7 @@ export const inviteLabel = (invite: EmailInvite): string => {
 };
 
 const dateText = (d: Date) =>
-  d.toLocaleDateString([], {
+  d.toLocaleDateString(displayLocale() ?? [], {
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -31,7 +32,11 @@ const dateText = (d: Date) =>
   });
 
 const timeText = (d: Date) =>
-  d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  d.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+    ...hourOptions(),
+  });
 
 // "2026-10-24" as a local date (not UTC midnight, which can land on the day
 // before in the Americas).

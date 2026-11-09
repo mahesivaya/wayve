@@ -3,7 +3,7 @@ import EmailBody from "./EmailBody";
 import { EmailAttachments } from "./EmailAttachments";
 import { emailBodyErrorMessage } from "./bodyUtils";
 import type { EmailItem } from "./types";
-import { APP_TIME_ZONE } from "../utils/datetime";
+import { APP_TIME_ZONE, displayLocale, hourOptions } from "../utils/datetime";
 
 // The earlier messages of an open conversation, oldest first, above the newest
 // one (which the reading pane shows in full as before). Each starts collapsed
@@ -149,11 +149,12 @@ function formatDate(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString("en-US", {
+  return d.toLocaleString(displayLocale(), {
     timeZone: APP_TIME_ZONE,
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    ...hourOptions(),
   });
 }

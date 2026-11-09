@@ -21,7 +21,7 @@ import { EmailItem } from "./types";
 import { SnoozeIcon, StarIcon } from "../icons";
 import { SnoozeMenu } from "./SnoozeMenu";
 import { updateEmailState, type InboxState } from "../api/sharedInboxes";
-import { APP_TIME_ZONE } from "../utils/datetime";
+import { APP_TIME_ZONE, displayLocale, hourOptions } from "../utils/datetime";
 import { useAuth } from "../auth/useAuth";
 import { useMentionSearch, mentionLabel } from "./useMentionSearch";
 import { avatarColor } from "../shared/avatar";
@@ -1547,20 +1547,21 @@ function formatEmailDate(iso: string | null | undefined): string {
     d.getMonth() === now.getMonth() &&
     d.getDate() === now.getDate();
   if (sameDay) {
-    return d.toLocaleTimeString("en-US", {
+    return d.toLocaleTimeString(undefined, {
       timeZone: APP_TIME_ZONE,
       hour: "numeric",
       minute: "2-digit",
+      ...hourOptions(),
     });
   }
   if (d.getFullYear() === now.getFullYear()) {
-    return d.toLocaleDateString("en-US", {
+    return d.toLocaleDateString(displayLocale(), {
       timeZone: APP_TIME_ZONE,
       month: "short",
       day: "numeric",
     });
   }
-  return d.toLocaleDateString("en-US", {
+  return d.toLocaleDateString(displayLocale(), {
     timeZone: APP_TIME_ZONE,
     year: "numeric",
     month: "short",
@@ -1574,7 +1575,7 @@ function formatEmailDateTime(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString("en-US", {
+  return d.toLocaleString(displayLocale(), {
     timeZone: APP_TIME_ZONE,
     weekday: "short",
     year: "numeric",
@@ -1582,5 +1583,6 @@ function formatEmailDateTime(iso: string | null | undefined): string {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    ...hourOptions(),
   });
 }

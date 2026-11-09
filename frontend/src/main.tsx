@@ -12,6 +12,7 @@ import { installDevLog } from "./utils/devlog";
 import { installErrorReporter } from "./utils/errorReporter";
 import { loadRuntimeConfig, runtimeConfig } from "./config/runtimeConfig";
 import { applyPlatformFont, cachedFontKey } from "./theme/platformFonts";
+import { applyTextSize, getTextSize } from "./theme/textSize";
 import { applyRuntimeClass } from "./utils/desktop";
 
 installDevLog();
@@ -26,6 +27,7 @@ applyRuntimeClass();
 void loadRuntimeConfig().finally(() => {
   const cached = cachedFontKey();
   applyPlatformFont(cached !== null ? cached : runtimeConfig().fontKey);
+  applyTextSize(getTextSize());
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
       <CustomThemeProvider>

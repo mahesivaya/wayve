@@ -17,6 +17,66 @@ export const APP_TIME_ZONE: string | undefined = undefined;
 
 const FALLBACK = "—";
 
+// The user's date and time format, from Settings › Appearance. Stored per
+// browser. "system" follows the browser's own locale.
+export type DateFormatPref = "system" | "month-first" | "day-first";
+export type TimeFormatPref = "system" | "12h" | "24h";
+
+const DATE_FORMAT_KEY = "wayve-date-format";
+const TIME_FORMAT_KEY = "wayve-time-format";
+
+function readPref(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writePref(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* per-browser convenience only */
+  }
+}
+
+export function getDateFormatPref(): DateFormatPref {
+  const value = readPref(DATE_FORMAT_KEY);
+  return value === "month-first" || value === "day-first" ? value : "system";
+}
+
+export function getTimeFormatPref(): TimeFormatPref {
+  const value = readPref(TIME_FORMAT_KEY);
+  return value === "12h" || value === "24h" ? value : "system";
+}
+
+export const setDateFormatPref = (pref: DateFormatPref) =>
+  writePref(DATE_FORMAT_KEY, pref);
+export const setTimeFormatPref = (pref: TimeFormatPref) =>
+  writePref(TIME_FORMAT_KEY, pref);
+
+// The locale that gives a date format: month first or day first.
+export function localeForDateFormat(pref: DateFormatPref): string | undefined {
+  if (pref === "month-first") return "en-US";
+  if (pref === "day-first") return "en-GB";
+  return undefined;
+}
+
+// Intl options for a time format. hourCycle, because `hour12: false` can print
+// midnight as 24:00.
+export function hourOptionsForTimeFormat(
+  pref: TimeFormatPref
+): Pick<Intl.DateTimeFormatOptions, "hourCycle"> {
+  if (pref === "12h") return { hourCycle: "h12" };
+  if (pref === "24h") return { hourCycle: "h23" };
+  return {};
+}
+
+// The current preference, for call sites that format dates themselves.
+export const displayLocale = () => localeForDateFormat(getDateFormatPref());
+export const hourOptions = () => hourOptionsForTimeFormat(getTimeFormatPref());
+
 function toDate(input: string | number | Date | null | undefined): Date | null {
   if (input == null || input === "") return null;
   const d = input instanceof Date ? input : new Date(input);
@@ -32,13 +92,13 @@ export function fmtDateTime(
 ): string {
   const d = toDate(input);
   if (!d) return FALLBACK;
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(displayLocale(), {
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-    hour12: true,
+    ...hourOptions(),
   }).format(d);
 }
 
@@ -47,7 +107,7 @@ export function fmtDate(
 ): string {
   const d = toDate(input);
   if (!d) return FALLBACK;
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(displayLocale(), {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -59,7 +119,7 @@ export function fmtShortDate(
 ): string {
   const d = toDate(input);
   if (!d) return FALLBACK;
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(displayLocale(), {
     month: "numeric",
     day: "numeric",
     year: "numeric",
@@ -74,7 +134,7 @@ export function fmtTime(
   return new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit",
-    hour12: true,
+    ...hourOptions(),
   }).format(d);
 }
 
@@ -93,10 +153,10 @@ export function fmtListTimestamp(
     return new Intl.DateTimeFormat(undefined, {
       hour: "numeric",
       minute: "2-digit",
-      hour12: true,
+      ...hourOptions(),
     }).format(d);
   }
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(displayLocale(), {
     month: "short",
     day: "numeric",
     ...(d.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
@@ -108,7 +168,7 @@ export function fmtLongDate(
 ): string {
   const d = toDate(input);
   if (!d) return FALLBACK;
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(displayLocale(), {
     weekday: "long",
     year: "numeric",
     month: "long",

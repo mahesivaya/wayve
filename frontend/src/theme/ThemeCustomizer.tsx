@@ -23,22 +23,6 @@ import {
 import "./themeCustomizer.css";
 import { PRESETS, type ThemePreset } from "./themePresets";
 import { useCustomTheme } from "./useCustomTheme";
-import { useAuth } from "../auth/useAuth";
-import {
-  getFontConfig,
-  putMyFont,
-  putOrgFont,
-  putPlatformFont,
-  type FontConfig,
-} from "../api/platformUi";
-import {
-  FONT_OPTIONS,
-  DEFAULT_FONT_KEY,
-  normalizeFontKey,
-  applyPlatformFont,
-  cacheFontKey,
-  type FontKey,
-} from "./platformFonts";
 
 type LibTab = "themes" | "ui";
 
@@ -110,53 +94,6 @@ export default function ThemeCustomizer() {
   } = useCustomTheme();
 
   const [libTab, setLibTab] = useState<LibTab>("themes");
-
-  // App font resolves by scope, most specific first: the user's own, then their
-  // org's, then the platform default.
-  const { user } = useAuth();
-  const [fontCfg, setFontCfg] = useState<FontConfig | null>(null);
-  const [fontSaving, setFontSaving] = useState(false);
-
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    void getFontConfig()
-      .then((cfg) => {
-        if (!cancelled) setFontCfg(cfg);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
-
-  const refreshFonts = () =>
-    void getFontConfig()
-      .then(setFontCfg)
-      .catch(() => {});
-
-  const setFont = async (level: "me" | "org" | "platform", next: FontKey) => {
-    const key = next === DEFAULT_FONT_KEY ? null : next;
-    const field = level === "me" ? "user" : level;
-    setFontSaving(true);
-    // Optimistic: reflect the pick in the dropdown immediately.
-    setFontCfg((prev) => (prev ? { ...prev, [field]: key } : prev));
-    try {
-      const res =
-        level === "me"
-          ? await putMyFont(key)
-          : level === "org"
-            ? await putOrgFont(key)
-            : await putPlatformFont(key);
-      cacheFontKey(res.resolved);
-      applyPlatformFont(res.resolved);
-      refreshFonts(); // re-sync all levels + capabilities
-    } catch {
-      refreshFonts(); // fall back to server truth
-    } finally {
-      setFontSaving(false);
-    }
-  };
 
   // Seed the advanced editor from the active choice when it's custom/saved.
   const initial = useMemo(() => {
@@ -507,7 +444,7 @@ export default function ThemeCustomizer() {
                 className={`theme-customizer-tab ${libTab === "ui" ? "active" : ""}`}
                 onClick={() => setLibTab("ui")}
               >
-                Font
+                Colors
               </button>
             </div>
 
@@ -626,82 +563,6 @@ export default function ThemeCustomizer() {
 
             {libTab === "ui" && (
               <div className="theme-ui-knobs">
-                {fontCfg && (
-                  <div className="theme-ui-fonts">
-                    <div className="theme-ui-font">
-                      <label htmlFor="ui-font-me">Your font</label>
-                      <select
-                        id="ui-font-me"
-                        className="theme-ui-font-select"
-                        value={normalizeFontKey(fontCfg.user)}
-                        disabled={fontSaving}
-                        onChange={(e) =>
-                          void setFont("me", e.target.value as FontKey)
-                        }
-                      >
-                        {FONT_OPTIONS.map((o) => (
-                          <option key={o.key} value={o.key}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="theme-ui-font-note">
-                        Just for you — overrides your organization &amp; the
-                        platform default.
-                      </p>
-                    </div>
-
-                    {fontCfg.can_set_org && (
-                      <div className="theme-ui-font">
-                        <label htmlFor="ui-font-org">Organization font</label>
-                        <select
-                          id="ui-font-org"
-                          className="theme-ui-font-select"
-                          value={normalizeFontKey(fontCfg.org)}
-                          disabled={fontSaving}
-                          onChange={(e) =>
-                            void setFont("org", e.target.value as FontKey)
-                          }
-                        >
-                          {FONT_OPTIONS.map((o) => (
-                            <option key={o.key} value={o.key}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </select>
-                        <p className="theme-ui-font-note">
-                          For all members who haven&apos;t set their own font.
-                        </p>
-                      </div>
-                    )}
-
-                    {fontCfg.can_set_platform && (
-                      <div className="theme-ui-font">
-                        <label htmlFor="ui-font-platform">
-                          Platform font (default)
-                        </label>
-                        <select
-                          id="ui-font-platform"
-                          className="theme-ui-font-select"
-                          value={normalizeFontKey(fontCfg.platform)}
-                          disabled={fontSaving}
-                          onChange={(e) =>
-                            void setFont("platform", e.target.value as FontKey)
-                          }
-                        >
-                          {FONT_OPTIONS.map((o) => (
-                            <option key={o.key} value={o.key}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </select>
-                        <p className="theme-ui-font-note">
-                          The default for everyone on the platform.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
                 {lowContrast && (
                   <div className="theme-ui-warning" role="alert">
                     ⚠ Low contrast between Text and Surface (
