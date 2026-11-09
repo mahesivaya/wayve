@@ -2272,6 +2272,11 @@
   background: var(--color-surface-hover);
 }
 
+/* In the ⋮ menu only on phones, where the bar drops these buttons. */
+.email-detail-more-item--phone {
+  display: none;
+}
+
 .email-detail-delete-icon,
 .email-detail-reply-icon,
 .email-detail-reply-all-icon,
@@ -3966,5 +3971,45 @@ img.email-mention-avatar {
     inset: 0;
     z-index: 1000;
     background: rgb(0, 0, 0, 0.45);
+  }
+}
+
+/* Phones: the open email's bar is icons only: Back, Reply, Forward, Delete and
+   ⋮. Everything else moves into the ⋮ menu; ✕ repeats Back, so it goes. */
+@media (max-width: 700px) {
+  .email-detail-reply-all,
+  .email-detail-star,
+  .email-detail-snooze,
+  .email-detail-back,
+  .email-detail-reply span,
+  .email-detail-forward span,
+  .email-detail-back-top span {
+    display: none;
+  }
+
+  .email-detail-more-item--phone {
+    display: block;
+  }
+
+  .email-detail-more-item {
+    padding: 10px 12px;
+    font-size: var(--text-md);
+    white-space: nowrap;
+  }
+
+  .email-detail-actions {
+    flex-wrap: nowrap;
+    gap: var(--space-3);
+  }
+
+  .email-detail-back-top,
+  .email-detail-reply,
+  .email-detail-forward,
+  .email-detail-delete,
+  .email-detail-more-btn {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    justify-content: center;
   }
 }
