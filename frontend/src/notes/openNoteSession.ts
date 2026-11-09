@@ -13,6 +13,8 @@ export type OpenNoteSession = {
   // Whether the text differs from the saved note. If it doesn't, the note may have
   // changed elsewhere since, so returning shows the saved copy instead.
   edited: boolean;
+  // Showing the form rather than the read-only view of the note.
+  editing: boolean;
 };
 
 export function readOpenNote(
@@ -38,6 +40,8 @@ export function readOpenNote(
       title: parsed.title,
       content: parsed.content,
       edited: parsed.edited === true,
+      // Entries written before the read-only view were always the form.
+      editing: parsed.editing !== false,
     };
   } catch {
     return null;
@@ -49,6 +53,33 @@ export function rememberOpenNote(open: OpenNoteSession): void {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(open));
   } catch {
     // private mode / quota — the note just won't come back on return.
+  }
+}
+
+// Once this text has reached the server, returning should show the saved copy
+// (it may have changed elsewhere since) rather than re-send this one. Only when
+// it's still the text on record: the writer may have typed more meanwhile.
+export function markOpenNoteSaved(
+  noteId: number,
+  title: string,
+  content: string
+): void {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const open = JSON.parse(raw) as OpenNoteSession;
+    if (
+      open.noteId === noteId &&
+      open.title === title &&
+      open.content === content
+    ) {
+      sessionStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ ...open, edited: false })
+      );
+    }
+  } catch {
+    // ignore — private mode / quota
   }
 }
 
