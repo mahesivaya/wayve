@@ -7,6 +7,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { bootstrapOrgMasterKey } from "./orgKeypair";
 import { getOrgKeys } from "./api";
+import { copyText } from "../utils/clipboard";
 import "../recovery/recoverySeedModal.css";
 
 type Phase =
@@ -25,14 +26,19 @@ export default function BootstrapPage() {
   const orgId = orgIdParam ? Number(orgIdParam) : NaN;
 
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
+    "idle"
+  );
+
+  const copyPhrase = async (words: string[]) => {
+    const ok = await copyText(words.join(" "));
+    setCopyState(ok ? "copied" : "failed");
+    window.setTimeout(() => setCopyState("idle"), 2000);
+  };
 
   const downloadMnemonic = (words: string[]) => {
-    // Both the numbered and the space-separated form go in the file so the user
-    // can restore from whichever they prefer.
-    const numbered = words.map((w, i) => `${i + 1}. ${w}`).join("\n");
-    const phrase = words.join(" ");
-    const body = `Hadal organization recovery key\nGenerated ${new Date().toISOString()}\n\n${numbered}\n\nPhrase:\n${phrase}\n`;
+    // Just the phrase, space-separated: exactly what the restore form takes.
+    const body = `${words.join(" ")}\n`;
     const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -230,16 +236,13 @@ export default function BootstrapPage() {
             <button
               type="button"
               className="recovery-copy-btn"
-              onClick={() => {
-                void navigator.clipboard
-                  ?.writeText(phase.mnemonic.join(" "))
-                  .then(() => {
-                    setCopied(true);
-                    window.setTimeout(() => setCopied(false), 2000);
-                  });
-              }}
+              onClick={() => void copyPhrase(phase.mnemonic)}
             >
-              {copied ? "Copied ✓" : "Copy phrase"}
+              {copyState === "copied"
+                ? "Copied ✓"
+                : copyState === "failed"
+                  ? "Couldn't copy"
+                  : "Copy phrase"}
             </button>
             <button
               type="button"
