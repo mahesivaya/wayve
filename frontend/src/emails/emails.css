@@ -3107,6 +3107,22 @@ img.email-mention-avatar {
     background: var(--color-surface-cool-blue-mid);
   }
 
+  /* An open email only ever scrolls vertically on a phone. `overflow-y: auto`
+     alone also makes the x axis scrollable, so the one-line action row, wider
+     than the screen, slid the whole email sideways under the icon rail. */
+  .email-detail {
+    overflow-x: hidden;
+  }
+
+  /* Wrap the actions onto a second line. Right-aligned so ⋮ stays at the edge
+     and its menu, which opens leftwards from the button, stays on screen. */
+  .email-detail-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    min-width: 0;
+    max-width: 100%;
+  }
+
   .main .email-sidebar,
   .main .email-sidebar-resizer,
   .main .email-list-resizer {
