@@ -390,6 +390,25 @@ export default function DocumentsBox({ teamId }: { teamId?: number } = {}) {
             ))}
           {canManage && (
             <div className="drive-breadcrumb-actions">
+              {/* Same as Drive's: goes into the folder being viewed. */}
+              {teamId != null && (
+                <label
+                  className={`drive-folder-new-btn drive-upload-btn${uploading ? " is-busy" : ""}`}
+                  data-tooltip="Upload files to this folder"
+                >
+                  {uploading ? "Uploading…" : "⬆ Upload"}
+                  <input
+                    type="file"
+                    multiple
+                    hidden
+                    disabled={uploading}
+                    onChange={(e) => {
+                      void doUpload(Array.from(e.target.files ?? []));
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              )}
               {creatingFolder ? (
                 <>
                   <input
@@ -477,8 +496,9 @@ export default function DocumentsBox({ teamId }: { teamId?: number } = {}) {
           </div>
         ) : (
           <p className="file-meta">
-            You have read-only access to this workspace. Only owners and super
-            admins can add or change files.
+            {teamId != null
+              ? "You have read-only access to this team's files. Only admins can add or change them."
+              : "You have read-only access to this workspace. Only owners and super admins can add or change files."}
           </p>
         )}
         {error && <p className="drive-error-msg">{error}</p>}
