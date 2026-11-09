@@ -31,6 +31,11 @@ pub struct FolderQuery {
 }
 
 #[derive(Deserialize)]
+struct TeamParam {
+    team: Option<String>,
+}
+
+#[derive(Deserialize)]
 pub struct ParentQuery {
     pub parent_folder_id: Option<i64>,
 }
@@ -104,8 +109,8 @@ async fn org_context(req: &HttpRequest, pool: &PgPool) -> Result<(i32, Option<i3
 
 /// The caller's `(user_id, scope)` for a **mutating** Documents action.
 /// Identical scoping to `org_context`, but additionally requires the
-/// `documents:manage` permission — held by owner and super_admin only. Every
-/// other member is read-only, so they get a 403 here while `org_context`
+/// `documents:manage` permission — held by owner and super_admin only — or, for
+/// a team's files, `org:settings`. Every other member is read-only, so they get a 403 here while `org_context`
 /// (list / view / download) still lets them through. A personal-account owner
 /// holds the permission by role but has no shared workspace, so the scope match
 /// below rejects them with the same 403 as `org_context`.
@@ -113,7 +118,14 @@ async fn require_docs_manage(
     req: &HttpRequest,
     pool: &PgPool,
 ) -> Result<(i32, Option<i32>), HttpResponse> {
-    let ctx = rbac::require_permission(req, pool, Permission::DocumentsManage).await?;
+    // A team's files are managed by admins (owner, super admin, admin), like the
+    // rest of the team page; the org-wide trees stay with `documents:manage`.
+    let permission = if team_param(req).is_some() {
+        Permission::OrgSettings
+    } else {
+        Permission::DocumentsManage
+    };
+    let ctx = rbac::require_permission(req, pool, permission).await?;
     match (ctx.scope, ctx.organization_id) {
         (Scope::Organization, Some(org_id)) => Ok((ctx.user_id, Some(org_id))),
         (Scope::Platform, _) => Ok((ctx.user_id, None)),
@@ -132,17 +144,91 @@ fn trimmed_name(raw: &str) -> Option<String> {
     }
 }
 
-/// Which `collection` this request addresses. The same handler functions back
-/// both the Documents ("library") page and the Skills ("skills") page — they are
-/// mounted under `/skills*` / `/skill-folders*` as well as `/documents*` /
-/// `/document-folders*` (see `mod.rs`), and the path tells them which tree they
-/// operate on. Every SQL touch on `org_documents` / `org_document_folders` binds
-/// this so the two trees never leak into each other's listings.
-fn collection_for(req: &HttpRequest) -> &'static str {
+/// The raw `?team=` value on a request to the Documents paths. Skills paths
+/// never carry a team, so a stray `?team=` there can't change their tree or gate.
+fn team_param(req: &HttpRequest) -> Option<String> {
     if req.path().contains("/skill") {
-        "skills"
-    } else {
-        "library"
+        return None;
+    }
+    web::Query::<TeamParam>::from_query(req.query_string())
+        .ok()?
+        .into_inner()
+        .team
+}
+
+/// Which `collection` this request addresses. The same handler functions back
+/// the Documents ("library") page and the Skills ("skills") page, which are
+/// mounted under `/skills*` / `/skill-folders*` as well as `/documents*` /
+/// `/document-folders*` (see `mod.rs`), and each team's own tree (`team:<id>`),
+/// chosen by `?team=<id>` on the Documents paths. Every SQL touch on
+/// `org_documents` / `org_document_folders` binds this so the trees never leak
+/// into each other's listings. A team outside the caller's scope is a 404.
+async fn collection_for(
+    req: &HttpRequest,
+    pool: &PgPool,
+    org_id: Option<i32>,
+) -> Result<String, HttpResponse> {
+    if req.path().contains("/skill") {
+        return Ok("skills".to_string());
+    }
+    let Some(raw) = team_param(req) else {
+        return Ok("library".to_string());
+    };
+    let not_found =
+        || HttpResponse::NotFound().json(serde_json::json!({ "message": "Team not found" }));
+    let team_id: i32 = raw.parse().map_err(|_| not_found())?;
+    let found: Option<i32> = sqlx::query_scalar(
+        "SELECT id FROM teams WHERE id = $1 AND organization_id IS NOT DISTINCT FROM $2",
+    )
+    .bind(team_id)
+    .bind(org_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| {
+        error!(target: "db", error = %e, "team lookup failed");
+        HttpResponse::InternalServerError().finish()
+    })?;
+    found.ok_or_else(not_found)?;
+    Ok(team_collection(team_id))
+}
+
+fn team_collection(team_id: i32) -> String {
+    format!("team:{team_id}")
+}
+
+/// Removes a deleted team's files: their rows and their stored blobs. The team
+/// row can't cascade to them, since the tree is only tied to it by `collection`.
+pub async fn purge_team_documents(pool: &PgPool, org_id: Option<i32>, team_id: i32) {
+    let collection = team_collection(team_id);
+    let paths: Vec<String> = match sqlx::query_scalar(
+        "DELETE FROM org_documents
+         WHERE organization_id IS NOT DISTINCT FROM $1 AND collection = $2
+         RETURNING file_path",
+    )
+    .bind(org_id)
+    .bind(&collection)
+    .fetch_all(pool)
+    .await
+    {
+        Ok(paths) => paths,
+        Err(e) => {
+            error!(target: "db", error = %e, team_id, "team documents purge failed");
+            return;
+        }
+    };
+    if let Err(e) = sqlx::query(
+        "DELETE FROM org_document_folders
+         WHERE organization_id IS NOT DISTINCT FROM $1 AND collection = $2",
+    )
+    .bind(org_id)
+    .bind(&collection)
+    .execute(pool)
+    .await
+    {
+        error!(target: "db", error = %e, team_id, "team folders purge failed");
+    }
+    for path in paths {
+        let _ = crate::storage::delete(&path).await;
     }
 }
 
@@ -251,7 +337,10 @@ pub async fn list_folders(
         Ok(v) => v,
         Err(_) => return Ok(HttpResponse::Ok().json(Vec::<DocumentFolder>::new())),
     };
-    let collection = collection_for(&req);
+    let collection = match collection_for(&req, pool.get_ref(), org_id).await {
+        Ok(collection) => collection,
+        Err(resp) => return Ok(resp),
+    };
 
     let rows = sqlx::query_as::<_, DocumentFolder>(
         "SELECT id, name, parent_folder_id, created_at
@@ -261,7 +350,7 @@ pub async fn list_folders(
          ORDER BY name ASC",
     )
     .bind(org_id)
-    .bind(collection)
+    .bind(&collection)
     .bind(query.parent_folder_id)
     .fetch_all(pool.get_ref())
     .await?;
@@ -280,14 +369,17 @@ pub async fn create_folder(
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
-    let collection = collection_for(&req);
+    let collection = match collection_for(&req, pool.get_ref(), org_id).await {
+        Ok(collection) => collection,
+        Err(resp) => return Ok(resp),
+    };
     let Some(name) = trimmed_name(&body.name) else {
         return Ok(HttpResponse::BadRequest()
             .json(serde_json::json!({ "message": "Folder name is required" })));
     };
 
     if let Some(parent_id) = body.parent_folder_id
-        && !folder_in_org(pool.get_ref(), parent_id, org_id, collection).await?
+        && !folder_in_org(pool.get_ref(), parent_id, org_id, &collection).await?
     {
         return Ok(HttpResponse::NotFound()
             .json(serde_json::json!({ "message": "Parent folder not found" })));
@@ -299,7 +391,7 @@ pub async fn create_folder(
          RETURNING id, name, parent_folder_id, created_at",
     )
     .bind(org_id)
-    .bind(collection)
+    .bind(&collection)
     .bind(body.parent_folder_id)
     .bind(&name)
     .bind(user_id)
@@ -321,7 +413,10 @@ pub async fn rename_folder(
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
-    let collection = collection_for(&req);
+    let collection = match collection_for(&req, pool.get_ref(), org_id).await {
+        Ok(collection) => collection,
+        Err(resp) => return Ok(resp),
+    };
     let Some(name) = trimmed_name(&body.name) else {
         return Ok(HttpResponse::BadRequest()
             .json(serde_json::json!({ "message": "Folder name is required" })));
@@ -334,7 +429,7 @@ pub async fn rename_folder(
     .bind(&name)
     .bind(path.into_inner())
     .bind(org_id)
-    .bind(collection)
+    .bind(&collection)
     .fetch_optional(pool.get_ref())
     .await?;
 
@@ -357,7 +452,10 @@ pub async fn delete_folder(
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
-    let collection = collection_for(&req);
+    let collection = match collection_for(&req, pool.get_ref(), org_id).await {
+        Ok(collection) => collection,
+        Err(resp) => return Ok(resp),
+    };
     let folder_id = path.into_inner();
 
     // Collect on-disk paths for every file under this folder (recursively)
@@ -375,7 +473,7 @@ pub async fn delete_folder(
     )
     .bind(folder_id)
     .bind(org_id)
-    .bind(collection)
+    .bind(&collection)
     .fetch_all(pool.get_ref())
     .await?;
 
@@ -384,7 +482,7 @@ pub async fn delete_folder(
     )
     .bind(folder_id)
     .bind(org_id)
-    .bind(collection)
+    .bind(&collection)
     .fetch_optional(pool.get_ref())
     .await?;
 
@@ -411,7 +509,10 @@ pub async fn list_documents(
         Ok(v) => v,
         Err(_) => return Ok(HttpResponse::Ok().json(Vec::<DocumentFile>::new())),
     };
-    let collection = collection_for(&req);
+    let collection = match collection_for(&req, pool.get_ref(), org_id).await {
+        Ok(collection) => collection,
+        Err(resp) => return Ok(resp),
+    };
 
     let rows = sqlx::query_as::<_, DocumentFile>(
         "SELECT id, name, file_type, size, created_at
@@ -421,7 +522,7 @@ pub async fn list_documents(
          ORDER BY created_at DESC",
     )
     .bind(org_id)
-    .bind(collection)
+    .bind(&collection)
     .bind(query.folder_id)
     .fetch_all(pool.get_ref())
     .await?;
@@ -441,7 +542,10 @@ pub async fn upload_documents(
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
-    let collection = collection_for(&req);
+    let collection = match collection_for(&req, pool.get_ref(), org_id).await {
+        Ok(collection) => collection,
+        Err(resp) => return Ok(resp),
+    };
 
     // Storage limit is enforced against the org's billing entitlement only for
     // org-scoped uploads; the platform-wide shared set (scope None) isn't billed
@@ -485,7 +589,7 @@ pub async fn upload_documents(
                 let parsed = raw
                     .parse::<i64>()
                     .map_err(|_| actix_web::error::ErrorBadRequest("Invalid folder_id"))?;
-                let in_org = folder_in_org(pool.get_ref(), parsed, org_id, collection)
+                let in_org = folder_in_org(pool.get_ref(), parsed, org_id, &collection)
                     .await
                     .map_err(|_| actix_web::error::ErrorInternalServerError("DB error"))?;
                 if !in_org {
@@ -545,7 +649,7 @@ pub async fn upload_documents(
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
         )
         .bind(org_id)
-        .bind(collection)
+        .bind(&collection)
         .bind(folder_id)
         .bind(&filename)
         .bind(&file_type)
@@ -574,14 +678,17 @@ pub async fn download_document(
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
-    let collection = collection_for(&req);
+    let collection = match collection_for(&req, pool.get_ref(), org_id).await {
+        Ok(collection) => collection,
+        Err(resp) => return Ok(resp),
+    };
 
     let row = sqlx::query(
         "SELECT name, file_path, file_iv FROM org_documents WHERE id = $1 AND organization_id IS NOT DISTINCT FROM $2 AND collection = $3",
     )
     .bind(path.into_inner())
     .bind(org_id)
-    .bind(collection)
+    .bind(&collection)
     .fetch_optional(pool.get_ref())
     .await?;
 
@@ -628,7 +735,10 @@ pub async fn rename_document(
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
-    let collection = collection_for(&req);
+    let collection = match collection_for(&req, pool.get_ref(), org_id).await {
+        Ok(collection) => collection,
+        Err(resp) => return Ok(resp),
+    };
     let Some(name) = trimmed_name(&body.name) else {
         return Ok(HttpResponse::BadRequest()
             .json(serde_json::json!({ "message": "File name is required" })));
@@ -641,7 +751,7 @@ pub async fn rename_document(
     .bind(&name)
     .bind(path.into_inner())
     .bind(org_id)
-    .bind(collection)
+    .bind(&collection)
     .fetch_optional(pool.get_ref())
     .await?;
 
@@ -664,14 +774,17 @@ pub async fn delete_document(
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
-    let collection = collection_for(&req);
+    let collection = match collection_for(&req, pool.get_ref(), org_id).await {
+        Ok(collection) => collection,
+        Err(resp) => return Ok(resp),
+    };
 
     let removed: Option<String> = sqlx::query_scalar(
         "DELETE FROM org_documents WHERE id = $1 AND organization_id IS NOT DISTINCT FROM $2 AND collection = $3 RETURNING file_path",
     )
     .bind(path.into_inner())
     .bind(org_id)
-    .bind(collection)
+    .bind(&collection)
     .fetch_optional(pool.get_ref())
     .await?;
 
@@ -700,14 +813,17 @@ pub async fn create_document(
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
-    let collection = collection_for(&req);
+    let collection = match collection_for(&req, pool.get_ref(), org_id).await {
+        Ok(collection) => collection,
+        Err(resp) => return Ok(resp),
+    };
     let Some(name) = trimmed_name(&body.name) else {
         return Ok(HttpResponse::BadRequest()
             .json(serde_json::json!({ "message": "File name is required" })));
     };
 
     if let Some(folder_id) = body.folder_id
-        && !folder_in_org(pool.get_ref(), folder_id, org_id, collection).await?
+        && !folder_in_org(pool.get_ref(), folder_id, org_id, &collection).await?
     {
         return Ok(
             HttpResponse::NotFound().json(serde_json::json!({ "message": "Folder not found" }))
@@ -766,7 +882,7 @@ pub async fn create_document(
          RETURNING id, name, file_type, size, created_at",
     )
     .bind(org_id)
-    .bind(collection)
+    .bind(&collection)
     .bind(body.folder_id)
     .bind(&name)
     .bind(&file_type)
@@ -792,14 +908,17 @@ pub async fn get_document_content(
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
-    let collection = collection_for(&req);
+    let collection = match collection_for(&req, pool.get_ref(), org_id).await {
+        Ok(collection) => collection,
+        Err(resp) => return Ok(resp),
+    };
 
     let row = sqlx::query(
         "SELECT name, file_path, file_iv FROM org_documents WHERE id = $1 AND organization_id IS NOT DISTINCT FROM $2 AND collection = $3",
     )
     .bind(path.into_inner())
     .bind(org_id)
-    .bind(collection)
+    .bind(&collection)
     .fetch_optional(pool.get_ref())
     .await?;
 
@@ -838,7 +957,10 @@ pub async fn update_document_content(
         Ok(v) => v,
         Err(resp) => return Ok(resp),
     };
-    let collection = collection_for(&req);
+    let collection = match collection_for(&req, pool.get_ref(), org_id).await {
+        Ok(collection) => collection,
+        Err(resp) => return Ok(resp),
+    };
     let id = path.into_inner();
 
     let file_path: Option<String> = sqlx::query_scalar(
@@ -846,7 +968,7 @@ pub async fn update_document_content(
     )
     .bind(id)
     .bind(org_id)
-    .bind(collection)
+    .bind(&collection)
     .fetch_optional(pool.get_ref())
     .await?;
 
@@ -875,7 +997,7 @@ pub async fn update_document_content(
     .bind(size)
     .bind(id)
     .bind(org_id)
-    .bind(collection)
+    .bind(&collection)
     .execute(pool.get_ref())
     .await?;
 

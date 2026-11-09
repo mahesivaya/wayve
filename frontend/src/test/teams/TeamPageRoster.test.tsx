@@ -8,11 +8,14 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 const getTeam = vi.fn();
 const addTeamMember = vi.fn();
 const removeTeamMember = vi.fn();
+const updateTeamDescription = vi.fn();
 let currentUser: Record<string, unknown> = {};
 
 vi.mock("../../api/workspace", () => ({
   getTeam: (s: string) => getTeam(s),
   deleteTeam: vi.fn(),
+  updateTeamDescription: (id: number, d: string) =>
+    updateTeamDescription(id, d),
   addTeamMember: (id: number, input: unknown) => addTeamMember(id, input),
   removeTeamMember: (id: number, memberId: number) =>
     removeTeamMember(id, memberId),
@@ -20,6 +23,12 @@ vi.mock("../../api/workspace", () => ({
 
 vi.mock("../../auth/useAuth", () => ({
   useAuth: () => ({ user: currentUser }),
+}));
+
+vi.mock("../../documents/DocumentsBox", () => ({
+  default: ({ teamId }: { teamId?: number }) => (
+    <div>files of team {teamId}</div>
+  ),
 }));
 
 import TeamPage from "../../teams/TeamPage";
@@ -30,7 +39,7 @@ const MANAGER = {
   effective_role: "admin",
   mode: "admin",
   can_switch_admin: true,
-  permissions: ["members:manage"],
+  permissions: ["members:manage", "org:settings"],
 };
 
 const TEAM = {
@@ -45,9 +54,9 @@ const TEAM = {
   ],
 };
 
-function renderAt(slug: string) {
+function renderAt(slug: string, query = "?tab=members") {
   render(
-    <MemoryRouter initialEntries={[`/teams/${slug}`]}>
+    <MemoryRouter initialEntries={[`/teams/${slug}${query}`]}>
       <Routes>
         <Route path="/teams/:slug" element={<TeamPage />} />
       </Routes>
@@ -60,9 +69,108 @@ describe("team page: saved roster", () => {
     getTeam.mockReset();
     addTeamMember.mockReset();
     removeTeamMember.mockReset();
+    updateTeamDescription.mockReset();
     currentUser = MANAGER;
   });
   afterEach(() => vi.restoreAllMocks());
+
+  it("shows the team's name at the top of the page", async () => {
+    getTeam.mockResolvedValue(TEAM);
+    renderAt("engineering");
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Engineering" })
+    ).toBeTruthy();
+  });
+
+  it("opens on Overview, and the buttons switch sections", async () => {
+    getTeam.mockResolvedValue({ ...TEAM, description: "We build things." });
+    renderAt("engineering", "");
+
+    const button = (name: string) => screen.findByRole("button", { name });
+    expect((await button("Overview")).getAttribute("aria-current")).toBe(
+      "page"
+    );
+    expect(screen.getByDisplayValue("We build things.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Ada Lovelace" })).toBeNull();
+
+    await userEvent.click(await button("Documents"));
+    expect(screen.getByText("files of team 42")).toBeTruthy();
+    expect(screen.queryByDisplayValue("We build things.")).toBeNull();
+
+    await userEvent.click(await button("Members"));
+    expect(await button("Ada Lovelace")).toBeTruthy();
+    expect((await button("Members")).getAttribute("aria-current")).toBe("page");
+  });
+
+  it("gives the security role, which can edit the roster, no textbox", async () => {
+    currentUser = {
+      ...MANAGER,
+      effective_role: "security",
+      permissions: ["members:manage"],
+    };
+    getTeam.mockResolvedValue({ ...TEAM, description: "Read only" });
+    renderAt("engineering", "");
+
+    expect(await screen.findByText("Read only")).toBeTruthy();
+    expect(
+      screen.queryByRole("textbox", { name: "Team description" })
+    ).toBeNull();
+  });
+
+  it("shows viewers the description as text, with no textbox", async () => {
+    currentUser = { ...MANAGER, permissions: [] };
+    getTeam.mockResolvedValue(TEAM);
+    renderAt("engineering", "");
+    expect(await screen.findByText("No description yet.")).toBeTruthy();
+    expect(
+      screen.queryByRole("textbox", { name: "Team description" })
+    ).toBeNull();
+  });
+
+  it("saves the description when the textbox loses focus", async () => {
+    getTeam.mockResolvedValue(TEAM);
+    updateTeamDescription.mockResolvedValue({
+      ...TEAM,
+      description: "New text",
+    });
+    renderAt("engineering", "");
+
+    const box = await screen.findByRole("textbox", {
+      name: "Team description",
+    });
+    await userEvent.type(box, "  New text ");
+    await userEvent.tab();
+
+    expect(updateTeamDescription).toHaveBeenCalledWith(42, "New text");
+    expect(await screen.findByText("Saved")).toBeTruthy();
+  });
+
+  it("does not save when nothing changed", async () => {
+    getTeam.mockResolvedValue({ ...TEAM, description: "Same" });
+    renderAt("engineering", "");
+
+    await userEvent.click(
+      await screen.findByRole("textbox", { name: "Team description" })
+    );
+    await userEvent.tab();
+
+    expect(updateTeamDescription).not.toHaveBeenCalled();
+  });
+
+  it("keeps the typed text and shows the error when saving fails", async () => {
+    getTeam.mockResolvedValue(TEAM);
+    updateTeamDescription.mockRejectedValue(new Error("Nope"));
+    renderAt("engineering", "");
+
+    const box = await screen.findByRole("textbox", {
+      name: "Team description",
+    });
+    await userEvent.type(box, "Draft");
+    await userEvent.tab();
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Nope");
+    expect((box as HTMLTextAreaElement).value).toBe("Draft");
+  });
 
   it("shows the members saved with the team", async () => {
     getTeam.mockResolvedValue(TEAM);

@@ -51,7 +51,7 @@ const TEAM = {
 
 async function openPage() {
   render(
-    <MemoryRouter initialEntries={["/teams/engineering"]}>
+    <MemoryRouter initialEntries={["/teams/engineering?tab=members"]}>
       <Routes>
         <Route path="/teams/:slug" element={<TeamPage />} />
       </Routes>

@@ -144,6 +144,86 @@
   border-color: var(--color-text-muted);
 }
 
+/* The team's name, at the top of its page. Left-aligned: #root centres text. */
+.team-page-title {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-primary);
+  font-size: var(--text-3xl);
+  font-weight: 600;
+  text-align: left;
+}
+
+/* Overview / Documents / Members, below the team name. */
+.team-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.team-tab {
+  padding: 5px 12px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 999px;
+  background: none;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.team-tab:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.team-tab.is-active {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.team-tab-panel {
+  text-align: left;
+}
+
+.team-description-input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 720px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--text-md);
+  resize: vertical;
+}
+
+.team-description-status {
+  margin: 6px 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* Team files: the Drive-style screen, as part of this page rather than a
+   full-height page of its own. */
+.team-tab-panel .drive-container {
+  height: auto;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+}
+
+.team-tab-text {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+  white-space: pre-wrap;
+}
+
 .team-section-title {
   margin: 0;
   font-size: var(--text-lg);
