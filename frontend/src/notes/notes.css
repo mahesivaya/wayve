@@ -207,33 +207,13 @@
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
 }
 
-.notes-list--grid .note-card {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 12px;
-}
-
-.notes-list--grid .note-card-meta {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  width: 100%;
-}
-
-.notes-list--grid .note-card-actions {
-  flex-wrap: wrap;
-  width: 100%;
-}
-
-.notes-list--grid .note-card p {
-  -webkit-line-clamp: 4;
-}
-
 .note-card {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
+  display: block;
+  width: 100%;
+  min-width: 0;
   padding: 14px 16px;
+  font: inherit;
+  text-align: left;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
@@ -249,63 +229,89 @@
     0 3px 10px rgb(15, 23, 42, 0.08);
 }
 
-.note-card-body {
-  flex: 1;
-  min-width: 0;
+.note-card:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
 }
 
-.note-card h3 {
-  margin: 0;
-  color: var(--color-text-primary);
-  font-size: var(--text-xl);
-  font-weight: 700;
+/* List view reads as a table: the header and every row share these tracks, so
+   Name / Created / Last edited line up. Set on the list and inherited, because
+   the header and the rows are siblings. */
+.notes-list--list {
+  --notes-columns: minmax(0, 1fr) 120px 120px;
 }
 
-.note-card p {
-  margin: 6px 0 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-md);
-  line-height: 1.45;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+.notes-columns,
+.notes-list--list .note-card {
+  display: grid;
+  grid-template-columns: var(--notes-columns);
+  align-items: center;
+  column-gap: 16px;
 }
 
-.note-card-meta {
-  flex: 0 0 auto;
+/* Side padding matches the rows: their 16px plus their 1px border. */
+.notes-columns {
+  padding: 0 17px;
+}
+
+/* No columns to line up with in the grid: the sort controls sit in a row of
+   their own above the cards. */
+.notes-list--grid .notes-columns {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
+  gap: 16px;
+  grid-column: 1 / -1;
 }
 
-.note-card time {
+.notes-sort-btn {
+  justify-self: start;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-
-.note-card-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.note-edit-btn {
-  padding: 4px 10px;
-  border: 1px solid var(--color-input-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
+  font: inherit;
   font-size: var(--text-sm);
   font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.note-edit-btn:hover {
-  border-color: var(--color-primary-action);
-  color: var(--color-primary-action);
-  background: var(--color-primary-soft);
+.notes-sort-btn:hover,
+.notes-sort-btn.is-active {
+  color: var(--color-text-primary);
+}
+
+.notes-sort-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.note-card-date {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+/* A phone has no room for 120px date columns beside the name. */
+@media (max-width: 700px) {
+  .notes-list--list {
+    --notes-columns: minmax(0, 1fr) 76px 76px;
+  }
+
+  .notes-columns,
+  .notes-list--list .note-card {
+    column-gap: 8px;
+  }
+}
+
+.note-card-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+  font-size: var(--text-xl);
+  font-weight: 700;
 }
 
 /* ================= EMPTY ================= */

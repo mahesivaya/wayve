@@ -14,15 +14,24 @@ import { logger } from "../utils/logger";
 import { decryptForSelf } from "../crypto/selfEncrypt";
 import { fmtShortDate } from "../utils/datetime";
 import {
+  DEFAULT_NOTE_SORT,
+  nextNoteSort,
+  noteName,
+  sortNotes,
+  type NoteSort,
+  type NoteSortKey,
+} from "./sortNotes";
+import {
   forgetOpenNote,
   readOpenNote,
   rememberOpenNote,
 } from "./openNoteSession";
 
-const formatDate = (iso: string | null | undefined) => {
-  if (!iso) return "";
-  return fmtShortDate(iso);
-};
+const SORT_COLUMNS: { key: NoteSortKey; label: string }[] = [
+  { key: "name", label: "Name" },
+  { key: "created", label: "Created" },
+  { key: "edited", label: "Last edited" },
+];
 
 export default function Notes() {
   const { normalizedSearchQuery } = useGlobalSearch();
@@ -44,6 +53,7 @@ export default function Notes() {
   );
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [sort, setSort] = useState<NoteSort>(DEFAULT_NOTE_SORT);
   const [view, setView] = useState<"list" | "grid">(() => {
     const saved = window.localStorage.getItem("wayve.notes.view");
     return saved === "grid" ? "grid" : "list";
@@ -207,14 +217,16 @@ export default function Notes() {
   }, [userId, selectedId, title, content, dirty]);
 
   const visibleNotes = useMemo(() => {
-    if (!normalizedSearchQuery) return notes;
-    return notes.filter((note) =>
-      [note.title ?? "", note.content ?? "", note.updated_at ?? ""]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalizedSearchQuery)
-    );
-  }, [normalizedSearchQuery, notes]);
+    const matching = normalizedSearchQuery
+      ? notes.filter((note) =>
+          [note.title ?? "", note.content ?? "", note.updated_at ?? ""]
+            .join(" ")
+            .toLowerCase()
+            .includes(normalizedSearchQuery)
+        )
+      : notes;
+    return sortNotes(matching, sort);
+  }, [normalizedSearchQuery, notes, sort]);
 
   return (
     <div className="notes-app">
@@ -333,38 +345,57 @@ export default function Notes() {
                 </span>
               </div>
             ) : (
-              visibleNotes.map((note) => (
-                <article
-                  key={note.id}
-                  className="note-card"
-                  onClick={() => openNote(note)}
+              <>
+                <div
+                  className="notes-columns"
+                  role="group"
+                  aria-label="Sort notes"
                 >
-                  <div className="note-card-body">
-                    <h3>{note.title?.trim() || "Untitled"}</h3>
-                    <p>{(note.content ?? "").slice(0, 160) || "No content."}</p>
-                  </div>
-                  <div className="note-card-meta">
-                    {note.updated_at && (
-                      <time dateTime={note.updated_at}>
-                        {formatDate(note.updated_at)}
-                      </time>
-                    )}
-                    <div className="note-card-actions">
+                  {SORT_COLUMNS.map(({ key, label }) => {
+                    const active = sort.key === key;
+                    return (
                       <button
+                        key={key}
                         type="button"
-                        className="note-edit-btn"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          openNote(note);
-                        }}
-                        aria-label={`Edit ${note.title || "note"}`}
+                        className={`notes-sort-btn${active ? " is-active" : ""}`}
+                        aria-pressed={active}
+                        onClick={() =>
+                          setSort((current) => nextNoteSort(current, key))
+                        }
                       >
-                        Edit
+                        {label}
+                        {active && (
+                          <span aria-hidden="true">
+                            {sort.direction === "asc" ? " ↑" : " ↓"}
+                          </span>
+                        )}
                       </button>
-                    </div>
-                  </div>
-                </article>
-              ))
+                    );
+                  })}
+                </div>
+                {visibleNotes.map((note) => {
+                  const name = noteName(note);
+                  const created = fmtShortDate(note.created_at);
+                  const edited = fmtShortDate(note.updated_at);
+                  return (
+                    <button
+                      key={note.id}
+                      type="button"
+                      className="note-card"
+                      onClick={() => openNote(note)}
+                      aria-label={`Edit ${name}. Created ${created}. Last edited ${edited}.`}
+                    >
+                      <span className="note-card-title">{name}</span>
+                      {view === "list" && (
+                        <>
+                          <span className="note-card-date">{created}</span>
+                          <span className="note-card-date">{edited}</span>
+                        </>
+                      )}
+                    </button>
+                  );
+                })}
+              </>
             )}
           </div>
         )}
