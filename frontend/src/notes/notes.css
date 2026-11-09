@@ -8,6 +8,7 @@
 }
 
 .notes-main {
+  container-type: inline-size;
   flex: 1;
   min-width: 0;
   overflow-y: auto;
@@ -98,58 +99,235 @@
 }
 
 /* ================= FORM ================= */
-.notes-edit-form {
-  margin-bottom: 16px;
-  padding: 16px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-pane);
-  text-align: left;
-  font-size: var(--text-md);
-}
-
-.notes-form-grid {
+/* Reads as a document: one centered column of text at a comfortable line
+   length, on the page itself rather than in a card. */
+/* An open note sits beside the list of names; each side scrolls on its own. */
+.notes-workspace.is-split {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 14px;
+  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 20px;
+  height: 100%;
 }
 
-.notes-form-grid label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.notes-workspace.is-split > .notes-list {
+  overflow-y: auto;
+  align-content: start;
+  padding-right: 12px;
+  border-right: 1px solid var(--color-border);
 }
 
-.notes-form-grid span {
-  color: var(--color-text-slate);
-  font-size: var(--text-sm);
-  font-weight: 700;
-  text-align: left;
-}
-
-.notes-form-grid input,
-.notes-form-grid textarea {
+.notes-workspace.is-split > .note-read {
   width: 100%;
+  overflow-y: auto;
   box-sizing: border-box;
-  padding: 8px 10px;
-  border: 1px solid var(--color-input-border);
-  border-radius: var(--radius-md);
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.notes-list--names {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+
+.notes-list--names .notes-columns {
+  display: flex;
+  gap: 12px;
+  padding: 0 12px 6px;
+}
+
+.notes-list--names .note-card {
+  padding: 8px 12px;
+}
+
+.notes-list--names .note-card-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.note-card.is-active {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-panel-border);
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
+
+/* No room for two columns: the open note takes the width and ✕ returns to
+   the list. Measured on the pane, so a narrow split view gets this too. */
+@container (max-width: 700px) {
+  .notes-workspace.is-split {
+    display: block;
+  }
+
+  .notes-workspace.is-split > .notes-list {
+    display: none;
+  }
+}
+
+.notes-form-actions .note-close-btn {
+  width: 30px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.notes-form-actions .note-close-btn:hover {
   background: var(--color-surface);
   color: var(--color-text-primary);
+}
+
+.note-read {
+  max-width: 760px;
+  margin: 8px auto 24px;
+  padding: 8px 16px;
+  text-align: left;
+}
+
+.note-read-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+/* Beside the title rather than below a form, so no gap above. */
+.note-read-header .notes-form-actions {
+  flex: 0 0 auto;
+  margin-top: 0;
+}
+
+/* Long words and URLs wrap instead of pushing the page wider. */
+.note-read-body {
+  margin-top: 20px;
+  color: var(--color-text-primary);
+  font-size: 15px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.note-read-body > :first-child {
+  margin-top: 0;
+}
+
+/* Keeps the writer's line breaks within a paragraph. */
+.note-read-body p {
+  margin: 0 0 12px;
+  white-space: pre-wrap;
+}
+
+.note-read-body h3,
+.note-read-body h4,
+.note-read-body h5 {
+  margin: 28px 0 10px;
+  color: var(--color-text-primary);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.note-read-body h3 {
+  font-size: 22px;
+}
+
+.note-read-body h4 {
+  font-size: 19px;
+}
+
+.note-read-body h5 {
+  font-size: 16px;
+}
+
+.note-read-body ul,
+.note-read-body ol {
+  margin: 0 0 12px;
+  padding-left: 24px;
+}
+
+.note-read-body ul {
+  list-style: disc;
+}
+
+.note-read-body ol {
+  list-style: decimal;
+}
+
+/* A nested list belongs to its item: no gap after it, hollow bullets. */
+.note-read-body li ul,
+.note-read-body li ol {
+  margin: 4px 0 0;
+}
+
+.note-read-body li ul {
+  list-style: circle;
+}
+
+.note-read-body li {
+  margin-bottom: 4px;
+}
+
+.notes-format-hint {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* Title and body edit in place: same type and position as the text they
+   replace, with no box around them. */
+.note-read .note-title-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-text-primary);
   font: inherit;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.note-read .note-body-input {
+  display: block;
+  width: 100%;
+  min-height: 120px;
+  margin-top: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.6;
+  resize: none;
+  overflow: hidden;
+}
+
+/* The spare height gives an empty or short note something to click. */
+.note-body-view {
+  min-height: 120px;
+  cursor: text;
+  border-radius: var(--radius-md);
+}
+
+.note-body-view:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 4px;
+}
+
+.note-save-state {
+  align-self: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.note-read-empty {
+  margin: 14px 0 0;
+  color: var(--color-text-muted);
   font-size: var(--text-md);
-}
-
-.notes-form-grid textarea {
-  min-height: 160px;
-  resize: vertical;
-  line-height: 1.5;
-}
-
-.notes-form-grid input:focus,
-.notes-form-grid textarea:focus {
-  outline: 2px solid var(--color-primary-panel-border);
-  border-color: var(--color-primary-action);
 }
 
 .notes-form-actions {
@@ -180,17 +358,6 @@
 .notes-form-actions .primary:disabled {
   opacity: 0.6;
   cursor: default;
-}
-
-.notes-form-actions .danger {
-  border-color: var(--color-danger-strong-soft);
-  color: var(--color-danger-hover);
-}
-
-.notes-form-actions .danger:hover {
-  background: var(--color-danger-soft);
-  border-color: var(--color-danger);
-  color: var(--color-danger);
 }
 
 /* ================= LIST ================= */
