@@ -726,6 +726,16 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
     </div>
   );
 
+  const toggleStar = () => {
+    if (!onToggleStar) return;
+    setDeleteError(null);
+    onToggleStar().catch((err: unknown) =>
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to star email"
+      )
+    );
+  };
+
   return (
     <div className="email-detail" ref={detailRef} tabIndex={-1}>
       <div className="email-detail-header">
@@ -802,14 +812,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
           {onToggleStar && (
             <button
               className={`email-detail-star${starred ? " is-starred" : ""}`}
-              onClick={() => {
-                setDeleteError(null);
-                onToggleStar().catch((err: unknown) =>
-                  setDeleteError(
-                    err instanceof Error ? err.message : "Failed to star email"
-                  )
-                );
-              }}
+              onClick={toggleStar}
               data-tooltip={starred ? "Starred" : "Not starred"}
               aria-label={starred ? "Starred" : "Not starred"}
               aria-pressed={starred}
@@ -895,6 +898,49 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
             </button>
             {moreOpen && (
               <div className="email-detail-more-menu" role="menu">
+                {/* Phones show only Reply, Forward and Delete in the bar. The
+                    rest of its buttons live here instead (hidden by CSS on
+                    wider screens, where the bar has room for them). */}
+                {canReplyAll && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="email-detail-more-item email-detail-more-item--phone"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      showReplyAll(!(replyOpen && replyAll));
+                    }}
+                  >
+                    Reply all
+                  </button>
+                )}
+                {onToggleStar && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="email-detail-more-item email-detail-more-item--phone"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      toggleStar();
+                    }}
+                  >
+                    {starred ? "Remove star" : "Add star"}
+                  </button>
+                )}
+                {onSnooze && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="email-detail-more-item email-detail-more-item--phone"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      // Anchored to ⋮: the bar's Snooze button is hidden here.
+                      setSnoozeAnchor(moreRef.current);
+                    }}
+                  >
+                    Snooze
+                  </button>
+                )}
                 <button
                   type="button"
                   role="menuitem"
