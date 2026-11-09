@@ -32,6 +32,15 @@
   cursor: pointer;
   font-size: var(--text-sm);
 }
+/* The button sits at the panel's edge, and the panel clips what overflows, so
+   the tooltip opens leftwards and wraps instead of running out of the box. */
+.aifix-start[data-tooltip]:hover::after,
+.aifix-start[data-tooltip]:focus-visible::after {
+  width: 220px;
+  white-space: normal;
+  text-align: left;
+}
+
 .aifix-start:hover:not(:disabled) {
   background: var(--color-surface-hover);
 }
