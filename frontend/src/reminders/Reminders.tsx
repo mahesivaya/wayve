@@ -11,6 +11,7 @@ import {
 import { fromTime, formatHour } from "../scheduler/dateUtils";
 import { useTaskStatuses } from "../tasks/useTaskStatuses";
 import "./reminders.css";
+import { displayLocale, hourOptions } from "../utils/datetime";
 
 type ApiMeeting = {
   id: number;
@@ -67,14 +68,14 @@ function relativeWhen(ts: number, now: number): string {
   if (days < 7) {
     return new Date(ts).toLocaleDateString("en-US", { weekday: "long" });
   }
-  return new Date(ts).toLocaleDateString("en-US", {
+  return new Date(ts).toLocaleDateString(displayLocale(), {
     month: "short",
     day: "numeric",
   });
 }
 
 const dateLabel = (date: string): string =>
-  new Date(`${date}T00:00:00`).toLocaleDateString("en-US", {
+  new Date(`${date}T00:00:00`).toLocaleDateString(displayLocale(), {
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -293,13 +294,17 @@ export default function Reminders() {
                       <span className="reminder-main">
                         <span className="reminder-title">{r.title}</span>
                         <span className="reminder-meta">
-                          {new Date(r.remind_at).toLocaleString("en-US", {
-                            weekday: "short",
-                            month: "short",
-                            day: "numeric",
-                            hour: "numeric",
-                            minute: "2-digit",
-                          })}
+                          {new Date(r.remind_at).toLocaleString(
+                            displayLocale(),
+                            {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                              ...hourOptions(),
+                            }
+                          )}
                           {r.notes ? ` · ${r.notes}` : ""}
                         </span>
                       </span>

@@ -169,13 +169,13 @@
      `font-size:` declarations across feature stylesheets. Heading sizes
      (20px / 24px / 36px / 56px) stay as raw values because they're
      one-offs in `h1`/`h2`. */
-  --text-xs: 11px;
-  --text-sm: 12px;
-  --text-md: 13px;
-  --text-lg: 14px;
-  --text-xl: 15px;
-  --text-2xl: 16px;
-  --text-3xl: 18px;
+  --text-xs: calc(11px * var(--text-scale, 1));
+  --text-sm: calc(12px * var(--text-scale, 1));
+  --text-md: calc(13px * var(--text-scale, 1));
+  --text-lg: calc(14px * var(--text-scale, 1));
+  --text-xl: calc(15px * var(--text-scale, 1));
+  --text-2xl: calc(16px * var(--text-scale, 1));
+  --text-3xl: calc(18px * var(--text-scale, 1));
 
   --sans: system-ui, "Segoe UI", Roboto, sans-serif;
   --heading: system-ui, "Segoe UI", Roboto, sans-serif;

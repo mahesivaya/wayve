@@ -1,4 +1,4 @@
-import { APP_TIME_ZONE } from "../utils/datetime";
+import { APP_TIME_ZONE, hourOptions } from "../utils/datetime";
 
 export function formatDateLocal(date: Date) {
   const y = date.getFullYear();
@@ -86,9 +86,10 @@ export function formatHour(mins: number) {
   // doesn't silently round to "3 PM". Previously every minute portion
   // was dropped, which made a 30-min event look like a 1-hour event
   // ("3 PM - 4 PM") that then rendered as a half-height block.
-  return date.toLocaleTimeString("en-US", {
+  return date.toLocaleTimeString(undefined, {
     timeZone: APP_TIME_ZONE,
     hour: "numeric",
     minute: mins % 60 === 0 ? undefined : "2-digit",
+    ...hourOptions(),
   });
 }

@@ -1,3 +1,4 @@
+import { displayLocale, hourOptions } from "../utils/datetime";
 // The snooze menu's choices, and how their times are worked out.
 
 // TEMPORARY presets, short so a snooze can be watched coming back while the
@@ -23,6 +24,7 @@ export const formatSnoozeTime = (when: Date, now = new Date()) => {
   const time = when.toLocaleTimeString([], {
     hour: "numeric",
     minute: "2-digit",
+    ...hourOptions(),
   });
   const day = (d: Date) =>
     new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -32,7 +34,7 @@ export const formatSnoozeTime = (when: Date, now = new Date()) => {
   if (days > 1 && days < 7) {
     return `${when.toLocaleDateString([], { weekday: "short" })} ${time}`;
   }
-  return `${when.toLocaleDateString([], { month: "short", day: "numeric" })}, ${time}`;
+  return `${when.toLocaleDateString(displayLocale() ?? [], { month: "short", day: "numeric" })}, ${time}`;
 };
 
 // Where a row or the open email offers Snooze. Not in Snoozed (it offers

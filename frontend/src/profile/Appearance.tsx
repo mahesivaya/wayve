@@ -1,6 +1,8 @@
 import { useState } from "react";
 
 import SettingsShell from "./SettingsShell";
+import DateTimeSettings from "../theme/DateTimeSettings";
+import FontSettings from "../theme/FontSettings";
 import ThemeCustomizer from "../theme/ThemeCustomizer";
 import ThemeModePicker from "../theme/ThemeModePicker";
 
@@ -17,6 +19,8 @@ export default function Appearance() {
         <h2 className="settings-card-title">Color theme</h2>
         <ThemeModePicker onPick={() => setEditorKey((key) => key + 1)} />
       </section>
+      <FontSettings />
+      <DateTimeSettings />
       <section className="settings-card">
         <h2 className="settings-card-title">Theme</h2>
         <ThemeCustomizer key={editorKey} />

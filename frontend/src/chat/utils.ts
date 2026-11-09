@@ -1,7 +1,7 @@
 import type { ChatChannel } from "../api/chat";
 import type { ChannelRole, Conversation } from "./types";
 import type { PresenceInfo } from "./hooks/usePresence";
-import { APP_TIME_ZONE } from "../utils/datetime";
+import { APP_TIME_ZONE, hourOptions } from "../utils/datetime";
 
 // Empty while presence is unknown, so a row doesn't flash "offline" before the first
 // snapshot lands.
@@ -22,10 +22,11 @@ export const formatTime = (dateStr: string) => {
   const d = new Date(dateStr);
   return Number.isNaN(d.getTime())
     ? ""
-    : d.toLocaleTimeString("en-US", {
+    : d.toLocaleTimeString(undefined, {
         timeZone: APP_TIME_ZONE,
         hour: "2-digit",
         minute: "2-digit",
+        ...hourOptions(),
       });
 };
 

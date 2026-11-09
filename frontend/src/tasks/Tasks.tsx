@@ -48,6 +48,7 @@ import FigmaLinks from "../integrations/FigmaLinks";
 import AiFixPanel from "../aifix/AiFixPanel";
 import type { AiFixApi } from "../api/aiFix";
 import "./tasks.css";
+import { displayLocale, hourOptions } from "../utils/datetime";
 
 // P1 is the most important, P5 the least — the number *is* the rank, so the
 // options read top-down in importance order.
@@ -66,12 +67,13 @@ const formatCreatedAt = (value: string | null | undefined): string => {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString(undefined, {
+  return date.toLocaleString(displayLocale(), {
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    ...hourOptions(),
   });
 };
 
@@ -81,7 +83,7 @@ const formatCreatedDate = (value: string | null | undefined): string => {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString(undefined, {
+  return date.toLocaleDateString(displayLocale(), {
     year: "numeric",
     month: "short",
     day: "numeric",

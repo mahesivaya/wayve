@@ -643,21 +643,133 @@
   color: var(--color-text-primary);
 }
 
-.theme-ui-font-select {
-  padding: 7px 10px;
+.theme-font-label {
+  font-size: var(--text-sm, 12px);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+/* Left-aligned against #root's centring. */
+.theme-ui-font {
+  text-align: left;
+}
+
+/* Text size as a row of percentage tabs on a shared underline. */
+.theme-size-tabs {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 18px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.theme-size-tab {
+  position: relative;
+  margin-bottom: -1px;
+  padding: 4px 1px 7px;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm, 12px);
+  cursor: pointer;
+}
+
+.theme-size-tab:hover {
+  color: var(--color-text-primary);
+}
+
+.theme-size-tab.is-selected {
+  border-bottom-color: var(--color-primary-action, #2563eb);
+  color: var(--color-primary-action, #2563eb);
+  font-weight: 600;
+}
+
+.theme-size-tab:has(input:focus-visible) {
+  outline: 2px solid var(--color-primary-action, #2563eb);
+  outline-offset: 2px;
+}
+
+.theme-size-tab input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+
+/* Font choices as small blocks, each set in its own typeface. */
+.theme-font-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.theme-font-tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  min-height: 32px;
+  padding: 4px 10px;
+  box-sizing: border-box;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm, 8px);
   background: var(--color-surface);
   color: var(--color-text-primary);
-  font-family: inherit;
-  font-size: var(--text-sm, 0.85rem);
+  font-size: var(--text-sm, 12px);
+  line-height: 1.2;
   cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
 }
 
-.theme-ui-font-select:focus-visible {
-  outline: none;
+.theme-font-tile:hover {
+  background: var(--color-surface-hover);
+}
+
+.theme-font-tile.is-selected {
   border-color: var(--color-primary-action, #2563eb);
-  box-shadow: 0 0 0 3px rgb(37 99 235 / 0.2);
+  background: color-mix(
+    in srgb,
+    var(--color-primary-action, #2563eb) 16%,
+    var(--color-surface)
+  );
+}
+
+.theme-font-tile:has(input:focus-visible) {
+  outline: 2px solid var(--color-primary-action, #2563eb);
+  outline-offset: 2px;
+}
+
+/* Visually hidden, still focusable and announced. */
+.theme-font-tile input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+
+.theme-font-tile span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.theme-font-tile svg {
+  flex: 0 0 13px;
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (max-width: 480px) {
+  .theme-font-tiles {
+    grid-template-columns: 1fr;
+  }
 }
 
 .theme-ui-font-note {
@@ -671,12 +783,87 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding-bottom: 12px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--color-border);
 }
 .theme-ui-fonts .theme-ui-font {
   padding-bottom: 0;
   margin-bottom: 0;
   border-bottom: none;
+}
+
+/* Date & time card (Appearance): label on the left, the dropdown and a live
+   example on the right. */
+.datetime-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+  gap: 8px 24px;
+  align-items: start;
+}
+
+.datetime-row + .datetime-row {
+  margin-top: 24px;
+}
+
+.datetime-row > label {
+  padding-top: 7px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.datetime-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.datetime-select {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--text-sm, 0.85rem);
+  cursor: pointer;
+}
+
+.datetime-example-label {
+  margin-top: 4px;
+  font-size: var(--text-xs, 0.7rem);
+  color: var(--color-text-muted);
+}
+
+.datetime-example {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 8px);
+  font-size: var(--text-sm, 0.85rem);
+  color: var(--color-text-muted);
+}
+
+.datetime-example span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.datetime-example strong {
+  flex: 0 0 auto;
+  color: var(--color-text-primary);
+}
+
+@media (max-width: 600px) {
+  .datetime-row {
+    grid-template-columns: 1fr;
+  }
+
+  .datetime-row > label {
+    padding-top: 0;
+  }
 }

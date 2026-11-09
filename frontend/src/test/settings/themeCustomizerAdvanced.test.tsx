@@ -51,7 +51,7 @@ describe("the theme editor", () => {
     expect(details().contains(screen.getByLabelText(label))).toBe(true);
   });
 
-  it.each(["Copy", "Import", "Revert sliders", "Reset", "Themes", "Font"])(
+  it.each(["Copy", "Import", "Revert sliders", "Reset", "Themes", "Colors"])(
     "keeps %s inside Advanced",
     (text) => {
       renderEditor();
