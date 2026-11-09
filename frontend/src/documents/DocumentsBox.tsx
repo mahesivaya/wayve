@@ -83,13 +83,18 @@ function iconFor(fileType: string | null): string {
   return "📄";
 }
 
-export default function DocumentsBox() {
+// With `teamId` this is that team's own file tree (Team page › Documents)
+// instead of the organization-wide library.
+export default function DocumentsBox({ teamId }: { teamId?: number } = {}) {
   const { user } = useAuth();
   // Only owners / super_admins may create, edit, rename, delete, or upload.
   // Every other member gets a read-only view (list / view / download). The
   // backend enforces this independently via the `documents:manage` permission;
   // this flag just hides the controls.
-  const canManage = hasPermission(user, "documents:manage");
+  const canManage = hasPermission(
+    user,
+    teamId != null ? "org:settings" : "documents:manage"
+  );
   const { normalizedSearchQuery } = useGlobalSearch();
 
   const [path, setPath] = useState<Crumb[]>([ROOT_CRUMB]);
@@ -135,8 +140,8 @@ export default function DocumentsBox() {
     if (!user) return;
     try {
       const [f, d] = await Promise.all([
-        listDocumentFolders(currentFolderId),
-        listDocuments(currentFolderId),
+        listDocumentFolders(currentFolderId, teamId),
+        listDocuments(currentFolderId, teamId),
       ]);
       setFolders(Array.isArray(f) ? f : []);
       setFiles(Array.isArray(d) ? d : []);
@@ -144,7 +149,7 @@ export default function DocumentsBox() {
       logger.error("documents load failed", err);
       setError("Failed to load documents.");
     }
-  }, [user, currentFolderId]);
+  }, [user, currentFolderId, teamId]);
 
   // Deferred with setTimeout(0) to keep the fetch (and its setState) out of the
   // synchronous effect body — mirrors DriveBox and satisfies the hooks lint.
@@ -158,7 +163,7 @@ export default function DocumentsBox() {
     setError(null);
     setUploading(true);
     try {
-      await uploadDocuments(incoming, currentFolderId);
+      await uploadDocuments(incoming, currentFolderId, teamId);
       await fetchAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
@@ -173,7 +178,7 @@ export default function DocumentsBox() {
     setNewFolderName("");
     if (!name) return;
     try {
-      await createDocumentFolder(name, currentFolderId);
+      await createDocumentFolder(name, currentFolderId, teamId);
       await fetchAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create folder");
@@ -186,7 +191,7 @@ export default function DocumentsBox() {
     setSavingNewFile(true);
     setError(null);
     try {
-      await createTextDocument(name, newFileBody, currentFolderId);
+      await createTextDocument(name, newFileBody, currentFolderId, teamId);
       setCreatingFile(false);
       setNewFileName("");
       setNewFileBody("");
@@ -213,7 +218,7 @@ export default function DocumentsBox() {
     setAiError(null);
     setAttachOpen(false);
     try {
-      const data = await getDocumentContent(file.id);
+      const data = await getDocumentContent(file.id, teamId);
       setEditorContent(data.content);
       setLoadedContent(data.content);
     } catch (err) {
@@ -229,7 +234,7 @@ export default function DocumentsBox() {
     setEditorSaving(true);
     setError(null);
     try {
-      await updateDocumentContent(editorFile.id, editorContent);
+      await updateDocumentContent(editorFile.id, editorContent, teamId);
       setEditorFile(null);
       await fetchAll();
     } catch (err) {
@@ -323,8 +328,9 @@ export default function DocumentsBox() {
     setEditDraft("");
     if (!target || !name) return;
     try {
-      if (target.kind === "folder") await renameDocumentFolder(target.id, name);
-      else await renameDocument(target.id, name);
+      if (target.kind === "folder")
+        await renameDocumentFolder(target.id, name, teamId);
+      else await renameDocument(target.id, name, teamId);
       await fetchAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Rename failed");
@@ -335,7 +341,7 @@ export default function DocumentsBox() {
     if (!window.confirm(`Delete folder "${name}" and everything inside it?`))
       return;
     try {
-      await deleteDocumentFolder(id);
+      await deleteDocumentFolder(id, teamId);
       await fetchAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delete failed");
@@ -345,7 +351,7 @@ export default function DocumentsBox() {
   const removeFile = async (id: number, name: string) => {
     if (!window.confirm(`Delete "${name}"?`)) return;
     try {
-      await deleteDocument(id);
+      await deleteDocument(id, teamId);
       await fetchAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delete failed");
@@ -580,7 +586,9 @@ export default function DocumentsBox() {
                   <button
                     type="button"
                     className="file-download-btn"
-                    onClick={() => void downloadDocument(file.id, file.name)}
+                    onClick={() =>
+                      void downloadDocument(file.id, file.name, teamId)
+                    }
                   >
                     Download
                   </button>

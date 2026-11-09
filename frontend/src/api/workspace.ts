@@ -100,6 +100,22 @@ export const deleteTeam = async (id: number) => {
   );
 };
 
+// A blank description clears it.
+export const updateTeamDescription = async (
+  teamId: number,
+  description: string
+) => {
+  const res = await apiFetch(`/api/teams/${teamId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ description }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    throw new Error(data?.message ?? "Failed to save description");
+  }
+  return res.json() as Promise<Team>;
+};
+
 export const addTeamMember = async (
   teamId: number,
   input: { name: string; role?: string; email?: string }

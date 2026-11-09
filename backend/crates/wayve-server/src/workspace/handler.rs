@@ -824,7 +824,10 @@ pub async fn delete_team(
     .await?;
 
     match deleted {
-        Some(_) => Ok(HttpResponse::NoContent().finish()),
+        Some(_) => {
+            crate::documents::handler::purge_team_documents(pool.get_ref(), org_id, id).await;
+            Ok(HttpResponse::NoContent().finish())
+        }
         None => {
             Ok(HttpResponse::NotFound().json(serde_json::json!({ "message": "Team not found" })))
         }
@@ -853,7 +856,17 @@ async fn team_for_roster_edit(
     pool: &PgPool,
     team_id: i32,
 ) -> Result<i32, HttpResponse> {
-    let ctx = rbac::require_permission(req, pool, Permission::MembersManage).await?;
+    team_for_edit(req, pool, team_id, Permission::MembersManage).await
+}
+
+/// Checks `permission`, then that the team is in the caller's scope.
+async fn team_for_edit(
+    req: &HttpRequest,
+    pool: &PgPool,
+    team_id: i32,
+    permission: Permission,
+) -> Result<i32, HttpResponse> {
+    let ctx = rbac::require_permission(req, pool, permission).await?;
     let org_id = team_owner_org(&ctx)?;
     let found: Option<i32> = sqlx::query_scalar(
         "SELECT id FROM teams WHERE id = $1 AND organization_id IS NOT DISTINCT FROM $2",
@@ -870,6 +883,47 @@ async fn team_for_roster_edit(
     found.ok_or_else(|| {
         HttpResponse::NotFound().json(serde_json::json!({ "message": "Team not found" }))
     })
+}
+
+#[derive(Deserialize)]
+pub struct UpdateTeamInput {
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+/// Sets a team's description; blank clears it. Admins only (owner, super admin,
+/// admin): `org:settings`, not the roster's `members:manage`, which the security
+/// role also holds. Another scope's team id reads as not found.
+#[patch("/teams/{id}")]
+#[instrument(target = "http", skip(req, pool, path, input))]
+pub async fn update_team(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+    input: web::Json<UpdateTeamInput>,
+) -> AppResult {
+    let team_id = match team_for_edit(
+        &req,
+        pool.get_ref(),
+        path.into_inner(),
+        Permission::OrgSettings,
+    )
+    .await
+    {
+        Ok(id) => id,
+        Err(response) => return Ok(response),
+    };
+    let description = clean_optional(input.description.as_deref(), DESCRIPTION_MAX);
+    let row = sqlx::query(
+        "UPDATE teams SET description = $1 WHERE id = $2
+         RETURNING id, name, slug, tagline, description, created_at",
+    )
+    .bind(description.as_deref())
+    .bind(team_id)
+    .fetch_one(pool.get_ref())
+    .await?;
+
+    Ok(HttpResponse::Ok().json(team_summary_json(row)))
 }
 
 #[derive(Deserialize)]

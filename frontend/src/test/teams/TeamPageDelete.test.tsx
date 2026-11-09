@@ -39,7 +39,7 @@ const REAL_TEAM = {
 
 function renderAt(slug: string) {
   render(
-    <MemoryRouter initialEntries={[`/teams/${slug}`]}>
+    <MemoryRouter initialEntries={[`/teams/${slug}?tab=members`]}>
       <Routes>
         <Route path="/teams/:slug" element={<TeamPage />} />
         <Route path="/home" element={<p>home page</p>} />

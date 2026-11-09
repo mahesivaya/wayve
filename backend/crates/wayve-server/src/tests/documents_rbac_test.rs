@@ -241,4 +241,175 @@ mod tests {
 
         cleanup(&pool, &[owner_id, member_id], &[org_id]).await;
     }
+
+    macro_rules! create_doc {
+        ($uri:expr, $uid:expr, $email:expr, $name:expr $(,)?) => {
+            actix_test::TestRequest::post()
+                .uri($uri)
+                .insert_header(("Authorization", format!("Bearer {}", jwt_for($uid, $email))))
+                .set_json(serde_json::json!({ "name": $name, "content": "hello" }))
+                .to_request()
+        };
+    }
+
+    macro_rules! get_as {
+        ($uri:expr, $uid:expr, $email:expr $(,)?) => {
+            actix_test::TestRequest::get()
+                .uri($uri)
+                .insert_header(("Authorization", format!("Bearer {}", jwt_for($uid, $email))))
+                .to_request()
+        };
+    }
+
+    fn names(listing: &serde_json::Value) -> Vec<String> {
+        listing
+            .as_array()
+            .unwrap_or_else(|| panic!("expected a list: {listing}"))
+            .iter()
+            .map(|d| d["name"].as_str().unwrap_or_default().to_string())
+            .collect()
+    }
+
+    async fn insert_team(pool: &PgPool, org_id: i32, slug: &str) -> i32 {
+        sqlx::query_scalar::<_, i32>(
+            "INSERT INTO teams (organization_id, name, slug) VALUES ($1, $2, $2) RETURNING id",
+        )
+        .bind(org_id)
+        .bind(slug)
+        .fetch_one(pool)
+        .await
+        .unwrap_or_else(|e| panic!("insert team: {e}"))
+    }
+
+    /// Each team has its own file tree. Admins manage it, other members only
+    /// read it, it never mixes with the org library, other orgs get a 404, and
+    /// the team's admin gate doesn't leak onto the library or Skills.
+    #[actix_web::test]
+    async fn team_documents_are_isolated_and_admin_managed() {
+        ensure_aes_key();
+        let pool = test_pool().await;
+        let (org_id, owner_id, owner_email, member_id, member_email) =
+            org_with_owner_and_member(&pool).await;
+        let admin_email = random_email();
+        let admin_id = insert_local_user(&pool, &admin_email, "password123").await;
+        place_in_org(&pool, admin_id, org_id, "admin").await;
+        let security_email = random_email();
+        let security_id = insert_local_user(&pool, &security_email, "password123").await;
+        place_in_org(&pool, security_id, org_id, "security").await;
+        let other_org = insert_org(&pool, &format!("Docs Other {}", random_email())).await;
+        let other_email = random_email();
+        let other_id = insert_local_user(&pool, &other_email, "password123").await;
+        place_in_org(&pool, other_id, other_org, "owner").await;
+
+        let team_a = insert_team(&pool, org_id, "docs-a").await;
+        let team_b = insert_team(&pool, org_id, "docs-b").await;
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .configure(crate::documents::routes),
+        )
+        .await;
+        let new_in_a = format!("/documents/new?team={team_a}");
+        let list_a = format!("/documents?team={team_a}");
+        let list_b = format!("/documents?team={team_b}");
+
+        // An admin can write a team's files, but not the org library or Skills.
+        let resp = actix_test::call_service(
+            &app,
+            create_doc!(&new_in_a, admin_id, &admin_email, "plan.txt"),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let resp = actix_test::call_service(
+            &app,
+            create_doc!("/documents/new", admin_id, &admin_email, "lib.txt"),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        let resp = actix_test::call_service(
+            &app,
+            create_doc!(
+                &format!("/skills/new?team={team_a}"),
+                admin_id,
+                &admin_email,
+                "s.txt",
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+        // Non-admins can't write, even security, who can edit the roster.
+        for (uid, email) in [(member_id, &member_email), (security_id, &security_email)] {
+            let resp =
+                actix_test::call_service(&app, create_doc!(&new_in_a, uid, email, "no.txt")).await;
+            assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        }
+
+        // Another org can't see the team, or read a team id that isn't one.
+        let resp = actix_test::call_service(
+            &app,
+            create_doc!(&new_in_a, other_id, &other_email, "x.txt"),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        let resp = actix_test::call_service(&app, get_as!(&list_a, other_id, &other_email)).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        let resp =
+            actix_test::call_service(&app, get_as!("/documents?team=abc", owner_id, &owner_email))
+                .await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+        // Members read it; it stays out of the library and the other team.
+        let listing: serde_json::Value =
+            actix_test::call_and_read_body_json(&app, get_as!(&list_a, member_id, &member_email))
+                .await;
+        assert_eq!(names(&listing), vec!["plan.txt".to_string()]);
+        let library: serde_json::Value = actix_test::call_and_read_body_json(
+            &app,
+            get_as!("/documents", owner_id, &owner_email),
+        )
+        .await;
+        assert!(names(&library).is_empty());
+        let other_team: serde_json::Value =
+            actix_test::call_and_read_body_json(&app, get_as!(&list_b, owner_id, &owner_email))
+                .await;
+        assert!(names(&other_team).is_empty());
+
+        // A team file can't be reached through the library's path.
+        let doc_id: i64 = listing[0]["id"]
+            .as_i64()
+            .unwrap_or_else(|| panic!("doc id: {listing}"));
+        let resp = actix_test::call_service(
+            &app,
+            actix_test::TestRequest::delete()
+                .uri(&format!("/documents/{doc_id}"))
+                .insert_header((
+                    "Authorization",
+                    format!("Bearer {}", jwt_for(owner_id, &owner_email)),
+                ))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+        // Deleting the team takes its files with it.
+        crate::documents::handler::purge_team_documents(&pool, Some(org_id), team_a).await;
+        let left: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM org_documents WHERE organization_id = $1 AND collection = $2",
+        )
+        .bind(org_id)
+        .bind(format!("team:{team_a}"))
+        .fetch_one(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("count: {e}"));
+        assert_eq!(left, 0);
+
+        cleanup(
+            &pool,
+            &[owner_id, member_id, admin_id, security_id, other_id],
+            &[org_id, other_org],
+        )
+        .await;
+    }
 }

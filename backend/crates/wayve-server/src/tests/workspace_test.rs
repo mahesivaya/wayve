@@ -202,6 +202,75 @@ mod tests {
         cleanup(&pool, &[owner_id, member_id], &[org_id, other_org]).await;
     }
 
+    /// Only admins (owner, super admin, admin) can set a team's description:
+    /// the security role and plain members can't, even though security may edit
+    /// the roster, and another org's owner can't even see the team.
+    #[actix_web::test]
+    async fn team_description_is_saved_and_scoped() {
+        let pool = test_pool().await;
+        let org_id = insert_org(&pool, &format!("WS Desc Org {}", random_email())).await;
+        let other_org = insert_org(&pool, &format!("WS Desc Other {}", random_email())).await;
+
+        let owner_email = random_email();
+        let owner_id = insert_local_user(&pool, &owner_email, "password123").await;
+        place_in_org(&pool, owner_id, org_id, "owner").await;
+
+        let member_email = random_email();
+        let member_id = insert_local_user(&pool, &member_email, "password123").await;
+        place_in_org(&pool, member_id, org_id, "member").await;
+
+        let other_email = random_email();
+        let other_id = insert_local_user(&pool, &other_email, "password123").await;
+        place_in_org(&pool, other_id, other_org, "owner").await;
+
+        let security_email = random_email();
+        let security_id = insert_local_user(&pool, &security_email, "password123").await;
+        place_in_org(&pool, security_id, org_id, "security").await;
+
+        let admin_email = random_email();
+        let admin_id = insert_local_user(&pool, &admin_email, "password123").await;
+        place_in_org(&pool, admin_id, org_id, "admin").await;
+
+        let team_id = insert_org_team(&pool, org_id, "described").await;
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(workspace::handler::update_team),
+        )
+        .await;
+        let patch = |uid: i32, email: &str, description: &str| {
+            actix_test::TestRequest::patch()
+                .uri(&format!("/teams/{team_id}"))
+                .insert_header(("Authorization", format!("Bearer {}", jwt_for(uid, email))))
+                .set_json(serde_json::json!({ "description": description }))
+                .to_request()
+        };
+
+        let resp = actix_test::call_service(&app, patch(member_id, &member_email, "no")).await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        let resp = actix_test::call_service(&app, patch(security_id, &security_email, "no")).await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        let resp = actix_test::call_service(&app, patch(other_id, &other_email, "no")).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+        let by_admin: serde_json::Value =
+            actix_test::call_and_read_body_json(&app, patch(admin_id, &admin_email, "By admin"))
+                .await;
+        assert_eq!(by_admin["description"], "By admin");
+
+        let saved: serde_json::Value = actix_test::call_and_read_body_json(
+            &app,
+            patch(owner_id, &owner_email, "  We build things. "),
+        )
+        .await;
+        assert_eq!(saved["description"], "We build things.");
+
+        let cleared: serde_json::Value =
+            actix_test::call_and_read_body_json(&app, patch(owner_id, &owner_email, "   ")).await;
+        assert!(cleared["description"].is_null());
+    }
+
     /// A team's roster is saved: a member-manager adds and removes rows, the
     /// team page reads them back, other orgs can't touch them, plain members
     /// can't edit, and deleting the team deletes its roster.

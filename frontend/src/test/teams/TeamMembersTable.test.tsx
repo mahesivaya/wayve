@@ -42,6 +42,8 @@ const renderTable = (canManage = true) => {
       canManage={canManage}
       busy={false}
       onRemove={onRemove}
+      selectedId={null}
+      onSelect={vi.fn()}
     />
   );
   return onRemove;

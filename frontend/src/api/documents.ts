@@ -12,6 +12,12 @@ async function errMessage(res: Response): Promise<string | null> {
   }
 }
 
+// A team's own file tree uses the same endpoints, selected by ?team=<id>.
+const inTeam = (path: string, teamId?: number) =>
+  teamId == null
+    ? path
+    : `${path}${path.includes("?") ? "&" : "?"}team=${teamId}`;
+
 // Organization Documents is a shared workspace where every org member has full
 // access. There is no per-user encryption envelope: the server holds the at-rest
 // key and serves blobs to any member, so unlike Drive these calls never pass a
@@ -33,18 +39,22 @@ export type DocumentFile = {
 };
 
 export const listDocumentFolders = async (
-  parentFolderId: number | null = null
+  parentFolderId: number | null = null,
+  teamId?: number
 ) => {
   const qs =
     parentFolderId != null ? `?parent_folder_id=${parentFolderId}` : "";
-  return apiFetchJson<DocumentFolder[]>(`/api/document-folders${qs}`);
+  return apiFetchJson<DocumentFolder[]>(
+    inTeam(`/api/document-folders${qs}`, teamId)
+  );
 };
 
 export const createDocumentFolder = async (
   name: string,
-  parentFolderId: number | null = null
+  parentFolderId: number | null = null,
+  teamId?: number
 ) => {
-  const res = await apiFetch("/api/document-folders", {
+  const res = await apiFetch(inTeam("/api/document-folders", teamId), {
     method: "POST",
     body: JSON.stringify({ name, parent_folder_id: parentFolderId }),
   });
@@ -53,48 +63,72 @@ export const createDocumentFolder = async (
   return res.json() as Promise<DocumentFolder>;
 };
 
-export const renameDocumentFolder = async (folderId: number, name: string) => {
-  const res = await apiFetch(`/api/document-folders/${folderId}`, {
-    method: "PATCH",
-    body: JSON.stringify({ name }),
-  });
+export const renameDocumentFolder = async (
+  folderId: number,
+  name: string,
+  teamId?: number
+) => {
+  const res = await apiFetch(
+    inTeam(`/api/document-folders/${folderId}`, teamId),
+    {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    }
+  );
   if (!res.ok)
     throw new Error((await errMessage(res)) ?? "Failed to rename folder");
 };
 
-export const deleteDocumentFolder = async (folderId: number) => {
-  const res = await apiFetch(`/api/document-folders/${folderId}`, {
-    method: "DELETE",
-  });
+export const deleteDocumentFolder = async (
+  folderId: number,
+  teamId?: number
+) => {
+  const res = await apiFetch(
+    inTeam(`/api/document-folders/${folderId}`, teamId),
+    {
+      method: "DELETE",
+    }
+  );
   if (!res.ok)
     throw new Error((await errMessage(res)) ?? "Failed to delete folder");
 };
 
-export const listDocuments = async (folderId: number | null = null) => {
+export const listDocuments = async (
+  folderId: number | null = null,
+  teamId?: number
+) => {
   const qs = folderId != null ? `?folder_id=${folderId}` : "";
-  return apiFetchJson<DocumentFile[]>(`/api/documents${qs}`);
+  return apiFetchJson<DocumentFile[]>(inTeam(`/api/documents${qs}`, teamId));
 };
 
 export const uploadDocuments = async (
   files: File[],
-  folderId: number | null = null
+  folderId: number | null = null,
+  teamId?: number
 ) => {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
   if (folderId != null) formData.append("folder_id", String(folderId));
 
   const token = getAuthToken();
-  const res = await fetch(`${getApiBase()}/api/documents`, {
-    method: "POST",
-    credentials: "include",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    body: formData,
-  });
+  const res = await fetch(
+    `${getApiBase()}${inTeam("/api/documents", teamId)}`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: formData,
+    }
+  );
   if (!res.ok) throw new Error((await errMessage(res)) ?? "Upload failed");
 };
 
-export const renameDocument = async (fileId: number, name: string) => {
-  const res = await apiFetch(`/api/documents/${fileId}`, {
+export const renameDocument = async (
+  fileId: number,
+  name: string,
+  teamId?: number
+) => {
+  const res = await apiFetch(inTeam(`/api/documents/${fileId}`, teamId), {
     method: "PATCH",
     body: JSON.stringify({ name }),
   });
@@ -102,8 +136,10 @@ export const renameDocument = async (fileId: number, name: string) => {
     throw new Error((await errMessage(res)) ?? "Failed to rename file");
 };
 
-export const deleteDocument = async (fileId: number) => {
-  const res = await apiFetch(`/api/documents/${fileId}`, { method: "DELETE" });
+export const deleteDocument = async (fileId: number, teamId?: number) => {
+  const res = await apiFetch(inTeam(`/api/documents/${fileId}`, teamId), {
+    method: "DELETE",
+  });
   if (!res.ok)
     throw new Error((await errMessage(res)) ?? "Failed to delete file");
 };
@@ -112,9 +148,10 @@ export const deleteDocument = async (fileId: number) => {
 export const createTextDocument = async (
   name: string,
   content: string,
-  folderId: number | null = null
+  folderId: number | null = null,
+  teamId?: number
 ) => {
-  const res = await apiFetch("/api/documents/new", {
+  const res = await apiFetch(inTeam("/api/documents/new", teamId), {
     method: "POST",
     body: JSON.stringify({ name, content, folder_id: folderId }),
   });
@@ -124,27 +161,37 @@ export const createTextDocument = async (
 };
 
 // Returns decrypted text, and is open to any member.
-export const getDocumentContent = async (fileId: number) => {
+export const getDocumentContent = async (fileId: number, teamId?: number) => {
   return apiFetchJson<{ name: string; content: string }>(
-    `/api/documents/${fileId}/content`
+    inTeam(`/api/documents/${fileId}/content`, teamId)
   );
 };
 
 // Owner and super_admin only, enforced on the backend.
 export const updateDocumentContent = async (
   fileId: number,
-  content: string
+  content: string,
+  teamId?: number
 ) => {
-  const res = await apiFetch(`/api/documents/${fileId}/content`, {
-    method: "PUT",
-    body: JSON.stringify({ content }),
-  });
+  const res = await apiFetch(
+    inTeam(`/api/documents/${fileId}/content`, teamId),
+    {
+      method: "PUT",
+      body: JSON.stringify({ content }),
+    }
+  );
   if (!res.ok)
     throw new Error((await errMessage(res)) ?? "Failed to save document");
 };
 
-export const downloadDocument = async (fileId: number, fileName: string) => {
-  const res = await apiFetch(`/api/documents/${fileId}/download`);
+export const downloadDocument = async (
+  fileId: number,
+  fileName: string,
+  teamId?: number
+) => {
+  const res = await apiFetch(
+    inTeam(`/api/documents/${fileId}/download`, teamId)
+  );
   const ct = res.headers.get("content-type") ?? "application/octet-stream";
   const blob = new Blob([new Uint8Array(await res.arrayBuffer())], {
     type: ct,
