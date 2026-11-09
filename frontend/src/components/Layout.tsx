@@ -1899,6 +1899,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               or when settings takes over and the sidebar is hidden. */}
             {!sidebarCollapsed && !isNarrow && !settingsTakeover && (
               <ResizeHandle
+                className="sidebar-resize-handle"
                 onPointerDown={startSidebarResize}
                 ariaLabel="Resize sidebar"
               />
