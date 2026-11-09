@@ -10,7 +10,7 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import { SupportSummary, getSupportSummary } from "../api/platformTeam";
-import { fmtDate } from "../utils/datetime";
+import { fmtDateTime } from "../utils/datetime";
 import UserStoriesSummaryCard from "../organization/UserStoriesSummaryCard";
 import PlatformConsoleCards from "../organization/PlatformConsoleCards";
 import "./platformTeam.css";
@@ -196,7 +196,7 @@ export default function PlatformAnalytics() {
                           </span>
                         </td>
                         <td>{row.auth_provider ?? "local"}</td>
-                        <td>{fmtDate(row.created_at)}</td>
+                        <td>{fmtDateTime(row.created_at)}</td>
                       </tr>
                     ))}
                   </tbody>
