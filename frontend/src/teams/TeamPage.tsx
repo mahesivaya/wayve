@@ -219,7 +219,7 @@ export default function TeamPage() {
       </nav>
 
       {tab === "overview" && (
-        <section className="team-tab-panel" aria-label="Overview">
+        <section className="team-tab-panel team-overview" aria-label="Overview">
           <TeamDescription
             key={team.id}
             teamId={team.id}

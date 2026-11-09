@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { updateTeamDescription } from "../api/workspace";
 
 // The backend keeps at most this many characters (DESCRIPTION_MAX).
 const MAX_LENGTH = 2000;
 
-// A team's description on its Overview. People who can manage the team get a
-// textbox that saves when they click away; everyone else reads it.
+// A team's description on its Overview. Admins can click the text to edit it,
+// and it saves when they click away; everyone else just reads it.
 export default function TeamDescription({
   teamId,
   value,
@@ -28,6 +28,15 @@ export default function TeamDescription({
     setLastValue(value);
     setDraft(value);
   }
+
+  // It reads as text on the page, so it grows with its content, not a scrollbar.
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  useLayoutEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.style.height = "auto";
+    input.style.height = `${input.scrollHeight}px`;
+  }, [draft]);
 
   if (!canEdit) {
     return <p className="team-tab-text">{value || "No description yet."}</p>;
@@ -54,10 +63,11 @@ export default function TeamDescription({
   return (
     <div className="team-description">
       <textarea
+        ref={inputRef}
         className="team-description-input"
         aria-label="Team description"
         placeholder="Add a description..."
-        rows={4}
+        rows={1}
         maxLength={MAX_LENGTH}
         value={draft}
         onChange={(e) => {
