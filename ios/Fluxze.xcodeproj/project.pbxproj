@@ -1,0 +1,531 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0BBE1C9E2EB40AE8E0341226 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A674271AD3D40E66590E5DB /* Keychain.swift */; };
+		1616177A6BDB3080056EB642 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E651CF8ADBA667BBF007BA75 /* LoginView.swift */; };
+		20F35B7C59F6F9FCB66E102D /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05DB673F81598C323B400103 /* Models.swift */; };
+		224F8F76724FC221FFEE780E /* VerifyEmailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 817331078984942973AF5C35 /* VerifyEmailView.swift */; };
+		3735D1FBDD6EF156D337E1A3 /* ServerDate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 313FD5F6B7DFFD19AFE52E53 /* ServerDate.swift */; };
+		4A88651F4E4AEAF89E949FF4 /* TaskRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1D2B721538532E5FC5D1BD /* TaskRow.swift */; };
+		73D19A88E176F29E8FC90F4D /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E41182006D4E509E502D709 /* Config.swift */; };
+		8AD7DE320FBF74B36B8B88B2 /* FluxzeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F856A10844A2070DAF393C08 /* FluxzeApp.swift */; };
+		8FBF015FC9FE3E99C1254917 /* AuthKeyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56AAA9B20FBD68C3287066A5 /* AuthKeyTests.swift */; };
+		98010F5E01DDE86495B66BD6 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25AC528395147B038243E758 /* SettingsView.swift */; };
+		9B54F3A1F5391C3C163FA9F2 /* APIError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1901BA3A71A784EF22796A09 /* APIError.swift */; };
+		A0C679395000CCF2F68E59F4 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5082E7A89DFB2BF26D61F627 /* APIClient.swift */; };
+		AB642C09E34CD8E7083813B5 /* ModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 744CBD373E925EC5B42D1DB6 /* ModelTests.swift */; };
+		B4AFB73D8AC5B56A4684E8EA /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B515DE16CD941B42060F87 /* AuthService.swift */; };
+		B9B6CB9CA56C435C8F498513 /* Color+Hex.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50906CB2A4F8EFCAE833F769 /* Color+Hex.swift */; };
+		C6811ED3D832EB0E16238B8A /* TaskListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72C615A41037C75B951C06A1 /* TaskListView.swift */; };
+		CD4F6F10FE0AFC1737A60A1F /* AuthKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC8A8BEFA43B8D2C310D0F3 /* AuthKey.swift */; };
+		D39441B02CCE0745FC9C249E /* APIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A8E7F23FA3DE45DE3D418DE /* APIClientTests.swift */; };
+		E2ABF554072C9C0BBC3C8159 /* TasksStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B45F54C30DE426ACAF23DF0F /* TasksStore.swift */; };
+		EFADE8AAAB7ACBBE5A025EE1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D6C86A862A8B9BF2E002BE73 /* Assets.xcassets */; };
+		F2E495C7E51738682DF5BEFF /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5CDB34F920D4252DC05E8FD /* AppState.swift */; };
+		F477A9C3E8E0FE0FC044AF9A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B971D2516468DCCC5C85754C /* PrivacyInfo.xcprivacy */; };
+		FB3AC3E5DD538292CF37D152 /* LiveAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E571995527BF46F24154CE6E /* LiveAPITests.swift */; };
+		FDCA93B7810A16FC71A4F7C8 /* TaskEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB5E07DE9D030CD8E72E3742 /* TaskEditView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		AC433A72F98CD1D0BC5323F2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 52CBA2C47BEC1C6A457CF62E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7624AF0AB6AC80D38DDBE29E;
+			remoteInfo = Fluxze;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		05DB673F81598C323B400103 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		0A8E7F23FA3DE45DE3D418DE /* APIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClientTests.swift; sourceTree = "<group>"; };
+		1901BA3A71A784EF22796A09 /* APIError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIError.swift; sourceTree = "<group>"; };
+		1A674271AD3D40E66590E5DB /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
+		25AC528395147B038243E758 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		313FD5F6B7DFFD19AFE52E53 /* ServerDate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerDate.swift; sourceTree = "<group>"; };
+		3A0C3BEE3E1C32ED0F13FC02 /* FluxzeTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = FluxzeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3E41182006D4E509E502D709 /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
+		4AC8A8BEFA43B8D2C310D0F3 /* AuthKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthKey.swift; sourceTree = "<group>"; };
+		5082E7A89DFB2BF26D61F627 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		50906CB2A4F8EFCAE833F769 /* Color+Hex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Hex.swift"; sourceTree = "<group>"; };
+		56AAA9B20FBD68C3287066A5 /* AuthKeyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthKeyTests.swift; sourceTree = "<group>"; };
+		6D1D2B721538532E5FC5D1BD /* TaskRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskRow.swift; sourceTree = "<group>"; };
+		72C615A41037C75B951C06A1 /* TaskListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskListView.swift; sourceTree = "<group>"; };
+		744CBD373E925EC5B42D1DB6 /* ModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTests.swift; sourceTree = "<group>"; };
+		817331078984942973AF5C35 /* VerifyEmailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifyEmailView.swift; sourceTree = "<group>"; };
+		98649CB7D547514D52F29CBA /* Fluxze.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Fluxze.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A2B515DE16CD941B42060F87 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
+		B45F54C30DE426ACAF23DF0F /* TasksStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksStore.swift; sourceTree = "<group>"; };
+		B971D2516468DCCC5C85754C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		C5CDB34F920D4252DC05E8FD /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		D6C86A862A8B9BF2E002BE73 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		E571995527BF46F24154CE6E /* LiveAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveAPITests.swift; sourceTree = "<group>"; };
+		E651CF8ADBA667BBF007BA75 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		E813568665C36BC5FA9BF1CA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		EB5E07DE9D030CD8E72E3742 /* TaskEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskEditView.swift; sourceTree = "<group>"; };
+		F856A10844A2070DAF393C08 /* FluxzeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxzeApp.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		270D9ACC5ADCB43B72A7474C /* Fluxze */ = {
+			isa = PBXGroup;
+			children = (
+				C5CDB34F920D4252DC05E8FD /* AppState.swift */,
+				D6C86A862A8B9BF2E002BE73 /* Assets.xcassets */,
+				3E41182006D4E509E502D709 /* Config.swift */,
+				F856A10844A2070DAF393C08 /* FluxzeApp.swift */,
+				E813568665C36BC5FA9BF1CA /* Info.plist */,
+				B971D2516468DCCC5C85754C /* PrivacyInfo.xcprivacy */,
+				BFEDAB7BA4F5E7FC69D96573 /* API */,
+				85AA1F905CDCCCE33832319A /* Auth */,
+				31A6B14FC9FF64CC2472ED33 /* Tasks */,
+				B9ECE5C9EAF8D0132E946727 /* Views */,
+			);
+			path = Fluxze;
+			sourceTree = "<group>";
+		};
+		31A6B14FC9FF64CC2472ED33 /* Tasks */ = {
+			isa = PBXGroup;
+			children = (
+				B45F54C30DE426ACAF23DF0F /* TasksStore.swift */,
+			);
+			path = Tasks;
+			sourceTree = "<group>";
+		};
+		85AA1F905CDCCCE33832319A /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				4AC8A8BEFA43B8D2C310D0F3 /* AuthKey.swift */,
+				A2B515DE16CD941B42060F87 /* AuthService.swift */,
+				1A674271AD3D40E66590E5DB /* Keychain.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		88878FAAE60962F033E914D7 /* FluxzeTests */ = {
+			isa = PBXGroup;
+			children = (
+				0A8E7F23FA3DE45DE3D418DE /* APIClientTests.swift */,
+				56AAA9B20FBD68C3287066A5 /* AuthKeyTests.swift */,
+				E571995527BF46F24154CE6E /* LiveAPITests.swift */,
+				744CBD373E925EC5B42D1DB6 /* ModelTests.swift */,
+			);
+			path = FluxzeTests;
+			sourceTree = "<group>";
+		};
+		B3AF2AFFE76FA5A75F626A00 = {
+			isa = PBXGroup;
+			children = (
+				270D9ACC5ADCB43B72A7474C /* Fluxze */,
+				88878FAAE60962F033E914D7 /* FluxzeTests */,
+				E2184AABAFBB19CB7D4C94AA /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B9ECE5C9EAF8D0132E946727 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				50906CB2A4F8EFCAE833F769 /* Color+Hex.swift */,
+				E651CF8ADBA667BBF007BA75 /* LoginView.swift */,
+				25AC528395147B038243E758 /* SettingsView.swift */,
+				EB5E07DE9D030CD8E72E3742 /* TaskEditView.swift */,
+				72C615A41037C75B951C06A1 /* TaskListView.swift */,
+				6D1D2B721538532E5FC5D1BD /* TaskRow.swift */,
+				817331078984942973AF5C35 /* VerifyEmailView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		BFEDAB7BA4F5E7FC69D96573 /* API */ = {
+			isa = PBXGroup;
+			children = (
+				5082E7A89DFB2BF26D61F627 /* APIClient.swift */,
+				1901BA3A71A784EF22796A09 /* APIError.swift */,
+				05DB673F81598C323B400103 /* Models.swift */,
+				313FD5F6B7DFFD19AFE52E53 /* ServerDate.swift */,
+			);
+			path = API;
+			sourceTree = "<group>";
+		};
+		E2184AABAFBB19CB7D4C94AA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				98649CB7D547514D52F29CBA /* Fluxze.app */,
+				3A0C3BEE3E1C32ED0F13FC02 /* FluxzeTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		4D357618D63AFFE1667A4899 /* FluxzeTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F75F5D39DBF468FB9679AAA6 /* Build configuration list for PBXNativeTarget "FluxzeTests" */;
+			buildPhases = (
+				9D8B6594C55F61C2DF7D1BD0 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				09341FAFE2606B10FA4B999E /* PBXTargetDependency */,
+			);
+			name = FluxzeTests;
+			packageProductDependencies = (
+			);
+			productName = FluxzeTests;
+			productReference = 3A0C3BEE3E1C32ED0F13FC02 /* FluxzeTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		7624AF0AB6AC80D38DDBE29E /* Fluxze */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 993DBE385B6F3E9C93515D94 /* Build configuration list for PBXNativeTarget "Fluxze" */;
+			buildPhases = (
+				CEC27D339967549401714FFD /* Sources */,
+				54EC0FD285580D7AD7760677 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Fluxze;
+			packageProductDependencies = (
+			);
+			productName = Fluxze;
+			productReference = 98649CB7D547514D52F29CBA /* Fluxze.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		52CBA2C47BEC1C6A457CF62E /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					4D357618D63AFFE1667A4899 = {
+						DevelopmentTeam = "";
+					};
+					7624AF0AB6AC80D38DDBE29E = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 1FA3010FFC5DD5C0A2F518D5 /* Build configuration list for PBXProject "Fluxze" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = B3AF2AFFE76FA5A75F626A00;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = E2184AABAFBB19CB7D4C94AA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				7624AF0AB6AC80D38DDBE29E /* Fluxze */,
+				4D357618D63AFFE1667A4899 /* FluxzeTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		54EC0FD285580D7AD7760677 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EFADE8AAAB7ACBBE5A025EE1 /* Assets.xcassets in Resources */,
+				F477A9C3E8E0FE0FC044AF9A /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		9D8B6594C55F61C2DF7D1BD0 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D39441B02CCE0745FC9C249E /* APIClientTests.swift in Sources */,
+				8FBF015FC9FE3E99C1254917 /* AuthKeyTests.swift in Sources */,
+				FB3AC3E5DD538292CF37D152 /* LiveAPITests.swift in Sources */,
+				AB642C09E34CD8E7083813B5 /* ModelTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CEC27D339967549401714FFD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A0C679395000CCF2F68E59F4 /* APIClient.swift in Sources */,
+				9B54F3A1F5391C3C163FA9F2 /* APIError.swift in Sources */,
+				F2E495C7E51738682DF5BEFF /* AppState.swift in Sources */,
+				CD4F6F10FE0AFC1737A60A1F /* AuthKey.swift in Sources */,
+				B4AFB73D8AC5B56A4684E8EA /* AuthService.swift in Sources */,
+				B9B6CB9CA56C435C8F498513 /* Color+Hex.swift in Sources */,
+				73D19A88E176F29E8FC90F4D /* Config.swift in Sources */,
+				8AD7DE320FBF74B36B8B88B2 /* FluxzeApp.swift in Sources */,
+				0BBE1C9E2EB40AE8E0341226 /* Keychain.swift in Sources */,
+				1616177A6BDB3080056EB642 /* LoginView.swift in Sources */,
+				20F35B7C59F6F9FCB66E102D /* Models.swift in Sources */,
+				3735D1FBDD6EF156D337E1A3 /* ServerDate.swift in Sources */,
+				98010F5E01DDE86495B66BD6 /* SettingsView.swift in Sources */,
+				FDCA93B7810A16FC71A4F7C8 /* TaskEditView.swift in Sources */,
+				C6811ED3D832EB0E16238B8A /* TaskListView.swift in Sources */,
+				4A88651F4E4AEAF89E949FF4 /* TaskRow.swift in Sources */,
+				E2ABF554072C9C0BBC3C8159 /* TasksStore.swift in Sources */,
+				224F8F76724FC221FFEE780E /* VerifyEmailView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		09341FAFE2606B10FA4B999E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 7624AF0AB6AC80D38DDBE29E /* Fluxze */;
+			targetProxy = AC433A72F98CD1D0BC5323F2 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		3CF31336E01823A283D76851 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.fluxze.app.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Fluxze.app/Fluxze";
+			};
+			name = Debug;
+		};
+		64E8C293DB1DD2DEE4FE4A06 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		7923E7FD45592355C22F6A49 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = Fluxze/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.fluxze.app;
+				PRODUCT_NAME = Fluxze;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		9D5259A3325848B26CF4E9F1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		9FA5796F8FFA4C85F4F449B3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = Fluxze/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.fluxze.app;
+				PRODUCT_NAME = Fluxze;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		D55A8D5B652D374C34CB98C7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.fluxze.app.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Fluxze.app/Fluxze";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1FA3010FFC5DD5C0A2F518D5 /* Build configuration list for PBXProject "Fluxze" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				64E8C293DB1DD2DEE4FE4A06 /* Debug */,
+				9D5259A3325848B26CF4E9F1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		993DBE385B6F3E9C93515D94 /* Build configuration list for PBXNativeTarget "Fluxze" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9FA5796F8FFA4C85F4F449B3 /* Debug */,
+				7923E7FD45592355C22F6A49 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F75F5D39DBF468FB9679AAA6 /* Build configuration list for PBXNativeTarget "FluxzeTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3CF31336E01823A283D76851 /* Debug */,
+				D55A8D5B652D374C34CB98C7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 52CBA2C47BEC1C6A457CF62E /* Project object */;
+}

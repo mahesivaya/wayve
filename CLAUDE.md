@@ -6,6 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - `backend/` — Rust + Actix Web 4 **Cargo workspace** (`backend/Cargo.toml`, resolver 2). Three crates under `backend/crates/`: `wayve-server` (the binary, package name `rwayve` — all feature modules, routes, workers), `wayve-security` (auth + crypto: jwt, rbac, api_key, encryption, oauth, password, sso), and `wayve-db` (Postgres pool + retry loop). Shared dep versions are centralized in the workspace root's `[workspace.dependencies]`. Postgres via sqlx, Redis for cache, Gmail OAuth + sync, WebSocket chat/call, AES-256-GCM at-rest encryption. See `backend/WORKSPACE.md` for the extraction history and crate boundaries.
 - `frontend/` — React 18 + TypeScript + Vite. React Compiler is enabled (via `@vitejs/plugin-react`). React Router v7.
+- `ios/` — native SwiftUI iPhone app (v1: Tasks only), calling the same `/api`. Project generated from `ios/project.yml` with XcodeGen (`cd ios && xcodegen generate`); tests via `xcodebuild test -scheme Fluxze`. Separate from `frontend/ios`, the Capacitor shell.
 - `infra/` — `docker-compose.yml` (postgres, redis, backend, frontend, nginx), `docker-compose.dev.yml` (full dev stack including `mailpit`), `justfile` of common commands, `postgres/init.sql` (the canonical schema), `nginx/nginx.conf`.
 - `scripts/smoke.sh` — end-to-end docker smoke that brings up the stack and hits a handful of endpoints. Used by CI.
 - `.github/workflows/smoke.yml` — runs backend `cargo test`, frontend `tsc --noEmit` + `vitest`, then the docker smoke.

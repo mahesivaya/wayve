@@ -1,0 +1,71 @@
+# XcodeGen spec for the native Fluxze iPhone app. Regenerate the project after
+# changing this file or adding/removing source files:
+#   cd ios && xcodegen generate
+name: Fluxze
+options:
+  bundleIdPrefix: com.fluxze
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+targets:
+  Fluxze:
+    type: application
+    platform: iOS
+    sources:
+      - path: Fluxze
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fluxze.app
+        PRODUCT_NAME: Fluxze
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Automatic
+    info:
+      path: Fluxze/Info.plist
+      properties:
+        CFBundleDisplayName: Fluxze
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # HTTPS + PBKDF2 for sign-in only: exempt from export documentation.
+        ITSAppUsesNonExemptEncryption: false
+        # Lets a Debug build talk to the local dev stack (http://localhost).
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+  FluxzeTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: FluxzeTests
+    dependencies:
+      - target: Fluxze
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fluxze.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Fluxze:
+    build:
+      targets:
+        Fluxze: all
+        FluxzeTests: [test]
+    run:
+      config: Debug
+      commandLineArguments:
+        # Tick in Xcode (Edit Scheme → Arguments) to use the local dev stack.
+        "-FluxzeBaseURL http://localhost": false
+    test:
+      config: Debug
+      targets:
+        - FluxzeTests
+    archive:
+      config: Release
