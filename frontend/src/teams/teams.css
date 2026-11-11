@@ -218,10 +218,19 @@
   margin-inline: auto;
 }
 
+/* The description sits in a softly tinted block, set apart from the page. */
 .team-overview .team-description-input,
 .team-overview .team-tab-text {
+  box-sizing: border-box;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-surface-hover) 60%, transparent);
   font-size: var(--text-2xl);
   line-height: 1.5;
+}
+
+.team-overview .team-description-input:focus {
+  background: var(--color-surface-hover);
 }
 
 /* Team files: the Drive-style screen, as part of this page rather than a
