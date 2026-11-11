@@ -4,8 +4,8 @@
 #   Source:  frontend/public/brand/fluxze.png   (black logo; also the in-app header logo)
 #   Writes:  frontend/public/brand/fluxze-icon.png                          browser tab icon (white on dark)
 #            desktop/build/icon.icns                                        macOS app (white on dark)
-#            frontend/ios/App/App/Assets.xcassets/AppIcon.appiconset/…      iPhone app icon
-#            frontend/ios/App/App/Assets.xcassets/Splash.imageset/…         iPhone launch screen
+#            ios/Fluxze/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png  iPhone app icon
+#            ios/Fluxze/Assets.xcassets/Logo.imageset/Logo.png               iPhone sign-in logo
 #
 # The generated files are committed (each platform needs its own copy inside
 # its project), but never edit them by hand: change the source logo and re-run
@@ -21,16 +21,14 @@ SRC="$ROOT/frontend/public/brand/fluxze.png"
 FAVICON="$ROOT/frontend/public/brand/fluxze-icon.png"
 FAVICON_SIZE=256
 ICNS="$ROOT/desktop/build/icon.icns"
-IOS_ASSETS="$ROOT/frontend/ios/App/App/Assets.xcassets"
-IOS_ICON="$IOS_ASSETS/AppIcon.appiconset/AppIcon-512@2x.png"
-IOS_SPLASH_DIR="$IOS_ASSETS/Splash.imageset"
+IOS_ASSETS="$ROOT/ios/Fluxze/Assets.xcassets"
+IOS_ICON="$IOS_ASSETS/AppIcon.appiconset/AppIcon-1024.png"
+IOS_LOGO="$IOS_ASSETS/Logo.imageset/Logo.png"
 
-BG="FFFFFF"            # iPhone icon / splash background (black logo)
+BG="FFFFFF"            # iPhone icon background (black logo)
 DESKTOP_BG="0F172A"    # macOS icon background (white logo); dark slate
 ICON_SIZE=1024
 ICON_LOGO=700          # logo size inside the 1024 icon (leaves a safe margin)
-SPLASH_SIZE=2732
-SPLASH_LOGO=640        # logo size on the launch screen
 
 for tool in sips iconutil swift; do
   command -v "$tool" >/dev/null || { echo "make-icons: needs macOS ($tool not found)" >&2; exit 1; }
@@ -68,19 +66,11 @@ square_on_bg "$ICON_SIZE" "$ICON_LOGO" "$TMP/master-desktop.png" "$SRC_WHITE" "$
 sips -z "$FAVICON_SIZE" "$FAVICON_SIZE" "$TMP/master-desktop.png" --out "$FAVICON" >/dev/null
 echo "make-icons: wrote ${FAVICON#$ROOT/}"
 
-# iPhone app icon.
+# iPhone app icon, and the same image as the logo on the sign-in screen.
 if [ -d "$(dirname "$IOS_ICON")" ]; then
   cp "$TMP/master.png" "$IOS_ICON"
-  echo "make-icons: wrote ${IOS_ICON#$ROOT/}"
-fi
-
-# iPhone launch screen: the asset catalog lists three copies of one image.
-if [ -d "$IOS_SPLASH_DIR" ]; then
-  square_on_bg "$SPLASH_SIZE" "$SPLASH_LOGO" "$TMP/splash.png"
-  for name in splash-2732x2732.png splash-2732x2732-1.png splash-2732x2732-2.png; do
-    cp "$TMP/splash.png" "$IOS_SPLASH_DIR/$name"
-  done
-  echo "make-icons: wrote ${IOS_SPLASH_DIR#$ROOT/}/splash-2732x2732*.png"
+  cp "$TMP/master.png" "$IOS_LOGO"
+  echo "make-icons: wrote ${IOS_ICON#$ROOT/} and ${IOS_LOGO#$ROOT/}"
 fi
 
 # macOS .icns: the standard iconset matrix, packed by iconutil.
