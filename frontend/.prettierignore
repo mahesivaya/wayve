@@ -5,5 +5,3 @@ node_modules
 package-lock.json
 # Vendored / static assets — not our source, don't reformat
 public
-# Capacitor iOS shell — Xcode writes these files in its own format
-ios
