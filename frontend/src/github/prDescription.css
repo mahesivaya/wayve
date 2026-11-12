@@ -1,0 +1,18 @@
+/* PR body sections (PrDescription): Summary always open, the rest folded. */
+.github-pr-desc-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.github-pr-desc-heading {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+/* A folded section's body sits under its title, past the chevron. */
+.github-pr-desc-section > .github-pr-desc-toggle + .github-pr-desc {
+  padding-left: 22px;
+}

@@ -23,6 +23,7 @@ const OPEN_PR = {
   state: "open",
   draft: false,
   merged: false,
+  mergeable: true,
   merged_at: null,
   locked: false,
   body: null,
@@ -94,14 +95,14 @@ describe("pull requests for a non-owner", () => {
       })
     ).toBeTruthy();
     expect(screen.queryByText("Owner review")).toBeNull();
-    expect(screen.queryByText("Merge pull request")).toBeNull();
+    expect(screen.queryByRole("button", { name: /merge/i })).toBeNull();
   });
 
-  it("shows an owner the merge card, with no approve action", async () => {
+  it("shows an owner the merge button, with no approve action", async () => {
     mockRole = "owner";
     renderViewer();
     fireEvent.click(await screen.findByText("Open PR for members"));
-    expect(await screen.findByText("Merge pull request")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /merge/i })).toBeTruthy();
     // Approving was removed: the app's GitHub account opens these PRs, and
     // GitHub won't let an author approve their own.
     expect(screen.queryByText("Owner review")).toBeNull();

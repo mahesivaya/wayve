@@ -6,6 +6,11 @@ import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import { getAuthToken } from "../auth/token";
 import RepoAccessPanel from "./RepoAccessPanel";
+import PrMergeBox from "./PrMergeBox";
+import PrDescription from "./PrDescription";
+import { useMergeabilityRecheck } from "./useMergeabilityRecheck";
+import PrMergeButton, { type HeaderMergeMethod } from "./PrMergeButton";
+import type { CheckRun } from "./prMergeSummary";
 import { listProjects, linkProjectRepo, type Project } from "../api/workspace";
 import {
   mergePullRequest,
@@ -18,7 +23,6 @@ import {
   getGithubConnection,
   getGithubConnectUrl,
   type GithubConnection,
-  type MergeMethod,
 } from "../api/github";
 import "./githubRepo.css";
 import {
@@ -160,6 +164,8 @@ type PullReview = {
   // APPROVED | CHANGES_REQUESTED | COMMENTED | DISMISSED | PENDING
   state: string;
   submitted_at: string | null;
+  /** The review on github.com. */
+  html_url?: string;
 };
 
 // Fetched together so the detail view renders in one pass.
@@ -170,6 +176,9 @@ type PullBundle = {
   // Comments on lines of the diff, kept by GitHub apart from the conversation.
   lineComments: IssueComment[];
   reviews: PullReview[];
+  // The head commit's check runs, for the merge box. Null when GitHub didn't
+  // return them (e.g. a token without checks access).
+  checkRuns: CheckRun[] | null;
 };
 
 // Comments and reviews merged into one chronological conversation.
@@ -893,11 +902,10 @@ export function GitHubRepoViewer({
   const [pullFullDiffError, setPullFullDiffError] = useState<
     Record<number, string>
   >({});
-  const [descExpanded, setDescExpanded] = useState(false);
   const [collapsedPrSections, setCollapsedPrSections] = useState<Set<string>>(
     new Set()
   );
-  // Merge is owner-only. `confirmMergePull` drives the two-step confirm.
+  // Merge is owner-only; PrMergeButton owns the method menu and confirm step.
   const [mergingPull, setMergingPull] = useState<number | null>(null);
   // PR conversation composer, per PR so a draft survives switching PRs.
   const [pullCommentDraft, setPullCommentDraft] = useState<
@@ -909,8 +917,6 @@ export function GitHubRepoViewer({
   const [pullCommentError, setPullCommentError] = useState<
     Record<number, string>
   >({});
-  const [confirmMergePull, setConfirmMergePull] = useState<number | null>(null);
-  const [mergeMethod, setMergeMethod] = useState<MergeMethod>("merge");
   const [mergeErrorByPull, setMergeErrorByPull] = useState<
     Record<number, string>
   >({});
@@ -1314,23 +1320,36 @@ export function GitHubRepoViewer({
         const detail = await githubJson<PullDetail>(
           `${API_BASE}/pulls/${number}`
         );
-        const [files, comments, lineComments, reviews] = await Promise.all([
-          githubJson<CommitFile[]>(
-            `${API_BASE}/pulls/${number}/files?per_page=100`
-          ).catch(() => [] as CommitFile[]),
-          githubJson<IssueComment[]>(
-            `${API_BASE}/issues/${number}/comments?per_page=100`
-          ).catch(() => [] as IssueComment[]),
-          githubJson<IssueComment[]>(
-            `${API_BASE}/pulls/${number}/comments?per_page=100`
-          ).catch(() => [] as IssueComment[]),
-          githubJson<PullReview[]>(
-            `${API_BASE}/pulls/${number}/reviews?per_page=100`
-          ).catch(() => [] as PullReview[]),
-        ]);
+        const [files, comments, lineComments, reviews, checkRuns] =
+          await Promise.all([
+            githubJson<CommitFile[]>(
+              `${API_BASE}/pulls/${number}/files?per_page=100`
+            ).catch(() => [] as CommitFile[]),
+            githubJson<IssueComment[]>(
+              `${API_BASE}/issues/${number}/comments?per_page=100`
+            ).catch(() => [] as IssueComment[]),
+            githubJson<IssueComment[]>(
+              `${API_BASE}/pulls/${number}/comments?per_page=100`
+            ).catch(() => [] as IssueComment[]),
+            githubJson<PullReview[]>(
+              `${API_BASE}/pulls/${number}/reviews?per_page=100`
+            ).catch(() => [] as PullReview[]),
+            githubJson<{ check_runs: CheckRun[] }>(
+              `${API_BASE}/commits/${detail.head.sha}/check-runs?per_page=100`
+            )
+              .then((r) => r.check_runs)
+              .catch(() => null),
+          ]);
         setPullBundleByNumber((current) => ({
           ...current,
-          [number]: { detail, files, comments, lineComments, reviews },
+          [number]: {
+            detail,
+            files,
+            comments,
+            lineComments,
+            reviews,
+            checkRuns,
+          },
         }));
         // Collapse this PR's files, except those opened on an earlier visit or
         // holding a half-written comment; keys use the `pr-{number}::{filename}`
@@ -1380,10 +1399,37 @@ export function GitHubRepoViewer({
   const openPull = useCallback(
     (number: number) => {
       setSelectedPull(number);
-      setDescExpanded(false);
       void loadPullDetail(number);
     },
     [loadPullDetail]
+  );
+
+  // An open PR GitHub hasn't finished checking for conflicts shows
+  // "Checking…"; re-check it until GitHub answers, then patch just that field.
+  const selectedDetail =
+    selectedPull !== null
+      ? pullBundleByNumber[selectedPull]?.detail
+      : undefined;
+  useMergeabilityRecheck(
+    selectedPull !== null ? `${API_BASE}/pulls/${selectedPull}` : null,
+    selectedDetail?.state === "open" &&
+      !selectedDetail.merged &&
+      selectedDetail.mergeable == null,
+    ({ mergeable, mergeable_state }) => {
+      const number = selectedPull;
+      if (number === null) return;
+      setPullBundleByNumber((cur) => {
+        const bundle = cur[number];
+        if (!bundle) return cur;
+        return {
+          ...cur,
+          [number]: {
+            ...bundle,
+            detail: { ...bundle.detail, mergeable, mergeable_state },
+          },
+        };
+      });
+    }
   );
 
   // On success, refetch the detail (it flips to merged, hiding the action cards)
@@ -1492,9 +1538,11 @@ export function GitHubRepoViewer({
     },
   });
 
-  const mergePull = async (prNumber: number) => {
+  const mergePull = async (
+    prNumber: number,
+    mergeMethod: HeaderMergeMethod
+  ) => {
     setMergingPull(prNumber);
-    setConfirmMergePull(null);
     setMergeErrorByPull((cur) => {
       const next = { ...cur };
       delete next[prNumber];
@@ -2625,15 +2673,6 @@ export function GitHubRepoViewer({
                     const rawDiff = pullFullDiff[selectedPull];
                     const repoLabel = `${owner}/${repoName}`;
                     const bodyText = d.body ?? "";
-                    const bodyLong = bodyText.length > 280;
-                    let descShown = bodyText;
-                    if (!descExpanded && bodyLong) {
-                      const firstPara = bodyText.split("\n\n")[0];
-                      descShown =
-                        firstPara.length <= 280
-                          ? firstPara
-                          : `${firstPara.slice(0, 280).trimEnd()}…`;
-                    }
                     const isCollapsed = (k: string) =>
                       collapsedPrSections.has(k);
                     const toggleSection = (k: string) =>
@@ -2647,7 +2686,28 @@ export function GitHubRepoViewer({
                       <div className="github-pr-detail">
                         <div className="github-pr-grid">
                           <div className="github-pr-main-col github-pr-full">
-                            <h2 className="github-pr-detail-h">{d.title}</h2>
+                            <div className="github-pr-title-row">
+                              <h2 className="github-pr-detail-h">{d.title}</h2>
+                              {isOwner && d.state === "open" && !d.merged && (
+                                <PrMergeButton
+                                  number={d.number}
+                                  baseRef={d.base.ref}
+                                  mergeable={d.mergeable}
+                                  merging={mergingPull === selectedPull}
+                                  onMerge={(method) =>
+                                    void mergePull(selectedPull, method)
+                                  }
+                                />
+                              )}
+                            </div>
+                            {mergeErrorByPull[selectedPull] && (
+                              <p
+                                className="github-pr-title-merge-err"
+                                role="alert"
+                              >
+                                {mergeErrorByPull[selectedPull]}
+                              </p>
+                            )}
 
                             <div className="github-pr-byline">
                               <PrAvatar name={d.user?.login ?? "unknown"} />
@@ -2738,40 +2798,22 @@ export function GitHubRepoViewer({
                               </div>
                             </dl>
 
+                            <PrMergeBox
+                              pr={d}
+                              checkRuns={bundle.checkRuns}
+                              reviews={bundle.reviews}
+                              comments={[
+                                ...bundle.comments,
+                                ...bundle.lineComments,
+                              ]}
+                            />
+
                             {bodyText.trim() && (
-                              <div className="github-pr-descwrap">
-                                <button
-                                  type="button"
-                                  className="github-pr-desc-toggle"
-                                  onClick={() => toggleSection("description")}
-                                  aria-expanded={!isCollapsed("description")}
-                                >
-                                  <span
-                                    className={`github-pr-chevron ${isCollapsed("description") ? "" : "open"}`}
-                                  >
-                                    <ChevronIcon />
-                                  </span>
-                                  Description
-                                </button>
-                                {!isCollapsed("description") && (
-                                  <div className="github-pr-desc">
-                                    {renderRichText(descShown)}
-                                    {bodyLong && (
-                                      <button
-                                        type="button"
-                                        className="github-pr-showmore"
-                                        onClick={() =>
-                                          setDescExpanded((v) => !v)
-                                        }
-                                      >
-                                        {descExpanded
-                                          ? "Show less"
-                                          : "Show more"}
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
+                              <PrDescription
+                                key={d.number}
+                                body={bodyText}
+                                renderText={renderRichText}
+                              />
                             )}
                           </div>
 
@@ -3036,95 +3078,6 @@ export function GitHubRepoViewer({
                               </div>
                             )}
                           </section>
-
-                          {isOwner && d.state === "open" && !d.merged && (
-                            <aside className="github-pr-side-col github-pr-full">
-                              {d.state === "open" && !d.merged && (
-                                <div className="github-pr-card github-pr-merge-card">
-                                  <span className="github-pr-card-title">
-                                    Merge
-                                  </span>
-                                  {d.mergeable === false ? (
-                                    <div className="github-pr-merge-err">
-                                      This branch has conflicts that must be
-                                      resolved before it can be merged.
-                                    </div>
-                                  ) : confirmMergePull === selectedPull ? (
-                                    <>
-                                      <div className="github-pr-merge-confirmtext">
-                                        Merge #{selectedPull} into{" "}
-                                        <code>{d.base.ref}</code>?
-                                      </div>
-                                      <div className="github-pr-merge-actions">
-                                        <button
-                                          type="button"
-                                          className="github-pr-merge-confirm"
-                                          onClick={() =>
-                                            void mergePull(selectedPull)
-                                          }
-                                          disabled={
-                                            mergingPull === selectedPull
-                                          }
-                                        >
-                                          {mergingPull === selectedPull
-                                            ? "Merging…"
-                                            : "Confirm merge"}
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="github-pr-merge-cancel"
-                                          onClick={() =>
-                                            setConfirmMergePull(null)
-                                          }
-                                          disabled={
-                                            mergingPull === selectedPull
-                                          }
-                                        >
-                                          Cancel
-                                        </button>
-                                      </div>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <select
-                                        className="github-pr-merge-method"
-                                        value={mergeMethod}
-                                        onChange={(e) =>
-                                          setMergeMethod(
-                                            e.target.value as MergeMethod
-                                          )
-                                        }
-                                      >
-                                        <option value="merge">
-                                          Create a merge commit
-                                        </option>
-                                        <option value="squash">
-                                          Squash and merge
-                                        </option>
-                                        <option value="rebase">
-                                          Rebase and merge
-                                        </option>
-                                      </select>
-                                      <button
-                                        type="button"
-                                        className="github-pr-merge-btn"
-                                        onClick={() =>
-                                          setConfirmMergePull(selectedPull)
-                                        }
-                                      >
-                                        Merge pull request
-                                      </button>
-                                    </>
-                                  )}
-                                  {mergeErrorByPull[selectedPull] && (
-                                    <div className="github-pr-merge-err">
-                                      {mergeErrorByPull[selectedPull]}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </aside>
-                          )}
                         </div>
                       </div>
                     );
