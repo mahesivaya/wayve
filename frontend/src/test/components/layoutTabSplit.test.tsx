@@ -456,4 +456,28 @@ describe("dragging a header tab into a split", () => {
         .map((t) => t.textContent)
     ).toEqual(["#6 Performance fix"]);
   });
+
+  it("shows Split right at the end of the tabs only while unsplit", () => {
+    render(
+      <MemoryRouter initialEntries={["/tickets"]}>
+        <PaneRoutesContext.Provider value={renderRoutes}>
+          <Layout>
+            <p>board</p>
+          </Layout>
+        </PaneRoutesContext.Provider>
+      </MemoryRouter>
+    );
+
+    const main = screen.getByRole("tablist", { name: "Open tabs" });
+    act(() => {
+      fireEvent.click(
+        within(main).getByRole("button", { name: "Split right" })
+      );
+    });
+
+    expect(
+      screen.getByRole("tablist", { name: "Right pane tabs" })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Split right" })).toBeNull();
+  });
 });

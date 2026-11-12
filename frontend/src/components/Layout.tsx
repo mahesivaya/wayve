@@ -2258,7 +2258,33 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
                   <TabBar
                     onCloseLast={splitOpen ? closeLeftPane : undefined}
                     closeLastLabel="Close left pane"
-                    trailing={headerActions}
+                    trailing={
+                      <>
+                        {headerActions}
+                        {/* Cursor's "Split Editor Right": only while unsplit,
+                            since the second column is capped at one. */}
+                        {!splitOpen && (
+                          <button
+                            type="button"
+                            className="app-tab-split"
+                            onClick={splitHorizontally}
+                            aria-label="Split right"
+                            data-tooltip="Split right (Ctrl+\)"
+                          >
+                            <svg viewBox="0 0 16 16" aria-hidden="true">
+                              <rect
+                                x="2"
+                                y="2.5"
+                                width="12"
+                                height="11"
+                                rx="1.5"
+                              />
+                              <path d="M8 2.5v11" />
+                            </svg>
+                          </button>
+                        )}
+                      </>
+                    }
                     onPaneDragStart={(e, tab, title, isLast) => {
                       setDraggingLastMain(isLast);
                       beginPaneDrag(e, {
