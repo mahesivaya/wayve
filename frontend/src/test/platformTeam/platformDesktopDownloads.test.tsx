@@ -75,4 +75,30 @@ describe("PlatformDesktopDownloads", () => {
     ]);
     expect(screen.getByText("Anonymous")).toBeTruthy();
   });
+
+  it("shows an Intel count of 0 when only Apple Silicon was downloaded", async () => {
+    const { getDesktopDownloadStats } =
+      await import("../../api/desktopDownloads");
+    vi.mocked(getDesktopDownloadStats).mockResolvedValueOnce({
+      total: 3,
+      unique_ips: 3,
+      last_30_days: 3,
+      by_build: [{ build: "mac-arm64", count: 3 }],
+      by_location: [],
+      recent: [],
+    });
+    render(<PlatformDesktopDownloads />);
+
+    await screen.findByText("macOS · Intel");
+    const stats = Array.from(document.querySelectorAll(".pt-stat"))
+      .slice(3)
+      .map((el) => [
+        el.querySelector(".pt-stat-label")?.textContent,
+        el.querySelector(".pt-stat-value")?.textContent,
+      ]);
+    expect(stats).toEqual([
+      ["macOS · Apple Silicon", "3"],
+      ["macOS · Intel", "0"],
+    ]);
+  });
 });
