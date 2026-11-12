@@ -1,0 +1,151 @@
+/* PR header merge control (PrMergeButton), beside the pull request title. */
+.github-pr-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.github-pr-title-row .github-pr-detail-h {
+  min-width: 0;
+}
+
+.pr-merge-dropdown {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.pr-merge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pr-merge-pill.is-ready {
+  background: #5b5bd6;
+  color: #fff;
+  cursor: pointer;
+}
+.pr-merge-pill.is-ready:hover:not(:disabled) {
+  background: #4c4cc4;
+}
+.pr-merge-pill.is-ready:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.pr-merge-pill.is-conflicts {
+  border-color: var(--diff-del-strong, #cf222e);
+  color: var(--diff-del-strong, #cf222e);
+  cursor: default;
+}
+
+.pr-merge-pill-icon {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.pr-merge-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  width: 280px;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow:
+    0 10px 25px rgb(0, 0, 0, 0.18),
+    0 4px 6px rgb(0, 0, 0, 0.08);
+}
+
+.pr-merge-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pr-merge-option:hover,
+.pr-merge-option:focus-visible {
+  background: var(--color-surface-hover);
+  outline: none;
+}
+.pr-merge-option-check {
+  width: 14px;
+  flex-shrink: 0;
+  color: #5b5bd6;
+  font-weight: 700;
+}
+.pr-merge-option-label {
+  display: block;
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+.pr-merge-option-hint {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.pr-merge-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+}
+.pr-merge-confirm-text {
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+}
+.pr-merge-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+.pr-merge-confirm-btn,
+.pr-merge-cancel-btn {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.pr-merge-confirm-btn {
+  border: 0;
+  background: #5b5bd6;
+  color: #fff;
+}
+.pr-merge-confirm-btn:hover {
+  background: #4c4cc4;
+}
+.pr-merge-cancel-btn {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-primary);
+}
+
+.github-pr-title-merge-err {
+  margin: 6px 0 0;
+  color: var(--diff-del-strong, #cf222e);
+  font-size: var(--text-sm);
+}
