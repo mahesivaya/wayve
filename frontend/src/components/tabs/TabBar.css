@@ -500,6 +500,20 @@ html.is-titlebar-inset.is-fullscreen
   border-left: 0;
 }
 
+/* A sidebar row that is a <button> (Log out in the settings menu): drop the
+   native button chrome so it matches the <a> rows exactly. */
+.sidebar-link.sidebar-link--button {
+  width: 100%;
+  border: 0;
+  background: none;
+  /* Only the family: size, weight and colour come from .sidebar-link. */
+  font-family: inherit;
+  cursor: pointer;
+}
+.sidebar-link.sidebar-link--button:hover {
+  background: var(--sidebar-hover);
+}
+
 /* Drop marker when a tab is dragged to the empty end of a strip. */
 .app-tab-drop-end {
   width: 2px;

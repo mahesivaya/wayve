@@ -2,7 +2,7 @@ import { Link, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { HEADER_NAME } from "../config/brand";
 import BrandLogo from "./BrandLogo";
 import { useAuth } from "../auth/useAuth";
-import { hasPermission } from "../auth/permissions";
+import { canViewIntegrations, hasPermission } from "../auth/permissions";
 import { recordActivity } from "../api/activity";
 import {
   Suspense,
@@ -103,7 +103,16 @@ import {
   PlatformIcon,
   OrganizationIcon,
   MembersIcon,
+  SettingsIcon,
+  BellIcon,
+  PersonIcon,
+  IntegrationsIcon,
+  CanvasIcon,
+  LibrariesIcon,
+  DevelopersIcon,
 } from "../icons";
+import { ArrowLeft, LogOut } from "lucide-react";
+import { homePathForUser } from "../auth/accountHome";
 
 function appKeyFromPath(pathname: string): AppKey {
   const match = SPLIT_APPS.find((app) => {
@@ -265,7 +274,7 @@ export default function Layout(props: { children?: ReactNode } = {}) {
 }
 
 function LayoutShell({ children }: { children?: ReactNode } = {}) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   // Gated on `user` so the badge fetches don't fire while the session is loading.
@@ -1980,13 +1989,10 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   // `headerActions` is the cluster that stays in the header in both.
   const desktop = isDesktopApp();
 
-  // The settings-family pages render their own left rail (SettingsShell), so
-  // the main sidebar steps aside there and the rail's Back button returns home.
-  // Both runtimes behave the same; only narrow screens keep the normal sidebar,
-  // since a 240px rail beside the content doesn't fit a phone.
-  //
-  // Only routes that actually render SettingsShell may appear here — hiding the
-  // sidebar on a page without the rail would leave no way back.
+  // On the settings-family pages (those rendering SettingsShell) the main
+  // sidebar swaps its menu for the settings menu — Back to Home, General, …,
+  // Log out — keeping the same frame and styles. Narrow screens keep the
+  // normal menu (SettingsShell's own stack covers them).
   const settingsTakeover =
     !isNarrow &&
     (location.pathname.startsWith("/settings/repositories/") ||
@@ -2000,8 +2006,11 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
         "/appearance",
         "/settings/statuses",
         "/settings/repositories",
+        "/settings/developers",
       ].includes(location.pathname));
-  const showTabs = !isNarrow && !settingsTakeover;
+  // Settings keeps the app's frame — sidebar, tab strip, top row — and only
+  // swaps the sidebar's menu for the settings menu (see settingsNav below).
+  const showTabs = !isNarrow;
 
   const headerActions = (
     <>
@@ -2015,6 +2024,101 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           Upgrade
         </button>
       )}
+    </>
+  );
+
+  // The settings menu, shown in the main sidebar on settings routes with the
+  // sidebar's own link styles (only the menu changes, not the frame).
+  const settingsPath = location.pathname.startsWith("/settings/repositories/")
+    ? "/settings/repositories"
+    : location.pathname;
+  const settingsLinks: SidebarLinkDef[] = [
+    { path: "/settings", label: "General", icon: <SettingsIcon size={18} /> },
+    {
+      path: "/settings/notifications",
+      label: "Notifications",
+      icon: <BellIcon size={18} />,
+    },
+    {
+      path: "/settings/usage",
+      label: "Usage",
+      icon: <AnalyticsIcon size={18} />,
+    },
+    {
+      // Platform users have no billing cards; mirrors Settings' gate.
+      path: "/settings/billing",
+      label: "Billing",
+      icon: <BillingIcon size={18} />,
+      visible: user?.scope !== "platform",
+    },
+    { path: "/profile", label: "My Profile", icon: <PersonIcon size={18} /> },
+    {
+      path: "/integrations",
+      label: "Integrations",
+      icon: <IntegrationsIcon size={18} />,
+      visible: canViewIntegrations(user),
+    },
+    {
+      path: "/appearance",
+      label: "Appearance",
+      icon: <CanvasIcon size={18} />,
+    },
+    {
+      path: "/settings/repositories",
+      label: "Repositories",
+      icon: <LibrariesIcon size={18} />,
+      visible: user?.effective_role !== "guest",
+    },
+    {
+      // Not for personal accounts — the gate the old Developers group had.
+      path: "/settings/developers",
+      label: "Developers",
+      icon: <DevelopersIcon size={18} />,
+      visible: user?.account_type !== "personal",
+    },
+  ];
+  const settingsNav = (
+    <>
+      <div className="sidebar-section">
+        {renderSidebarLink(
+          user ? homePathForUser(user) : "/home",
+          "Back to Home",
+          <ArrowLeft size={18} />,
+          false
+        )}
+      </div>
+      <div className="sidebar-section">
+        <div className="sidebar-section-label">
+          <span className="sidebar-section-icon" aria-hidden="true">
+            <SettingsIcon size={16} />
+          </span>
+          <span>Settings</span>
+        </div>
+        {settingsLinks
+          .filter((l) => l.visible !== false)
+          .map((l) => (
+            <Fragment key={l.path}>
+              {renderSidebarLink(
+                l.path,
+                l.label,
+                l.icon,
+                settingsPath === l.path
+              )}
+            </Fragment>
+          ))}
+        {/* Log out sits right under Developers, as the menu's last row. */}
+        <button
+          type="button"
+          className="sidebar-link sidebar-link--button"
+          title="Log out"
+          onClick={() => logout()}
+        >
+          <span className="sidebar-icon" aria-hidden="true">
+            <LogOut size={18} />
+          </span>
+          <span className="sidebar-label">Log out</span>
+        </button>
+      </div>
     </>
   );
 
@@ -2043,7 +2147,6 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
               rail. The narrow overlay uses the hamburger below instead; hidden
               while settings takes over (there's no sidebar to toggle). */}
       {!isNarrow &&
-        !settingsTakeover &&
         (desktop && showTabs ? (
           // Desktop title bar (macOS): the toggle, pinned beside the window
           // controls (see .titlebar-nav).
@@ -2176,7 +2279,7 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           <div className="body">
             <nav
               ref={sidebarRef}
-              className={`sidebar ${showTabs ? "has-brand" : ""} ${isNarrow && navOpen ? "open" : ""} ${railCollapsed ? "collapsed" : ""} ${settingsTakeover ? "takeover-hidden" : ""}`.trim()}
+              className={`sidebar ${showTabs ? "has-brand" : ""} ${isNarrow && navOpen ? "open" : ""} ${railCollapsed ? "collapsed" : ""}`.trim()}
               style={
                 !sidebarCollapsed && !isNarrow
                   ? { width: `${sidebarWidth}px` }
@@ -2185,88 +2288,101 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
               aria-label="Primary navigation"
             >
               {showTabs && <div className="sidebar-brand">{brand}</div>}
-              <div className="sidebar-section">
-                {renderSidebarItem("/", "home", "Home", <HomeIcon size={18} />)}
-                {SHOW_REMINDERS_NAV && <NotificationBell variant="sidebar" />}
-                {renderSidebarItem(
-                  "/emails",
-                  "emails",
-                  "Inbox",
-                  <EmailsIcon size={18} />,
-                  emailsUnreadCount
-                )}
-                {renderSidebarItem(
-                  "/chat",
-                  "chat",
-                  "Chat",
-                  <ChatIcon size={18} />,
-                  chatUnreadCount
-                )}
-                {/* /call is intentionally absent — audio/video lives inside Chat. */}
-                {/* Labelled "Calendar" — the route and component keep the
+              {settingsTakeover ? (
+                settingsNav
+              ) : (
+                <>
+                  <div className="sidebar-section">
+                    {renderSidebarItem(
+                      "/",
+                      "home",
+                      "Home",
+                      <HomeIcon size={18} />
+                    )}
+                    {SHOW_REMINDERS_NAV && (
+                      <NotificationBell variant="sidebar" />
+                    )}
+                    {renderSidebarItem(
+                      "/emails",
+                      "emails",
+                      "Inbox",
+                      <EmailsIcon size={18} />,
+                      emailsUnreadCount
+                    )}
+                    {renderSidebarItem(
+                      "/chat",
+                      "chat",
+                      "Chat",
+                      <ChatIcon size={18} />,
+                      chatUnreadCount
+                    )}
+                    {/* /call is intentionally absent — audio/video lives inside Chat. */}
+                    {/* Labelled "Calendar" — the route and component keep the
                     `scheduler` name so no links or deep links break. */}
-                {renderSidebarItem(
-                  "/scheduler",
-                  "scheduler",
-                  "Calendar",
-                  <SchedulerIcon size={18} />
-                )}
-                {/* Splits the communication apps (Inbox / Chat / Calendar)
+                    {renderSidebarItem(
+                      "/scheduler",
+                      "scheduler",
+                      "Calendar",
+                      <SchedulerIcon size={18} />
+                    )}
+                    {/* Splits the communication apps (Inbox / Chat / Calendar)
                     from the content ones below, so the list reads as two short
                     groups rather than one long run. Presentational only. */}
-                <hr className="sidebar-divider" aria-hidden="true" />
-                {renderSidebarItem(
-                  "/drive",
-                  "drive",
-                  "Drive",
-                  <DriveIcon size={18} />
-                )}
-                {renderSidebarItem(
-                  "/notes",
-                  "notes",
-                  "Notes",
-                  <NotesIcon size={18} />
-                )}
-                {renderSidebarItem(
-                  "/tasks",
-                  "tasks",
-                  "Tasks",
-                  <TasksIcon size={18} />
-                )}
-                {/* Always on for personal accounts; workspace users get it
+                    <hr className="sidebar-divider" aria-hidden="true" />
+                    {renderSidebarItem(
+                      "/drive",
+                      "drive",
+                      "Drive",
+                      <DriveIcon size={18} />
+                    )}
+                    {renderSidebarItem(
+                      "/notes",
+                      "notes",
+                      "Notes",
+                      <NotesIcon size={18} />
+                    )}
+                    {renderSidebarItem(
+                      "/tasks",
+                      "tasks",
+                      "Tasks",
+                      <TasksIcon size={18} />
+                    )}
+                    {/* Always on for personal accounts; workspace users get it
                 inside the Workspace section instead. */}
-                {user.account_type === "personal" &&
-                  user.effective_role !== "guest" &&
-                  renderSidebarItem(
-                    "/github",
-                    "github",
-                    "Code & reviews",
-                    <CodeReviewIcon size={18} />
-                  )}
-                {/* Test Access and Access Requests moved into the Workspace
+                    {user.account_type === "personal" &&
+                      user.effective_role !== "guest" &&
+                      renderSidebarItem(
+                        "/github",
+                        "github",
+                        "Code & reviews",
+                        <CodeReviewIcon size={18} />
+                      )}
+                    {/* Test Access and Access Requests moved into the Workspace
                     section below. */}
-              </div>
+                  </div>
 
-              {sectionDefs.map(renderSection)}
+                  {sectionDefs.map(renderSection)}
 
-              <div className="sidebar-spacer" />
+                  <div className="sidebar-spacer" />
 
-              {/* Sits below the flex spacer so it stays pinned to the bottom
+                  {/* Sits below the flex spacer so it stays pinned to the bottom
               regardless of how many nav groups render above it. */}
-              {/* The profile menu pinned to the sidebar bottom, in both
+                  {/* The profile menu pinned to the sidebar bottom, in both
               runtimes. Wide screens get just Settings + Log out — Settings'
               left rail (SettingsShell) carries Profile, Integrations and
               Appearance. Narrow screens drop that rail, so the dropdown adds
               Profile and Integrations back; Appearance is a card on the
               General settings page there instead. */}
-              <div className="sidebar-section sidebar-section-bottom">
-                <ProfileMenu placement="sidebar" minimal={!isNarrow} />
-              </div>
+                  <div className="sidebar-section sidebar-section-bottom">
+                    <ProfileMenu placement="sidebar" minimal={!isNarrow} />
+                  </div>
+                </>
+              )}
             </nav>
 
             {/* Resizing is meaningless in the icon rail, the narrow overlay,
               or when settings takes over and the sidebar is hidden. */}
-            {!sidebarCollapsed && !isNarrow && !settingsTakeover && (
+            {!sidebarCollapsed && !isNarrow && (
               <ResizeHandle
                 className="sidebar-resize-handle"
                 onPointerDown={startSidebarResize}
