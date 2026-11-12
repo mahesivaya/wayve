@@ -162,6 +162,8 @@ type PullReview = {
   // APPROVED | CHANGES_REQUESTED | COMMENTED | DISMISSED | PENDING
   state: string;
   submitted_at: string | null;
+  /** The review on github.com. */
+  html_url?: string;
 };
 
 // Fetched together so the detail view renders in one pass.
@@ -2781,10 +2783,10 @@ export function GitHubRepoViewer({
                               pr={d}
                               checkRuns={bundle.checkRuns}
                               reviews={bundle.reviews}
-                              commentCount={
-                                bundle.comments.length +
-                                bundle.lineComments.length
-                              }
+                              comments={[
+                                ...bundle.comments,
+                                ...bundle.lineComments,
+                              ]}
                             />
 
                             {bodyText.trim() && (

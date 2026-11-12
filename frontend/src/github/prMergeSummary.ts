@@ -10,7 +10,10 @@ export type CheckRun = {
   /** Set once completed: success | failure | neutral | cancelled | skipped |
    *  timed_out | action_required | stale | startup_failure */
   conclusion: string | null;
+  /** The check's page on GitHub (its Actions job page for workflow jobs). */
   html_url?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
 };
 
 export type CheckSummary = {
@@ -24,6 +27,15 @@ export type CheckSummary = {
 const PASSED = new Set(["success", "neutral"]);
 const SKIPPED = new Set(["skipped", "stale"]);
 
+export type CheckOutcome = "pass" | "fail" | "pending" | "skip";
+
+export function checkOutcome(run: CheckRun): CheckOutcome {
+  if (run.status !== "completed" || !run.conclusion) return "pending";
+  if (PASSED.has(run.conclusion)) return "pass";
+  if (SKIPPED.has(run.conclusion)) return "skip";
+  return "fail";
+}
+
 export function summarizeChecks(runs: CheckRun[]): CheckSummary {
   const s = {
     total: runs.length,
@@ -33,12 +45,44 @@ export function summarizeChecks(runs: CheckRun[]): CheckSummary {
     skipped: 0,
   };
   for (const run of runs) {
-    if (run.status !== "completed" || !run.conclusion) s.pending += 1;
-    else if (PASSED.has(run.conclusion)) s.passed += 1;
-    else if (SKIPPED.has(run.conclusion)) s.skipped += 1;
+    const o = checkOutcome(run);
+    if (o === "pending") s.pending += 1;
+    else if (o === "pass") s.passed += 1;
+    else if (o === "skip") s.skipped += 1;
     else s.failing += 1;
   }
   return s;
+}
+
+const OUTCOME_ORDER: Record<CheckOutcome, number> = {
+  fail: 0,
+  pending: 1,
+  pass: 2,
+  skip: 3,
+};
+
+/** Failing first, then pending, passed, skipped; by name within each. */
+export function sortChecks(runs: CheckRun[]): CheckRun[] {
+  return [...runs].sort(
+    (a, b) =>
+      OUTCOME_ORDER[checkOutcome(a)] - OUTCOME_ORDER[checkOutcome(b)] ||
+      a.name.localeCompare(b.name, undefined, { numeric: true })
+  );
+}
+
+/** "9m 10s", "14s", "1h 2m" — how long a finished check ran. */
+export function checkDuration(run: CheckRun): string | null {
+  if (!run.started_at || !run.completed_at) return null;
+  const secs = Math.round(
+    (Date.parse(run.completed_at) - Date.parse(run.started_at)) / 1000
+  );
+  if (!Number.isFinite(secs) || secs < 0) return null;
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const sec = secs % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
 }
 
 /** "6 failing", "2 pending", "All passed", "No checks" — the Checks label. */
@@ -55,18 +99,21 @@ type Review = {
   user: { login: string } | null;
   state: string;
   submitted_at: string | null;
+  html_url?: string;
 };
 
-export type ApprovalSummary = {
-  approved: string[];
-  changesRequested: string[];
+export type Verdict = {
+  login: string;
+  state: "APPROVED" | "CHANGES_REQUESTED";
+  submitted_at: string | null;
+  html_url?: string;
 };
 
 /** Each reviewer's latest verdict, as GitHub counts it: a later APPROVED or
  *  CHANGES_REQUESTED replaces an earlier one, DISMISSED clears it, and plain
- *  COMMENTED reviews don't change it. */
-export function summarizeApprovals(reviews: Review[]): ApprovalSummary {
-  const latest = new Map<string, string>();
+ *  COMMENTED reviews don't change it. Oldest verdict first. */
+export function latestVerdicts(reviews: Review[]): Verdict[] {
+  const latest = new Map<string, Verdict>();
   const ordered = [...reviews].sort(
     (a, b) =>
       Date.parse(a.submitted_at ?? "") - Date.parse(b.submitted_at ?? "")
@@ -75,17 +122,35 @@ export function summarizeApprovals(reviews: Review[]): ApprovalSummary {
     const who = r.user?.login;
     if (!who) continue;
     if (r.state === "APPROVED" || r.state === "CHANGES_REQUESTED") {
-      latest.set(who, r.state);
+      latest.delete(who);
+      latest.set(who, {
+        login: who,
+        state: r.state,
+        submitted_at: r.submitted_at,
+        html_url: r.html_url,
+      });
     } else if (r.state === "DISMISSED") {
       latest.delete(who);
     }
   }
-  const approved: string[] = [];
-  const changesRequested: string[] = [];
-  for (const [who, state] of latest) {
-    (state === "APPROVED" ? approved : changesRequested).push(who);
-  }
-  return { approved, changesRequested };
+  return [...latest.values()];
+}
+
+export type ApprovalSummary = {
+  approved: string[];
+  changesRequested: string[];
+};
+
+export function summarizeApprovals(reviews: Review[]): ApprovalSummary {
+  const verdicts = latestVerdicts(reviews);
+  return {
+    approved: verdicts
+      .filter((v) => v.state === "APPROVED")
+      .map((v) => v.login),
+    changesRequested: verdicts
+      .filter((v) => v.state === "CHANGES_REQUESTED")
+      .map((v) => v.login),
+  };
 }
 
 export function approvalsLabel(s: ApprovalSummary): string {
@@ -94,79 +159,4 @@ export function approvalsLabel(s: ApprovalSummary): string {
   }
   if (s.approved.length > 0) return `${s.approved.length} approved`;
   return "None yet";
-}
-
-type MergeState = {
-  state: string;
-  merged?: boolean;
-  mergeable?: boolean | null;
-  mergeable_state?: string;
-};
-
-export type MergeHeadline = {
-  tone: "ok" | "bad" | "neutral" | "merged";
-  title: string;
-  detail: string;
-};
-
-/** The merge box's headline, from GitHub's (asynchronously computed)
- *  mergeability. */
-export function mergeHeadline(
-  pr: MergeState,
-  checks: CheckSummary
-): MergeHeadline {
-  if (pr.merged) {
-    return {
-      tone: "merged",
-      title: "Merged",
-      detail: "This pull request has been merged.",
-    };
-  }
-  if (pr.state !== "open") {
-    return {
-      tone: "neutral",
-      title: "Closed",
-      detail: "This pull request is closed.",
-    };
-  }
-  if (pr.mergeable === false || pr.mergeable_state === "dirty") {
-    return {
-      tone: "bad",
-      title: "Merge conflicts",
-      detail: "Resolve the merge conflicts before this can merge.",
-    };
-  }
-  if (pr.mergeable == null || pr.mergeable_state === "unknown") {
-    return {
-      tone: "neutral",
-      title: "Checking mergeability",
-      detail: "GitHub is still working this out.",
-    };
-  }
-  if (pr.mergeable_state === "blocked") {
-    return {
-      tone: "bad",
-      title: "Merging is blocked",
-      detail: "A required check or review hasn't been satisfied yet.",
-    };
-  }
-  if (pr.mergeable_state === "behind") {
-    return {
-      tone: "neutral",
-      title: "Out of date",
-      detail: "This branch is behind its base branch.",
-    };
-  }
-  if (checks.failing > 0 || pr.mergeable_state === "unstable") {
-    return {
-      tone: "neutral",
-      title: "Ready to merge",
-      detail: "Some checks aren't passing, but they aren't required.",
-    };
-  }
-  return {
-    tone: "ok",
-    title: "Ready to merge",
-    detail: "No conflicts with the base branch.",
-  };
 }

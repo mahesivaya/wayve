@@ -33,6 +33,8 @@ export type IssueComment = {
   user: { login: string } | null;
   body: string | null;
   created_at: string;
+  /** The comment on github.com. */
+  html_url?: string;
   path?: string | null;
   position?: number | null;
   line?: number | null;

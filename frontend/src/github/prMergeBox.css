@@ -3,57 +3,16 @@
   margin: 14px 0 4px;
   border: 1px solid var(--color-border);
   border-radius: 10px;
-  background: var(--color-surface);
-  overflow: hidden;
-}
-
-.pr-merge-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-}
-
-.pr-merge-head-icon {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  font-size: 14px;
-  font-weight: 700;
-  color: #fff;
-  background: var(--color-text-muted);
-}
-.pr-merge-head.is-bad .pr-merge-head-icon {
-  background: var(--diff-del-strong, #cf222e);
-}
-.pr-merge-head.is-ok .pr-merge-head-icon {
-  background: var(--diff-add-strong, #1a7f37);
-}
-.pr-merge-head.is-merged .pr-merge-head-icon {
-  background: #8250df;
-}
-
-.pr-merge-head-title {
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-.pr-merge-head-detail {
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
+  background: var(--color-surface-soft);
 }
 
 .pr-merge-cells {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-top: 1px solid var(--color-border);
-  background: var(--color-surface-soft);
 }
 
 .pr-merge-cell {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -65,8 +24,169 @@
 .pr-merge-cell + .pr-merge-cell {
   border-left: 1px solid var(--color-border);
 }
-.pr-merge-cell:hover {
+.pr-merge-cell.has-list:hover {
   background: var(--color-surface-hover);
+}
+/* The box has no overflow clip (the checks list pops out of it), so its
+   cells round their own outer corners. */
+.pr-merge-cell:first-child {
+  border-radius: 10px 0 0 10px;
+}
+.pr-merge-cell:last-child {
+  border-radius: 0 10px 10px 0;
+}
+.pr-merge-cell.has-list:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+/* Hovering (or focusing) a cell lists what's behind it: check runs,
+   comments or reviewers' verdicts. Cells with nothing to list have none. It hangs directly
+   below the cell so the pointer can travel into it without it closing. */
+.pr-checks-pop {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 40;
+  width: min(380px, 90vw);
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow:
+    0 10px 25px rgb(0, 0, 0, 0.18),
+    0 4px 6px rgb(0, 0, 0, 0.08);
+}
+.pr-merge-cell.has-list:hover .pr-checks-pop,
+.pr-merge-cell.has-list:focus-within .pr-checks-pop {
+  display: block;
+}
+
+.pr-checks-pop-head {
+  padding: 4px 8px 6px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.pr-checks-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pr-checks-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.pr-checks-item:hover:not(:disabled),
+.pr-checks-item:focus-visible {
+  background: var(--color-surface-hover);
+  outline: none;
+}
+.pr-checks-item:hover:not(:disabled) .pr-checks-name {
+  text-decoration: underline;
+}
+.pr-checks-item:disabled {
+  cursor: default;
+}
+.pr-checks-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+}
+.pr-checks-icon.is-pass {
+  background: var(--diff-add-strong, #1a7f37);
+}
+.pr-checks-icon.is-fail {
+  background: var(--diff-del-strong, #cf222e);
+}
+.pr-checks-icon.is-pending {
+  background: #bf8700;
+}
+.pr-checks-icon.is-skip {
+  background: var(--color-text-muted);
+}
+.pr-checks-icon.is-comment {
+  background: var(--color-primary, #5b5bd6);
+  font-size: 13px;
+  line-height: 1;
+}
+.pr-checks-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.pr-checks-name,
+.pr-checks-secondary {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.pr-checks-secondary {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.pr-checks-time {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* The redirect pop-up's body (rendered in the shared Modal). */
+.pr-checks-confirm p {
+  margin: 0 0 16px;
+  line-height: 1.5;
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+}
+.pr-checks-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.pr-checks-open,
+.pr-checks-cancel {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.pr-checks-open {
+  border: 0;
+  background: #5b5bd6;
+  color: #fff;
+}
+.pr-checks-open:hover {
+  background: #4c4cc4;
+}
+.pr-checks-cancel {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-primary);
 }
 
 .pr-merge-cell-head {
@@ -133,5 +253,11 @@
   .pr-merge-cell + .pr-merge-cell {
     border-left: 0;
     border-top: 1px solid var(--color-border);
+  }
+  .pr-merge-cell:first-child {
+    border-radius: 10px 10px 0 0;
+  }
+  .pr-merge-cell:last-child {
+    border-radius: 0 0 10px 10px;
   }
 }
