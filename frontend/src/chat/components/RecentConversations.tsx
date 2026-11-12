@@ -8,6 +8,7 @@ import type { Conversation } from "../types";
 import { presenceNameClass, relativeTime } from "../utils";
 import { PersonIcon } from "../../icons";
 import PresenceDot from "./PresenceDot";
+import ConversationRow from "./ConversationRow";
 
 type Props = {
   users: ChatUser[];
@@ -69,33 +70,34 @@ export default function RecentConversations({
       selectedConversation.user.id === r.user.id;
     const time = relativeTime(r.lastAt);
     return (
-      <button
-        key={`dm-${r.user.id}`}
-        type="button"
-        className={`conversation-item ${active ? "active" : ""}`}
-        onClick={() => onSelectUser(r.user)}
-      >
-        <span className="conversation-icon">
-          <PersonIcon size={16} />
-          <PresenceDot presence={presence.get(r.user.id)} />
-        </span>
-        <span className="conversation-main">
-          <span
-            className={`conversation-name ${presenceNameClass(presence.get(r.user.id))}`}
-          >
-            {r.user.email}
+      <ConversationRow key={`dm-${r.user.id}`} label={r.user.email}>
+        <button
+          type="button"
+          className={`conversation-item ${active ? "active" : ""}`}
+          onClick={() => onSelectUser(r.user)}
+        >
+          <span className="conversation-icon">
+            <PersonIcon size={16} />
+            <PresenceDot presence={presence.get(r.user.id)} />
           </span>
-        </span>
-        {time && <span className="conversation-time">{time}</span>}
-        {r.unread > 0 && (
-          <span
-            className="conversation-unread-badge"
-            aria-label={`${r.unread} unread`}
-          >
-            {r.unread > 99 ? "99+" : r.unread}
+          <span className="conversation-main">
+            <span
+              className={`conversation-name ${presenceNameClass(presence.get(r.user.id))}`}
+            >
+              {r.user.email}
+            </span>
           </span>
-        )}
-      </button>
+          {time && <span className="conversation-time">{time}</span>}
+          {r.unread > 0 && (
+            <span
+              className="conversation-unread-badge"
+              aria-label={`${r.unread} unread`}
+            >
+              {r.unread > 99 ? "99+" : r.unread}
+            </span>
+          )}
+        </button>
+      </ConversationRow>
     );
   };
 
@@ -105,18 +107,19 @@ export default function RecentConversations({
       selectedConversation.channel.id === r.channel.id;
     const time = relativeTime(r.lastAt);
     return (
-      <button
-        key={`ch-${r.channel.id}`}
-        type="button"
-        className={`conversation-item ${active ? "active" : ""}`}
-        onClick={() => onSelectChannel(r.channel)}
-      >
-        <span className="conversation-icon">#</span>
-        <span className="conversation-main">
-          <span className="conversation-name">{r.channel.name}</span>
-        </span>
-        {time && <span className="conversation-time">{time}</span>}
-      </button>
+      <ConversationRow key={`ch-${r.channel.id}`} label={`#${r.channel.name}`}>
+        <button
+          type="button"
+          className={`conversation-item ${active ? "active" : ""}`}
+          onClick={() => onSelectChannel(r.channel)}
+        >
+          <span className="conversation-icon">#</span>
+          <span className="conversation-main">
+            <span className="conversation-name">{r.channel.name}</span>
+          </span>
+          {time && <span className="conversation-time">{time}</span>}
+        </button>
+      </ConversationRow>
     );
   };
 

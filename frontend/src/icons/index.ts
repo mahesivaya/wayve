@@ -117,6 +117,7 @@ export {
   X as CloseCommentIcon,
   ArrowUp as SendCommentIcon,
   Ellipsis as CommentOptionsIcon,
+  EllipsisVertical as RowMenuIcon,
   Pencil as EditCommentIcon,
 } from "lucide-react";
 
