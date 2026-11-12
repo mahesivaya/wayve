@@ -191,6 +191,8 @@ html .sidebar.has-brand:not(.takeover-hidden) {
   background:
     linear-gradient(var(--sidebar-divider), var(--sidebar-divider)) right 38px /
       1px calc(100% - 38px) no-repeat,
+    linear-gradient(var(--color-border), var(--color-border)) 0 37px / 100% 1px
+      no-repeat,
     var(--sidebar-surface);
 }
 html[data-theme="dark"] .sidebar.has-brand:not(.takeover-hidden) {
@@ -217,6 +219,13 @@ html[data-theme="dark"] .sidebar.has-brand:not(.takeover-hidden) {
 .sidebar.has-brand ~ .sidebar-resize-handle::after {
   top: 38px;
 }
+/* Bridge the header's bottom line across the gap between the sidebar and the
+   tab strip (the scrollbar gutter, which the brand row can't reach, and the
+   resize handle), so it runs as one straight line. */
+.sidebar.has-brand ~ .sidebar-resize-handle {
+  background: linear-gradient(var(--color-border), var(--color-border)) 0 37px /
+    100% 1px no-repeat;
+}
 /* Keep the grip pill centred on the shortened line. */
 .sidebar.has-brand ~ .sidebar-resize-handle::before {
   top: calc(50% + 19px);
@@ -230,6 +239,9 @@ html[data-theme="dark"] .sidebar.has-brand:not(.takeover-hidden) {
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  /* Border-box, so its bottom line lands on the tab strip's (y 37), not 1px
+     below it. */
+  box-sizing: border-box;
   height: 38px;
   margin: 0 -8px;
   padding: 0 8px 0 12px;
