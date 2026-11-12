@@ -4,6 +4,7 @@ import type { Conversation } from "../types";
 import { presenceNameClass, relativeTime } from "../utils";
 import { PersonIcon } from "../../icons";
 import PresenceDot from "./PresenceDot";
+import ConversationRow from "./ConversationRow";
 
 type Props = {
   users: ChatUser[];
@@ -65,33 +66,34 @@ export default function PersonalChatList({
     const label = r.user.email;
     const time = relativeTime(r.lastAt);
     return (
-      <button
-        key={r.user.id}
-        type="button"
-        className={`conversation-item ${active ? "active" : ""}`}
-        onClick={() => onSelect(r.user)}
-      >
-        <span className="conversation-icon">
-          <PersonIcon size={16} />
-          <PresenceDot presence={presence.get(r.user.id)} />
-        </span>
-        <span className="conversation-main">
-          <span
-            className={`conversation-name ${presenceNameClass(presence.get(r.user.id))}`}
-          >
-            {label}
+      <ConversationRow key={r.user.id} label={r.user.email}>
+        <button
+          type="button"
+          className={`conversation-item ${active ? "active" : ""}`}
+          onClick={() => onSelect(r.user)}
+        >
+          <span className="conversation-icon">
+            <PersonIcon size={16} />
+            <PresenceDot presence={presence.get(r.user.id)} />
           </span>
-        </span>
-        {meta && time && <span className="conversation-time">{time}</span>}
-        {meta && r.unread > 0 && (
-          <span
-            className="conversation-unread-badge"
-            aria-label={`${r.unread} unread`}
-          >
-            {r.unread > 99 ? "99+" : r.unread}
+          <span className="conversation-main">
+            <span
+              className={`conversation-name ${presenceNameClass(presence.get(r.user.id))}`}
+            >
+              {label}
+            </span>
           </span>
-        )}
-      </button>
+          {meta && time && <span className="conversation-time">{time}</span>}
+          {meta && r.unread > 0 && (
+            <span
+              className="conversation-unread-badge"
+              aria-label={`${r.unread} unread`}
+            >
+              {r.unread > 99 ? "99+" : r.unread}
+            </span>
+          )}
+        </button>
+      </ConversationRow>
     );
   };
 

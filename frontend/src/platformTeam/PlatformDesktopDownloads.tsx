@@ -17,6 +17,19 @@ function buildLabel(build: string): string {
   return BUILD_LABELS[build] ?? build;
 }
 
+// The backend only returns builds that have been downloaded at least once; show
+// Apple Silicon and Intel side by side even while one of them is still at 0.
+function buildCounts(
+  byBuild: { build: string; count: number }[]
+): { build: string; count: number }[] {
+  const known = Object.keys(BUILD_LABELS).map((build) => ({
+    build,
+    count: byBuild.find((b) => b.build === build)?.count ?? 0,
+  }));
+  const other = byBuild.filter((b) => !(b.build in BUILD_LABELS));
+  return [...known, ...other];
+}
+
 function locationLabel(r: {
   city: string | null;
   region: string | null;
@@ -72,7 +85,7 @@ export default function PlatformDesktopDownloads() {
           sub="Approximate people"
         />
         <Stat label="Last 30 days" value={data.last_30_days} />
-        {data.by_build.map((b) => (
+        {buildCounts(data.by_build).map((b) => (
           <Stat key={b.build} label={buildLabel(b.build)} value={b.count} />
         ))}
       </section>
