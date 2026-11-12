@@ -1240,28 +1240,15 @@ html.is-titlebar-inset .header .split-menu-btn svg {
 }
 
 /* The focused pane — where a sidebar click or keyboard shortcut will land. Made
-   deliberately obvious: a primary-accent ring plus a tinted, accent-titled
-   toolbar, so which pane is "current" reads at a glance. */
-.split-pane.active-target::after,
-.pane-half.active-target::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border: 2px solid var(--color-primary-action, var(--color-primary));
-  z-index: 5;
-}
-
-.split-pane.active-target > .split-pane-toolbar,
-.pane-half.active-target > .split-pane-toolbar {
-  background: var(--color-accent-indigo-mist);
-  border-bottom-color: var(--color-primary-action, var(--color-primary));
-}
-
+   the Cursor way: its tab gets an accent line and full-strength text, with no
+   ring around the pane. */
 .split-pane.active-target > .split-pane-toolbar .split-pane-title,
-.pane-half.active-target > .split-pane-toolbar .split-pane-title {
-  color: var(--color-accent-indigo-deep, var(--color-primary-action));
-  font-weight: 700;
+.split-pane.active-target > .split-pane-toolbar .split-pane-tools,
+.pane-half.active-target > .split-pane-toolbar .split-pane-title,
+.pane-half.active-target > .split-pane-toolbar .split-pane-tools {
+  color: var(--color-text-primary);
+  /* Cursor-style focus marker: an accent line along the top of the tab. */
+  box-shadow: inset 0 2px 0 var(--color-primary-action, var(--color-primary));
 }
 
 /* "Already open here": opening an app that a pane already shows pulses that pane
@@ -1527,60 +1514,70 @@ html.is-titlebar-inset .header .split-menu-btn svg {
    app so it cannot overlap app-level controls like "close email". */
 /* Compact, like an editor's tab strip: 32px tall with a 24px close button. */
 .split-pane-toolbar {
-  height: 32px;
+  /* Cursor/VS Code editor-group tab strip: one tab per pane, flush with the
+     top, the tab sharing the page's surface so it reads as the page's tab. */
+  height: 34px;
   flex-shrink: 0;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 4px 0 14px;
-  /* Same chrome as the page header above, so the tabs read as part of the
-     app frame. The focused pane's tab overrides this with its indigo tint. */
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0;
+  padding: 0;
   background: var(--color-chrome-surface);
-  border-bottom: 1px solid var(--color-border-soft);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .split-pane-title {
+  display: flex;
+  align-items: center;
   min-width: 0;
-  color: var(--color-text-slate);
-  font-size: var(--text-md);
-  font-weight: 600;
+  max-width: 260px;
+  padding: 0 6px 0 14px;
+  background: var(--color-canvas);
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* The tab sits over the strip's bottom border, merging into the page. */
+  margin-bottom: -1px;
 }
 
 .split-close-btn {
-  height: 24px;
-  min-width: 24px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
-  padding: 0 6px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  padding: 0;
+  border: none;
+  background: transparent;
   cursor: pointer;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1;
+  color: inherit;
+  opacity: 0.6;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  box-shadow: 0 1px 2px rgb(0, 0, 0, 0.05);
-  transition: 0.15s;
 }
 
 .split-close-btn:hover {
-  background: var(--color-danger-soft);
-  border-color: var(--color-danger-border);
-  color: var(--color-danger-hover);
+  opacity: 1;
+  background: var(--color-surface-hover);
 }
 
-/* Split-pane toolbar controls: the per-pane split toggle + close button. */
+/* The close button, drawn as the right end of the pane's tab. */
 .split-pane-tools {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
+  padding-right: 8px;
+  background: var(--color-canvas);
+  color: var(--color-text-muted);
+  border-right: 1px solid var(--color-border);
+  margin-bottom: -1px;
 }
 
 /* Per-pane vertical-split toggle (framed-pane icon button). */

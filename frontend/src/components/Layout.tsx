@@ -9,6 +9,7 @@ import {
   Fragment,
   useState,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -17,7 +18,6 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import SearchProvider from "../search/SearchProvider";
-import SearchBar from "../search/SearchBar";
 import ProfileMenu from "./ProfileMenu";
 import NotificationPrompt from "./NotificationPrompt";
 import ReminderPopups from "./ReminderPopups";
@@ -28,18 +28,43 @@ import { useChatUnreadCount } from "../chat/useChatUnreadCount";
 import { useTicketsOpenCount } from "../tickets/useTicketsOpenCount";
 import { useUserStoriesCount } from "../userstories/useUserStoriesCount";
 import StorageLimitBanner from "./StorageLimitBanner";
+import TabBar from "./tabs/TabBar";
+import {
+  TAB_MOVED_EVENT,
+  TAB_OPEN_EVENT,
+  TAB_TITLE_SOURCES,
+  type TabOpenDetail,
+} from "./tabs/tabsConfig";
+import TabStrip from "./tabs/TabStrip";
+import PathPane from "./tabs/PathPane";
+import { InPaneContext } from "./tabs/paneContexts";
+import {
+  activateTab,
+  insertTab,
+  moveTab,
+  newTabId,
+  removeTab,
+  setTitleFor,
+  syncActivePath,
+  tabTitle,
+  type Tab,
+  type TabsState,
+  MAX_TABS,
+} from "./tabs/tabsModel";
+import { TAB_TITLE_EVENT, type TabTitleDetail } from "./tabs/useTabTitle";
 import { SplitPaneContext } from "./SplitPaneContext";
 import { SplitControlContext, type SplitTarget } from "./SplitControlContext";
 import ResizeHandle from "./ResizeHandle";
 import { useResizableWidth } from "./useResizableWidth";
 import { useIsNarrow } from "./useIsNarrow";
 import PaneDropOverlay from "./PaneDropOverlay";
-import SplitMenu from "./SplitMenu";
 import {
+  appKeyForTabPath,
   setPaneDragData,
   type DropZone,
   type PaneDragPayload,
   type PaneHalf,
+  type TabDragPayload,
 } from "./paneDnd";
 import {
   applyPaneDrop,
@@ -192,7 +217,53 @@ function useSidebarSections() {
   return { isOpen, setOpen, toggle };
 }
 
-export default function Layout({ children }: { children?: ReactNode } = {}) {
+// The right column's own tab group (Cursor editor group). Each tab is an exact
+// URL rendered by PathPane; null while the column shows a plain app.
+const RIGHT_GROUP_KEY = "wayve.rightGroup.v1";
+// Id of the single tab a plain app column shows before it becomes a group.
+const RIGHT_APP_TAB_ID = "right-app";
+
+function loadRightGroup(): TabsState | null {
+  try {
+    const raw = localStorage.getItem(RIGHT_GROUP_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw) as Partial<TabsState>;
+    const tabs = Array.isArray(v.tabs)
+      ? v.tabs.filter(
+          (t): t is Tab =>
+            !!t &&
+            typeof t.id === "string" &&
+            typeof t.path === "string" &&
+            t.path.startsWith("/")
+        )
+      : [];
+    if (tabs.length === 0) return null;
+    const activeId = tabs.some((t) => t.id === v.activeId)
+      ? (v.activeId as string)
+      : tabs[0].id;
+    return { tabs, activeId };
+  } catch {
+    return null;
+  }
+}
+
+function saveRightGroup(group: TabsState | null) {
+  try {
+    if (group) localStorage.setItem(RIGHT_GROUP_KEY, JSON.stringify(group));
+    else localStorage.removeItem(RIGHT_GROUP_KEY);
+  } catch {
+    /* storage unavailable: the group just won't survive a reload */
+  }
+}
+
+// Inside a split pane (PathPane) the route tree is rendered again, which mounts
+// Layout again — there it must render only the page, not a second app shell.
+export default function Layout(props: { children?: ReactNode } = {}) {
+  const inPane = useContext(InPaneContext);
+  return inPane ? (props.children ?? <Outlet />) : <LayoutShell {...props} />;
+}
+
+function LayoutShell({ children }: { children?: ReactNode } = {}) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -292,6 +363,29 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // Non-null only while a pane drag is in flight. Gates the drop overlays, so
   // they exist exactly when a drop is possible and never intercept a click.
   const [paneDrag, setPaneDrag] = useState<PaneDragPayload | null>(null);
+
+  // The right column's tab group: tabs dragged over from the main strip, each
+  // rendering its exact URL (PathPane). Null while it shows a plain app.
+  const [rightGroup, setRightGroup] = useState<TabsState | null>(
+    loadRightGroup
+  );
+  useEffect(() => saveRightGroup(rightGroup), [rightGroup]);
+  const rightTab =
+    rightGroup?.tabs.find((t) => t.id === rightGroup.activeId) ?? null;
+  // Links inside the right pane move only its active tab.
+  const navigateRightTab = useCallback(
+    (path: string) => setRightGroup((g) => (g ? syncActivePath(g, path) : g)),
+    []
+  );
+  // Pages name themselves via useTabTitle; pick that up for the group's tabs.
+  useEffect(() => {
+    const onTitle = (e: Event) => {
+      const { pathname, title } = (e as CustomEvent<TabTitleDetail>).detail;
+      setRightGroup((g) => (g ? setTitleFor(g, pathname, title) : g));
+    };
+    window.addEventListener(TAB_TITLE_EVENT, onTitle);
+    return () => window.removeEventListener(TAB_TITLE_EVENT, onTitle);
+  }, []);
 
   // Starts a drag from a sidebar app link or a pane's title.
   const beginPaneDrag = useCallback(
@@ -657,6 +751,8 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         const path = SPLIT_APPS.find((a) => a.key === result.navigateTo)?.path;
         if (path) void navigate(path);
       }
+      // An app dropped over the right column replaces its tab group.
+      if (result.next.right !== rightView) setRightGroup(null);
       focusPane(result.focus.pane, result.focus.half);
     },
     [
@@ -676,15 +772,98 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // new column it cannot open.
   const columnsAvailable = rightView === null;
 
-  const dropOverlay = (target: PaneKey, half: PaneHalf) =>
-    paneDrag ? (
+  const closeRightColumn = () => {
+    setRightView(null);
+    setRightGroup(null);
+    setSplitTarget("left");
+    setPaneTarget(null);
+    setSubSplit((s) => ({ ...s, right: false }));
+  };
+
+  // Adds a page to the right group (Cursor: dropping a tab onto an editor
+  // group). A column showing a plain app becomes a group whose first tab is
+  // that app, so nothing already open is lost; no column yet → one opens.
+  const addToRightGroup = (
+    page: { path: string; title?: string },
+    index?: number
+  ) => {
+    let base = rightGroup;
+    if (!base && rightApp) {
+      const first = {
+        id: newTabId(),
+        path: rightApp.path,
+        title: rightApp.label,
+      };
+      base = { tabs: [first], activeId: first.id };
+    }
+    setRightGroup(
+      base
+        ? insertTab(base, page, index)
+        : insertTab({ tabs: [], activeId: "" }, page, 0)
+    );
+    if (!rightView) setRightView(appKeyForTabPath(page.path) ?? "home");
+    setSubSplit((s) => ({ ...s, right: false }));
+    focusPane("right", "top");
+  };
+
+  // Removes a tab from the right group; the column closes with its last tab.
+  const removeFromRightGroup = (id: string) => {
+    const next = rightGroup ? removeTab(rightGroup, id) : null;
+    if (next) setRightGroup(next);
+    else closeRightColumn();
+  };
+
+  // A tab dropped onto a pane: main-strip tabs join the right group (past the
+  // middle of the main page, or anywhere on the right column); right-group
+  // tabs dropped on the main page go back to the main strip.
+  const handleTabDrop = (
+    target: PaneKey,
+    zone: DropZone,
+    payload: TabDragPayload
+  ) => {
+    setPaneDrag(null);
+    if (payload.source === "main") {
+      if (target === "left" && zone !== "right") return;
+      addToRightGroup({ path: payload.path, title: payload.title });
+      window.dispatchEvent(
+        new CustomEvent(TAB_MOVED_EVENT, { detail: payload.tabId })
+      );
+      return;
+    }
+    if (target === "right") return;
+    removeFromRightGroup(payload.tabId);
+    window.dispatchEvent(
+      new CustomEvent<TabOpenDetail>(TAB_OPEN_EVENT, {
+        detail: { path: payload.path, title: payload.title },
+      })
+    );
+  };
+
+  const overlayModeFor = (
+    target: PaneKey
+  ): "zones" | "half" | "whole" | null => {
+    if (paneDrag?.kind !== "tab") return "zones";
+    if (paneDrag.source === "main") return target === "left" ? "half" : "whole";
+    // A right-group tab: the main page takes it back; its own column doesn't.
+    return target === "right" ? null : "whole";
+  };
+
+  const dropOverlay = (target: PaneKey, half: PaneHalf) => {
+    const mode = paneDrag ? overlayModeFor(target) : null;
+    return mode ? (
       <PaneDropOverlay
         canOpenNewColumn={columnsAvailable}
         // A pane already split into two halves can't split again.
         canSplitVertically={!subSplit[target]}
-        onDrop={(zone, payload) => handlePaneDrop(target, half, zone, payload)}
+        mode={mode}
+        onDrop={(zone, payload) =>
+          payload.kind === "tab"
+            ? handleTabDrop(target, zone, payload)
+            : handlePaneDrop(target, half, zone, payload)
+        }
       />
     ) : null;
+  };
 
   // Makes a pane's title behave like a VS Code tab: drag it to move the pane.
   const titleDragProps = (from: PaneKey, half: PaneHalf = "top") => ({
@@ -793,6 +972,17 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
 
   const rightApp = SPLIT_APPS.find((a) => a.key === rightView) ?? null;
   const RightComp = rightApp?.Comp ?? null;
+  // The column was closed some other way: forget the tab group it hosted.
+  if (rightView === null && rightGroup) setRightGroup(null);
+  const titleOfTab = (tab: Tab) => tabTitle(tab, TAB_TITLE_SOURCES);
+  const rightTabLabel = rightTab ? titleOfTab(rightTab) : "";
+  // What the right strip shows: the group's tabs, or — for a plain app column —
+  // that app as a single tab (no group is created until one is needed).
+  const rightStripTabs: Tab[] =
+    rightGroup?.tabs ??
+    (rightApp
+      ? [{ id: RIGHT_APP_TAB_ID, path: rightApp.path, title: rightApp.label }]
+      : []);
   const rightLabel = rightApp?.label ?? null;
   const leftApp =
     SPLIT_APPS.find((a) => a.key === appKeyFromPath(location.pathname)) ?? null;
@@ -818,6 +1008,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // in state, so they return when the window widens. Hidden panes must not take
   // sidebar taps or count as "already open": on a phone either one read as a
   // tap that did nothing. Only the left column (and its halves) is visible.
+  // Likewise a right column hosting a tab page doesn't count as its app being
+  // open: clicking Tickets in the sidebar must open the board, not just pulse
+  // the pane showing ticket #6.
+  const hasRightGroup = rightGroup !== null;
   const visibleArrangement = useMemo<PaneArrangement>(
     () =>
       isNarrow
@@ -827,8 +1021,10 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
             right: null,
             subSplit: { ...arrangement.subSplit, center: false, right: false },
           }
-        : arrangement,
-    [isNarrow, arrangement]
+        : hasRightGroup
+          ? { ...arrangement, right: null }
+          : arrangement,
+    [isNarrow, arrangement, hasRightGroup]
   );
   // More than one pane on screen right now.
   const multiPaneVisible = isNarrow ? subSplit.left : splitOpen;
@@ -844,12 +1040,33 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   // other pane closes. Adjusted during render rather than in an effect, so the
   // duplicate never paints; it converges in one pass.
   // Skipped while narrow, so hidden desktop panes survive until it widens.
-  const deduped = isNarrow ? null : dedupeArrangement(arrangement);
+  // A right column hosting a dropped tab shows a URL, not an app instance (its
+  // rightView is only a placeholder), so it never counts as a duplicate — the
+  // Tickets board on the left and ticket #6 on the right is a valid layout.
+  const deduped = isNarrow
+    ? null
+    : dedupeArrangement(
+        rightTab
+          ? {
+              ...arrangement,
+              right: null,
+              subSplit: { ...arrangement.subSplit, right: false },
+            }
+          : arrangement
+      );
   if (deduped) {
     setMiddleView(deduped.next.center);
-    setRightView(deduped.next.right);
-    setSubSplit(deduped.next.subSplit);
-    setSubBottomView(deduped.next.subBottomView);
+    if (!rightTab) setRightView(deduped.next.right);
+    setSubSplit(
+      rightTab
+        ? { ...deduped.next.subSplit, right: subSplit.right }
+        : deduped.next.subSplit
+    );
+    setSubBottomView(
+      rightTab
+        ? { ...deduped.next.subBottomView, right: subBottomView.right }
+        : deduped.next.subBottomView
+    );
     setSplitTarget(deduped.kept.pane);
     setFocusHalf(deduped.kept.half);
   }
@@ -886,6 +1103,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         return;
       }
       setRightView(app);
+      setRightGroup(null);
       setSplitTarget("right");
       setFocusHalf("top");
     },
@@ -914,6 +1132,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
       }
       if (splitTarget === "right") {
         setRightView(app);
+        setRightGroup(null);
         return true;
       }
       return false;
@@ -945,11 +1164,40 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
   const HomeComp = homeApp?.Comp ?? null;
   const homeLabel = homeApp?.label ?? "Home";
 
-  function closeLeftPane() {
+  // `replaceTabId`: the main tab whose × closed the pane (its last tab).
+  function closeLeftPane(replaceTabId?: string) {
     const fromKey: PaneKey = rightApp ? "right" : "center";
     const nextApp = rightApp ?? middleApp;
     if (!nextApp) return;
-    void navigate(nextApp.path);
+    if (fromKey === "right" && rightGroup && showTabs) {
+      // Cursor: closing a group leaves the other one. The right group's tabs
+      // become the main strip's — the closed tab's slot takes the first, the
+      // active one goes last so it ends up on screen.
+      const active = rightGroup.tabs.filter(
+        (t) => t.id === rightGroup.activeId
+      );
+      const ordered = [
+        ...rightGroup.tabs.filter((t) => t.id !== rightGroup.activeId),
+        ...active,
+      ];
+      ordered.forEach((t, i) =>
+        window.dispatchEvent(
+          new CustomEvent<TabOpenDetail>(TAB_OPEN_EVENT, {
+            detail: {
+              path: t.path,
+              title: t.title,
+              replaceId: i === 0 ? replaceTabId : undefined,
+            },
+          })
+        )
+      );
+    } else {
+      // A right column hosting a tab page moves that exact page to the left.
+      void navigate(
+        fromKey === "right" && rightTab ? rightTab.path : nextApp.path
+      );
+    }
+    if (fromKey === "right") setRightGroup(null);
     // Promote the surviving pane — including its vertical sub-split (bottom app
     // + ratio) — into the left/main pane, so closing the left pane keeps that
     // pane exactly as it was.
@@ -977,6 +1225,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         setMiddleView(bottomKey);
       } else {
         setRightView(bottomKey);
+        setRightGroup(null);
       }
     }
     setSubSplit((s) => ({ ...s, [key]: false }));
@@ -1669,6 +1918,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         "/settings/statuses",
         "/settings/repositories",
       ].includes(location.pathname));
+  const showTabs = !isNarrow && !settingsTakeover;
 
   const headerActions = (
     <>
@@ -1682,18 +1932,88 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
           Upgrade
         </button>
       )}
-
-      {/* One split control in the top-right; the menu offers only the splits
-          that can still be made. Hidden below 768px, where splits are too. */}
-      {!isNarrow && (
-        <SplitMenu
-          canSplitHorizontal={rightView === null}
-          canSplitVertical={!subSplit[splitTarget]}
-          onSplitHorizontal={splitHorizontally}
-          onSplitVertical={() => toggleVerticalSplit(splitTarget)}
-        />
-      )}
     </>
+  );
+
+  const brand = (
+    <div
+      className={`header-brand${
+        sidebarCollapsed && !isNarrow ? " collapsed" : ""
+      }`}
+      style={
+        !isNarrow && !sidebarCollapsed
+          ? { width: `${sidebarWidth}px` }
+          : undefined
+      }
+    >
+      <div className="logo" onClick={() => navigate("/")}>
+        {/* The wordmark hides when the sidebar collapses to the icon rail.
+                The narrow overlay has no collapsed rail, so it always shows. */}
+        <BrandLogo className="logo-mark" size={desktop ? 24 : 26} />
+        {!(sidebarCollapsed && !isNarrow) && (
+          <span className="logo-word">{HEADER_NAME}</span>
+        )}
+      </div>
+      {/* Desktop expand/collapse toggle, docked next to the brand mark so
+              it stays reachable whether the sidebar is a full panel or an icon
+              rail. The narrow overlay uses the hamburger below instead; hidden
+              while settings takes over (there's no sidebar to toggle). */}
+      {!isNarrow && !settingsTakeover && (
+        <button
+          type="button"
+          className="sidebar-collapse-btn header-collapse-btn"
+          onClick={() => setSidebarCollapsed((c) => !c)}
+          data-tooltip={
+            sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
+          }
+          aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!sidebarCollapsed}
+        >
+          <svg
+            className="sidebar-collapse-icon"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            {/* The arrow points the way the panel will move on click. */}
+            <rect x="3" y="5" width="18" height="14" rx="2.2" />
+            <line x1="9" y1="5" x2="9" y2="19" />
+            {sidebarCollapsed ? (
+              <polyline points="12 9 15 12 12 15" />
+            ) : (
+              <polyline points="15 9 12 12 15 15" />
+            )}
+          </svg>
+        </button>
+      )}
+      {/* Narrow-screen expand/collapse toggle. The icon rail is always
+              on screen; this only shows or hides the labels, expanding the
+              rail over the content rather than squeezing it. */}
+      {isNarrow && !settingsTakeover && (
+        <button
+          type="button"
+          className="sidebar-toggle-btn"
+          onClick={() => setNavOpen((open) => !open)}
+          data-tooltip={navOpen ? "Collapse sidebar" : "Expand sidebar"}
+          aria-label={navOpen ? "Collapse sidebar" : "Expand sidebar"}
+          aria-expanded={navOpen}
+        >
+          <svg
+            className="sidebar-toggle-icon"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <rect x="3" y="5" width="18" height="14" rx="2.2" />
+            <line x1="9" y1="5" x2="9" y2="19" />
+            {/* The arrow points the way the panel will move on click. */}
+            {navOpen ? (
+              <polyline points="15 9 12 12 15 15" />
+            ) : (
+              <polyline points="12 9 15 12 12 15" />
+            )}
+          </svg>
+        </button>
+      )}
+    </div>
   );
 
   return (
@@ -1702,102 +2022,23 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
         <ReminderPopups />
         <NotificationPrompt />
         <SearchProvider>
-          <div className="header">
-            <div
-              className={`header-brand${
-                sidebarCollapsed && !isNarrow ? " collapsed" : ""
-              }`}
-              style={
-                !isNarrow && !sidebarCollapsed
-                  ? { width: `${sidebarWidth}px` }
-                  : undefined
-              }
-            >
-              <div className="logo" onClick={() => navigate("/")}>
-                {/* The wordmark hides when the sidebar collapses to the icon rail.
-                The narrow overlay has no collapsed rail, so it always shows. */}
-                <BrandLogo className="logo-mark" size={desktop ? 24 : 26} />
-                {!(sidebarCollapsed && !isNarrow) && (
-                  <span className="logo-word">{HEADER_NAME}</span>
-                )}
-              </div>
-              {/* Desktop expand/collapse toggle, docked next to the brand mark so
-              it stays reachable whether the sidebar is a full panel or an icon
-              rail. The narrow overlay uses the hamburger below instead; hidden
-              while settings takes over (there's no sidebar to toggle). */}
-              {!isNarrow && !settingsTakeover && (
-                <button
-                  type="button"
-                  className="sidebar-collapse-btn header-collapse-btn"
-                  onClick={() => setSidebarCollapsed((c) => !c)}
-                  data-tooltip={
-                    sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
-                  }
-                  aria-label={
-                    sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
-                  }
-                  aria-expanded={!sidebarCollapsed}
-                >
-                  <svg
-                    className="sidebar-collapse-icon"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    {/* The arrow points the way the panel will move on click. */}
-                    <rect x="3" y="5" width="18" height="14" rx="2.2" />
-                    <line x1="9" y1="5" x2="9" y2="19" />
-                    {sidebarCollapsed ? (
-                      <polyline points="12 9 15 12 12 15" />
-                    ) : (
-                      <polyline points="15 9 12 12 15 15" />
-                    )}
-                  </svg>
-                </button>
-              )}
-              {/* Narrow-screen expand/collapse toggle. The icon rail is always
-              on screen; this only shows or hides the labels, expanding the
-              rail over the content rather than squeezing it. */}
-              {isNarrow && !settingsTakeover && (
-                <button
-                  type="button"
-                  className="sidebar-toggle-btn"
-                  onClick={() => setNavOpen((open) => !open)}
-                  data-tooltip={navOpen ? "Collapse sidebar" : "Expand sidebar"}
-                  aria-label={navOpen ? "Collapse sidebar" : "Expand sidebar"}
-                  aria-expanded={navOpen}
-                >
-                  <svg
-                    className="sidebar-toggle-icon"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <rect x="3" y="5" width="18" height="14" rx="2.2" />
-                    <line x1="9" y1="5" x2="9" y2="19" />
-                    {/* The arrow points the way the panel will move on click. */}
-                    {navOpen ? (
-                      <polyline points="15 9 12 12 15 15" />
-                    ) : (
-                      <polyline points="12 9 15 12 12 15" />
-                    )}
-                  </svg>
-                </button>
-              )}
+          {/* Wide screens drop the header row entirely (Cursor-style): the
+              brand + sidebar toggle head the sidebar and the tab strip heads
+              the page. Phones and the settings takeover keep the header. */}
+          {!showTabs && (
+            <div className="header">
+              {brand}
+              <div className="header-spacer" />
+              <div className="actions">{headerActions}</div>
             </div>
-
-            {/* Emails owns its own in-page search, so the header search is
-            suppressed there to avoid two competing search inputs. Chat and
-            Notes have no in-page search box — the header search drives them. */}
-            {!location.pathname.startsWith("/emails") && <SearchBar />}
-
-            <div className="actions">{headerActions}</div>
-          </div>
+          )}
 
           <StorageLimitBanner onUpgrade={goToUpgrade} />
 
           <div className="body">
             <nav
               ref={sidebarRef}
-              className={`sidebar ${isNarrow && navOpen ? "open" : ""} ${railCollapsed ? "collapsed" : ""} ${peeking ? "peek" : ""} ${settingsTakeover ? "takeover-hidden" : ""}`.trim()}
+              className={`sidebar ${showTabs ? "has-brand" : ""} ${isNarrow && navOpen ? "open" : ""} ${railCollapsed ? "collapsed" : ""} ${peeking ? "peek" : ""} ${settingsTakeover ? "takeover-hidden" : ""}`.trim()}
               style={
                 peeking
                   ? {
@@ -1816,6 +2057,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
               onMouseLeave={endRailPeek}
               aria-label="Primary navigation"
             >
+              {showTabs && <div className="sidebar-brand">{brand}</div>}
               <div className="sidebar-section">
                 {renderSidebarItem("/", "home", "Home", <HomeIcon size={18} />)}
                 {SHOW_REMINDERS_NAV && <NotificationBell variant="sidebar" />}
@@ -1938,7 +2180,29 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                     Keeping one structure keeps the page mounted. `splitOpen` is
                     false only while unsplit, and subSplit.left implies splitOpen,
                     so `!subSplit.left` alone gates the overlay for both cases. */}
-                {splitOpen && !subSplit.left && (
+                {/* Cursor-style: the main tabs are the left pane's own tab
+                    strip (phones and the settings takeover have no strip). */}
+                {showTabs && (
+                  <TabBar
+                    onCloseLast={splitOpen ? closeLeftPane : undefined}
+                    closeLastLabel="Close left pane"
+                    trailing={headerActions}
+                    onPaneDragStart={(e, tab, title) =>
+                      beginPaneDrag(e, {
+                        kind: "tab",
+                        tabId: tab.id,
+                        path: tab.path,
+                        title,
+                        source: "main",
+                      })
+                    }
+                    onPaneDragEnd={() => setPaneDrag(null)}
+                    onReceivedFromRight={(payload) =>
+                      removeFromRightGroup(payload.tabId)
+                    }
+                  />
+                )}
+                {!showTabs && splitOpen && !subSplit.left && (
                   <div className="split-pane-toolbar">
                     <span
                       className="split-pane-title"
@@ -1949,7 +2213,7 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                     <div className="split-pane-tools">
                       <button
                         className="split-close-btn"
-                        onClick={closeLeftPane}
+                        onClick={() => closeLeftPane()}
                         data-tooltip="Close pane"
                         aria-label="Close left pane"
                       >
@@ -2044,33 +2308,67 @@ export default function Layout({ children }: { children?: ReactNode } = {}) {
                   }}
                   style={{ flexGrow: paneWeights.right }}
                 >
+                  {/* Cursor-style strip for the right group. A plain app (no
+                      group yet) shows as a single tab; adding or dropping a
+                      tab turns it into a group, keeping the app as tab one. */}
                   {!subSplit.right && (
-                    <div className="split-pane-toolbar">
-                      <span
-                        className="split-pane-title"
-                        {...titleDragProps("right")}
-                      >
-                        {rightLabel}
-                      </span>
-                      <div className="split-pane-tools">
-                        <button
-                          className="split-close-btn"
-                          onClick={() => {
-                            setRightView(null);
-                            setSplitTarget("left");
-                            setPaneTarget(null);
-                            setSubSplit((s) => ({ ...s, right: false }));
-                          }}
-                          data-tooltip="Close pane"
-                          aria-label="Close right pane"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
+                    <TabStrip
+                      stripId="right"
+                      ariaLabel="Right pane tabs"
+                      tabs={rightStripTabs}
+                      activeId={rightGroup?.activeId ?? RIGHT_APP_TAB_ID}
+                      titleOf={titleOfTab}
+                      onSelect={(id) =>
+                        setRightGroup((g) => (g ? activateTab(g, id) : g))
+                      }
+                      onClose={removeFromRightGroup}
+                      closeLabel={(_tab, title) =>
+                        rightStripTabs.length <= 1
+                          ? "Close right pane"
+                          : `Close ${title}`
+                      }
+                      onReorder={(from, to) =>
+                        setRightGroup((g) => (g ? moveTab(g, from, to) : g))
+                      }
+                      onReceive={(payload, index) => {
+                        setPaneDrag(null);
+                        addToRightGroup(
+                          { path: payload.path, title: payload.title },
+                          index
+                        );
+                        window.dispatchEvent(
+                          new CustomEvent(TAB_MOVED_EVENT, {
+                            detail: payload.tabId,
+                          })
+                        );
+                      }}
+                      onTabDragStart={(e, tab, title) =>
+                        beginPaneDrag(e, {
+                          kind: "tab",
+                          tabId: tab.id,
+                          path: tab.path,
+                          title,
+                          source: "right",
+                        })
+                      }
+                      onTabDragEnd={() => setPaneDrag(null)}
+                      onAdd={() => addToRightGroup({ path: "/" })}
+                      addDisabled={rightStripTabs.length >= MAX_TABS}
+                    />
                   )}
-                  {RightComp &&
-                    renderPaneBody("right", rightLabel ?? "", <RightComp />)}
+                  {rightTab
+                    ? renderPaneBody(
+                        "right",
+                        rightTabLabel,
+                        <PathPane
+                          // Each tab is its own page: switching remounts.
+                          key={rightTab.id}
+                          path={rightTab.path}
+                          onNavigate={navigateRightTab}
+                        />
+                      )
+                    : RightComp &&
+                      renderPaneBody("right", rightLabel ?? "", <RightComp />)}
                   {!subSplit.right && dropOverlay("right", "top")}
                 </div>
               )}

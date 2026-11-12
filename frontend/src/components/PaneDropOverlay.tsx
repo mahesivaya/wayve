@@ -1,6 +1,7 @@
 import { useState, type DragEvent } from "react";
 import {
   dropZoneFromPointer,
+  tabDropZoneFromPointer,
   hasPaneDragData,
   readPaneDragData,
   type DropZone,
@@ -17,6 +18,7 @@ export default function PaneDropOverlay({
   onDrop,
   canOpenNewColumn = true,
   canSplitVertically = true,
+  mode = "zones",
 }: {
   onDrop: (zone: DropZone, payload: PaneDragPayload) => void;
   /**
@@ -31,6 +33,14 @@ export default function PaneDropOverlay({
    * whole pane rather than promising a split that can't happen.
    */
   canSplitVertically?: boolean;
+  /**
+   * Tab drags (Cursor-style editor groups):
+   * - "half": only the right half is a target — dragging a tab past the middle
+   *   of the main page sends it to the right group; the left half ignores it.
+   * - "whole": the entire pane is one target (dropping a tab onto a group).
+   * - "zones" (default): edge/centre zones for app and pane drags.
+   */
+  mode?: "zones" | "half" | "whole";
 }) {
   const [zone, setZone] = useState<DropZone | null>(null);
 
@@ -40,11 +50,16 @@ export default function PaneDropOverlay({
     (zone === "left" || zone === "right") && !canOpenNewColumn;
   const blockedVertically =
     (zone === "top" || zone === "bottom") && !canSplitVertically;
+  // Tab drops never split further or replace, so they preview as-is.
   const shownZone: DropZone | null =
-    zone && (blockedHorizontally || blockedVertically) ? "center" : zone;
+    mode === "zones" && zone && (blockedHorizontally || blockedVertically)
+      ? "center"
+      : zone;
 
-  const zoneFor = (e: DragEvent<HTMLDivElement>): DropZone => {
+  const zoneFor = (e: DragEvent<HTMLDivElement>): DropZone | null => {
     const rect = e.currentTarget.getBoundingClientRect();
+    if (mode === "whole") return "center";
+    if (mode === "half") return tabDropZoneFromPointer(rect, e.clientX);
     return dropZoneFromPointer(rect, e.clientX, e.clientY);
   };
 
@@ -54,9 +69,11 @@ export default function PaneDropOverlay({
       onDragOver={(e) => {
         // During dragover only `types` is readable, not the payload itself.
         if (!hasPaneDragData(e.dataTransfer)) return;
+        const next = zoneFor(e);
+        setZone(next);
+        if (!next) return; // not past the middle yet: no drop here
         e.preventDefault(); // required, or the browser refuses the drop
         e.dataTransfer.dropEffect = "move";
-        setZone(zoneFor(e));
       }}
       onDragLeave={(e) => {
         // Ignore bubbling from the highlight child, which would otherwise
@@ -71,6 +88,7 @@ export default function PaneDropOverlay({
         e.stopPropagation();
         const target = zoneFor(e);
         setZone(null);
+        if (!target) return;
         onDrop(target, payload);
       }}
     >

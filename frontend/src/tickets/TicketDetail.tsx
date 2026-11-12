@@ -5,6 +5,7 @@ import { getTickets, updateTicketApi, deleteTicketApi } from "../api/tickets";
 import { ticketAiFix } from "../api/aiFix";
 import AiFixPanel from "../aifix/AiFixPanel";
 import { getTaskStatuses, type TaskStatusRow } from "../api/taskStatuses";
+import { useTabTitle } from "../components/tabs/useTabTitle";
 import "./ticketDetail.css";
 
 const PRIORITIES: TaskPriority[] = [1, 2, 3, 4, 5];
@@ -106,6 +107,12 @@ export default function TicketDetail() {
       priority !== ((ticket.priority as TaskPriority) ?? 3) ||
       status !== ticket.status ||
       assignee !== (ticket.assignee ?? ""));
+
+  useTabTitle(
+    ticket
+      ? `${ticket.task_number != null ? `#${ticket.task_number} ` : ""}${ticket.name}`
+      : null
+  );
 
   const remove = async () => {
     if (!ticket) return;
