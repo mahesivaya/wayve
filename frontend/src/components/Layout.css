@@ -1374,14 +1374,16 @@ html.is-titlebar-inset .header .split-menu-btn svg {
   bottom: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 2px;
+  /* Just a hairline at rest; it thickens and tints on hover (below). */
+  width: 1px;
   background: var(--color-border);
   transition:
     background 0.12s ease,
     width 0.12s ease;
 }
 
-/* Centered grip pill so it's obvious the divider can be dragged. */
+/* Centered grip pill, shown only on hover/drag so the divider is a plain line
+   at rest but still announces that it can be dragged. */
 .resize-handle::before,
 .split-resize-handle::before,
 .sidebar-resize-handle::before {
@@ -1394,7 +1396,7 @@ html.is-titlebar-inset .header .split-menu-btn svg {
   height: 36px;
   border-radius: 3px;
   background: var(--color-text-muted);
-  opacity: 0.45;
+  opacity: 0;
   transition:
     opacity 0.12s ease,
     background 0.12s ease,
