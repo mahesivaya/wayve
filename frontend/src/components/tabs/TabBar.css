@@ -140,6 +140,32 @@
 }
 
 /* Header actions (e.g. Upgrade) pinned to the strip's right end. */
+/* "Split right", pinned at the strip's end while there is no split. */
+.app-tab-split {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.app-tab-split:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+.app-tab-split svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+}
+
 .app-tabbar-trailing {
   display: flex;
   align-items: center;
