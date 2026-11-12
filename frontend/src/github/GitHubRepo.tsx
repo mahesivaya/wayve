@@ -8,6 +8,7 @@ import { getAuthToken } from "../auth/token";
 import RepoAccessPanel from "./RepoAccessPanel";
 import PrMergeBox from "./PrMergeBox";
 import PrDescription from "./PrDescription";
+import { useMergeabilityRecheck } from "./useMergeabilityRecheck";
 import PrMergeButton, { type HeaderMergeMethod } from "./PrMergeButton";
 import type { CheckRun } from "./prMergeSummary";
 import { listProjects, linkProjectRepo, type Project } from "../api/workspace";
@@ -1401,6 +1402,34 @@ export function GitHubRepoViewer({
       void loadPullDetail(number);
     },
     [loadPullDetail]
+  );
+
+  // An open PR GitHub hasn't finished checking for conflicts shows
+  // "Checking…"; re-check it until GitHub answers, then patch just that field.
+  const selectedDetail =
+    selectedPull !== null
+      ? pullBundleByNumber[selectedPull]?.detail
+      : undefined;
+  useMergeabilityRecheck(
+    selectedPull !== null ? `${API_BASE}/pulls/${selectedPull}` : null,
+    selectedDetail?.state === "open" &&
+      !selectedDetail.merged &&
+      selectedDetail.mergeable == null,
+    ({ mergeable, mergeable_state }) => {
+      const number = selectedPull;
+      if (number === null) return;
+      setPullBundleByNumber((cur) => {
+        const bundle = cur[number];
+        if (!bundle) return cur;
+        return {
+          ...cur,
+          [number]: {
+            ...bundle,
+            detail: { ...bundle.detail, mergeable, mergeable_state },
+          },
+        };
+      });
+    }
   );
 
   // On success, refetch the detail (it flips to merged, hiding the action cards)
