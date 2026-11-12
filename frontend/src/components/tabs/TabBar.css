@@ -179,6 +179,58 @@
   stroke-linejoin: round;
 }
 
+/* Hover menu under the split button: split right / split left. It hangs from
+   the button with no gap (padding, not margin), so the pointer can travel
+   onto it without the hover dropping. */
+.app-tab-split-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.app-tab-split-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 40;
+  display: none;
+  flex-direction: column;
+  min-width: 130px;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+  box-shadow: 0 6px 18px rgb(0, 0, 0, 0.25);
+}
+.app-tab-split-wrap:hover .app-tab-split-menu,
+.app-tab-split-wrap:focus-within .app-tab-split-menu {
+  display: flex;
+}
+.app-tab-split-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 8px;
+  line-height: 1.2;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.app-tab-split-menu button:hover,
+.app-tab-split-menu button:focus-visible {
+  background: var(--color-surface-hover);
+}
+.app-tab-split-menu kbd {
+  font: inherit;
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+
 .app-tabbar-trailing {
   display: flex;
   align-items: center;

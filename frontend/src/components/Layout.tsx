@@ -670,6 +670,7 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   // mouse.
   //
   //   Cmd/Ctrl + \          horizontal split (open the second column)
+  //   Cmd/Ctrl + /          split left (page moves right, Home opens left)
   //   Cmd/Ctrl + Shift + \  vertical split (stack the focused pane)
   //
   // Mirrors VS Code, where \ is the split key.
@@ -679,7 +680,11 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     if (isNarrow) return;
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "\\" || !(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const isSplit = e.key === "\\";
+      const isSplitLeft = e.key === "/" && !e.shiftKey;
+      if (!(isSplit || isSplitLeft) || !(e.metaKey || e.ctrlKey) || e.altKey) {
+        return;
+      }
       // Never steal the key from a field the user is typing in.
       const el = e.target as HTMLElement | null;
       if (
@@ -690,7 +695,13 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
         return;
       }
       e.preventDefault();
-      if (e.shiftKey) toggleVerticalSplit(splitTarget);
+      // Split left presses the menu's own item, which exists only while
+      // unsplit — so the shortcut does exactly what the menu does.
+      if (isSplitLeft)
+        document
+          .querySelector<HTMLButtonElement>("[data-split-action='left']")
+          ?.click();
+      else if (e.shiftKey) toggleVerticalSplit(splitTarget);
       else splitHorizontally();
     };
 
@@ -797,6 +808,17 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     setSubSplit((s) => ({ ...s, right: false }));
     // Deliberately no focus change: sidebar clicks keep going where the user
     // last clicked, so a drop never silently redirects them into this group.
+  };
+
+  // "Split left": the current page moves to a new pane on the right and the
+  // main pane opens Home beside it, on the left.
+  const splitLeft = () => {
+    // Like the menu it backs, only while unsplit.
+    if (rightView) return;
+    addToRightGroup({
+      path: `${location.pathname}${location.search}${location.hash}`,
+    });
+    void navigate("/");
   };
 
   // Removes a tab from the right group; the column closes with its last tab.
@@ -2293,29 +2315,49 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
                         {/* Cursor's "Split Editor Right": only while unsplit,
                             since the second column is capped at one. */}
                         {!splitOpen && (
-                          <button
-                            type="button"
-                            className="app-tab-split"
-                            onClick={splitHorizontally}
-                            aria-label="Split right"
-                            data-tooltip="Split right (Ctrl+\)"
-                            // At the window's right edge: open the tooltip
-                            // leftwards so it stays on screen.
-                            data-tooltip-align="right"
-                          >
-                            {/* Drawn on the sidebar toggle's 24px grid (same
-                                frame, divider centred) so the two match. */}
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                              <rect
-                                x="3"
-                                y="5"
-                                width="18"
-                                height="14"
-                                rx="2.2"
-                              />
-                              <line x1="12" y1="5" x2="12" y2="19" />
-                            </svg>
-                          </button>
+                          // Hovering (or focusing) the split button reveals
+                          // a small menu: split right or left. A plain click
+                          // still splits right.
+                          <div className="app-tab-split-wrap">
+                            <button
+                              type="button"
+                              className="app-tab-split"
+                              onClick={splitHorizontally}
+                              aria-label="Split right"
+                            >
+                              {/* Drawn on the sidebar toggle's 24px grid (same
+                                  frame, divider centred) so the two match. */}
+                              <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <rect
+                                  x="3"
+                                  y="5"
+                                  width="18"
+                                  height="14"
+                                  rx="2.2"
+                                />
+                                <line x1="12" y1="5" x2="12" y2="19" />
+                              </svg>
+                            </button>
+                            <div className="app-tab-split-menu" role="menu">
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={splitHorizontally}
+                              >
+                                Split right
+                                <kbd>Ctrl+\</kbd>
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                data-split-action="left"
+                                onClick={splitLeft}
+                              >
+                                Split left
+                                <kbd>Ctrl+/</kbd>
+                              </button>
+                            </div>
+                          </div>
                         )}
                       </>
                     }

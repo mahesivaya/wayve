@@ -480,4 +480,68 @@ describe("dragging a header tab into a split", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Split right" })).toBeNull();
   });
+
+  it("'Split left' moves the page to a new right pane and opens Home here", () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ tabs: [{ id: "a", path: "/tickets" }], activeId: "a" })
+    );
+    render(
+      <MemoryRouter initialEntries={["/tickets"]}>
+        <PaneRoutesContext.Provider value={renderRoutes}>
+          <Layout>
+            <p>board</p>
+          </Layout>
+        </PaneRoutesContext.Provider>
+      </MemoryRouter>
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByRole("menuitem", { name: /^Split left/ }));
+    });
+
+    const right = screen.getByRole("tablist", { name: "Right pane tabs" });
+    expect(
+      within(right)
+        .getAllByRole("tab")
+        .map((t) => t.textContent)
+    ).toEqual(["Tickets"]);
+    expect(screen.getByTestId("pane-page")).toHaveTextContent("/tickets");
+    expect(
+      within(screen.getByRole("tablist", { name: "Open tabs" }))
+        .getAllByRole("tab")
+        .map((t) => t.textContent)
+    ).toEqual(["Home"]);
+  });
+
+  it("Ctrl+/ splits left, like the menu item", () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ tabs: [{ id: "a", path: "/tickets" }], activeId: "a" })
+    );
+    render(
+      <MemoryRouter initialEntries={["/tickets"]}>
+        <PaneRoutesContext.Provider value={renderRoutes}>
+          <Layout>
+            <p>board</p>
+          </Layout>
+        </PaneRoutesContext.Provider>
+      </MemoryRouter>
+    );
+
+    act(() => {
+      fireEvent.keyDown(document, { key: "/", ctrlKey: true });
+    });
+
+    expect(
+      within(screen.getByRole("tablist", { name: "Right pane tabs" }))
+        .getAllByRole("tab")
+        .map((t) => t.textContent)
+    ).toEqual(["Tickets"]);
+    expect(
+      within(screen.getByRole("tablist", { name: "Open tabs" }))
+        .getAllByRole("tab")
+        .map((t) => t.textContent)
+    ).toEqual(["Home"]);
+  });
 });
