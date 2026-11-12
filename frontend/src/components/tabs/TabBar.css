@@ -140,16 +140,23 @@
 }
 
 /* Header actions (e.g. Upgrade) pinned to the strip's right end. */
-/* "Split right", pinned at the strip's end while there is no split. */
+/* "Split right", pinned at the strip's end while there is no split. Sized and
+   styled like the sidebar toggle (see .titlebar-nav): 32x30 button, 23px icon,
+   muted until hovered. */
 .app-tab-split {
+  align-self: center;
+  /* The strip's 5px top padding centres it ~2px low; lift it onto the top
+     row's centre line, level with the sidebar toggle. */
+  position: relative;
+  top: -2px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 32px;
-  height: 32px;
+  height: 30px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: 5px;
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
@@ -159,11 +166,13 @@
   color: var(--color-text-primary);
 }
 .app-tab-split svg {
-  width: 24px;
-  height: 24px;
+  width: 23px;
+  height: 23px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.3;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .app-tabbar-trailing {

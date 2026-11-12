@@ -2303,15 +2303,17 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
                             // leftwards so it stays on screen.
                             data-tooltip-align="right"
                           >
-                            <svg viewBox="0 0 16 16" aria-hidden="true">
+                            {/* Drawn on the sidebar toggle's 24px grid (same
+                                frame, divider centred) so the two match. */}
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
                               <rect
-                                x="2"
-                                y="2.5"
-                                width="12"
-                                height="11"
-                                rx="1.5"
+                                x="3"
+                                y="5"
+                                width="18"
+                                height="14"
+                                rx="2.2"
                               />
-                              <path d="M8 2.5v11" />
+                              <line x1="12" y1="5" x2="12" y2="19" />
                             </svg>
                           </button>
                         )}
