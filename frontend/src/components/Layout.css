@@ -102,9 +102,11 @@
 
 /* The brand mark is a transparent, pure-black PNG. On the light-theme header
    (lightslategray) black reads fine; on the dark-theme header (navy) flip it to
-   white so it stays visible. Scoped to the header so other placements are
+   white so it stays visible. Scoped to the app chrome (the header, or the
+   sidebar's brand row when tabs replace the header) so other placements are
    unaffected. */
-:root[data-theme="dark"] .header .logo-mark {
+:root[data-theme="dark"] .header .logo-mark,
+:root[data-theme="dark"] .sidebar-brand .logo-mark {
   filter: invert(1) brightness(2);
 }
 

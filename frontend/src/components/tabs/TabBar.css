@@ -145,11 +145,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: none;
-  border-radius: 5px;
+  border-radius: 6px;
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
@@ -159,8 +159,8 @@
   color: var(--color-text-primary);
 }
 .app-tab-split svg {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.3;
@@ -195,12 +195,32 @@
   flex: 1;
   min-width: 0;
 }
+/* Nudged out toward the sidebar's edge. */
 .sidebar-brand .header-collapse-btn {
-  margin-right: 0;
+  margin-right: -4px;
 }
-/* Icon rail: only the toggle, centred. */
+/* A bigger toggle here (menu ☰ when shrunk, panel icon when open). Specific
+   enough to beat the desktop title-bar sizing too. */
+.sidebar.has-brand .sidebar-brand .sidebar-collapse-btn {
+  width: 30px;
+  height: 28px;
+}
+.sidebar.has-brand .sidebar-brand .sidebar-collapse-icon {
+  width: 22px;
+  height: 22px;
+  stroke-width: 1.8;
+}
+/* The expanded panel shows the logo and name (the desktop app included — its
+   "no logo" rule is for the header-as-title-bar); the icon rail shows just the
+   menu toggle, centred. */
+html.is-desktop .sidebar-brand .header-brand .logo {
+  display: inline-flex;
+}
 .sidebar.collapsed:not(.peek) .sidebar-brand {
   padding: 0;
+  justify-content: center;
+}
+.sidebar.collapsed:not(.peek) .sidebar-brand .header-brand {
   justify-content: center;
 }
 .sidebar.collapsed:not(.peek) .sidebar-brand .logo {

@@ -506,24 +506,9 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   // Icons always show; collapsing only hides the labels. Narrow screens keep
   // their own (unpersisted) expand state, so a wide-screen "expanded" preference
   // doesn't open a phone with the labels covering the page.
-  // Hovering the collapsed desktop rail "peeks" it open: full labels, drawn
-  // over the content (see .sidebar.peek) so the page doesn't shift. The saved
-  // collapse preference is untouched. A short open delay keeps the menu from
-  // flashing open when the pointer merely crosses the rail.
-  const [railHover, setRailHover] = useState(false);
-  const railHoverTimer = useRef<number | undefined>(undefined);
-  const peeking = railHover && sidebarCollapsed && !isNarrow;
-  const startRailPeek = () => {
-    window.clearTimeout(railHoverTimer.current);
-    railHoverTimer.current = window.setTimeout(() => setRailHover(true), 150);
-  };
-  const endRailPeek = () => {
-    window.clearTimeout(railHoverTimer.current);
-    setRailHover(false);
-  };
-  useEffect(() => () => window.clearTimeout(railHoverTimer.current), []);
-
-  const railCollapsed = isNarrow ? !navOpen : sidebarCollapsed && !peeking;
+  // The collapsed desktop rail opens only from its toggle — hovering it no
+  // longer peeks the full menu open.
+  const railCollapsed = isNarrow ? !navOpen : sidebarCollapsed;
 
   useEffect(() => {
     try {
@@ -2007,6 +1992,7 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     </>
   );
 
+  const collapseTip = sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar";
   const brand = (
     <div
       className={`header-brand${
@@ -2035,9 +2021,10 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           type="button"
           className="sidebar-collapse-btn header-collapse-btn"
           onClick={() => setSidebarCollapsed((c) => !c)}
-          data-tooltip={
-            sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
-          }
+          // In the sidebar (tabs layout) the custom tooltip would be clipped
+          // by the sidebar's scroll box, so use the native one there.
+          title={showTabs ? collapseTip : undefined}
+          data-tooltip={showTabs ? undefined : collapseTip}
           aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-expanded={!sidebarCollapsed}
         >
@@ -2046,13 +2033,19 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
             viewBox="0 0 24 24"
             aria-hidden="true"
           >
-            {/* The arrow points the way the panel will move on click. */}
-            <rect x="3" y="5" width="18" height="14" rx="2.2" />
-            <line x1="9" y1="5" x2="9" y2="19" />
+            {/* Shrunk: a three-line menu icon. Open: a plain sidebar-panel
+                glyph. The tooltip says which way it goes. */}
             {sidebarCollapsed ? (
-              <polyline points="12 9 15 12 12 15" />
+              <>
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </>
             ) : (
-              <polyline points="15 9 12 12 15 15" />
+              <>
+                <rect x="3" y="5" width="18" height="14" rx="2.2" />
+                <line x1="9" y1="5" x2="9" y2="19" />
+              </>
             )}
           </svg>
         </button>
@@ -2110,23 +2103,12 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           <div className="body">
             <nav
               ref={sidebarRef}
-              className={`sidebar ${showTabs ? "has-brand" : ""} ${isNarrow && navOpen ? "open" : ""} ${railCollapsed ? "collapsed" : ""} ${peeking ? "peek" : ""} ${settingsTakeover ? "takeover-hidden" : ""}`.trim()}
+              className={`sidebar ${showTabs ? "has-brand" : ""} ${isNarrow && navOpen ? "open" : ""} ${railCollapsed ? "collapsed" : ""} ${settingsTakeover ? "takeover-hidden" : ""}`.trim()}
               style={
-                peeking
-                  ? {
-                      // Widen to the user's expanded width; the matching
-                      // negative margin keeps the rail's 56px footprint.
-                      width: `${sidebarWidth}px`,
-                      marginRight: `${56 - sidebarWidth}px`,
-                    }
-                  : !sidebarCollapsed && !isNarrow
-                    ? { width: `${sidebarWidth}px` }
-                    : undefined
+                !sidebarCollapsed && !isNarrow
+                  ? { width: `${sidebarWidth}px` }
+                  : undefined
               }
-              onMouseEnter={
-                sidebarCollapsed && !isNarrow ? startRailPeek : undefined
-              }
-              onMouseLeave={endRailPeek}
               aria-label="Primary navigation"
             >
               {showTabs && <div className="sidebar-brand">{brand}</div>}
@@ -2270,6 +2252,9 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
                             onClick={splitHorizontally}
                             aria-label="Split right"
                             data-tooltip="Split right (Ctrl+\)"
+                            // At the window's right edge: open the tooltip
+                            // leftwards so it stays on screen.
+                            data-tooltip-align="right"
                           >
                             <svg viewBox="0 0 16 16" aria-hidden="true">
                               <rect
