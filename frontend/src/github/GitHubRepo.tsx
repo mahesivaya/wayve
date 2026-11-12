@@ -7,6 +7,7 @@ import { hasPermission } from "../auth/permissions";
 import { getAuthToken } from "../auth/token";
 import RepoAccessPanel from "./RepoAccessPanel";
 import PrMergeBox from "./PrMergeBox";
+import PrDescription from "./PrDescription";
 import PrMergeButton, { type HeaderMergeMethod } from "./PrMergeButton";
 import type { CheckRun } from "./prMergeSummary";
 import { listProjects, linkProjectRepo, type Project } from "../api/workspace";
@@ -900,7 +901,6 @@ export function GitHubRepoViewer({
   const [pullFullDiffError, setPullFullDiffError] = useState<
     Record<number, string>
   >({});
-  const [descExpanded, setDescExpanded] = useState(false);
   const [collapsedPrSections, setCollapsedPrSections] = useState<Set<string>>(
     new Set()
   );
@@ -1398,7 +1398,6 @@ export function GitHubRepoViewer({
   const openPull = useCallback(
     (number: number) => {
       setSelectedPull(number);
-      setDescExpanded(false);
       void loadPullDetail(number);
     },
     [loadPullDetail]
@@ -2645,15 +2644,6 @@ export function GitHubRepoViewer({
                     const rawDiff = pullFullDiff[selectedPull];
                     const repoLabel = `${owner}/${repoName}`;
                     const bodyText = d.body ?? "";
-                    const bodyLong = bodyText.length > 280;
-                    let descShown = bodyText;
-                    if (!descExpanded && bodyLong) {
-                      const firstPara = bodyText.split("\n\n")[0];
-                      descShown =
-                        firstPara.length <= 280
-                          ? firstPara
-                          : `${firstPara.slice(0, 280).trimEnd()}…`;
-                    }
                     const isCollapsed = (k: string) =>
                       collapsedPrSections.has(k);
                     const toggleSection = (k: string) =>
@@ -2790,39 +2780,11 @@ export function GitHubRepoViewer({
                             />
 
                             {bodyText.trim() && (
-                              <div className="github-pr-descwrap">
-                                <button
-                                  type="button"
-                                  className="github-pr-desc-toggle"
-                                  onClick={() => toggleSection("description")}
-                                  aria-expanded={!isCollapsed("description")}
-                                >
-                                  <span
-                                    className={`github-pr-chevron ${isCollapsed("description") ? "" : "open"}`}
-                                  >
-                                    <ChevronIcon />
-                                  </span>
-                                  Description
-                                </button>
-                                {!isCollapsed("description") && (
-                                  <div className="github-pr-desc">
-                                    {renderRichText(descShown)}
-                                    {bodyLong && (
-                                      <button
-                                        type="button"
-                                        className="github-pr-showmore"
-                                        onClick={() =>
-                                          setDescExpanded((v) => !v)
-                                        }
-                                      >
-                                        {descExpanded
-                                          ? "Show less"
-                                          : "Show more"}
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
+                              <PrDescription
+                                key={d.number}
+                                body={bodyText}
+                                renderText={renderRichText}
+                              />
                             )}
                           </div>
 
