@@ -64,6 +64,37 @@ export default function ProfileMenu({
 
   const inSidebar = placement === "sidebar";
 
+  // Wide screens: the sidebar's account control is a Settings gear (with a
+  // small avatar badge) that opens Settings directly — its left rail carries
+  // Profile, Integrations, Appearance, the admin switch and Log out.
+  if (inSidebar && minimal) {
+    return (
+      <div className="profile-menu profile-menu--sidebar">
+        <button
+          type="button"
+          className="profile-trigger profile-settings-trigger"
+          onClick={() => void navigate("/settings")}
+          title={`Settings — ${user.email}`}
+          aria-label="Settings"
+        >
+          <span className="profile-settings-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+            <Avatar
+              className="profile-settings-badge"
+              name={user.email}
+              src={`${getApiBase()}/api/users/${user.id}/avatar`}
+              size={14}
+            />
+          </span>
+          <span className="sidebar-label">Settings</span>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className={`profile-menu profile-menu--${placement}`} ref={menuRef}>
       <button

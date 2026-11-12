@@ -1684,16 +1684,20 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
         </div>
       );
     }
-    const open = sections.isOpen(s.key);
+    // The icon rail has no room for a section's items, so it never shows them
+    // (just the section's icon). Clicking that icon opens the sidebar with the
+    // section expanded instead.
+    const open = sections.isOpen(s.key) && !railCollapsed;
+    const onToggle = railCollapsed
+      ? () => {
+          sections.setOpen(s.key, true);
+          if (isNarrow) setNavOpen(true);
+          else setSidebarCollapsed(false);
+        }
+      : () => sections.toggle(s.key);
     return (
       <div className="sidebar-section" key={s.key}>
-        {renderSectionToggle(
-          s.label,
-          sections.isOpen(s.key),
-          () => sections.toggle(s.key),
-          s.onAdd,
-          s.icon
-        )}
+        {renderSectionToggle(s.label, open, onToggle, s.onAdd, s.icon)}
         {open &&
           (s.body ?? (
             <div className="sidebar-subitems">{renderLinks(s.links)}</div>

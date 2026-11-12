@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import "./profile.css";
@@ -12,12 +12,33 @@ import { useIsNarrow } from "../components/useIsNarrow";
 // a left rail and rendered by SettingsShell on Settings, My Profile and
 // Integrations alike, so the menu stays put while navigating between them. It
 // stands in for the main sidebar, which Layout hides on these routes — hence
-// the Back to Home link. The admin-mode switch lives in the ProfileMenu,
-// between Settings and Log out.
+// the Back to Home link. On wide screens the sidebar's account control just
+// opens Settings, so the admin-mode switch lives here, above Log out.
 function SettingsSideNav() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, switchMode } = useAuth();
+  const [switching, setSwitching] = useState(false);
+  const inAdminMode = user?.mode === "admin";
+  // Eligible owners see this, plus anyone already elevated so they can exit.
+  const showSwitcher = inAdminMode || (user?.can_switch_admin ?? false);
+  const handleSwitch = async () => {
+    if (switching || !user) return;
+    const target = inAdminMode ? "normal" : "admin";
+    setSwitching(true);
+    try {
+      await switchMode(target);
+      void navigate(
+        target === "admin"
+          ? homePathForUser({ ...user, mode: "admin", can_switch_admin: true })
+          : "/home"
+      );
+    } catch {
+      // Server refused (e.g. no longer eligible); stay put.
+    } finally {
+      setSwitching(false);
+    }
+  };
 
   // A repository's own settings page still counts as Repositories.
   const current = location.pathname.startsWith("/settings/repositories/")
@@ -124,6 +145,25 @@ function SettingsSideNav() {
             >
               <span className="settings-account-link-icon">{"</>"}</span>
               <span>Developers</span>
+            </button>
+          )}
+          {showSwitcher && (
+            <button
+              type="button"
+              className="settings-account-link"
+              disabled={switching}
+              onClick={() => void handleSwitch()}
+            >
+              <span className="settings-account-link-icon">
+                {inAdminMode ? "🚪" : "🛡️"}
+              </span>
+              <span>
+                {switching
+                  ? "Switching…"
+                  : inAdminMode
+                    ? "Exit admin mode"
+                    : "Switch to admin mode"}
+              </span>
             </button>
           )}
           <button
