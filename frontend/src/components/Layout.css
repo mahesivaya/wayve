@@ -296,6 +296,32 @@
   content: none;
 }
 
+/* Wide screens: a Settings gear with a small avatar badge at its corner. */
+.profile-settings-icon {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  color: var(--color-text-primary);
+}
+.profile-settings-icon svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.profile-settings-icon .profile-settings-badge {
+  position: absolute;
+  right: -5px;
+  bottom: -4px;
+  box-shadow: 0 0 0 2px var(--sidebar-surface, var(--color-chrome-surface));
+  font-size: 7px;
+}
+
 /* Open upward from the bottom-left instead of down from the top-right. */
 .profile-menu--sidebar .profile-dropdown {
   top: auto;

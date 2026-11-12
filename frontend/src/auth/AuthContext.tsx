@@ -732,6 +732,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await refresh();
   };
 
+  // Owners always work in admin mode — there is no switch any more. Sign-in
+  // already starts them there; this moves an older session still in normal
+  // mode across, once.
+  const autoAdminTried = useRef(false);
+  useEffect(() => {
+    if (
+      autoAdminTried.current ||
+      !user?.can_switch_admin ||
+      user.mode === "admin"
+    ) {
+      return;
+    }
+    autoAdminTried.current = true;
+    switchMode("admin").catch(() => {
+      // Server refused (no longer eligible): stay in normal mode.
+    });
+  });
+
   return (
     <AuthContext.Provider
       value={{ user, initializing, login, logout, refresh, switchMode }}

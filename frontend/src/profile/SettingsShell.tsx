@@ -1,149 +1,13 @@
 import { type ReactNode } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
 
 import "./profile.css";
 
-import { useAuth } from "../auth/useAuth";
-import { homePathForUser } from "../auth/accountHome";
-import { canViewIntegrations } from "../auth/permissions";
 import { useIsNarrow } from "../components/useIsNarrow";
 
-// The Account links that otherwise live in the ProfileMenu dropdown, docked as
-// a left rail and rendered by SettingsShell on Settings, My Profile and
-// Integrations alike, so the menu stays put while navigating between them. It
-// stands in for the main sidebar, which Layout hides on these routes — hence
-// the Back to Home link. The admin-mode switch lives in the ProfileMenu,
-// between Settings and Log out.
-function SettingsSideNav() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { user, logout } = useAuth();
-
-  // A repository's own settings page still counts as Repositories.
-  const current = location.pathname.startsWith("/settings/repositories/")
-    ? "/settings/repositories"
-    : location.pathname;
-  const linkClass = (path: string) =>
-    `settings-account-link${current === path ? " active" : ""}`;
-
-  return (
-    <aside className="settings-side">
-      <section className="settings-card">
-        <h2 className="settings-card-title">Settings</h2>
-        <div className="settings-rows">
-          {/* The main sidebar is hidden while settings has taken over, so
-            this is the one road back to the app. */}
-          <button
-            type="button"
-            className="settings-account-link settings-back-link"
-            onClick={() =>
-              void navigate(user ? homePathForUser(user) : "/home")
-            }
-          >
-            <span className="settings-account-link-icon">←</span>
-            <span>Back to Home</span>
-          </button>
-          <button
-            type="button"
-            className={linkClass("/settings")}
-            onClick={() => void navigate("/settings")}
-          >
-            <span className="settings-account-link-icon">⚙️</span>
-            <span>General</span>
-          </button>
-          <button
-            type="button"
-            className={linkClass("/settings/notifications")}
-            onClick={() => void navigate("/settings/notifications")}
-          >
-            <span className="settings-account-link-icon">🔔</span>
-            <span>Notifications</span>
-          </button>
-          <button
-            type="button"
-            className={linkClass("/settings/usage")}
-            onClick={() => void navigate("/settings/usage")}
-          >
-            <span className="settings-account-link-icon">📊</span>
-            <span>Usage</span>
-          </button>
-          {/* Platform users have no billing cards; mirrors Settings' gate. */}
-          {user?.scope !== "platform" && (
-            <button
-              type="button"
-              className={linkClass("/settings/billing")}
-              onClick={() => void navigate("/settings/billing")}
-            >
-              <span className="settings-account-link-icon">💳</span>
-              <span>Billing</span>
-            </button>
-          )}
-          <button
-            type="button"
-            className={linkClass("/profile")}
-            onClick={() => void navigate("/profile")}
-          >
-            <span className="settings-account-link-icon">👤</span>
-            <span>My Profile</span>
-          </button>
-          {canViewIntegrations(user) && (
-            <button
-              type="button"
-              className={linkClass("/integrations")}
-              onClick={() => void navigate("/integrations")}
-            >
-              <span className="settings-account-link-icon">🔌</span>
-              <span>Integrations</span>
-            </button>
-          )}
-          <button
-            type="button"
-            className={linkClass("/appearance")}
-            onClick={() => void navigate("/appearance")}
-          >
-            <span className="settings-account-link-icon">🎨</span>
-            <span>Appearance</span>
-          </button>
-          {user?.effective_role !== "guest" && (
-            <button
-              type="button"
-              className={linkClass("/settings/repositories")}
-              onClick={() => void navigate("/settings/repositories")}
-            >
-              <span className="settings-account-link-icon">📦</span>
-              <span>Repositories</span>
-            </button>
-          )}
-          {/* Docs / API / SDK / keys used to be a collapsible group in the main
-            sidebar. Same gate the group carried: not for personal accounts. */}
-          {user?.account_type !== "personal" && (
-            <button
-              type="button"
-              className={linkClass("/settings/developers")}
-              onClick={() => void navigate("/settings/developers")}
-            >
-              <span className="settings-account-link-icon">{"</>"}</span>
-              <span>Developers</span>
-            </button>
-          )}
-          <button
-            type="button"
-            className="settings-account-link settings-account-logout"
-            onClick={() => logout()}
-          >
-            <span className="settings-account-link-icon">⏻</span>
-            <span>Log out</span>
-          </button>
-        </div>
-      </section>
-    </aside>
-  );
-}
-
 // Shared scaffolding for the settings-family pages (Settings, My Profile,
-// Integrations): page title on top, then the Account rail beside the page's own
-// cards. Both runtimes get the same view; only narrow screens degrade to the
-// plain single-column stack.
+// Integrations, …): the page title over the page's own cards. On wide screens
+// the settings menu is in the app's main sidebar (Layout), so the app's frame
+// stays the same; narrow screens get the plain single-column stack.
 export default function SettingsShell({
   title,
   children,
@@ -151,8 +15,8 @@ export default function SettingsShell({
   title: ReactNode;
   children: ReactNode;
 }) {
-  // Must agree with Layout's `settingsTakeover`, which hides the main sidebar
-  // exactly when this rail stands in for it.
+  // Must agree with Layout's `settingsTakeover`, which shows the settings menu
+  // in the main sidebar exactly when this drops its own.
   const narrow = useIsNarrow();
 
   // Narrow: the plain centered stack, with the main sidebar still in place.
@@ -167,11 +31,10 @@ export default function SettingsShell({
     );
   }
 
-  // Wide: the settings menu is a full-height left rail (standing in for the
-  // hidden main app sidebar); the content pane scrolls beside it.
+  // Wide: the settings menu lives in the app's own sidebar (Layout swaps its
+  // menu on settings routes), so this is just the content pane.
   return (
     <div className="settings-page settings-page--split">
-      <SettingsSideNav />
       <div className="settings-content">
         <div className="settings-stack">
           <h1 className="settings-page-title">{title}</h1>
