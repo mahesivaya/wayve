@@ -13,8 +13,13 @@
   /* Room above the tabs, so the open one reads as a raised tab. */
   padding-top: 5px;
   box-sizing: border-box;
-  background: var(--color-chrome-surface);
-  border-bottom: 1px solid var(--color-border);
+  /* The bottom line is painted inside the strip (not a border below it), so
+     the open tab, which fills the strip's height, can paint over it and open
+     into its page. */
+  background:
+    linear-gradient(var(--color-border), var(--color-border)) bottom / 100% 1px
+      no-repeat,
+    var(--color-chrome-surface);
 }
 
 /* The scrolling part of the strip. It shrinks before anything else, so the
@@ -55,12 +60,11 @@
   color: var(--color-text-primary);
 }
 .app-tab.active {
-  background: var(--color-canvas);
+  /* The page card's surface, so the open tab and its page read as one. */
+  background: var(--color-surface);
   color: var(--color-text-primary);
   border-color: var(--color-border);
   box-shadow: inset 0 2px 0 var(--color-primary);
-  /* Sits over the strip's bottom border so it merges into the page. */
-  margin-bottom: -1px;
 }
 .app-tab:focus-visible {
   outline: 2px solid var(--color-primary);
@@ -232,8 +236,13 @@ html[data-theme="dark"] .sidebar.has-brand:not(.takeover-hidden) {
    tab strip (the scrollbar gutter, which the brand row can't reach, and the
    resize handle), so it runs as one straight line. */
 .sidebar.has-brand ~ .sidebar-resize-handle {
-  background: linear-gradient(var(--color-border), var(--color-border)) 0 37px /
-    100% 1px no-repeat;
+  /* Above the line it is painted as header, filling the sliver between the
+     sidebar and the strip that otherwise shows the window background. */
+  background:
+    linear-gradient(var(--color-border), var(--color-border)) 0 37px / 100% 1px
+      no-repeat,
+    linear-gradient(var(--color-chrome-surface), var(--color-chrome-surface)) 0
+      0 / 100% 37px no-repeat;
 }
 /* Keep the grip pill centred on the shortened line. */
 .sidebar.has-brand ~ .sidebar-resize-handle::before {
@@ -391,6 +400,22 @@ html.is-titlebar-inset.is-fullscreen
   .body:has(> .sidebar.collapsed)
   .app-tabbar[data-strip="main"] {
   padding-left: 50px;
+}
+
+/* Under a tab strip the page card hangs straight off it, like an editor's
+   open tab: flush at the top and sides, no top border or top corners. The
+   strip's bottom line is the card's top edge, and the active tab (same
+   background, covering that line) opens into it — its side borders run
+   straight on into the card's. */
+.app-tabbar ~ * .page-card-frame {
+  padding-top: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+.app-tabbar ~ * .page-card-frame > .page-card {
+  border-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
 /* Drop marker when a tab is dragged to the empty end of a strip. */
