@@ -1374,7 +1374,7 @@ html.is-titlebar-inset .header .split-menu-btn svg {
   bottom: 0;
   left: 50%;
   transform: translateX(-50%);
-  /* Just a hairline at rest; it thickens and tints on hover (below). */
+  /* A hairline, at rest and on hover (where it only tints, below). */
   width: 1px;
   background: var(--color-border);
   transition:
@@ -1382,8 +1382,8 @@ html.is-titlebar-inset .header .split-menu-btn svg {
     width 0.12s ease;
 }
 
-/* Centered grip pill, shown only on hover/drag so the divider is a plain line
-   at rest but still announces that it can be dragged. */
+/* Centered grip pill — currently never shown (opacity 0, at rest and on
+   hover); kept so a visible grip is a one-line change. */
 .resize-handle::before,
 .split-resize-handle::before,
 .sidebar-resize-handle::before {
@@ -1392,9 +1392,10 @@ html.is-titlebar-inset .header .split-menu-btn svg {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 4px;
-  height: 36px;
-  border-radius: 3px;
+  /* A small grip, not a block: just wider than the line, 12px long. */
+  width: 2px;
+  height: 12px;
+  border-radius: 1px;
   background: var(--color-text-muted);
   opacity: 0;
   transition:
@@ -1410,8 +1411,8 @@ html.is-titlebar-inset .header .split-menu-btn svg {
 .split-resize-handle:active::after,
 .sidebar-resize-handle:hover::after,
 .sidebar-resize-handle:active::after {
+  /* Tints but stays a hairline — the grip pill shows it can be dragged. */
   background: var(--color-primary-action);
-  width: 3px;
 }
 
 .resize-handle:hover::before,
@@ -1420,9 +1421,9 @@ html.is-titlebar-inset .header .split-menu-btn svg {
 .split-resize-handle:active::before,
 .sidebar-resize-handle:hover::before,
 .sidebar-resize-handle:active::before {
-  opacity: 1;
-  height: 52px;
-  background: var(--color-primary-action);
+  /* The grip stays hidden even on hover/drag: the tinted line and the resize
+     cursor are the only cues. */
+  opacity: 0;
 }
 
 /* Horizontal variant for a pane's internal top/bottom sub-split: a full-width,
@@ -1439,24 +1440,24 @@ html.is-titlebar-inset .header .split-menu-btn svg {
   right: 0;
   transform: translateY(-50%);
   width: auto;
-  height: 2px;
+  height: 1px;
 }
 
 .split-resize-handle--horizontal::before {
-  width: 36px;
-  height: 4px;
+  width: 12px;
+  height: 2px;
 }
 
 .split-resize-handle--horizontal:hover::after,
 .split-resize-handle--horizontal:active::after {
   width: auto;
-  height: 3px;
+  height: 1px;
 }
 
 .split-resize-handle--horizontal:hover::before,
 .split-resize-handle--horizontal:active::before {
-  width: 52px;
-  height: 4px;
+  width: 12px;
+  height: 2px;
 }
 
 /* Body holds the rendered app — it must fill so the embedded page (Emails,

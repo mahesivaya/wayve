@@ -418,6 +418,21 @@ html.is-titlebar-inset.is-fullscreen
   border-top-right-radius: 0;
 }
 
+/* Side by side, the two page cards' facing borders sat either side of the
+   divider's own line — three hairlines in ~4px, reading as one thick bar. Drop
+   the facing borders so the divider is a single hairline. */
+.split-pane:has(+ .split-resize-handle:not(.split-resize-handle--horizontal))
+  .page-card-frame
+  > .page-card {
+  border-right: 0;
+}
+.split-resize-handle:not(.split-resize-handle--horizontal)
+  + .split-pane
+  .page-card-frame
+  > .page-card {
+  border-left: 0;
+}
+
 /* Drop marker when a tab is dragged to the empty end of a strip. */
 .app-tab-drop-end {
   width: 2px;
