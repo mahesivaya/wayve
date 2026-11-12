@@ -180,7 +180,53 @@
 .sidebar.has-brand {
   padding-top: 0;
 }
+/* The sidebar's divider (its border and the resize handle's line) starts
+   under the 38px top row, open or shrunk, so the header reads as one unbroken
+   bar. */
+/* (:not(.takeover-hidden) only adds weight, to beat the dark theme's
+   `:root[data-theme="dark"] .sidebar` border.) */
+html .sidebar.has-brand:not(.takeover-hidden) {
+  --sidebar-divider: var(--color-border);
+  border-right-color: transparent;
+  background:
+    linear-gradient(var(--sidebar-divider), var(--sidebar-divider)) right 38px /
+      1px calc(100% - 38px) no-repeat,
+    var(--sidebar-surface);
+}
+html[data-theme="dark"] .sidebar.has-brand:not(.takeover-hidden) {
+  --sidebar-divider: var(--color-overlay-border);
+}
+/* Its scrollbar starts under the top row too, instead of running up through
+   it. A track margin needs the ::-webkit-scrollbar styles, which Chromium only
+   uses when the standard scrollbar-width/-color are unset. */
+.sidebar.has-brand {
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+}
+.sidebar.has-brand::-webkit-scrollbar {
+  width: 6px;
+}
+.sidebar.has-brand::-webkit-scrollbar-track {
+  margin-top: 38px;
+  background: transparent;
+}
+.sidebar.has-brand::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: var(--color-border);
+}
+.sidebar.has-brand ~ .sidebar-resize-handle::after {
+  top: 38px;
+}
+/* Keep the grip pill centred on the shortened line. */
+.sidebar.has-brand ~ .sidebar-resize-handle::before {
+  top: calc(50% + 19px);
+}
 .sidebar-brand {
+  /* Pinned: the sidebar scrolls underneath it, never up into the top row. */
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--sidebar-surface);
   display: flex;
   align-items: center;
   flex-shrink: 0;
@@ -210,12 +256,9 @@
   height: 22px;
   stroke-width: 1.8;
 }
-/* The expanded panel shows the logo and name (the desktop app included — its
-   "no logo" rule is for the header-as-title-bar); the icon rail shows just the
-   menu toggle, centred. */
-html.is-desktop .sidebar-brand .header-brand .logo {
-  display: inline-flex;
-}
+/* The expanded panel shows the logo and name — except in the desktop app,
+   which has no brand at all (its `.header-brand .logo` rule hides it); the
+   icon rail shows just the menu toggle, centred. */
 .sidebar.collapsed:not(.peek) .sidebar-brand {
   padding: 0;
   justify-content: center;
@@ -230,22 +273,103 @@ html.is-desktop .sidebar-brand .header-brand .logo {
   margin: 0;
 }
 
-/* macOS desktop shell: the window controls float over the sidebar's top-left,
-   so the brand row keeps clear of them (in the rail, the toggle drops below). */
-html.is-titlebar-inset:not(.is-fullscreen)
-  .sidebar.collapsed:not(.peek)
-  .sidebar-brand {
-  height: 64px;
-  align-items: flex-end;
-  padding-bottom: 6px;
+/* Desktop app title-bar row: the sidebar toggle, a small muted icon like the
+   native title bar's. On macOS it is pinned just right of the window
+   controls (14pt circles from x 14 to ~66, see trafficLightPosition in
+   desktop/main.cjs), centred in the 38px top row, in the same spot whether
+   the sidebar is open or shrunk. */
+.titlebar-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
 }
-html.is-titlebar-inset:not(.is-fullscreen)
-  .sidebar.collapsed:not(.peek)
-  .sidebar-brand
-  .header-brand {
-  padding-left: 0;
-  min-width: 0;
+.sidebar.has-brand .titlebar-nav .sidebar-collapse-btn {
+  position: static;
+  width: 32px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.sidebar.has-brand .titlebar-nav .sidebar-collapse-btn:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+.sidebar.has-brand .titlebar-nav .sidebar-collapse-icon {
+  width: 23px;
+  height: 23px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+html.is-titlebar-inset .titlebar-nav {
+  position: fixed;
+  /* Centred in the 38px top row's height ((38 - 30) / 2), and midway between
+     the last window control (~x 66) and the first tab (x 120). */
+  left: 77px;
+  top: 4px;
+  z-index: 30;
+  margin: 0;
+}
+html.is-titlebar-inset.is-fullscreen .titlebar-nav {
+  left: 10px;
+}
+/* Undo the old title-bar nudge (Layout.css drops the toggle 2px), so it sits
+   centred in the row. */
+html.is-titlebar-inset:not(.is-fullscreen)
+  .sidebar-brand
+  .titlebar-nav
+  .header-collapse-btn {
+  top: 0;
+}
+/* `.header-brand` stacks at z-index 1, which would cap the pinned row below
+   the tab strip (z-index 21) once the rail shrinks under it. */
+html.is-titlebar-inset .sidebar .sidebar-brand .header-brand {
+  z-index: auto;
+}
+/* Shrunk, the macOS desktop app keeps the 56px icon rail, but below the top
+   row: the tab strip spans the window's full width across the top (reaching
+   back over the rail), starting after the window controls and the pinned
+   row. The rail's own brand row collapses, since the row is pinned. */
+html.is-titlebar-inset .sidebar.collapsed {
+  padding-top: 0;
+}
+html.is-titlebar-inset .sidebar.collapsed .sidebar-brand .logo {
+  display: none;
+}
+/* A sticky row is its own stacking layer, which caps the pinned title-bar row
+   inside it. Lift it above the tab strip (z-index 21) so the toggle stays on
+   top when the shrunk rail sits under the strip. */
+html.is-titlebar-inset .sidebar .sidebar-brand {
+  z-index: 31;
+}
+/* The rail's brand row stays as an empty, pinned 38px band under the tab
+   strip, so rail icons scroll beneath the top row rather than into it. */
+html.is-titlebar-inset .sidebar.collapsed .sidebar-brand {
+  /* Keeps its bottom border, continuing the tab strip's line across it. */
+  margin: 0 -8px -8px;
+  padding: 0;
+}
+html.is-titlebar-inset
+  .body:has(> .sidebar.collapsed)
+  .app-tabbar[data-strip="main"] {
+  margin-left: -56px;
+  padding-left: 120px;
+}
+html.is-titlebar-inset.is-fullscreen
+  .body:has(> .sidebar.collapsed)
+  .app-tabbar[data-strip="main"] {
+  padding-left: 50px;
 }
 
 /* Drop marker when a tab is dragged to the empty end of a strip. */

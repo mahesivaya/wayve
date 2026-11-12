@@ -2016,40 +2016,87 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
               it stays reachable whether the sidebar is a full panel or an icon
               rail. The narrow overlay uses the hamburger below instead; hidden
               while settings takes over (there's no sidebar to toggle). */}
-      {!isNarrow && !settingsTakeover && (
-        <button
-          type="button"
-          className="sidebar-collapse-btn header-collapse-btn"
-          onClick={() => setSidebarCollapsed((c) => !c)}
-          // In the sidebar (tabs layout) the custom tooltip would be clipped
-          // by the sidebar's scroll box, so use the native one there.
-          title={showTabs ? collapseTip : undefined}
-          data-tooltip={showTabs ? undefined : collapseTip}
-          aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-expanded={!sidebarCollapsed}
-        >
-          <svg
-            className="sidebar-collapse-icon"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
+      {!isNarrow &&
+        !settingsTakeover &&
+        (desktop && showTabs ? (
+          // Desktop title bar (macOS): the toggle, pinned beside the window
+          // controls (see .titlebar-nav).
+          <div className="titlebar-nav">
+            <button
+              type="button"
+              className="sidebar-collapse-btn header-collapse-btn"
+              onClick={() => setSidebarCollapsed((c) => !c)}
+              // In the sidebar (tabs layout) the custom tooltip would be clipped
+              // by the sidebar's scroll box, so use the native one there.
+              title={showTabs ? collapseTip : undefined}
+              data-tooltip={showTabs ? undefined : collapseTip}
+              aria-label={
+                sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
+              }
+              aria-expanded={!sidebarCollapsed}
+            >
+              <svg
+                className="sidebar-collapse-icon"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                {/* Shrunk: a three-line menu icon. Open: a plain sidebar-panel
+                    glyph. The desktop app uses the panel glyph for both, so its
+                    toggle looks the same in one fixed spot. The tooltip says which
+                    way it goes. */}
+                {sidebarCollapsed && !desktop ? (
+                  <>
+                    <line x1="3" y1="6" x2="21" y2="6" />
+                    <line x1="3" y1="12" x2="21" y2="12" />
+                    <line x1="3" y1="18" x2="21" y2="18" />
+                  </>
+                ) : (
+                  <>
+                    <rect x="3" y="5" width="18" height="14" rx="2.2" />
+                    <line x1="9" y1="5" x2="9" y2="19" />
+                  </>
+                )}
+              </svg>
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="sidebar-collapse-btn header-collapse-btn"
+            onClick={() => setSidebarCollapsed((c) => !c)}
+            // In the sidebar (tabs layout) the custom tooltip would be clipped
+            // by the sidebar's scroll box, so use the native one there.
+            title={showTabs ? collapseTip : undefined}
+            data-tooltip={showTabs ? undefined : collapseTip}
+            aria-label={
+              sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
+            }
+            aria-expanded={!sidebarCollapsed}
           >
-            {/* Shrunk: a three-line menu icon. Open: a plain sidebar-panel
-                glyph. The tooltip says which way it goes. */}
-            {sidebarCollapsed ? (
-              <>
-                <line x1="3" y1="6" x2="21" y2="6" />
-                <line x1="3" y1="12" x2="21" y2="12" />
-                <line x1="3" y1="18" x2="21" y2="18" />
-              </>
-            ) : (
-              <>
-                <rect x="3" y="5" width="18" height="14" rx="2.2" />
-                <line x1="9" y1="5" x2="9" y2="19" />
-              </>
-            )}
-          </svg>
-        </button>
-      )}
+            <svg
+              className="sidebar-collapse-icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              {/* Shrunk: a three-line menu icon. Open: a plain sidebar-panel
+                glyph. The desktop app uses the panel glyph for both, so its
+                toggle looks the same in one fixed spot. The tooltip says which
+                way it goes. */}
+              {sidebarCollapsed && !desktop ? (
+                <>
+                  <line x1="3" y1="6" x2="21" y2="6" />
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                  <line x1="3" y1="18" x2="21" y2="18" />
+                </>
+              ) : (
+                <>
+                  <rect x="3" y="5" width="18" height="14" rx="2.2" />
+                  <line x1="9" y1="5" x2="9" y2="19" />
+                </>
+              )}
+            </svg>
+          </button>
+        ))}
       {/* Narrow-screen expand/collapse toggle. The icon rail is always
               on screen; this only shows or hides the labels, expanding the
               rail over the content rather than squeezing it. */}
