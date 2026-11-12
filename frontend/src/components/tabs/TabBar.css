@@ -219,14 +219,14 @@ html[data-theme="dark"] .sidebar.has-brand:not(.takeover-hidden) {
   scrollbar-color: auto;
 }
 .sidebar.has-brand::-webkit-scrollbar {
-  width: 6px;
+  width: 3px;
 }
 .sidebar.has-brand::-webkit-scrollbar-track {
   margin-top: 38px;
   background: transparent;
 }
 .sidebar.has-brand::-webkit-scrollbar-thumb {
-  border-radius: 3px;
+  border-radius: 2px;
   background: var(--color-border);
 }
 .sidebar.has-brand ~ .sidebar-resize-handle::after {
