@@ -418,6 +418,21 @@ html.is-titlebar-inset.is-fullscreen
   border-top-right-radius: 0;
 }
 
+/* The split divider also starts under the 38px top row (both panes' tab
+   strips), so the header runs as one bar across the split; above the line the
+   handle is painted as header, with the strips' bottom line bridged across. */
+.split-pane
+  + .split-resize-handle:not(.split-resize-handle--horizontal)::after {
+  top: 38px;
+}
+.split-pane + .split-resize-handle:not(.split-resize-handle--horizontal) {
+  background:
+    linear-gradient(var(--color-border), var(--color-border)) 0 37px / 100% 1px
+      no-repeat,
+    linear-gradient(var(--color-chrome-surface), var(--color-chrome-surface)) 0
+      0 / 100% 37px no-repeat;
+}
+
 /* Side by side, the two page cards' facing borders sat either side of the
    divider's own line — three hairlines in ~4px, reading as one thick bar. Drop
    the facing borders so the divider is a single hairline. */
