@@ -43,6 +43,7 @@ import {
   insertTab,
   moveTab,
   newTabId,
+  pathnameOf,
   removeTab,
   setTitleFor,
   syncActivePath,
@@ -321,9 +322,10 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
 
   // The pane the user last clicked in — a sidebar click retargets it (loads the
   // app into that pane only). `focusHalf` picks a sub-split half within it.
-  const [splitTarget, setSplitTarget] = useState<PaneFocus>(
-    () => loadPersistedSplit().splitTarget
-  );
+  // Sidebar clicks go to the focused pane. Focus always starts on the main
+  // (left) pane — it is not restored from a previous session — so menu clicks
+  // only open in the right pane after the user clicks into it.
+  const [splitTarget, setSplitTarget] = useState<PaneFocus>("left");
   const [focusHalf, setFocusHalf] = useState<"top" | "bottom">("top");
 
   // Focus a pane (and optionally one of its sub-split halves) in a single click.
@@ -783,10 +785,10 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   // Adds a page to the right group (Cursor: dropping a tab onto an editor
   // group). A column showing a plain app becomes a group whose first tab is
   // that app, so nothing already open is lost; no column yet → one opens.
-  const addToRightGroup = (
+  const rightGroupWith = (
     page: { path: string; title?: string },
     index?: number
-  ) => {
+  ): TabsState => {
     let base = rightGroup;
     if (!base && rightApp) {
       const first = {
@@ -796,14 +798,20 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       };
       base = { tabs: [first], activeId: first.id };
     }
-    setRightGroup(
-      base
-        ? insertTab(base, page, index)
-        : insertTab({ tabs: [], activeId: "" }, page, 0)
-    );
+    return base
+      ? insertTab(base, page, index)
+      : insertTab({ tabs: [], activeId: "" }, page, 0);
+  };
+
+  const addToRightGroup = (
+    page: { path: string; title?: string },
+    index?: number
+  ) => {
+    setRightGroup(rightGroupWith(page, index));
     if (!rightView) setRightView(appKeyForTabPath(page.path) ?? "home");
     setSubSplit((s) => ({ ...s, right: false }));
-    focusPane("right", "top");
+    // Deliberately no focus change: sidebar clicks keep going where the user
+    // last clicked, so a drop never silently redirects them into this group.
   };
 
   // Removes a tab from the right group; the column closes with its last tab.
@@ -811,6 +819,25 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     const next = rightGroup ? removeTab(rightGroup, id) : null;
     if (next) setRightGroup(next);
     else closeRightColumn();
+  };
+
+  // Whether the tab being dragged is the main strip's only one.
+  const [draggingLastMain, setDraggingLastMain] = useState(false);
+
+  // A main-strip tab moving into the right group. If it was the main strip's
+  // last tab, the left group is left empty and closes (Cursor): the right
+  // group, now holding the tab, becomes the single screen.
+  const moveMainTabRight = (payload: TabDragPayload, index?: number) => {
+    setPaneDrag(null);
+    const page = { path: payload.path, title: payload.title };
+    if (draggingLastMain && splitOpen) {
+      closeLeftPane(payload.tabId, rightGroupWith(page, index));
+      return;
+    }
+    addToRightGroup(page, index);
+    window.dispatchEvent(
+      new CustomEvent(TAB_MOVED_EVENT, { detail: payload.tabId })
+    );
   };
 
   // A tab dropped onto a pane: main-strip tabs join the right group (past the
@@ -823,11 +850,8 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   ) => {
     setPaneDrag(null);
     if (payload.source === "main") {
-      if (target === "left" && zone !== "right") return;
-      addToRightGroup({ path: payload.path, title: payload.title });
-      window.dispatchEvent(
-        new CustomEvent(TAB_MOVED_EVENT, { detail: payload.tabId })
-      );
+      if (target === "left" && (zone !== "right" || rightView !== null)) return;
+      moveMainTabRight(payload);
       return;
     }
     if (target === "right") return;
@@ -843,7 +867,13 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     target: PaneKey
   ): "zones" | "half" | "whole" | null => {
     if (paneDrag?.kind !== "tab") return "zones";
-    if (paneDrag.source === "main") return target === "left" ? "half" : "whole";
+    if (paneDrag.source === "main") {
+      if (target === "right") return "whole";
+      // Already split: a tab only switches sides once it's over the other
+      // pane, so its own pane neither accepts it nor previews a third column.
+      // A lone tab has nothing to split from.
+      return rightView === null && !draggingLastMain ? "half" : null;
+    }
     // A right-group tab: the main page takes it back; its own column doesn't.
     return target === "right" ? null : "whole";
   };
@@ -976,6 +1006,12 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   if (rightView === null && rightGroup) setRightGroup(null);
   const titleOfTab = (tab: Tab) => tabTitle(tab, TAB_TITLE_SOURCES);
   const rightTabLabel = rightTab ? titleOfTab(rightTab) : "";
+  // The app a tab on exactly its page (/notes) shows; PathPane falls back to
+  // it when Layout is mounted without the app's route table.
+  const RightTabApp = rightTab
+    ? (SPLIT_APPS.find((a) => a.path === pathnameOf(rightTab.path))?.Comp ??
+      null)
+    : null;
   // What the right strip shows: the group's tabs, or — for a plain app column —
   // that app as a single tab (no group is created until one is needed).
   const rightStripTabs: Tab[] =
@@ -1008,10 +1044,18 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   // in state, so they return when the window widens. Hidden panes must not take
   // sidebar taps or count as "already open": on a phone either one read as a
   // tap that did nothing. Only the left column (and its halves) is visible.
-  // Likewise a right column hosting a tab page doesn't count as its app being
-  // open: clicking Tickets in the sidebar must open the board, not just pulse
-  // the pane showing ticket #6.
+  // Likewise a right column hosting a tab page counts as its app being open
+  // only when the active tab sits exactly on that app's page (/notes):
+  // clicking Tickets in the sidebar must open the board, not just pulse the
+  // pane showing ticket #6.
   const hasRightGroup = rightGroup !== null;
+  const rightActivePath = rightTab ? pathnameOf(rightTab.path) : null;
+  const rightActiveApp: AppKey | null =
+    rightActivePath === null
+      ? null
+      : (SPLIT_APPS.find((a) => a.path === rightActivePath)?.key ?? null);
+  // What the right column visibly shows, for sidebar highlighting.
+  const rightShownApp = hasRightGroup ? rightActiveApp : rightView;
   const visibleArrangement = useMemo<PaneArrangement>(
     () =>
       isNarrow
@@ -1022,9 +1066,9 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
             subSplit: { ...arrangement.subSplit, center: false, right: false },
           }
         : hasRightGroup
-          ? { ...arrangement, right: null }
+          ? { ...arrangement, right: rightActiveApp }
           : arrangement,
-    [isNarrow, arrangement, hasRightGroup]
+    [isNarrow, arrangement, hasRightGroup, rightActiveApp]
   );
   // More than one pane on screen right now.
   const multiPaneVisible = isNarrow ? subSplit.left : splitOpen;
@@ -1131,13 +1175,39 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
         return true;
       }
       if (splitTarget === "right") {
-        setRightView(app);
-        setRightGroup(null);
+        // Cursor-style: opening something into the right group adds a tab
+        // there (or selects the tab already showing it) — it never wipes the
+        // group's other tabs. A plain app column keeps its app as tab one.
+        const target = SPLIT_APPS.find((a) => a.key === app);
+        if (!target) return false;
+        setRightGroup((g) => {
+          let base = g;
+          const current = SPLIT_APPS.find((a) => a.key === rightView);
+          if (!base && current) {
+            const first = {
+              id: newTabId(),
+              path: current.path,
+              title: current.label,
+            };
+            base = { tabs: [first], activeId: first.id };
+          }
+          if (!base) {
+            const only = { id: newTabId(), path: target.path };
+            return { tabs: [only], activeId: only.id };
+          }
+          const existing = base.tabs.find(
+            (t) => pathnameOf(t.path) === target.path
+          );
+          return existing
+            ? activateTab(base, existing.id)
+            : insertTab(base, { path: target.path });
+        });
+        setRightView((v) => v ?? app);
         return true;
       }
       return false;
     },
-    [routeToFocusedPane, focusHalf, subSplit, splitTarget]
+    [routeToFocusedPane, focusHalf, subSplit, splitTarget, rightView]
   );
 
   // Open an app in whichever pane/half currently has focus, mirroring a sidebar
@@ -1165,7 +1235,9 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   const homeLabel = homeApp?.label ?? "Home";
 
   // `replaceTabId`: the main tab whose × closed the pane (its last tab).
-  function closeLeftPane(replaceTabId?: string) {
+  // `group`: the right group to promote (defaults to the current one).
+  function closeLeftPane(replaceTabId?: string, group = rightGroup) {
+    const rightGroup = group;
     const fromKey: PaneKey = rightApp ? "right" : "center";
     const nextApp = rightApp ?? middleApp;
     if (!nextApp) return;
@@ -1395,7 +1467,7 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           ? location.pathname === "/" || location.pathname === "/home"
           : location.pathname === path;
       const isMiddleActive = middleView === app;
-      const isRightActive = rightView === app;
+      const isRightActive = rightShownApp === app;
       const showBadge = typeof badge === "number" && badge > 0;
 
       return (
@@ -1418,7 +1490,7 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
         </Link>
       );
     },
-    [location.pathname, middleView, rightView, splitAppLinkProps]
+    [location.pathname, middleView, rightShownApp, splitAppLinkProps]
   );
 
   const renderSidebarLink = (
@@ -1630,7 +1702,7 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       "sidebar-project-label",
       extra,
       location.pathname === path ? "active" : "",
-      middleView === app || rightView === app ? "active-split" : "",
+      middleView === app || rightShownApp === app ? "active-split" : "",
     ]
       .filter(Boolean)
       .join(" ");
@@ -2187,15 +2259,16 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
                     onCloseLast={splitOpen ? closeLeftPane : undefined}
                     closeLastLabel="Close left pane"
                     trailing={headerActions}
-                    onPaneDragStart={(e, tab, title) =>
+                    onPaneDragStart={(e, tab, title, isLast) => {
+                      setDraggingLastMain(isLast);
                       beginPaneDrag(e, {
                         kind: "tab",
                         tabId: tab.id,
                         path: tab.path,
                         title,
                         source: "main",
-                      })
-                    }
+                      });
+                    }}
                     onPaneDragEnd={() => setPaneDrag(null)}
                     onReceivedFromRight={(payload) =>
                       removeFromRightGroup(payload.tabId)
@@ -2330,18 +2403,9 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
                       onReorder={(from, to) =>
                         setRightGroup((g) => (g ? moveTab(g, from, to) : g))
                       }
-                      onReceive={(payload, index) => {
-                        setPaneDrag(null);
-                        addToRightGroup(
-                          { path: payload.path, title: payload.title },
-                          index
-                        );
-                        window.dispatchEvent(
-                          new CustomEvent(TAB_MOVED_EVENT, {
-                            detail: payload.tabId,
-                          })
-                        );
-                      }}
+                      onReceive={(payload, index) =>
+                        moveMainTabRight(payload, index)
+                      }
                       onTabDragStart={(e, tab, title) =>
                         beginPaneDrag(e, {
                           kind: "tab",
@@ -2365,6 +2429,7 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
                           key={rightTab.id}
                           path={rightTab.path}
                           onNavigate={navigateRightTab}
+                          fallback={RightTabApp ? <RightTabApp /> : null}
                         />
                       )
                     : RightComp &&

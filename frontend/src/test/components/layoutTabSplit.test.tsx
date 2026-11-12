@@ -140,6 +140,32 @@ describe("dragging a header tab into a split", () => {
     ).toEqual(["#6 Performance fix"]);
   });
 
+  it("once split, a tab dragged within its own pane previews nothing", () => {
+    window.localStorage.setItem(
+      "rwayve.layout.split",
+      JSON.stringify({ rightView: "tasks", splitTarget: "left" })
+    );
+    const { container } = render(
+      <MemoryRouter initialEntries={["/tickets"]}>
+        <PaneRoutesContext.Provider value={renderRoutes}>
+          <Layout>
+            <p>board</p>
+          </Layout>
+        </PaneRoutesContext.Provider>
+      </MemoryRouter>
+    );
+    const tab = screen.getByRole("tab", { name: /#6 Performance fix/ });
+    fireEvent.dragStart(tab, { dataTransfer: dataTransfer() });
+    // No "past the middle" half-pane target on the left any more; only the
+    // other pane takes the tab.
+    expect(
+      container.querySelector(".split-pane.left .pane-drop-overlay")
+    ).toBeNull();
+    expect(
+      container.querySelector(".split-pane.right .pane-drop-overlay")
+    ).toBeTruthy();
+  });
+
   it("adds a dropped tab to an open right pane instead of replacing it", () => {
     // Right column already showing the Tasks app (no group yet).
     window.localStorage.setItem(
@@ -205,6 +231,84 @@ describe("dragging a header tab into a split", () => {
     ).toEqual(["Tasks"]);
   });
 
+  it("dragging a group's last tab to the other side leaves one screen", () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ tabs: [{ id: "a", path: "/tickets" }], activeId: "a" })
+    );
+    window.localStorage.setItem(
+      "rwayve.layout.split",
+      JSON.stringify({ rightView: "tasks", splitTarget: "left" })
+    );
+    const { container } = render(
+      <MemoryRouter initialEntries={["/tickets"]}>
+        <PaneRoutesContext.Provider value={renderRoutes}>
+          <Layout>
+            <p>board</p>
+          </Layout>
+        </PaneRoutesContext.Provider>
+      </MemoryRouter>
+    );
+
+    // The main strip's only tab → the right pane: the left group closes.
+    const tab = screen.getByRole("tab", { name: "Tickets" });
+    const dt = dataTransfer();
+    fireEvent.dragStart(tab, { dataTransfer: dt });
+    const overlay = container.querySelector(
+      ".split-pane.right .pane-drop-overlay"
+    ) as HTMLElement;
+    fireEvent.dragOver(overlay, { dataTransfer: dt });
+    act(() => {
+      fireEvent.drop(overlay, { dataTransfer: dt });
+    });
+    fireEvent.dragEnd(tab, { dataTransfer: dt });
+
+    expect(container.querySelector(".split-pane.right")).toBeNull();
+    expect(screen.queryByRole("tablist", { name: "Right pane tabs" })).toBe(
+      null
+    );
+    expect(
+      within(screen.getByRole("tablist", { name: "Open tabs" }))
+        .getAllByRole("tab")
+        .map((t) => t.textContent)
+    ).toEqual(["Tasks", "Tickets"]);
+  });
+
+  it("dragging the right pane's only tab to the left closes the split", () => {
+    window.localStorage.setItem(
+      "rwayve.layout.split",
+      JSON.stringify({ rightView: "tasks", splitTarget: "left" })
+    );
+    const { container } = render(
+      <MemoryRouter initialEntries={["/tickets"]}>
+        <PaneRoutesContext.Provider value={renderRoutes}>
+          <Layout>
+            <p>board</p>
+          </Layout>
+        </PaneRoutesContext.Provider>
+      </MemoryRouter>
+    );
+    const right = screen.getByRole("tablist", { name: "Right pane tabs" });
+    const tab = within(right).getByRole("tab", { name: "Tasks" });
+    const dt = dataTransfer();
+    fireEvent.dragStart(tab, { dataTransfer: dt });
+    const overlay = container.querySelector(
+      ".split-pane.left .pane-drop-overlay"
+    ) as HTMLElement;
+    fireEvent.dragOver(overlay, { dataTransfer: dt });
+    act(() => {
+      fireEvent.drop(overlay, { dataTransfer: dt });
+    });
+    fireEvent.dragEnd(tab, { dataTransfer: dt });
+
+    expect(container.querySelector(".split-pane.right")).toBeNull();
+    expect(
+      within(screen.getByRole("tablist", { name: "Open tabs" }))
+        .getAllByRole("tab")
+        .map((t) => t.textContent)
+    ).toEqual(["Tickets", "Tasks", "#6 Performance fix"]);
+  });
+
   it("'+' in the right strip opens a new tab beside the app there", () => {
     window.localStorage.setItem(
       "rwayve.layout.split",
@@ -235,5 +339,121 @@ describe("dragging a header tab into a split", () => {
     expect(tabs.map((t) => t.textContent)).toEqual(["Tasks", "Home"]);
     expect(tabs[1]).toHaveAttribute("aria-selected", "true");
     expect(screen.getByTestId("pane-page")).toHaveTextContent("/");
+  });
+
+  it("a sidebar click into the focused right group adds a tab there", () => {
+    // Right column showing Tasks, and it has focus.
+    window.localStorage.setItem(
+      "rwayve.layout.split",
+      JSON.stringify({ rightView: "tasks", splitTarget: "left" })
+    );
+    const { container } = render(
+      <MemoryRouter initialEntries={["/tickets"]}>
+        <PaneRoutesContext.Provider value={renderRoutes}>
+          <Layout>
+            <p>board</p>
+          </Layout>
+        </PaneRoutesContext.Provider>
+      </MemoryRouter>
+    );
+    const rightTabs = () =>
+      within(screen.getByRole("tablist", { name: "Right pane tabs" }))
+        .getAllByRole("tab")
+        .map((t) => t.textContent);
+    const mainTabs = () =>
+      within(screen.getByRole("tablist", { name: "Open tabs" }))
+        .getAllByRole("tab")
+        .map((t) => t.textContent);
+    const before = mainTabs();
+    // Focus the right pane by clicking into it, as a user would.
+    fireEvent.mouseDown(
+      container.querySelector(".split-pane.right .split-pane-body") ??
+        (container.querySelector(".split-pane.right") as HTMLElement)
+    );
+
+    act(() => {
+      fireEvent.click(screen.getByRole("link", { name: /Notes/ }));
+    });
+    // Tasks is kept; Notes opens as a new tab beside it.
+    expect(rightTabs()).toEqual(["Tasks", "Notes"]);
+    act(() => {
+      fireEvent.click(screen.getByRole("link", { name: /Chat/ }));
+    });
+    expect(rightTabs()).toEqual(["Tasks", "Notes", "Chat"]);
+    // Opening one that's already there selects it instead of duplicating.
+    act(() => {
+      fireEvent.click(screen.getByRole("link", { name: /Notes/ }));
+    });
+    expect(rightTabs()).toEqual(["Tasks", "Notes", "Chat"]);
+    // The main strip is untouched.
+    expect(mainTabs()).toEqual(before);
+  });
+
+  it("sidebar clicks stay in the main pane unless the right one was clicked", () => {
+    // A stale "right" focus from a previous session must not be restored.
+    window.localStorage.setItem(
+      "rwayve.layout.split",
+      JSON.stringify({ rightView: "tasks", splitTarget: "right" })
+    );
+    render(
+      <MemoryRouter initialEntries={["/tickets"]}>
+        <PaneRoutesContext.Provider value={renderRoutes}>
+          <Layout>
+            <p>board</p>
+          </Layout>
+        </PaneRoutesContext.Provider>
+      </MemoryRouter>
+    );
+    act(() => {
+      fireEvent.click(screen.getByRole("link", { name: /Notes/ }));
+    });
+    act(() => {
+      fireEvent.click(screen.getByRole("link", { name: /Chat/ }));
+    });
+    // The right group gained no tabs.
+    expect(
+      within(screen.getByRole("tablist", { name: "Right pane tabs" }))
+        .getAllByRole("tab")
+        .map((t) => t.textContent)
+    ).toEqual(["Tasks"]);
+  });
+
+  it("dropping a tab into the right group doesn't redirect sidebar clicks", () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={["/tickets"]}>
+        <PaneRoutesContext.Provider value={renderRoutes}>
+          <Layout>
+            <p>board</p>
+          </Layout>
+        </PaneRoutesContext.Provider>
+      </MemoryRouter>
+    );
+    const tab = screen.getByRole("tab", { name: /#6 Performance fix/ });
+    const dt = dataTransfer();
+    fireEvent.dragStart(tab, { dataTransfer: dt });
+    const overlay = container.querySelector(
+      ".split-pane.left .pane-drop-overlay"
+    ) as HTMLElement;
+    overlay.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 1000, height: 600 }) as DOMRect;
+    const at = (make: typeof createEvent.dragOver) => {
+      const ev = make(overlay, { dataTransfer: dt });
+      Object.defineProperty(ev, "clientX", { value: 800 });
+      return ev;
+    };
+    fireEvent(overlay, at(createEvent.dragOver));
+    act(() => {
+      fireEvent(overlay, at(createEvent.drop));
+    });
+    fireEvent.dragEnd(tab, { dataTransfer: dt });
+
+    act(() => {
+      fireEvent.click(screen.getByRole("link", { name: /Notes/ }));
+    });
+    expect(
+      within(screen.getByRole("tablist", { name: "Right pane tabs" }))
+        .getAllByRole("tab")
+        .map((t) => t.textContent)
+    ).toEqual(["#6 Performance fix"]);
   });
 });

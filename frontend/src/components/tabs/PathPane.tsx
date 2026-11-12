@@ -1,4 +1,4 @@
-import { Suspense, useContext, useMemo } from "react";
+import { Suspense, useContext, useMemo, type ReactNode } from "react";
 import { InPaneContext, PaneRoutesContext } from "./paneContexts";
 import {
   createPath,
@@ -21,9 +21,12 @@ function toPath(to: To): string {
 export default function PathPane({
   path,
   onNavigate,
+  fallback = null,
 }: {
   path: string;
   onNavigate: (path: string) => void;
+  /** Rendered when no route table is provided (Layout mounted on its own). */
+  fallback?: ReactNode;
 }) {
   const renderRoutes = useContext(PaneRoutesContext);
   const nav = useContext(NavigationContext);
@@ -42,7 +45,7 @@ export default function PathPane({
     [nav, onNavigate]
   );
 
-  if (!renderRoutes) return null;
+  if (!renderRoutes) return <>{fallback}</>;
 
   return (
     <InPaneContext.Provider value={true}>

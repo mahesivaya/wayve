@@ -41,7 +41,13 @@ function currentUrl(loc: { pathname: string; search: string; hash: string }) {
 type Props = {
   /** A tab drag started: Layout turns it into a pane drag, so the tab can be
    *  dropped past the middle of the page or onto the right group. */
-  onPaneDragStart?: (e: DragEvent, tab: Tab, title: string) => void;
+  onPaneDragStart?: (
+    e: DragEvent,
+    tab: Tab,
+    title: string,
+    /** It's this strip's only tab. */
+    isLast: boolean
+  ) => void;
   onPaneDragEnd?: () => void;
   /** A tab from the right group was dropped into this strip (Layout removes it
    *  from the group). */
@@ -103,11 +109,21 @@ export default function TabBar({
     stateRef.current = state;
   });
 
+  // Where the router is (or is about to be): several `go`s in one tick must
+  // compare against the previous one's navigation, not this render's URL.
+  const urlRef = useRef(url);
+  useEffect(() => {
+    urlRef.current = url;
+  }, [url]);
+
   const go = (next: TabsState) => {
     stateRef.current = next;
     setState(next);
     const target = next.tabs.find((t) => t.id === next.activeId);
-    if (target && target.path !== url) void navigate(target.path);
+    if (target && target.path !== urlRef.current) {
+      urlRef.current = target.path;
+      void navigate(target.path);
+    }
   };
   const goRef = useRef(go);
   useEffect(() => {
@@ -199,7 +215,9 @@ export default function TabBar({
         );
         onReceivedFromRight?.(payload);
       }}
-      onTabDragStart={onPaneDragStart}
+      onTabDragStart={(e, tab, title) =>
+        onPaneDragStart?.(e, tab, title, state.tabs.length <= 1)
+      }
       onTabDragEnd={onPaneDragEnd}
       onAdd={open}
       addDisabled={state.tabs.length >= MAX_TABS}
