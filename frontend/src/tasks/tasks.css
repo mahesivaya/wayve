@@ -1467,12 +1467,14 @@
 
 /* Read-only priority badge sits at the top-right of the card content (right
    end of the title row, before the actions). */
-.task-card .task-card-title .task-priority-badge {
+.task-card .task-card-title .task-priority-badge,
+.task-card .task-card-title .task-priority-select {
   margin-left: auto;
 }
 
 /* Board card: push the read-only priority badge to the top-right of the card. */
-.task-board-card-top .task-priority-badge {
+.task-board-card-top .task-priority-badge,
+.task-board-card-top .task-priority-select {
   margin-left: auto;
   order: 2;
 }
@@ -1863,6 +1865,11 @@ body.is-col-resizing {
 
 .task-tcell--priority {
   justify-content: center;
+}
+/* In a table row the dropdown is centred in its cell, not pushed right. */
+.task-tcell--priority .task-priority-select {
+  margin-left: 0;
+  max-width: 100%;
 }
 
 .task-tcell--status .task-status-select {

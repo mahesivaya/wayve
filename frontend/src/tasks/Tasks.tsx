@@ -1397,6 +1397,31 @@ export default function Tasks({
     }
   };
 
+  const changePriority = async (task: Task, next: TaskPriority) => {
+    if (task.priority === next) return;
+    await patchTask(task, { priority: next }, "Failed to update priority");
+  };
+
+  // Click-to-change priority, shown wherever a task's priority is (table row,
+  // cards, board), like the status dropdown.
+  const priorityPicker = (task: Task) => (
+    <select
+      className={`task-priority-select priority-${task.priority}`}
+      value={task.priority}
+      onChange={(event) =>
+        void changePriority(task, normalizePriority(event.target.value))
+      }
+      aria-label={`Priority of ${task.name}`}
+      data-tooltip={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
+    >
+      {PRIORITY_OPTIONS.map((value) => (
+        <option key={value} value={value} title={priorityLabel(value)}>
+          {`P${value}`}
+        </option>
+      ))}
+    </select>
+  );
+
   const changeStatus = async (task: Task, nextStatus: TaskStatus) => {
     if (task.status === nextStatus) return;
     await patchTask(task, { status: nextStatus }, "Failed to update status");
@@ -1904,12 +1929,7 @@ export default function Tasks({
         )}
 
         <div className="task-tcell task-tcell--priority">
-          <span
-            className={`task-priority-badge priority-${task.priority}`}
-            data-tooltip={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
-          >
-            P{task.priority}
-          </span>
+          {priorityPicker(task)}
         </div>
 
         <div className="task-tcell task-tcell--status">
@@ -2811,12 +2831,7 @@ export default function Tasks({
                             }}
                           >
                             <div className="task-board-card-top">
-                              <span
-                                className={`task-priority-badge priority-${task.priority}`}
-                                data-tooltip={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
-                              >
-                                P{task.priority}
-                              </span>
+                              {priorityPicker(task)}
                               <TaskKeyBadge
                                 value={taskKey(task)}
                                 tooltip={config.labels.numberBadgeTooltip}
@@ -2919,12 +2934,7 @@ export default function Tasks({
                               <JiraBadge task={task} />
                               <GitlabBadge task={task} />
                             </h3>
-                            <span
-                              className={`task-priority-badge priority-${task.priority}`}
-                              data-tooltip={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
-                            >
-                              P{task.priority}
-                            </span>
+                            {priorityPicker(task)}
                           </div>
                           {formatCreatedAt(task.created_at) && (
                             <span className="task-card-created">
@@ -3046,12 +3056,7 @@ export default function Tasks({
                               <JiraBadge task={task} />
                               <GitlabBadge task={task} />
                             </h3>
-                            <span
-                              className={`task-priority-badge priority-${task.priority}`}
-                              data-tooltip={`Priority ${task.priority} — ${priorityLabel(task.priority)}`}
-                            >
-                              P{task.priority}
-                            </span>
+                            {priorityPicker(task)}
                           </div>
                           {formatCreatedAt(task.created_at) && (
                             <span className="task-card-created">
