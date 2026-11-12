@@ -1,0 +1,137 @@
+/* GitHub-style merge box on the PR detail page (PrMergeBox). */
+.pr-merge-box {
+  margin: 14px 0 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.pr-merge-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.pr-merge-head-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--color-text-muted);
+}
+.pr-merge-head.is-bad .pr-merge-head-icon {
+  background: var(--diff-del-strong, #cf222e);
+}
+.pr-merge-head.is-ok .pr-merge-head-icon {
+  background: var(--diff-add-strong, #1a7f37);
+}
+.pr-merge-head.is-merged .pr-merge-head-icon {
+  background: #8250df;
+}
+
+.pr-merge-head-title {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.pr-merge-head-detail {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.pr-merge-cells {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-soft);
+}
+
+.pr-merge-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 16px 14px;
+  color: inherit;
+  text-decoration: none;
+}
+.pr-merge-cell + .pr-merge-cell {
+  border-left: 1px solid var(--color-border);
+}
+.pr-merge-cell:hover {
+  background: var(--color-surface-hover);
+}
+
+.pr-merge-cell-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.pr-merge-cell-title {
+  font-weight: 600;
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+}
+.pr-merge-cell-sub {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.pr-merge-bar {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.pr-merge-bar-seg {
+  flex-basis: 0;
+  min-width: 4px;
+}
+.pr-merge-bar-seg.is-pass {
+  background: var(--diff-add-strong, #1a7f37);
+}
+.pr-merge-bar-seg.is-fail {
+  background: var(--diff-del-strong, #cf222e);
+}
+.pr-merge-bar-seg.is-skip {
+  background: var(--color-text-muted);
+}
+.pr-merge-bar-seg.is-pending {
+  background: #bf8700;
+}
+.pr-merge-bar-seg.is-comment {
+  background: var(--diff-add-strong, #1a7f37);
+}
+/* Nothing to show yet: GitHub's striped empty track. */
+.pr-merge-bar-empty {
+  flex: 1;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent 0 4px,
+    var(--color-border) 4px 6px
+  );
+}
+
+@media (max-width: 640px) {
+  .pr-merge-cells {
+    grid-template-columns: 1fr;
+  }
+  .pr-merge-cell + .pr-merge-cell {
+    border-left: 0;
+    border-top: 1px solid var(--color-border);
+  }
+}

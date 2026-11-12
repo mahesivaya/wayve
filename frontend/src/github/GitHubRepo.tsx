@@ -6,6 +6,8 @@ import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import { getAuthToken } from "../auth/token";
 import RepoAccessPanel from "./RepoAccessPanel";
+import PrMergeBox from "./PrMergeBox";
+import type { CheckRun } from "./prMergeSummary";
 import { listProjects, linkProjectRepo, type Project } from "../api/workspace";
 import {
   mergePullRequest,
@@ -170,6 +172,9 @@ type PullBundle = {
   // Comments on lines of the diff, kept by GitHub apart from the conversation.
   lineComments: IssueComment[];
   reviews: PullReview[];
+  // The head commit's check runs, for the merge box. Null when GitHub didn't
+  // return them (e.g. a token without checks access).
+  checkRuns: CheckRun[] | null;
 };
 
 // Comments and reviews merged into one chronological conversation.
@@ -1314,23 +1319,36 @@ export function GitHubRepoViewer({
         const detail = await githubJson<PullDetail>(
           `${API_BASE}/pulls/${number}`
         );
-        const [files, comments, lineComments, reviews] = await Promise.all([
-          githubJson<CommitFile[]>(
-            `${API_BASE}/pulls/${number}/files?per_page=100`
-          ).catch(() => [] as CommitFile[]),
-          githubJson<IssueComment[]>(
-            `${API_BASE}/issues/${number}/comments?per_page=100`
-          ).catch(() => [] as IssueComment[]),
-          githubJson<IssueComment[]>(
-            `${API_BASE}/pulls/${number}/comments?per_page=100`
-          ).catch(() => [] as IssueComment[]),
-          githubJson<PullReview[]>(
-            `${API_BASE}/pulls/${number}/reviews?per_page=100`
-          ).catch(() => [] as PullReview[]),
-        ]);
+        const [files, comments, lineComments, reviews, checkRuns] =
+          await Promise.all([
+            githubJson<CommitFile[]>(
+              `${API_BASE}/pulls/${number}/files?per_page=100`
+            ).catch(() => [] as CommitFile[]),
+            githubJson<IssueComment[]>(
+              `${API_BASE}/issues/${number}/comments?per_page=100`
+            ).catch(() => [] as IssueComment[]),
+            githubJson<IssueComment[]>(
+              `${API_BASE}/pulls/${number}/comments?per_page=100`
+            ).catch(() => [] as IssueComment[]),
+            githubJson<PullReview[]>(
+              `${API_BASE}/pulls/${number}/reviews?per_page=100`
+            ).catch(() => [] as PullReview[]),
+            githubJson<{ check_runs: CheckRun[] }>(
+              `${API_BASE}/commits/${detail.head.sha}/check-runs?per_page=100`
+            )
+              .then((r) => r.check_runs)
+              .catch(() => null),
+          ]);
         setPullBundleByNumber((current) => ({
           ...current,
-          [number]: { detail, files, comments, lineComments, reviews },
+          [number]: {
+            detail,
+            files,
+            comments,
+            lineComments,
+            reviews,
+            checkRuns,
+          },
         }));
         // Collapse this PR's files, except those opened on an earlier visit or
         // holding a half-written comment; keys use the `pr-{number}::{filename}`
@@ -2737,6 +2755,16 @@ export function GitHubRepoViewer({
                                 </dd>
                               </div>
                             </dl>
+
+                            <PrMergeBox
+                              pr={d}
+                              checkRuns={bundle.checkRuns}
+                              reviews={bundle.reviews}
+                              commentCount={
+                                bundle.comments.length +
+                                bundle.lineComments.length
+                              }
+                            />
 
                             {bodyText.trim() && (
                               <div className="github-pr-descwrap">
