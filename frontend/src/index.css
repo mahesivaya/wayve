@@ -1182,9 +1182,10 @@ html.is-titlebar-inset
     textarea,
     label,
     [role="button"],
+    [role="tab"],
     .logo,
     .header .actions,
-    .global-search-row
+    .global-search-box
   ) {
   -webkit-app-region: no-drag;
 }

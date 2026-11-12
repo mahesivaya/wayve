@@ -10,6 +10,7 @@ function LegacyServiceRedirect() {
 }
 
 import Layout from "./components/Layout";
+import { PaneRoutesContext } from "./components/tabs/paneContexts";
 import ProtectedRoute from "./components/ProtectedRoute";
 import DesktopUpdateBanner from "./components/DesktopUpdateBanner";
 import RouteErrorBoundary from "./components/RouteErrorBoundary";
@@ -151,6 +152,405 @@ export default function App() {
     <Navigate to={accountHome} replace />
   );
 
+  // The route table as a render function: the main view renders it at the
+  // browser URL, and split panes (PathPane) render it at a tab's URL.
+  const renderRoutes = (paneLocation?: string) => (
+    <Routes location={paneLocation}>
+      <Route
+        path="/"
+        element={user ? (redirectToAccountHome ?? <Home />) : <Home />}
+      />
+
+      {/* Public routes. */}
+      <Route
+        path="/login"
+        element={user ? (redirectToAccountHome ?? <Login />) : <Login />}
+      />
+      <Route
+        path="/register"
+        element={user ? (redirectToAccountHome ?? <Register />) : <Register />}
+      />
+      <Route
+        path="/register-business"
+        element={
+          user ? (
+            (redirectToAccountHome ?? <RegisterBusiness />)
+          ) : (
+            <RegisterBusiness />
+          )
+        }
+      />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
+      <Route
+        path="/recover-with-mnemonic"
+        element={<RecoverWithMnemonicPage />}
+      />
+      {/* The secure-send magic link is deliberately public: the recipient
+            need not be a Wayve user, and the passphrase is what unlocks the
+            message. The page fetches ciphertext from a no-auth route and
+            decrypts entirely client-side. */}
+      <Route path="/m/:token" element={<SecureMessageView />} />
+      <Route path="/organization" element={<Organization />} />
+      <Route path="/services/:slug" element={<LegacyServiceRedirect />} />
+      <Route path="/docs/services/:slug" element={<ServicePage />} />
+      {/* Pricing sits outside ProtectedRoute so logged-out visitors can view
+            plans without being bounced to /login, and it renders its own header
+            chrome so it needs no Layout. Personal accounts are redirected to
+            Settings › Billing, where "Manage billing & upgrade" lives. */}
+      <Route
+        path="/pricing"
+        element={
+          <RequirePricingAccess>
+            <Pricing />
+          </RequirePricingAccess>
+        }
+      />
+      <Route path="/support" element={<Support />} />
+      {/* Public, for signed-in and signed-out visitors alike: Google's OAuth
+            verification links to it and requires the home page to as well. */}
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/book-demo" element={<BookDemo />} />
+      {/* The whole /docs/* tree is public, so anyone can browse the API
+            contract. Legacy paths (/developers, /developers/quotas,
+            /services/:slug) redirect to their canonical /docs/* URL. */}
+      <Route path="/docs" element={<DocsIndex />} />
+      <Route path="/docs/api" element={<SwaggerDocs />} />
+      <Route path="/docs/developers" element={<Developers />} />
+      <Route path="/docs/quotas" element={<Quotas />} />
+      {/* The markdown catalog matches anything else under /docs/*, so it
+            must stay AFTER the static routes above or /docs/api and friends
+            would be treated as slugs. */}
+      <Route path="/docs/:slug" element={<Docs />} />
+      <Route
+        path="/developers"
+        element={<Navigate to="/docs/developers" replace />}
+      />
+      <Route
+        path="/developers/quotas"
+        element={<Navigate to="/docs/quotas" replace />}
+      />
+
+      <Route element={<ProtectedRoute />}>
+        <Route element={<Layout />}>
+          {/* Sidebar split-pane app routes are generated from the SPLIT_APPS
+                registry in LayoutConfig.ts, so adding an app there adds both the
+                sidebar entry and its route. Guarded or redirecting ones opt out
+                via autoRoute:false and are declared explicitly below. */}
+          {SPLIT_APPS.filter((app) => app.autoRoute !== false).map((app) => (
+            <Route key={app.key} path={app.path} element={<app.Comp />} />
+          ))}
+
+          {/* A single ticket opens on its own page (Tickets board routes here
+                  via config.detailPath) instead of the edit modal. */}
+          <Route path="/tickets/:id" element={<TicketDetail />} />
+
+          {/* A single user story opens on its own page (User Stories board
+                  routes here via config.detailPath) when Edit is clicked; a name
+                  click opens the in-page drawer instead. */}
+          <Route path="/user-stories/:id" element={<StoryDetail />} />
+
+          <Route path="/home" element={redirectToAccountHome ?? <Home />} />
+          <Route
+            path="/organization/home"
+            element={
+              isOrganizationUser ? (
+                <OrganizationAdminHome />
+              ) : (
+                (redirectToAccountHome ?? <OrganizationAdminHome />)
+              )
+            }
+          />
+          {/* Legacy alias — bookmarks from before the rename. */}
+          <Route
+            path="/organization-home"
+            element={<Navigate to="/organization/home" replace />}
+          />
+          <Route
+            path="/platform/home"
+            element={
+              // A platform user whose role-derived home is some other page
+              // (billing lands on /platform/billing) is bounced out, so
+              // /platform/home never becomes the landing surface for a role
+              // with no actionable panels on it.
+              accountType === "platform_admin" &&
+              accountHome === "/platform/home" ? (
+                <PlatformAdminHome />
+              ) : (
+                (redirectToAccountHome ?? <PlatformAdminHome />)
+              )
+            }
+          />
+          {/* Legacy alias — bookmarks from before the rename. */}
+          <Route
+            path="/platform-admin-home"
+            element={<Navigate to="/platform/home" replace />}
+          />
+          <Route
+            path="/organization/members"
+            element={<OrganizationMembers />}
+          />
+          <Route
+            path="/organization/members/:id"
+            element={<MemberDetail scope="organization" />}
+          />
+          <Route
+            path="/organization/domains"
+            element={<OrganizationDomains />}
+          />
+          <Route
+            path="/organization/settings"
+            element={<Navigate to="/settings" replace />}
+          />
+          <Route
+            path="/organization/:slug"
+            element={redirectToAccountHome ?? <OrganizationHome />}
+          />
+          <Route path="/emails/attachments" element={<EmailFiles />} />
+          {/* Legacy alias. */}
+          <Route
+            path="/email-files"
+            element={<Navigate to="/emails/attachments" replace />}
+          />
+          <Route path="/reminders" element={<Reminders />} />
+          <Route path="/call" element={<Call />} />
+          <Route path="/documents" element={<Documents />} />
+          <Route path="/skills" element={<Skills />} />
+          <Route path="/teams/:slug" element={<TeamPage />} />
+          {/* Legacy alias (no hyphen — original spelling). */}
+          <Route path="/aichat" element={<Navigate to="/ai-chat" replace />} />
+          {/* Any authenticated user may reach the Code Repo viewer, since
+                the backend proxy serves a single read-only repo. The guard only
+                bounces unauthenticated visitors. */}
+          <Route
+            path="/github"
+            element={
+              user ? <GitHubRepo /> : <Navigate to={accountHome} replace />
+            }
+          />
+          {/* Per-project repo viewer. The bare /github above stays the
+                platform team's single-repo dashboard. */}
+          <Route
+            path="/github/:projectId"
+            element={
+              user ? <GitHubRepo /> : <Navigate to={accountHome} replace />
+            }
+          />
+          {/* Platform-owner only. */}
+          <Route
+            path="/logs/tracing"
+            element={
+              user?.scope === "platform" && user?.effective_role === "owner" ? (
+                <TracingDashboard />
+              ) : (
+                <Navigate to={accountHome} replace />
+              )
+            }
+          />
+          <Route
+            path="/platform/tracing"
+            element={<Navigate to="/logs/tracing" replace />}
+          />
+          {/* Platform-owner only. */}
+          <Route
+            path="/platform/domains"
+            element={
+              user?.scope === "platform" && user?.effective_role === "owner" ? (
+                <DomainVerification />
+              ) : (
+                <Navigate to={accountHome} replace />
+              )
+            }
+          />
+          {/* Asking for access and reviewing requests are two tabs of one
+                page now. The old paths still resolve — they were linked from
+                emails and bookmarks — and land on the matching tab. */}
+          <Route path="/requests" element={<RequestsPage />} />
+          <Route
+            path="/test-access"
+            element={<Navigate to="/requests?tab=mine" replace />}
+          />
+          <Route
+            path="/access-requests"
+            element={<Navigate to="/requests?tab=review" replace />}
+          />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route
+            path="/settings/notifications"
+            element={<Settings section="notifications" />}
+          />
+          <Route
+            path="/settings/usage"
+            element={<Settings section="usage" />}
+          />
+          <Route
+            path="/settings/billing"
+            element={<Settings section="billing" />}
+          />
+          {/* Integrations is for personal accounts, whose only route to
+                connecting a Gmail mailbox it is, and for organization and
+                platform owners. Other members are bounced home. The sidebar and
+                Settings links gate on the same predicate. */}
+          <Route
+            path="/integrations"
+            element={
+              canViewIntegrations(user) ? (
+                <Integrations />
+              ) : (
+                <Navigate to={accountHome} replace />
+              )
+            }
+          />
+          {/* Theme customizer as a page, so the settings sidebar's
+                Appearance entry navigates like My Profile / Integrations. */}
+          <Route path="/appearance" element={<Appearance />} />
+          {/* Docs / API / SDK / keys, moved off the main sidebar into the
+                settings family. Personal accounts never had the sidebar group,
+                so they are bounced home rather than shown an empty page; the
+                SettingsShell rail entry gates on the same predicate. */}
+          <Route
+            path="/settings/developers"
+            element={
+              user?.account_type !== "personal" ? (
+                <DeveloperSettings />
+              ) : (
+                <Navigate to={accountHome} replace />
+              )
+            }
+          />
+          {/* The owner-only feature access matrix self-guards. One component
+                serves both scopes; the backend resolves the matrix from the
+                caller's scope. */}
+          <Route path="/organization/access" element={<FeatureAccessPage />} />
+          <Route path="/platform/access" element={<FeatureAccessPage />} />
+          <Route path="/billing" element={<Billing />} />
+          <Route
+            path="/platform/organizations"
+            element={<PlatformOrganizations />}
+          />
+          <Route path="/platform/users" element={<PlatformUsers />} />
+          <Route
+            path="/platform/members/:id"
+            element={<MemberDetail scope="platform" />}
+          />
+          <Route
+            path="/platform/enterprise"
+            element={<PlatformEnterprises />}
+          />
+          <Route path="/platform/members" element={<PlatformMembers />} />
+          {/* The platform's own endpoint catalogue, read from
+                /api/openapi.json. The page gates on platform scope itself. */}
+          <Route path="/platform/api" element={<PlatformApis />} />
+          <Route path="/platform/billing" element={<PlatformBilling />} />
+          <Route path="/platform/developer" element={<PlatformDeveloper />} />
+          <Route path="/platform/support" element={<PlatformSupport />} />
+          <Route path="/platform/analytics" element={<PlatformAnalytics />} />
+          {/* The page gates on organization scope itself. */}
+          <Route
+            path="/organization/analytics"
+            element={<OrganizationAnalytics />}
+          />
+          <Route path="/platform/welcome" element={<PlatformWelcome />} />
+          <Route path="/platform/secrets" element={<PlatformSecrets />} />
+          {/* All log and audit surfaces live under one /logs/* namespace;
+                the older paths below redirect here. */}
+          <Route path="/logs" element={<Navigate to="/logs/app" replace />} />
+          <Route path="/logs/app" element={<PlatformLogs />} />
+          <Route path="/logs/users" element={<PlatformUserLogs />} />
+          <Route path="/logs/audit" element={<AuditSecurity />} />
+          <Route path="/logs/user-audit" element={<UserAudit />} />
+          <Route path="/logs/visitors" element={<PlatformVisitors />} />
+          <Route
+            path="/platform/logs"
+            element={<Navigate to="/logs/app" replace />}
+          />
+          <Route
+            path="/organization/logs"
+            element={<Navigate to="/logs/app" replace />}
+          />
+          <Route
+            path="/platform/user-logs"
+            element={<Navigate to="/logs/users" replace />}
+          />
+          <Route
+            path="/platform/visitors"
+            element={<Navigate to="/logs/visitors" replace />}
+          />
+          <Route path="/api-keys" element={<ApiKeysPage />} />
+          <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/projects/:owner/:repo" element={<ProjectDetail />} />
+          {/* Org-master-key flows: bootstrap shows the 24-word mnemonic
+                once, recovery-key accepts it on a fresh device, and impersonate
+                is the owner/admin proof view. */}
+          <Route
+            path="/organization/recovery-key/bootstrap"
+            element={<OrgKeyBootstrap />}
+          />
+          <Route
+            path="/organization/recovery-key"
+            element={<OrgRecoveryKey />}
+          />
+          <Route
+            path="/organization/members/:uid/impersonate"
+            element={<RecoverMemberData />}
+          />
+          {/* Legacy alias. */}
+          <Route
+            path="/organization/members/:uid/recover-data"
+            element={
+              <Navigate
+                to={
+                  typeof window !== "undefined"
+                    ? window.location.pathname.replace(
+                        /\/recover-data$/,
+                        "/impersonate"
+                      ) + window.location.search
+                    : "/organization/members"
+                }
+                replace
+              />
+            }
+          />
+          <Route
+            path="/organization/audit/key-access"
+            element={<OrgAuditLog />}
+          />
+          <Route
+            path="/security/audit"
+            element={<Navigate to="/logs/audit" replace />}
+          />
+          <Route path="/recover" element={<RecoverPage />} />
+          <Route path="/settings/sso" element={<SsoSettings />} />
+          <Route path="/settings/inboxes" element={<SharedInboxes />} />
+          <Route path="/settings/webhooks" element={<Webhooks />} />
+          <Route path="/settings/scim" element={<ScimTokens />} />
+          <Route path="/settings/plans" element={<PlanAdmin />} />
+          <Route path="/settings/ai" element={<AiSettings />} />
+          {/* Readable by anyone in the scope — the page itself hides the
+                  editing affordances without `task_statuses:manage`. */}
+          <Route path="/settings/statuses" element={<TaskStatuses />} />
+          <Route
+            path="/settings/repositories"
+            element={<RepositorySettings />}
+          />
+          <Route
+            path="/settings/repositories/:owner/:repo"
+            element={<RepoSettingsPage />}
+          />
+          <Route path="/settings/ai/usage" element={<AiUsageGovernance />} />
+        </Route>
+      </Route>
+
+      {/* Explicit 404, also reported to /api/error-logs. */}
+      <Route
+        path="*"
+        element={<NotFound homePath={user ? accountHome : "/login"} />}
+      />
+    </Routes>
+  );
+
   return (
     <RouteErrorBoundary>
       <DesktopUpdateBanner />
@@ -161,427 +561,9 @@ export default function App() {
           </div>
         }
       >
-        <Routes>
-          <Route
-            path="/"
-            element={user ? (redirectToAccountHome ?? <Home />) : <Home />}
-          />
-
-          {/* Public routes. */}
-          <Route
-            path="/login"
-            element={user ? (redirectToAccountHome ?? <Login />) : <Login />}
-          />
-          <Route
-            path="/register"
-            element={
-              user ? (redirectToAccountHome ?? <Register />) : <Register />
-            }
-          />
-          <Route
-            path="/register-business"
-            element={
-              user ? (
-                (redirectToAccountHome ?? <RegisterBusiness />)
-              ) : (
-                <RegisterBusiness />
-              )
-            }
-          />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/verify-email" element={<VerifyEmail />} />
-          <Route
-            path="/recover-with-mnemonic"
-            element={<RecoverWithMnemonicPage />}
-          />
-          {/* The secure-send magic link is deliberately public: the recipient
-            need not be a Wayve user, and the passphrase is what unlocks the
-            message. The page fetches ciphertext from a no-auth route and
-            decrypts entirely client-side. */}
-          <Route path="/m/:token" element={<SecureMessageView />} />
-          <Route path="/organization" element={<Organization />} />
-          <Route path="/services/:slug" element={<LegacyServiceRedirect />} />
-          <Route path="/docs/services/:slug" element={<ServicePage />} />
-          {/* Pricing sits outside ProtectedRoute so logged-out visitors can view
-            plans without being bounced to /login, and it renders its own header
-            chrome so it needs no Layout. Personal accounts are redirected to
-            Settings › Billing, where "Manage billing & upgrade" lives. */}
-          <Route
-            path="/pricing"
-            element={
-              <RequirePricingAccess>
-                <Pricing />
-              </RequirePricingAccess>
-            }
-          />
-          <Route path="/support" element={<Support />} />
-          {/* Public, for signed-in and signed-out visitors alike: Google's OAuth
-            verification links to it and requires the home page to as well. */}
-          <Route path="/privacy" element={<Privacy />} />
-          <Route path="/book-demo" element={<BookDemo />} />
-          {/* The whole /docs/* tree is public, so anyone can browse the API
-            contract. Legacy paths (/developers, /developers/quotas,
-            /services/:slug) redirect to their canonical /docs/* URL. */}
-          <Route path="/docs" element={<DocsIndex />} />
-          <Route path="/docs/api" element={<SwaggerDocs />} />
-          <Route path="/docs/developers" element={<Developers />} />
-          <Route path="/docs/quotas" element={<Quotas />} />
-          {/* The markdown catalog matches anything else under /docs/*, so it
-            must stay AFTER the static routes above or /docs/api and friends
-            would be treated as slugs. */}
-          <Route path="/docs/:slug" element={<Docs />} />
-          <Route
-            path="/developers"
-            element={<Navigate to="/docs/developers" replace />}
-          />
-          <Route
-            path="/developers/quotas"
-            element={<Navigate to="/docs/quotas" replace />}
-          />
-
-          <Route element={<ProtectedRoute />}>
-            <Route element={<Layout />}>
-              {/* Sidebar split-pane app routes are generated from the SPLIT_APPS
-                registry in LayoutConfig.ts, so adding an app there adds both the
-                sidebar entry and its route. Guarded or redirecting ones opt out
-                via autoRoute:false and are declared explicitly below. */}
-              {SPLIT_APPS.filter((app) => app.autoRoute !== false).map(
-                (app) => (
-                  <Route key={app.key} path={app.path} element={<app.Comp />} />
-                )
-              )}
-
-              {/* A single ticket opens on its own page (Tickets board routes here
-                  via config.detailPath) instead of the edit modal. */}
-              <Route path="/tickets/:id" element={<TicketDetail />} />
-
-              {/* A single user story opens on its own page (User Stories board
-                  routes here via config.detailPath) when Edit is clicked; a name
-                  click opens the in-page drawer instead. */}
-              <Route path="/user-stories/:id" element={<StoryDetail />} />
-
-              <Route path="/home" element={redirectToAccountHome ?? <Home />} />
-              <Route
-                path="/organization/home"
-                element={
-                  isOrganizationUser ? (
-                    <OrganizationAdminHome />
-                  ) : (
-                    (redirectToAccountHome ?? <OrganizationAdminHome />)
-                  )
-                }
-              />
-              {/* Legacy alias — bookmarks from before the rename. */}
-              <Route
-                path="/organization-home"
-                element={<Navigate to="/organization/home" replace />}
-              />
-              <Route
-                path="/platform/home"
-                element={
-                  // A platform user whose role-derived home is some other page
-                  // (billing lands on /platform/billing) is bounced out, so
-                  // /platform/home never becomes the landing surface for a role
-                  // with no actionable panels on it.
-                  accountType === "platform_admin" &&
-                  accountHome === "/platform/home" ? (
-                    <PlatformAdminHome />
-                  ) : (
-                    (redirectToAccountHome ?? <PlatformAdminHome />)
-                  )
-                }
-              />
-              {/* Legacy alias — bookmarks from before the rename. */}
-              <Route
-                path="/platform-admin-home"
-                element={<Navigate to="/platform/home" replace />}
-              />
-              <Route
-                path="/organization/members"
-                element={<OrganizationMembers />}
-              />
-              <Route
-                path="/organization/members/:id"
-                element={<MemberDetail scope="organization" />}
-              />
-              <Route
-                path="/organization/domains"
-                element={<OrganizationDomains />}
-              />
-              <Route
-                path="/organization/settings"
-                element={<Navigate to="/settings" replace />}
-              />
-              <Route
-                path="/organization/:slug"
-                element={redirectToAccountHome ?? <OrganizationHome />}
-              />
-              <Route path="/emails/attachments" element={<EmailFiles />} />
-              {/* Legacy alias. */}
-              <Route
-                path="/email-files"
-                element={<Navigate to="/emails/attachments" replace />}
-              />
-              <Route path="/reminders" element={<Reminders />} />
-              <Route path="/call" element={<Call />} />
-              <Route path="/documents" element={<Documents />} />
-              <Route path="/skills" element={<Skills />} />
-              <Route path="/teams/:slug" element={<TeamPage />} />
-              {/* Legacy alias (no hyphen — original spelling). */}
-              <Route
-                path="/aichat"
-                element={<Navigate to="/ai-chat" replace />}
-              />
-              {/* Any authenticated user may reach the Code Repo viewer, since
-                the backend proxy serves a single read-only repo. The guard only
-                bounces unauthenticated visitors. */}
-              <Route
-                path="/github"
-                element={
-                  user ? <GitHubRepo /> : <Navigate to={accountHome} replace />
-                }
-              />
-              {/* Per-project repo viewer. The bare /github above stays the
-                platform team's single-repo dashboard. */}
-              <Route
-                path="/github/:projectId"
-                element={
-                  user ? <GitHubRepo /> : <Navigate to={accountHome} replace />
-                }
-              />
-              {/* Platform-owner only. */}
-              <Route
-                path="/logs/tracing"
-                element={
-                  user?.scope === "platform" &&
-                  user?.effective_role === "owner" ? (
-                    <TracingDashboard />
-                  ) : (
-                    <Navigate to={accountHome} replace />
-                  )
-                }
-              />
-              <Route
-                path="/platform/tracing"
-                element={<Navigate to="/logs/tracing" replace />}
-              />
-              {/* Platform-owner only. */}
-              <Route
-                path="/platform/domains"
-                element={
-                  user?.scope === "platform" &&
-                  user?.effective_role === "owner" ? (
-                    <DomainVerification />
-                  ) : (
-                    <Navigate to={accountHome} replace />
-                  )
-                }
-              />
-              {/* Asking for access and reviewing requests are two tabs of one
-                page now. The old paths still resolve — they were linked from
-                emails and bookmarks — and land on the matching tab. */}
-              <Route path="/requests" element={<RequestsPage />} />
-              <Route
-                path="/test-access"
-                element={<Navigate to="/requests?tab=mine" replace />}
-              />
-              <Route
-                path="/access-requests"
-                element={<Navigate to="/requests?tab=review" replace />}
-              />
-              <Route path="/profile" element={<Profile />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route
-                path="/settings/notifications"
-                element={<Settings section="notifications" />}
-              />
-              <Route
-                path="/settings/usage"
-                element={<Settings section="usage" />}
-              />
-              <Route
-                path="/settings/billing"
-                element={<Settings section="billing" />}
-              />
-              {/* Integrations is for personal accounts, whose only route to
-                connecting a Gmail mailbox it is, and for organization and
-                platform owners. Other members are bounced home. The sidebar and
-                Settings links gate on the same predicate. */}
-              <Route
-                path="/integrations"
-                element={
-                  canViewIntegrations(user) ? (
-                    <Integrations />
-                  ) : (
-                    <Navigate to={accountHome} replace />
-                  )
-                }
-              />
-              {/* Theme customizer as a page, so the settings sidebar's
-                Appearance entry navigates like My Profile / Integrations. */}
-              <Route path="/appearance" element={<Appearance />} />
-              {/* Docs / API / SDK / keys, moved off the main sidebar into the
-                settings family. Personal accounts never had the sidebar group,
-                so they are bounced home rather than shown an empty page; the
-                SettingsShell rail entry gates on the same predicate. */}
-              <Route
-                path="/settings/developers"
-                element={
-                  user?.account_type !== "personal" ? (
-                    <DeveloperSettings />
-                  ) : (
-                    <Navigate to={accountHome} replace />
-                  )
-                }
-              />
-              {/* The owner-only feature access matrix self-guards. One component
-                serves both scopes; the backend resolves the matrix from the
-                caller's scope. */}
-              <Route
-                path="/organization/access"
-                element={<FeatureAccessPage />}
-              />
-              <Route path="/platform/access" element={<FeatureAccessPage />} />
-              <Route path="/billing" element={<Billing />} />
-              <Route
-                path="/platform/organizations"
-                element={<PlatformOrganizations />}
-              />
-              <Route path="/platform/users" element={<PlatformUsers />} />
-              <Route
-                path="/platform/members/:id"
-                element={<MemberDetail scope="platform" />}
-              />
-              <Route
-                path="/platform/enterprise"
-                element={<PlatformEnterprises />}
-              />
-              <Route path="/platform/members" element={<PlatformMembers />} />
-              {/* The platform's own endpoint catalogue, read from
-                /api/openapi.json. The page gates on platform scope itself. */}
-              <Route path="/platform/api" element={<PlatformApis />} />
-              <Route path="/platform/billing" element={<PlatformBilling />} />
-              <Route
-                path="/platform/developer"
-                element={<PlatformDeveloper />}
-              />
-              <Route path="/platform/support" element={<PlatformSupport />} />
-              <Route
-                path="/platform/analytics"
-                element={<PlatformAnalytics />}
-              />
-              {/* The page gates on organization scope itself. */}
-              <Route
-                path="/organization/analytics"
-                element={<OrganizationAnalytics />}
-              />
-              <Route path="/platform/welcome" element={<PlatformWelcome />} />
-              <Route path="/platform/secrets" element={<PlatformSecrets />} />
-              {/* All log and audit surfaces live under one /logs/* namespace;
-                the older paths below redirect here. */}
-              <Route
-                path="/logs"
-                element={<Navigate to="/logs/app" replace />}
-              />
-              <Route path="/logs/app" element={<PlatformLogs />} />
-              <Route path="/logs/users" element={<PlatformUserLogs />} />
-              <Route path="/logs/audit" element={<AuditSecurity />} />
-              <Route path="/logs/user-audit" element={<UserAudit />} />
-              <Route path="/logs/visitors" element={<PlatformVisitors />} />
-              <Route
-                path="/platform/logs"
-                element={<Navigate to="/logs/app" replace />}
-              />
-              <Route
-                path="/organization/logs"
-                element={<Navigate to="/logs/app" replace />}
-              />
-              <Route
-                path="/platform/user-logs"
-                element={<Navigate to="/logs/users" replace />}
-              />
-              <Route
-                path="/platform/visitors"
-                element={<Navigate to="/logs/visitors" replace />}
-              />
-              <Route path="/api-keys" element={<ApiKeysPage />} />
-              <Route path="/projects" element={<ProjectsPage />} />
-              <Route
-                path="/projects/:owner/:repo"
-                element={<ProjectDetail />}
-              />
-              {/* Org-master-key flows: bootstrap shows the 24-word mnemonic
-                once, recovery-key accepts it on a fresh device, and impersonate
-                is the owner/admin proof view. */}
-              <Route
-                path="/organization/recovery-key/bootstrap"
-                element={<OrgKeyBootstrap />}
-              />
-              <Route
-                path="/organization/recovery-key"
-                element={<OrgRecoveryKey />}
-              />
-              <Route
-                path="/organization/members/:uid/impersonate"
-                element={<RecoverMemberData />}
-              />
-              {/* Legacy alias. */}
-              <Route
-                path="/organization/members/:uid/recover-data"
-                element={
-                  <Navigate
-                    to={
-                      typeof window !== "undefined"
-                        ? window.location.pathname.replace(
-                            /\/recover-data$/,
-                            "/impersonate"
-                          ) + window.location.search
-                        : "/organization/members"
-                    }
-                    replace
-                  />
-                }
-              />
-              <Route
-                path="/organization/audit/key-access"
-                element={<OrgAuditLog />}
-              />
-              <Route
-                path="/security/audit"
-                element={<Navigate to="/logs/audit" replace />}
-              />
-              <Route path="/recover" element={<RecoverPage />} />
-              <Route path="/settings/sso" element={<SsoSettings />} />
-              <Route path="/settings/inboxes" element={<SharedInboxes />} />
-              <Route path="/settings/webhooks" element={<Webhooks />} />
-              <Route path="/settings/scim" element={<ScimTokens />} />
-              <Route path="/settings/plans" element={<PlanAdmin />} />
-              <Route path="/settings/ai" element={<AiSettings />} />
-              {/* Readable by anyone in the scope — the page itself hides the
-                  editing affordances without `task_statuses:manage`. */}
-              <Route path="/settings/statuses" element={<TaskStatuses />} />
-              <Route
-                path="/settings/repositories"
-                element={<RepositorySettings />}
-              />
-              <Route
-                path="/settings/repositories/:owner/:repo"
-                element={<RepoSettingsPage />}
-              />
-              <Route
-                path="/settings/ai/usage"
-                element={<AiUsageGovernance />}
-              />
-            </Route>
-          </Route>
-
-          {/* Explicit 404, also reported to /api/error-logs. */}
-          <Route
-            path="*"
-            element={<NotFound homePath={user ? accountHome : "/login"} />}
-          />
-        </Routes>
+        <PaneRoutesContext.Provider value={renderRoutes}>
+          {renderRoutes()}
+        </PaneRoutesContext.Provider>
       </Suspense>
     </RouteErrorBoundary>
   );

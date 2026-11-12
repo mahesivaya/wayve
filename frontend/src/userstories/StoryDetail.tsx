@@ -12,6 +12,7 @@ import { getTaskStatuses, type TaskStatusRow } from "../api/taskStatuses";
 // Reuses the ticket detail-page styling so the full-page story editor matches
 // the ticket one (same `.ticket-detail-*` classes). The board's drawer shows
 // the compose form; this is the "Edit → full page" surface.
+import { useTabTitle } from "../components/tabs/useTabTitle";
 import "../tickets/ticketDetail.css";
 
 const PRIORITIES: TaskPriority[] = [1, 2, 3, 4, 5];
@@ -117,6 +118,12 @@ export default function StoryDetail() {
       priority !== ((story.priority as TaskPriority) ?? 3) ||
       status !== story.status ||
       assignee !== (story.assignee ?? ""));
+
+  useTabTitle(
+    story
+      ? `${story.task_number != null ? `#${story.task_number} ` : ""}${story.name}`
+      : null
+  );
 
   const remove = async () => {
     if (!story) return;

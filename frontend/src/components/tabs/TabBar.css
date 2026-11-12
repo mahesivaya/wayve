@@ -1,0 +1,204 @@
+/* The main pane's tab strip, styled after Cursor / VS Code editor tabs: flush
+   tabs on the chrome surface, the active one sharing the page's background with
+   an accent line on top. */
+.app-tabbar {
+  position: relative;
+  /* Above the pane drop overlay, so tabs can still be reordered mid-drag. */
+  z-index: 21;
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  height: 34px;
+  min-width: 0;
+  background: var(--color-chrome-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* The scrolling part of the strip. It shrinks before anything else, so the
+   "+" after it never leaves the screen; tabs narrow first, then scroll. */
+.app-tabbar-tabs {
+  display: flex;
+  align-items: stretch;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.app-tabbar-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.app-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 200px;
+  min-width: 90px;
+  padding: 0 6px 0 14px;
+  border-right: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+.app-tab:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+.app-tab.active {
+  background: var(--color-canvas);
+  color: var(--color-text-primary);
+  box-shadow: inset 0 2px 0 var(--color-primary-action, var(--color-primary));
+  /* Sits over the strip's bottom border so it merges into the page. */
+  margin-bottom: -1px;
+}
+.app-tab:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+.app-tab.drop-target {
+  box-shadow: inset 2px 0 0 var(--color-primary);
+}
+
+.app-tab-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.app-tab-close,
+.app-tab-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0;
+}
+.app-tab-close {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  opacity: 0;
+}
+.app-tab:hover .app-tab-close,
+.app-tab.active .app-tab-close,
+.app-tab-close:focus-visible {
+  opacity: 0.7;
+}
+.app-tab-close:hover {
+  opacity: 1;
+  background: var(--color-surface-hover);
+}
+
+.app-tab-add {
+  width: 34px;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  border-radius: 0;
+}
+.app-tab-add:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+.app-tab-add:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.app-tab-close svg,
+.app-tab-add svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  fill: none;
+}
+.app-tab-add svg {
+  width: 14px;
+  height: 14px;
+}
+
+.header-spacer {
+  flex: 1;
+}
+
+/* Header actions (e.g. Upgrade) pinned to the strip's right end. */
+.app-tabbar-trailing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding: 0 10px;
+  flex-shrink: 0;
+}
+
+/* With no header row, the brand + sidebar toggle head the sidebar, level with
+   the tab strip beside it. */
+.sidebar.has-brand {
+  padding-top: 0;
+}
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 34px;
+  margin: 0 -8px;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+.sidebar-brand .header-brand {
+  /* Layout sizes the header copy inline; here it just fills the sidebar. */
+  width: auto !important;
+  flex: 1;
+  min-width: 0;
+}
+.sidebar-brand .header-collapse-btn {
+  margin-right: 0;
+}
+/* Icon rail: only the toggle, centred. */
+.sidebar.collapsed:not(.peek) .sidebar-brand {
+  padding: 0;
+  justify-content: center;
+}
+.sidebar.collapsed:not(.peek) .sidebar-brand .logo {
+  display: none;
+}
+.sidebar.collapsed:not(.peek) .sidebar-brand .header-collapse-btn {
+  margin: 0;
+}
+
+/* macOS desktop shell: the window controls float over the sidebar's top-left,
+   so the brand row keeps clear of them (in the rail, the toggle drops below). */
+html.is-titlebar-inset:not(.is-fullscreen)
+  .sidebar.collapsed:not(.peek)
+  .sidebar-brand {
+  height: 64px;
+  align-items: flex-end;
+  padding-bottom: 6px;
+}
+html.is-titlebar-inset:not(.is-fullscreen)
+  .sidebar.collapsed:not(.peek)
+  .sidebar-brand
+  .header-brand {
+  padding-left: 0;
+  min-width: 0;
+  justify-content: center;
+}
+
+/* Drop marker when a tab is dragged to the empty end of a strip. */
+.app-tab-drop-end {
+  width: 2px;
+  align-self: stretch;
+  background: var(--color-primary);
+}

@@ -3,7 +3,7 @@
 // navigated and replaced the routed first pane. Drives the real sidebar on both
 // admin homes; the page modules are stubbed so only Layout is under test.
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 
@@ -143,9 +143,12 @@ const renderAt = (path: string) =>
   );
 
 const paneTitles = (container: HTMLElement) =>
-  Array.from(container.querySelectorAll(".split-pane-title")).map(
-    (el) => el.textContent?.trim() ?? ""
-  );
+  Array.from(
+    container.querySelectorAll(
+      // A pane's title is its active tab in its Cursor-style strip.
+      ".split-pane .app-tab.active .app-tab-title, .split-pane-title"
+    )
+  ).map((el) => el.textContent?.trim() ?? "");
 
 const persistSplit = (rightView: string, splitTarget: "left" | "right") =>
   window.localStorage.setItem(
@@ -165,10 +168,13 @@ describe.each(ACCOUNTS)("Workspace items on the $name home", (account) => {
       const user = userEvent.setup();
       const { container } = renderAt(account.home);
 
-      await user.click(screen.getByRole("button", { name: "Split view" }));
-      await user.click(
-        screen.getByRole("menuitem", { name: /Split vertically/ })
-      );
+      // The header split button is gone; the keyboard shortcut drives the
+      // same handler (Ctrl+\\ columns, Ctrl+Shift+\\ stacks).
+      fireEvent.keyDown(document, {
+        key: "\\",
+        ctrlKey: true,
+        shiftKey: false,
+      });
       // Click inside the second pane, exactly as a user would to activate it.
       await user.click(await screen.findByTestId("pane-home"));
       await user.click(screen.getByRole("link", { name: new RegExp(link) }));

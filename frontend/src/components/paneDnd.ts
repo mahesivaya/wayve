@@ -19,9 +19,22 @@ export type DropZone = "left" | "right" | "top" | "bottom" | "center";
 // instead of uploading.
 export const PANE_DND_MIME = "application/x-wayve-pane";
 
+/** Which tab strip a tab belongs to: the main view's, or the right group's. */
+export type TabStripId = "main" | "right";
+
+/** A tab dragged out of a strip: carries its exact URL (Cursor-style). */
+export type TabDragPayload = {
+  kind: "tab";
+  tabId: string;
+  path: string;
+  title: string;
+  source: TabStripId;
+};
+
 export type PaneDragPayload =
   /** Dragged out of the sidebar: opens a new app. */
   | { kind: "app"; app: AppKey }
+  | TabDragPayload
   /** Dragged by an open pane's title: moves/swaps that pane. */
   | { kind: "pane"; from: PaneKey; half?: PaneHalf };
 
@@ -59,6 +72,16 @@ export function readPaneDragData(
     if (o.kind === "app" && isAppKey(o.app)) {
       return { kind: "app", app: o.app };
     }
+    if (
+      o.kind === "tab" &&
+      typeof o.tabId === "string" &&
+      typeof o.path === "string" &&
+      o.path.startsWith("/")
+    ) {
+      const title = typeof o.title === "string" ? o.title : o.path;
+      const source: TabStripId = o.source === "right" ? "right" : "main";
+      return { kind: "tab", tabId: o.tabId, path: o.path, title, source };
+    }
     if (o.kind === "pane" && isPaneKey(o.from)) {
       const half = o.half === "top" || o.half === "bottom" ? o.half : undefined;
       return { kind: "pane", from: o.from, half };
@@ -67,6 +90,33 @@ export function readPaneDragData(
   } catch {
     return null;
   }
+}
+
+/**
+ * The split-pane app a header tab's URL belongs to. Detail pages resolve to
+ * their board (`/tickets/5` → tickets) since panes hold apps, not records.
+ * Null when the route isn't a split-pane app (settings, platform pages, …).
+ */
+export function appKeyForTabPath(pathname: string): AppKey | null {
+  if (pathname === "/" || pathname === "/home") return "home";
+  const match = SPLIT_APPS.filter(
+    (a) =>
+      a.path !== "/" &&
+      (pathname === a.path || pathname.startsWith(`${a.path}/`))
+  ).sort((a, b) => b.path.length - a.path.length)[0];
+  return match?.key ?? null;
+}
+
+/**
+ * Header-tab drags split only once the pointer is past the middle of the pane:
+ * the right half opens the tab beside the page, the left half does nothing.
+ */
+export function tabDropZoneFromPointer(
+  rect: { left: number; width: number },
+  x: number
+): DropZone | null {
+  if (rect.width <= 0) return null;
+  return (x - rect.left) / rect.width > 0.5 ? "right" : null;
 }
 
 /**

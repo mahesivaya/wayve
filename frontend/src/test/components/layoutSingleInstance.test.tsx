@@ -4,7 +4,7 @@
 // and the layout never holds the same app twice. Drives the real sidebar links
 // and split control; the page modules are stubbed so only Layout is under test.
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
@@ -52,9 +52,12 @@ vi.mock("../../home/Home", () => ({ default: () => <div>home page</div> }));
 import Layout from "../../components/Layout";
 
 const paneTitles = (container: HTMLElement) =>
-  Array.from(container.querySelectorAll(".split-pane-title")).map(
-    (el) => el.textContent?.trim() ?? ""
-  );
+  Array.from(
+    container.querySelectorAll(
+      // A pane's title is its active tab in its Cursor-style strip.
+      ".split-pane .app-tab.active .app-tab-title, .split-pane-title"
+    )
+  ).map((el) => el.textContent?.trim() ?? "");
 
 describe("Layout keeps one pane per app", () => {
   beforeEach(() => {
@@ -73,10 +76,13 @@ describe("Layout keeps one pane per app", () => {
 
     // Open the second column (it starts on Home and takes focus), then load
     // Notes into it from the sidebar.
-    await user.click(screen.getByRole("button", { name: "Split view" }));
-    await user.click(
-      screen.getByRole("menuitem", { name: /Split vertically/ })
-    );
+    // The header split button is gone; the keyboard shortcut drives the
+    // same handler (Ctrl+\\ columns, Ctrl+Shift+\\ stacks).
+    fireEvent.keyDown(document, {
+      key: "\\",
+      ctrlKey: true,
+      shiftKey: false,
+    });
     await user.click(screen.getByRole("link", { name: "Notes" }));
     expect(paneTitles(container)).toEqual(["Home", "Notes"]);
 

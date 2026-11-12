@@ -164,6 +164,8 @@ export function applyPaneDrop(
   zone: DropZone,
   payload: PaneDragPayload
 ): PaneDropResult | null {
+  // Header tabs open a URL, not an app; Layout places them itself.
+  if (payload.kind === "tab") return null;
   const sourceHalf: PaneHalf =
     payload.kind === "pane" ? (payload.half ?? "top") : "top";
 

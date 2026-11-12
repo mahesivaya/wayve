@@ -10,7 +10,7 @@
 // This test drives the real header split control and asserts a stateful child
 // keeps its state. It fails (state resets to 0) against the two-branch version.
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { useState } from "react";
@@ -92,10 +92,13 @@ describe("Layout split does not remount the page", () => {
     // The real control: header split button, then the "Split vertically" item
     // (which opens the second column — the label follows the divider's
     // orientation, not the action name).
-    await user.click(screen.getByRole("button", { name: "Split view" }));
-    await user.click(
-      screen.getByRole("menuitem", { name: /Split vertically/ })
-    );
+    // The header split button is gone; the keyboard shortcut drives the
+    // same handler (Ctrl+\\ columns, Ctrl+Shift+\\ stacks).
+    fireEvent.keyDown(document, {
+      key: "\\",
+      ctrlKey: true,
+      shiftKey: false,
+    });
 
     // The split actually opened...
     expect(
@@ -122,10 +125,13 @@ describe("Layout split does not remount the page", () => {
 
     // "Split horizontally" stacks the focused pane top/bottom — the path that
     // used to push the page two levels deeper into a .pane-half.
-    await user.click(screen.getByRole("button", { name: "Split view" }));
-    await user.click(
-      screen.getByRole("menuitem", { name: /Split horizontally/ })
-    );
+    // The header split button is gone; the keyboard shortcut drives the
+    // same handler (Ctrl+\\ columns, Ctrl+Shift+\\ stacks).
+    fireEvent.keyDown(document, {
+      key: "\\",
+      ctrlKey: true,
+      shiftKey: true,
+    });
 
     // The stack actually formed (each half carries its own close button)...
     expect(
