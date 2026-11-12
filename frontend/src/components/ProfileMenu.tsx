@@ -1,7 +1,6 @@
 import { useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import { homePathForUser } from "../auth/accountHome";
 import { canViewIntegrations } from "../auth/permissions";
 import Avatar from "./Avatar";
 import { getApiBase } from "../config/env";
@@ -11,38 +10,15 @@ export default function ProfileMenu({
   minimal = false,
 }: {
   placement?: "header" | "sidebar";
-  // Only Settings, the admin switch and Log out. For wide screens, where
+  // Only Settings and Log out. For wide screens, where
   // Settings' left rail (SettingsShell) already carries Profile and Integrations.
   // Appearance is never in this menu: it lives in Settings (the rail on wide
   // screens, a card on the General page on narrow ones).
   minimal?: boolean;
 } = {}) {
-  const { user, logout, switchMode } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [switching, setSwitching] = useState(false);
-
-  const inAdminMode = user?.mode === "admin";
-  // Eligible owners see this, plus anyone already elevated so they can exit.
-  const showSwitcher = inAdminMode || (user?.can_switch_admin ?? false);
-
-  const handleSwitch = async (target: "normal" | "admin") => {
-    if (switching) return;
-    setSwitching(true);
-    try {
-      await switchMode(target);
-      setMenuOpen(false);
-      void navigate(
-        target === "admin"
-          ? homePathForUser({ ...user, mode: "admin", can_switch_admin: true })
-          : "/home"
-      );
-    } catch {
-      // Server refused (e.g. no longer eligible); leave the menu as-is.
-    } finally {
-      setSwitching(false);
-    }
-  };
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -66,7 +42,7 @@ export default function ProfileMenu({
 
   // Wide screens: the sidebar's account control is a Settings gear (with a
   // small avatar badge) that opens Settings directly — its left rail carries
-  // Profile, Integrations, Appearance, the admin switch and Log out.
+  // Profile, Integrations, Appearance and Log out.
   if (inSidebar && minimal) {
     return (
       <div className="profile-menu profile-menu--sidebar">
@@ -158,31 +134,6 @@ export default function ProfileMenu({
               <span className="profile-dropdown-icon">🔌</span>
               <span className="profile-dropdown-label">Integrations</span>
             </button>
-          )}
-
-          {showSwitcher && (
-            <>
-              <div className="profile-dropdown-divider" />
-              <button
-                className="profile-dropdown-item"
-                disabled={switching}
-                title={inAdminMode ? "Exit admin mode" : "Switch to admin mode"}
-                onClick={() =>
-                  void handleSwitch(inAdminMode ? "normal" : "admin")
-                }
-              >
-                <span className="profile-dropdown-icon">
-                  {inAdminMode ? "🚪" : "🛡️"}
-                </span>
-                <span className="profile-dropdown-label">
-                  {switching
-                    ? "Switching…"
-                    : inAdminMode
-                      ? "Exit admin mode"
-                      : "Switch to admin mode"}
-                </span>
-              </button>
-            </>
           )}
 
           <div className="profile-dropdown-divider" />

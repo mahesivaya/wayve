@@ -106,9 +106,10 @@ function ColorPicker({
 export default function TaskStatuses() {
   const { user } = useAuth();
   const canManage = hasPermission(user, "task_statuses:manage");
-  // Owners of an org/platform scope can elevate; personal accounts and plain
-  // members cannot, and get the "ask an admin" wording instead.
-  const canSwitchAdmin =
+  // Owners of an org/platform scope are always moved into admin mode (see
+  // AuthContext); one still read-only here is mid-way there, so say so rather
+  // than "ask an admin".
+  const isOwnerInNormalMode =
     user?.mode !== "admin" && (user?.can_switch_admin ?? false);
 
   const [statuses, setStatuses] = useState<TaskStatusRow[]>([]);
@@ -555,11 +556,12 @@ export default function TaskStatuses() {
         {/* An org/platform owner browsing in normal session mode is downscoped
             to `member` and lands here read-only, so "ask an admin" would be
             useless advice to the very person who is one. Point at the mode
-            switch when they could elevate, and at their admin otherwise. */}
+            reload when they are about to be elevated, and at their admin
+            otherwise. */}
         {!canManage && !loading && (
           <p className="ts-muted">
-            {canSwitchAdmin
-              ? "You're in normal mode, so these are read-only. Switch to admin mode to rename, recolour or reorder them."
+            {isOwnerInNormalMode
+              ? "These are read-only until your admin access loads. Reload the page to rename, recolour or reorder them."
               : "These are your organization's shared statuses. An owner or admin can change them."}
           </p>
         )}
