@@ -97,10 +97,14 @@ describe("pull requests for a non-owner", () => {
     expect(screen.queryByText("Merge pull request")).toBeNull();
   });
 
-  it("still shows an owner the approve card", async () => {
+  it("shows an owner the merge card, with no approve action", async () => {
     mockRole = "owner";
     renderViewer();
     fireEvent.click(await screen.findByText("Open PR for members"));
-    expect(await screen.findByText("Owner review")).toBeTruthy();
+    expect(await screen.findByText("Merge pull request")).toBeTruthy();
+    // Approving was removed: the app's GitHub account opens these PRs, and
+    // GitHub won't let an author approve their own.
+    expect(screen.queryByText("Owner review")).toBeNull();
+    expect(screen.queryByText("Approve pull request")).toBeNull();
   });
 });

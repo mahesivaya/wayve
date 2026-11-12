@@ -8,7 +8,6 @@ import { getAuthToken } from "../auth/token";
 import RepoAccessPanel from "./RepoAccessPanel";
 import { listProjects, linkProjectRepo, type Project } from "../api/workspace";
 import {
-  approvePullRequest,
   mergePullRequest,
   createCommitComment,
   createPullComment,
@@ -812,8 +811,8 @@ export function GitHubRepoViewer({
 
   // UI gating only, never authorization: the backend proxy is the authority and
   // re-checks every request. Anyone who can open the repo can read and comment
-  // on its pull requests; approving and merging are owner-only, so those cards
-  // are hidden from everyone else.
+  // on its pull requests; merging is owner-only, so the merge card is
+  // hidden from everyone else.
   const { user } = useAuth();
   const isOwner = user?.effective_role === "owner";
   // The per-repo Access panel is for a scope owner or anyone with members:manage.
@@ -898,13 +897,6 @@ export function GitHubRepoViewer({
   const [collapsedPrSections, setCollapsedPrSections] = useState<Set<string>>(
     new Set()
   );
-  // Approval is owner-only and optimistic on success, because the proxied
-  // reviews list stays cached for its TTL.
-  const [approvingPull, setApprovingPull] = useState<number | null>(null);
-  const [approvedPulls, setApprovedPulls] = useState<Set<number>>(new Set());
-  const [approveErrorByPull, setApproveErrorByPull] = useState<
-    Record<number, string>
-  >({});
   // Merge is owner-only. `confirmMergePull` drives the two-step confirm.
   const [mergingPull, setMergingPull] = useState<number | null>(null);
   // PR conversation composer, per PR so a draft survives switching PRs.
@@ -1393,32 +1385,6 @@ export function GitHubRepoViewer({
     },
     [loadPullDetail]
   );
-
-  // Surface GitHub's verbatim failure message. The server PAT is the same GitHub
-  // user who opens the PRs, so approving your own PR always 422s ("Can not
-  // approve your own pull request."); a 403 means the token lacks write scope.
-  const approvePull = async (prNumber: number) => {
-    setApprovingPull(prNumber);
-    setApproveErrorByPull((cur) => {
-      const next = { ...cur };
-      delete next[prNumber];
-      return next;
-    });
-    try {
-      await approvePullRequest(owner, repoName, prNumber);
-      setApprovedPulls((cur) => new Set(cur).add(prNumber));
-    } catch (err) {
-      setApproveErrorByPull((cur) => ({
-        ...cur,
-        [prNumber]:
-          err instanceof Error
-            ? err.message
-            : "Couldn't approve this pull request.",
-      }));
-    } finally {
-      setApprovingPull(null);
-    }
-  };
 
   // On success, refetch the detail (it flips to merged, hiding the action cards)
   // and the PR list (which drops it and its count badge).
@@ -3073,43 +3039,6 @@ export function GitHubRepoViewer({
 
                           {isOwner && d.state === "open" && !d.merged && (
                             <aside className="github-pr-side-col github-pr-full">
-                              {d.state === "open" && !d.merged && (
-                                <div className="github-pr-card github-pr-approve-card">
-                                  <span className="github-pr-card-title">
-                                    Owner review
-                                  </span>
-                                  {approvedPulls.has(selectedPull) ||
-                                  bundle.reviews.some(
-                                    (r) => r.state === "APPROVED"
-                                  ) ? (
-                                    <div className="github-pr-approved">
-                                      ✓ Approved
-                                    </div>
-                                  ) : (
-                                    <>
-                                      <button
-                                        type="button"
-                                        className="github-pr-approve-btn"
-                                        onClick={() =>
-                                          void approvePull(selectedPull)
-                                        }
-                                        disabled={
-                                          approvingPull === selectedPull
-                                        }
-                                      >
-                                        {approvingPull === selectedPull
-                                          ? "Approving…"
-                                          : "Approve pull request"}
-                                      </button>
-                                      {approveErrorByPull[selectedPull] && (
-                                        <div className="github-pr-approve-err">
-                                          {approveErrorByPull[selectedPull]}
-                                        </div>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-                              )}
                               {d.state === "open" && !d.merged && (
                                 <div className="github-pr-card github-pr-merge-card">
                                   <span className="github-pr-card-title">

@@ -21,7 +21,6 @@ vi.mock("../../api/github", () => ({
   getGithubConnection: () => getGithubConnection(),
   getGithubConnectUrl: vi.fn(),
   disconnectGithub: vi.fn(),
-  approvePullRequest: vi.fn(),
   mergePullRequest: vi.fn(),
   createCommitComment: vi.fn(),
 }));
