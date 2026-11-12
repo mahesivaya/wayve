@@ -91,23 +91,6 @@ export const topLanguages = (langs: Record<string, number>, n = 2): string[] =>
     .slice(0, n)
     .map(([name]) => name);
 
-// Owner-only. The thrown error carries GitHub's own message, which callers
-// surface verbatim (e.g. "Can not approve your own pull request.").
-export const approvePullRequest = (
-  owner: string,
-  repo: string,
-  prNumber: number,
-  message?: string
-) =>
-  apiFetchJson<{ state?: string; html_url?: string }>(
-    `/api/github/repos/${owner}/${repo}/pulls/${prNumber}/approve`,
-    {
-      method: "POST",
-      body: JSON.stringify({ body: message ?? undefined }),
-      preserve401: true,
-    }
-  );
-
 export type MergeMethod = "merge" | "squash" | "rebase";
 
 // Owner-only. The thrown error carries GitHub's own message, which callers
