@@ -13,8 +13,8 @@ type Props = {
   summary: ChatConversationSummary;
   presence: PresenceMap;
   /**
-   * Which half of the DM list to render: `"recent"` is the active conversations
-   * above the channels, `"people"` the full directory below them.
+   * Which half of the DM list to render: `"recent"` is the active conversations,
+   * `"people"` everyone you have a DM with, below the channels.
    */
   section: "recent" | "people";
 };
@@ -50,12 +50,14 @@ export default function PersonalChatList({
 
   const unread = rows.filter((r) => r.unread > 0).sort(byRecency);
   const recent = rows.filter((r) => r.unread === 0 && r.lastAt).sort(byRecency);
-  // The directory is the full roster, so someone you have messaged appears both here
-  // and under Recent. DMing a person must not remove them from the list you find
-  // people in.
-  const people = [...rows].sort((a, b) =>
-    a.user.email.localeCompare(b.user.email)
-  );
+  // The DM list: only people you have a conversation with, by name. The person
+  // open on screen stays listed too, so a chat just started from "New chat"
+  // doesn't vanish before its first message.
+  const openUserId =
+    selectedConversation?.type === "user" ? selectedConversation.user.id : null;
+  const people = rows
+    .filter((r) => byUser.has(r.user.id) || r.user.id === openUserId)
+    .sort((a, b) => a.user.email.localeCompare(b.user.email));
 
   // `meta` (relative time and unread badge) explains why a Recent/Unread row is
   // there, so the plain directory row omits it.
@@ -97,9 +99,11 @@ export default function PersonalChatList({
     );
   };
 
-  // The "Users" header (with its "+" start-chat control) is rendered by
-  // ConversationSidebar, which owns the form state.
+  // The "DMs" header is rendered by ConversationSidebar.
   if (section === "people") {
+    if (people.length === 0) {
+      return <p className="conversation-empty">No direct messages yet.</p>;
+    }
     return <>{people.map((r) => renderRow(r, false))}</>;
   }
 

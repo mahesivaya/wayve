@@ -45,7 +45,6 @@ const renderSidebar = (channels: ChatChannel[], myChannelsByDefault: boolean) =>
       onSelectChannel={vi.fn()}
       onJoinChannel={vi.fn()}
       onSelectUser={vi.fn()}
-      onStartChat={vi.fn()}
       onNewChat={vi.fn()}
       composingNew={false}
       summary={{ conversations: [], total_unread: 0 }}

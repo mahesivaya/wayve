@@ -12,7 +12,6 @@ import ChannelCreateForm from "./ChannelCreateForm";
 import ChannelList from "./ChannelList";
 import PersonalChatList from "./PersonalChatList";
 import RecentConversations from "./RecentConversations";
-import StartChatForm from "./StartChatForm";
 import StatusSelector from "./StatusSelector";
 
 type Props = {
@@ -38,8 +37,6 @@ type Props = {
   onSelectChannel: (channel: ChatChannel) => void;
   onJoinChannel: (channel: ChatChannel) => void;
   onSelectUser: (user: ChatUser) => void;
-  // A user found by email via the "+" next to Users, possibly not yet in `users`.
-  onStartChat: (user: ChatUser) => void;
   // Opens the New conversation page in the main area; `composingNew` is true
   // while it's open, to keep the New chat button highlighted.
   onNewChat: () => void;
@@ -88,14 +85,12 @@ export default function ConversationSidebar({
   onSelectChannel,
   onJoinChannel,
   onSelectUser,
-  onStartChat,
   onNewChat,
   composingNew,
   summary,
   presence,
 }: Props) {
   const { setSearchQuery } = useGlobalSearch();
-  const [startingChat, setStartingChat] = useState(false);
   const [browsingChannels, setBrowsingChannels] = useState(false);
   const [view, setView] = useState<SidebarView>(readView);
   const chooseView = (next: SidebarView) => {
@@ -236,30 +231,10 @@ export default function ConversationSidebar({
             </button>
           )}
 
+          {/* Only the people you have a DM with; "New chat" starts a new one. */}
           <div className="conversation-section-header">
-            <span className="conversation-section-title">Users</span>
-            <button
-              type="button"
-              className="new-channel-btn"
-              onClick={() => setStartingChat((open) => !open)}
-              aria-label="Message someone by email"
-              data-tooltip="Message someone by email"
-            >
-              +
-            </button>
+            <span className="conversation-section-title">DMs</span>
           </div>
-
-          {startingChat && (
-            <StartChatForm
-              myUserId={myUserId}
-              users={users}
-              onFound={(user) => {
-                setStartingChat(false);
-                onStartChat(user);
-              }}
-              onCancel={() => setStartingChat(false)}
-            />
-          )}
 
           <PersonalChatList
             users={users}

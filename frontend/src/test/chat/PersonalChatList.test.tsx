@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import PersonalChatList from "../../chat/components/PersonalChatList";
 import type { ChatConversationSummary, ChatUser } from "../../api/chat";
+import type { Conversation } from "../../chat/types";
 
 const ALICE: ChatUser = { id: 2, email: "alice@example.com" };
 const BOB: ChatUser = { id: 3, email: "bob@example.com" };
@@ -18,29 +19,58 @@ const SUMMARY: ChatConversationSummary = {
   ],
 };
 
-const renderList = (section: "recent" | "people") =>
+const renderList = (
+  section: "recent" | "people",
+  summary: ChatConversationSummary = SUMMARY,
+  selectedConversation: Conversation | null = null
+) =>
   render(
     <PersonalChatList
       users={[ALICE, BOB]}
-      selectedConversation={null}
+      selectedConversation={selectedConversation}
       onSelect={vi.fn()}
-      summary={SUMMARY}
+      summary={summary}
       presence={new Map()}
       section={section}
     />
   );
 
-describe("PersonalChatList — Users directory", () => {
-  it("keeps a user you have DMed in the Users directory", () => {
+describe("PersonalChatList — DM list", () => {
+  it("lists only the people you have a DM with", () => {
     renderList("people");
-    // The regression: Alice used to disappear from Users the moment she had a
-    // last_message_at, leaving Recent as the only place to find her.
+    expect(screen.getByText(ALICE.email)).toBeTruthy();
+    expect(screen.queryByText(BOB.email)).toBeNull();
+  });
+
+  it("keeps the person you have open listed before their first message", () => {
+    renderList("people", SUMMARY, { type: "user", user: BOB });
     expect(screen.getByText(ALICE.email)).toBeTruthy();
     expect(screen.getByText(BOB.email)).toBeTruthy();
   });
 
-  it("lists the directory alphabetically, not by recency", () => {
-    renderList("people");
+  it("says so when you have no DMs yet", () => {
+    renderList("people", { total_unread: 0, conversations: [] });
+    expect(screen.getByText("No direct messages yet.")).toBeTruthy();
+    expect(screen.queryByText(ALICE.email)).toBeNull();
+  });
+
+  it("lists DMs alphabetically, not by recency", () => {
+    // Bob's DM is newer, but Alice still comes first.
+    renderList("people", {
+      total_unread: 0,
+      conversations: [
+        {
+          user_id: ALICE.id,
+          unread_count: 0,
+          last_message_at: "2026-11-01T00:00:00Z",
+        },
+        {
+          user_id: BOB.id,
+          unread_count: 0,
+          last_message_at: "2026-11-12T00:00:00Z",
+        },
+      ],
+    });
     const names = screen
       .getAllByRole("button")
       .map((b) => b.textContent ?? "")
