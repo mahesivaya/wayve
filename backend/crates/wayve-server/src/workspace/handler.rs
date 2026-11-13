@@ -776,6 +776,9 @@ pub async fn create_team(
     .await?;
     let slug = pick_free_slug(&base, &taken);
 
+    // The team and its first member land together: whoever creates a team is
+    // on its roster from the start, as its admin (like the org's default team).
+    let mut tx = pool.begin().await?;
     let row = sqlx::query(
         "INSERT INTO teams (organization_id, name, slug, tagline, description, created_by)
          VALUES ($1, $2, $3, $4, $5, $6)
@@ -787,8 +790,22 @@ pub async fn create_team(
     .bind(tagline.as_deref())
     .bind(description.as_deref())
     .bind(ctx.user_id)
-    .fetch_one(pool.get_ref())
+    .fetch_one(&mut *tx)
     .await?;
+
+    let team_id: i32 = row.try_get("id")?;
+    sqlx::query(
+        "INSERT INTO team_members (team_id, name, role, email, created_by)
+         SELECT $1, COALESCE(NULLIF(trim(u.username), ''), split_part(u.email, '@', 1)),
+                'Admin', u.email, u.id
+           FROM users u
+          WHERE u.id = $2",
+    )
+    .bind(team_id)
+    .bind(ctx.user_id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
 
     Ok(HttpResponse::Created().json(team_summary_json(row)))
 }

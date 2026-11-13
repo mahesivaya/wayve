@@ -76,7 +76,8 @@ mod tests {
                 .service(workspace::handler::create_project)
                 .service(workspace::handler::list_projects)
                 .service(workspace::handler::create_team)
-                .service(workspace::handler::list_teams),
+                .service(workspace::handler::list_teams)
+                .service(workspace::handler::get_team),
         )
         .await;
 
@@ -97,6 +98,20 @@ mod tests {
             .to_request();
         let resp = actix_test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::CREATED);
+
+        // Whoever creates a team is on its roster straight away, as its admin,
+        // and shows in the team's members list.
+        let req = actix_test::TestRequest::get()
+            .uri("/teams/platformteam")
+            .insert_header(("Authorization", bearer(member_id, &member_email)))
+            .to_request();
+        let team: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
+        let members = team["members"]
+            .as_array()
+            .unwrap_or_else(|| panic!("team has no members list: {team}"));
+        assert_eq!(members.len(), 1, "members: {members:?}");
+        assert_eq!(members[0]["role"], "Admin");
+        assert_eq!(members[0]["email"], owner_email.as_str());
 
         let req = actix_test::TestRequest::get()
             .uri("/projects")
