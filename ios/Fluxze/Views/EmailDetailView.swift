@@ -42,6 +42,7 @@ struct EmailDetailView: View {
                 header
                 Divider()
                 bodyView
+                if email.accountId != nil { bottomActions }
             }
             .padding()
         }
@@ -118,6 +119,25 @@ struct EmailDetailView: View {
         }
         .font(.body)
         .foregroundStyle(.primary)
+    }
+
+    /// Reply and Forward under the message, like the end of a Gmail email.
+    private var bottomActions: some View {
+        HStack(spacing: 12) {
+            Button { composing = .reply } label: {
+                Label("Reply", systemImage: "arrowshape.turn.up.left")
+                    .frame(maxWidth: .infinity)
+            }
+            Button { composing = .forward } label: {
+                Label("Forward", systemImage: "arrowshape.turn.up.right")
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .controlSize(.large)
+        .tint(.primary)
+        .padding(.top, 16)
     }
 
     /// Runs an action, showing its error instead of failing silently.
