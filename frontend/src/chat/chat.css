@@ -236,6 +236,52 @@
   padding-bottom: 0;
 }
 
+/* "New chat" row under the status picker: icon + label, in the same 220px
+   column as the status row and the All | Recent switch. */
+.chat-new-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  width: calc(100% - 28px);
+  max-width: 220px;
+  margin: 2px 14px 6px;
+  padding: 8px 10px;
+  /* A highlighted block, styled like the status box above it. */
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-new-btn svg {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
+
+.chat-new-btn:hover {
+  background: var(--color-surface-hover);
+}
+
+/* While its box is open, the block stays lit in the accent colour. */
+.chat-new-btn.is-open {
+  border-color: var(--color-primary-action);
+  background: var(--color-surface-hover);
+}
+
+.chat-new-btn.is-open svg {
+  color: var(--color-primary-action);
+}
+
+.chat-new-btn:focus-visible {
+  outline: 2px solid var(--color-primary-action);
+  outline-offset: 1px;
+}
+
 /* All | Recent switch at the top of the sidebar: two equal segments. It keeps
    a fixed maximum width so dragging the sidebar wider doesn't stretch it. */
 .chat-view-toggle {
@@ -749,6 +795,102 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* "New chat" page: a "To:" bar where the conversation header normally sits,
+   and an empty state below it. */
+.new-conversation {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.new-conversation-to {
+  justify-content: flex-start;
+}
+
+.new-conversation-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.new-conversation-field input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+  outline: none;
+}
+
+.new-conversation-field input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.new-conversation-go {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border: 1px solid var(--color-primary-action);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-action);
+  color: var(--color-surface);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.new-conversation-go:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.new-conversation-error {
+  margin: 10px 14px 0;
+  color: var(--color-danger-strong);
+  font-size: var(--text-sm);
+}
+
+.new-conversation-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 24px;
+  text-align: center;
+}
+
+.new-conversation-empty h3 {
+  margin: 14px 0 0;
+  color: var(--color-text-primary);
+  font-size: var(--text-lg);
+}
+
+.new-conversation-empty p {
+  margin: 0;
+  max-width: 360px;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.new-conversation-art {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  background: var(--color-surface-hover);
+  color: var(--color-primary-action);
 }
 
 .chat-header {

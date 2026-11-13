@@ -31,6 +31,7 @@ import ChatHeader from "./components/ChatHeader";
 import ChannelSettingsPanel from "./components/ChannelSettingsPanel";
 import DmProfilePanel from "./components/DmProfilePanel";
 import ConversationSidebar from "./components/ConversationSidebar";
+import NewConversation from "./components/NewConversation";
 import MessageComposer, {
   type MentionCandidate,
 } from "./components/MessageComposer";
@@ -106,6 +107,10 @@ export default function Chat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [selectedConversation, setSelectedConversation] =
     useState<Conversation | null>(null);
+  // "New chat" page in the main area. Any open conversation takes precedence,
+  // so opening one from anywhere (sidebar, URL, notification) replaces it.
+  const [composingNew, setComposingNew] = useState(false);
+  const showNewConversation = composingNew && !selectedConversation;
 
   const userIds = useMemo(() => users.map((u) => u.id), [users]);
   const { presence, applyPresenceEvent } = usePresence(userIds);
@@ -1183,7 +1188,7 @@ export default function Chat() {
     <div
       ref={containerRef}
       className={`chat-container${isNarrow ? " narrow" : ""}${
-        selectedConversation ? " has-active" : ""
+        selectedConversation || showNewConversation ? " has-active" : ""
       }`}
       style={{ "--chat-sidebar-w": `${sidebarWidth}px` } as React.CSSProperties}
     >
@@ -1203,13 +1208,26 @@ export default function Chat() {
         onChannelVisibilityChange={setChannelVisibility}
         onCancelCreateChannel={() => setCreatingChannel(false)}
         onCreateChannel={createChannel}
-        onSelectChannel={loadChannelMessages}
+        onSelectChannel={(channel) => {
+          setComposingNew(false);
+          void loadChannelMessages(channel);
+        }}
         onJoinChannel={joinChannel}
-        onSelectUser={loadUserMessages}
+        onSelectUser={(other) => {
+          setComposingNew(false);
+          void loadUserMessages(other);
+        }}
         onStartChat={(found) => {
+          setComposingNew(false);
           addUser(found);
           void loadUserMessages(found);
         }}
+        onNewChat={() => {
+          setChannelSettingsOpen(false);
+          setSelectedConversation(null);
+          setComposingNew(true);
+        }}
+        composingNew={showNewConversation}
         summary={summary}
         presence={presence}
       />
@@ -1223,147 +1241,167 @@ export default function Chat() {
       />
 
       <section className="chat-area">
-        <ChatHeader
-          title={selectedTitle}
-          selectedChannel={selectedChannel}
-          isDirect={!!selectedUser}
-          presence={selectedUserPresence}
-          settingsOpen={channelSettingsOpen}
-          onAudioCall={onAudioCall}
-          onVideoCall={onVideoCall}
-          callDisabled={callDisabled}
-          onBack={() => setSelectedConversation(null)}
-          onToggleSettings={() => setChannelSettingsOpen((open) => !open)}
-          addMember={
-            selectedChannel && isSelectedChannelAdmin
-              ? {
-                  open: addMemberChannelId === selectedChannel.id,
-                  emails: addUserEmails,
-                  error: addMemberError,
-                  onToggle: () => {
-                    setAddMemberError("");
-                    setAddMemberChannelId((id) =>
-                      id === selectedChannel.id ? null : selectedChannel.id
-                    );
-                  },
-                  onEmailsChange: setAddUserEmails,
-                  onAdd: () => void inviteFromHeader(),
-                  onClose: () => setAddMemberChannelId(null),
-                }
-              : null
-          }
-          onJoinChannel={joinChannel}
-        />
-
-        <div
-          className={`chat-content-row${
-            channelSettingsOpen ? " settings-open" : ""
-          }${activeThread ? " thread-open" : ""}`}
-        >
-          <div className="chat-main">
-            <MessageThread
-              messages={filteredMessages}
-              selectedChannel={selectedChannel}
-              currentUserId={user?.id}
-              onOpenThread={
-                selectedChannel ? (msg) => void openThread(msg) : null
-              }
-              onToggleReaction={toggleReaction}
-              listRef={messageListRef}
-              onListScroll={onMessageListScroll}
-            />
-
-            <MessageComposer
-              conversation={selectedConversation}
-              canChat={canChatInSelectedChannel}
-              isConnected={isChatSocketConnected}
-              isReconnecting={isChatSocketReconnecting}
+        {showNewConversation ? (
+          <NewConversation
+            myUserId={user?.id ?? 0}
+            users={users}
+            onFound={(found) => {
+              setComposingNew(false);
+              addUser(found);
+              void loadUserMessages(found);
+            }}
+            onBack={() => setComposingNew(false)}
+          />
+        ) : (
+          <>
+            <ChatHeader
               title={selectedTitle}
-              input={input}
-              onInputChange={(value) => {
-                setInput(value);
-                if (composeError) setComposeError("");
-              }}
-              onSend={() => {
-                void sendMessage();
-              }}
-              mentionCandidates={mentionCandidates}
-              error={composeError}
-              onDismissError={() => setComposeError("")}
-              allowAttachments={!!selectedConversation}
-              pendingFiles={pendingFiles}
-              uploading={uploadingFiles}
-              onPickFiles={(files) =>
-                setPendingFiles((prev) => [...prev, ...files])
-              }
-              onRemoveFile={(index) =>
-                setPendingFiles((prev) => prev.filter((_, i) => i !== index))
-              }
-            />
-          </div>
-
-          {selectedChannel && activeThread && (
-            <>
-              <ResizeHandle
-                onPointerDown={startThreadDrag}
-                className="thread-resize-handle"
-                ariaLabel="Resize thread panel"
-              />
-              <ThreadPanel
-                parent={activeThread}
-                replies={threadReplies}
-                currentUserId={user?.id}
-                isConnected={isChatSocketConnected}
-                onClose={closeThread}
-                onSendReply={sendThreadReply}
-                onToggleReaction={toggleReaction}
-                width={threadWidth}
-              />
-            </>
-          )}
-
-          {selectedUser && user && channelSettingsOpen && (
-            <DmProfilePanel
-              key={selectedUser.id}
-              peer={selectedUser}
+              selectedChannel={selectedChannel}
+              isDirect={!!selectedUser}
               presence={selectedUserPresence}
-              currentUserId={user.id}
-              onClose={() => setChannelSettingsOpen(false)}
-              onOpenChannel={(channelId) => {
-                const channel = channels.find((c) => c.id === channelId);
-                if (channel) void loadChannelMessages(channel);
+              settingsOpen={channelSettingsOpen}
+              onAudioCall={onAudioCall}
+              onVideoCall={onVideoCall}
+              callDisabled={callDisabled}
+              onBack={() => {
+                setComposingNew(false);
+                setSelectedConversation(null);
               }}
+              onToggleSettings={() => setChannelSettingsOpen((open) => !open)}
+              addMember={
+                selectedChannel && isSelectedChannelAdmin
+                  ? {
+                      open: addMemberChannelId === selectedChannel.id,
+                      emails: addUserEmails,
+                      error: addMemberError,
+                      onToggle: () => {
+                        setAddMemberError("");
+                        setAddMemberChannelId((id) =>
+                          id === selectedChannel.id ? null : selectedChannel.id
+                        );
+                      },
+                      onEmailsChange: setAddUserEmails,
+                      onAdd: () => void inviteFromHeader(),
+                      onClose: () => setAddMemberChannelId(null),
+                    }
+                  : null
+              }
+              onJoinChannel={joinChannel}
             />
-          )}
 
-          {selectedChannel && channelSettingsOpen && (
-            <ChannelSettingsPanel
-              channel={selectedChannel}
-              isAdmin={isSelectedChannelAdmin}
-              admins={getChannelAdmins(selectedChannel)}
-              users={getChannelUsers(selectedChannel)}
-              subjectDraft={subjectDraft}
-              visibilityDraft={visibilityDraft}
-              canChooseVisibility={!channelsAlwaysPublic(user)}
-              addUserRole={addUserRole}
-              addUserEmails={addUserEmails}
-              error={settingsError}
-              onSubjectDraftChange={setSubjectDraft}
-              onVisibilityDraftChange={setVisibilityDraft}
-              onAddUserRoleChange={setAddUserRole}
-              onAddUserEmailsChange={setAddUserEmails}
-              onSaveSubject={saveSubject}
-              onSaveVisibility={saveVisibility}
-              onDeleteUser={deleteUser}
-              onChangeRole={changeMemberRole}
-              onLeave={leaveChannel}
-              onDelete={deleteChannel}
-              onAddUsers={addUsers}
-              onApproveJoinRequest={approveJoinRequest}
-              onClose={() => setChannelSettingsOpen(false)}
-            />
-          )}
-        </div>
+            <div
+              className={`chat-content-row${
+                channelSettingsOpen ? " settings-open" : ""
+              }${activeThread ? " thread-open" : ""}`}
+            >
+              <div className="chat-main">
+                <MessageThread
+                  messages={filteredMessages}
+                  selectedChannel={selectedChannel}
+                  currentUserId={user?.id}
+                  onOpenThread={
+                    selectedChannel ? (msg) => void openThread(msg) : null
+                  }
+                  onToggleReaction={toggleReaction}
+                  listRef={messageListRef}
+                  onListScroll={onMessageListScroll}
+                />
+
+                <MessageComposer
+                  conversation={selectedConversation}
+                  canChat={canChatInSelectedChannel}
+                  isConnected={isChatSocketConnected}
+                  isReconnecting={isChatSocketReconnecting}
+                  title={selectedTitle}
+                  input={input}
+                  onInputChange={(value) => {
+                    setInput(value);
+                    if (composeError) setComposeError("");
+                  }}
+                  onSend={() => {
+                    void sendMessage();
+                  }}
+                  mentionCandidates={mentionCandidates}
+                  error={composeError}
+                  onDismissError={() => setComposeError("")}
+                  allowAttachments={!!selectedConversation}
+                  pendingFiles={pendingFiles}
+                  uploading={uploadingFiles}
+                  onPickFiles={(files) =>
+                    setPendingFiles((prev) => [...prev, ...files])
+                  }
+                  onRemoveFile={(index) =>
+                    setPendingFiles((prev) =>
+                      prev.filter((_, i) => i !== index)
+                    )
+                  }
+                />
+              </div>
+
+              {selectedChannel && activeThread && (
+                <>
+                  <ResizeHandle
+                    onPointerDown={startThreadDrag}
+                    className="thread-resize-handle"
+                    ariaLabel="Resize thread panel"
+                  />
+                  <ThreadPanel
+                    parent={activeThread}
+                    replies={threadReplies}
+                    currentUserId={user?.id}
+                    isConnected={isChatSocketConnected}
+                    onClose={closeThread}
+                    onSendReply={sendThreadReply}
+                    onToggleReaction={toggleReaction}
+                    width={threadWidth}
+                  />
+                </>
+              )}
+
+              {selectedUser && user && channelSettingsOpen && (
+                <DmProfilePanel
+                  key={selectedUser.id}
+                  peer={selectedUser}
+                  presence={selectedUserPresence}
+                  currentUserId={user.id}
+                  onClose={() => setChannelSettingsOpen(false)}
+                  onOpenChannel={(channelId) => {
+                    const channel = channels.find((c) => c.id === channelId);
+                    if (channel) void loadChannelMessages(channel);
+                  }}
+                />
+              )}
+
+              {selectedChannel && channelSettingsOpen && (
+                <ChannelSettingsPanel
+                  channel={selectedChannel}
+                  isAdmin={isSelectedChannelAdmin}
+                  admins={getChannelAdmins(selectedChannel)}
+                  users={getChannelUsers(selectedChannel)}
+                  subjectDraft={subjectDraft}
+                  visibilityDraft={visibilityDraft}
+                  canChooseVisibility={!channelsAlwaysPublic(user)}
+                  addUserRole={addUserRole}
+                  addUserEmails={addUserEmails}
+                  error={settingsError}
+                  onSubjectDraftChange={setSubjectDraft}
+                  onVisibilityDraftChange={setVisibilityDraft}
+                  onAddUserRoleChange={setAddUserRole}
+                  onAddUserEmailsChange={setAddUserEmails}
+                  onSaveSubject={saveSubject}
+                  onSaveVisibility={saveVisibility}
+                  onDeleteUser={deleteUser}
+                  onChangeRole={changeMemberRole}
+                  onLeave={leaveChannel}
+                  onDelete={deleteChannel}
+                  onAddUsers={addUsers}
+                  onApproveJoinRequest={approveJoinRequest}
+                  onClose={() => setChannelSettingsOpen(false)}
+                />
+              )}
+            </div>
+          </>
+        )}
       </section>
     </div>
   );

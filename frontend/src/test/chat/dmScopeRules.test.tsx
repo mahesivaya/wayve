@@ -32,7 +32,7 @@ describe("StartChatForm", () => {
     );
 
     await userEvent.type(
-      screen.getByPlaceholderText("name@example.com"),
+      screen.getByPlaceholderText("name@example.com or username"),
       "staff@platform.test"
     );
     await userEvent.click(screen.getByRole("button", { name: "Start chat" }));
@@ -58,7 +58,7 @@ describe("StartChatForm", () => {
     );
 
     await userEvent.type(
-      screen.getByPlaceholderText("name@example.com"),
+      screen.getByPlaceholderText("name@example.com or username"),
       "support@platform.test"
     );
     await userEvent.click(screen.getByRole("button", { name: "Start chat" }));

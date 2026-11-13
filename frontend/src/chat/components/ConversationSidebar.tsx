@@ -4,6 +4,7 @@ import type {
   ChatConversationSummary,
   ChatUser,
 } from "../../api/chat";
+import { NewChatIcon } from "../../icons";
 import { useGlobalSearch } from "../../search/SearchContext";
 import type { PresenceMap } from "../hooks/usePresence";
 import type { ChannelVisibility, Conversation } from "../types";
@@ -39,6 +40,10 @@ type Props = {
   onSelectUser: (user: ChatUser) => void;
   // A user found by email via the "+" next to Users, possibly not yet in `users`.
   onStartChat: (user: ChatUser) => void;
+  // Opens the New conversation page in the main area; `composingNew` is true
+  // while it's open, to keep the New chat button highlighted.
+  onNewChat: () => void;
+  composingNew: boolean;
   summary: ChatConversationSummary;
   presence: PresenceMap;
 };
@@ -84,6 +89,8 @@ export default function ConversationSidebar({
   onJoinChannel,
   onSelectUser,
   onStartChat,
+  onNewChat,
+  composingNew,
   summary,
   presence,
 }: Props) {
@@ -119,6 +126,17 @@ export default function ConversationSidebar({
     <aside className="user-list">
       {/* Your own presence-status picker sits at the very top. */}
       <StatusSelector myUserId={myUserId} />
+
+      {/* Opens the New conversation page (email or username). */}
+      <button
+        type="button"
+        className={`chat-new-btn${composingNew ? " is-open" : ""}`}
+        onClick={onNewChat}
+        aria-pressed={composingNew}
+      >
+        <NewChatIcon size={18} />
+        <span>New chat</span>
+      </button>
 
       <div
         className="chat-view-toggle"
