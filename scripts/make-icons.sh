@@ -4,8 +4,10 @@
 #   Source:  frontend/public/brand/fluxze.png   (black logo; also the in-app header logo)
 #   Writes:  frontend/public/brand/fluxze-icon.png                          browser tab icon (white on dark)
 #            desktop/build/icon.icns                                        macOS app (white on dark)
-#            ios/Fluxze/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png  iPhone app icon
-#            ios/Fluxze/Assets.xcassets/Logo.imageset/Logo.png               iPhone sign-in logo
+#            ios/Fluxze/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png  iPhone app icon (white on dark)
+#            ios/Fluxze/Assets.xcassets/Logo.imageset/Logo.png               iPhone sign-in logo (same image)
+#
+# Every platform shows the same dark icon: the white logo on dark slate.
 #
 # The generated files are committed (each platform needs its own copy inside
 # its project), but never edit them by hand: change the source logo and re-run
@@ -25,8 +27,7 @@ IOS_ASSETS="$ROOT/ios/Fluxze/Assets.xcassets"
 IOS_ICON="$IOS_ASSETS/AppIcon.appiconset/AppIcon-1024.png"
 IOS_LOGO="$IOS_ASSETS/Logo.imageset/Logo.png"
 
-BG="FFFFFF"            # iPhone icon background (black logo)
-DESKTOP_BG="0F172A"    # macOS icon background (white logo); dark slate
+BG="0F172A"            # icon background (white logo); dark slate
 ICON_SIZE=1024
 ICON_LOGO=700          # logo size inside the 1024 icon (leaves a safe margin)
 
@@ -39,7 +40,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 # square_on_bg <canvas px> <logo px> <out.png> [logo file] [bg hex]
-# The logo centred on an opaque square (default: black logo on $BG). App Store
+# The logo centred on an opaque square (default: the source logo on $BG). App Store
 # icons must not have an alpha channel, so the result is flattened through JPEG
 # and back to PNG.
 square_on_bg() {
@@ -51,19 +52,16 @@ square_on_bg() {
   sips -s format png "$TMP/flat.jpg" --out "$out" >/dev/null
 }
 
-# White logo (transparent background), the mark on the dark icons.
+# White logo (transparent background), the mark on the dark icon.
 SRC_WHITE="$TMP/logo-white.png"
 swift "$ROOT/scripts/tint-logo.swift" "$SRC" "$SRC_WHITE" FFFFFF
 
-# iPhone master 1024: black logo on white.
-square_on_bg "$ICON_SIZE" "$ICON_LOGO" "$TMP/master.png"
+# The one 1024 master: white logo on dark, for macOS, iPhone and the browser tab.
+square_on_bg "$ICON_SIZE" "$ICON_LOGO" "$TMP/master.png" "$SRC_WHITE"
 
-# macOS master 1024: white logo on dark.
-square_on_bg "$ICON_SIZE" "$ICON_LOGO" "$TMP/master-desktop.png" "$SRC_WHITE" "$DESKTOP_BG"
-
-# Browser tab icon: the desktop icon, scaled down. Its own dark background keeps
+# Browser tab icon: the app icon, scaled down. Its own dark background keeps
 # the white lines visible on light and dark tab bars alike.
-sips -z "$FAVICON_SIZE" "$FAVICON_SIZE" "$TMP/master-desktop.png" --out "$FAVICON" >/dev/null
+sips -z "$FAVICON_SIZE" "$FAVICON_SIZE" "$TMP/master.png" --out "$FAVICON" >/dev/null
 echo "make-icons: wrote ${FAVICON#$ROOT/}"
 
 # iPhone app icon, and the same image as the logo on the sign-in screen.
@@ -77,7 +75,7 @@ fi
 ICONSET="$TMP/icon.iconset"
 mkdir -p "$ICONSET" "$(dirname "$ICNS")"
 while read -r size name; do
-  sips -z "$size" "$size" "$TMP/master-desktop.png" --out "$ICONSET/$name" >/dev/null
+  sips -z "$size" "$size" "$TMP/master.png" --out "$ICONSET/$name" >/dev/null
 done <<'EOF'
 16 icon_16x16.png
 32 icon_16x16@2x.png
