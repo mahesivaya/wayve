@@ -396,9 +396,10 @@ html[data-theme="dark"] .sidebar.has-brand:not(.takeover-hidden) {
 }
 html.is-titlebar-inset .titlebar-nav {
   position: fixed;
-  /* Centred in the 38px top row's height ((38 - 30) / 2), and midway between
-     the last window control (~x 66) and the first tab (x 120). */
-  left: 77px;
+  /* Centred in the 38px top row's height ((38 - 30) / 2), with ~19px of
+     space after the last window control (~x 66) and before the first tab
+     (x 128). */
+  left: 85px;
   top: 4px;
   z-index: 30;
   margin: 0;
@@ -446,7 +447,7 @@ html.is-titlebar-inset
   .body:has(> .sidebar.collapsed)
   .app-tabbar[data-strip="main"] {
   margin-left: -56px;
-  padding-left: 120px;
+  padding-left: 128px;
 }
 html.is-titlebar-inset.is-fullscreen
   .body:has(> .sidebar.collapsed)
