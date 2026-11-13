@@ -514,6 +514,17 @@ html.is-titlebar-inset.is-fullscreen
   background: var(--sidebar-hover);
 }
 
+/* Hover-peeked rail (browser): just the ☰ toggle at the top-left, no logo. */
+.sidebar.peek .sidebar-brand .logo {
+  display: none;
+}
+.sidebar.peek .sidebar-brand .header-brand {
+  justify-content: flex-start;
+}
+.sidebar.peek .sidebar-brand .header-collapse-btn {
+  margin: 0;
+}
+
 /* Drop marker when a tab is dragged to the empty end of a strip. */
 .app-tab-drop-end {
   width: 2px;

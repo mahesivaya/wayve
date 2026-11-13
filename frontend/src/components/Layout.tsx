@@ -504,31 +504,52 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       })
       .catch(() => {});
   };
-  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+  const [collapsedPref, setSidebarCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem("rwayve.sidebar.collapsed") === "1";
     } catch {
       return false;
     }
   });
+  // The browser keeps the sidebar always open (no shrink toggle there); only
+  // the desktop app can shrink it to the icon rail.
+  const sidebarCollapsed = collapsedPref && isDesktopApp();
 
   // Icons always show; collapsing only hides the labels. Narrow screens keep
   // their own (unpersisted) expand state, so a wide-screen "expanded" preference
   // doesn't open a phone with the labels covering the page.
-  // The collapsed desktop rail opens only from its toggle — hovering it no
-  // longer peeks the full menu open.
-  const railCollapsed = isNarrow ? !navOpen : sidebarCollapsed;
+  // In the browser, hovering the collapsed rail "peeks" it open: full labels,
+  // drawn over the content (see .sidebar.peek) so the page doesn't shift; the
+  // saved collapse preference is untouched, and clicking the toggle while
+  // peeking keeps it open. A short open delay keeps it from flashing open when
+  // the pointer merely crosses the rail. The desktop app opens the rail only
+  // from its toggle.
+  const [railHover, setRailHover] = useState(false);
+  const railHoverTimer = useRef<number | undefined>(undefined);
+  const canPeek = !isNarrow && !isDesktopApp();
+  const peeking = railHover && sidebarCollapsed && canPeek;
+  const startRailPeek = () => {
+    window.clearTimeout(railHoverTimer.current);
+    railHoverTimer.current = window.setTimeout(() => setRailHover(true), 150);
+  };
+  const endRailPeek = () => {
+    window.clearTimeout(railHoverTimer.current);
+    setRailHover(false);
+  };
+  useEffect(() => () => window.clearTimeout(railHoverTimer.current), []);
+
+  const railCollapsed = isNarrow ? !navOpen : sidebarCollapsed && !peeking;
 
   useEffect(() => {
     try {
       localStorage.setItem(
         "rwayve.sidebar.collapsed",
-        sidebarCollapsed ? "1" : "0"
+        collapsedPref ? "1" : "0"
       );
     } catch {
       // private mode / quota — preference just won't persist this session.
     }
-  }, [sidebarCollapsed]);
+  }, [collapsedPref]);
 
   const sidebarRef = useRef<HTMLElement | null>(null);
   const { width: sidebarWidth, startResize: startSidebarResize } =
@@ -2163,8 +2184,10 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
               it stays reachable whether the sidebar is a full panel or an icon
               rail. The narrow overlay uses the hamburger below instead; hidden
               while settings takes over (there's no sidebar to toggle). */}
+      {/* Only the desktop app shrinks the sidebar; the browser keeps it open. */}
       {!isNarrow &&
-        (desktop && showTabs ? (
+        desktop &&
+        (showTabs ? (
           // Desktop title bar (macOS): the toggle, pinned beside the window
           // controls (see .titlebar-nav).
           <div className="titlebar-nav">
@@ -2225,9 +2248,9 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
               aria-hidden="true"
             >
               {/* Shrunk: a three-line menu icon. Open: a plain sidebar-panel
-                glyph. The desktop app uses the panel glyph for both, so its
-                toggle looks the same in one fixed spot. The tooltip says which
-                way it goes. */}
+                  glyph. The desktop app uses the panel glyph for both, so its
+                  toggle looks the same in one fixed spot. The tooltip says which
+                  way it goes. */}
               {sidebarCollapsed && !desktop ? (
                 <>
                   <line x1="3" y1="6" x2="21" y2="6" />
@@ -2296,12 +2319,23 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           <div className="body">
             <nav
               ref={sidebarRef}
-              className={`sidebar ${showTabs ? "has-brand" : ""} ${isNarrow && navOpen ? "open" : ""} ${railCollapsed ? "collapsed" : ""}`.trim()}
+              className={`sidebar ${showTabs ? "has-brand" : ""} ${isNarrow && navOpen ? "open" : ""} ${railCollapsed ? "collapsed" : ""} ${peeking ? "peek" : ""}`.trim()}
               style={
-                !sidebarCollapsed && !isNarrow
-                  ? { width: `${sidebarWidth}px` }
-                  : undefined
+                peeking
+                  ? {
+                      // Widen to the user's expanded width; the matching
+                      // negative margin keeps the rail's 56px footprint.
+                      width: `${sidebarWidth}px`,
+                      marginRight: `${56 - sidebarWidth}px`,
+                    }
+                  : !sidebarCollapsed && !isNarrow
+                    ? { width: `${sidebarWidth}px` }
+                    : undefined
               }
+              onMouseEnter={
+                sidebarCollapsed && canPeek ? startRailPeek : undefined
+              }
+              onMouseLeave={endRailPeek}
               aria-label="Primary navigation"
             >
               {showTabs && <div className="sidebar-brand">{brand}</div>}
