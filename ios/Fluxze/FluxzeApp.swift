@@ -23,7 +23,7 @@ struct RootView: View {
             case .signedOut:
                 LoginView()
             case .signedIn:
-                MainTabView(api: appState.api)
+                MainTabView(api: appState.api, userID: appState.me?.id)
             }
         }
         .task { await appState.restore() }
@@ -34,10 +34,11 @@ struct RootView: View {
 /// The signed-in app: a tab per area.
 struct MainTabView: View {
     let api: APIClient
+    let userID: Int?
 
     var body: some View {
         TabView {
-            EmailListView(store: EmailsStore(api: api))
+            EmailListView(store: EmailsStore(api: api, userID: userID))
                 .tabItem { Label("Email", systemImage: "envelope") }
             TaskListView(store: TasksStore(api: api))
                 .tabItem { Label("Tasks", systemImage: "checklist") }

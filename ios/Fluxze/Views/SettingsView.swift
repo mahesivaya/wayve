@@ -7,6 +7,8 @@ struct SettingsView: View {
     @State private var confirmDelete = false
     @State private var isDeleting = false
     @State private var errorMessage: String?
+    @State private var hasKey = KeyVault.hasKey
+    @State private var unlocking = false
 
     var body: some View {
         NavigationStack {
@@ -19,6 +21,23 @@ struct SettingsView: View {
                         }
                     }
                     Button("Sign out") { confirmSignOut = true }
+                }
+
+                Section {
+                    if hasKey {
+                        Label("Unlocked on this iPhone", systemImage: "lock.open")
+                        Button("Remove key from this iPhone", role: .destructive) {
+                            KeyVault.delete()
+                            hasKey = false
+                        }
+                    } else {
+                        Label("Locked on this iPhone", systemImage: "lock")
+                        Button("Unlock with recovery phrase") { unlocking = true }
+                    }
+                } header: {
+                    Text("Encrypted mail")
+                } footer: {
+                    Text("With your key on this iPhone, encrypted mail opens here like it does in your browser. The key stays on this device and is removed when you sign out.")
                 }
 
                 Section {
@@ -47,6 +66,9 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+            .sheet(isPresented: $unlocking) {
+                UnlockKeyView { hasKey = true }
             }
             .confirmationDialog("Sign out of Fluxze?", isPresented: $confirmSignOut, titleVisibility: .visible) {
                 Button("Sign out", role: .destructive) { appState.signOut() }

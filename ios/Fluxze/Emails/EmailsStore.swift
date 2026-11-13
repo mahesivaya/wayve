@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 /// The inbox, read from the same `/api/emails` the web app uses, so the phone
 /// shows the mail of every mailbox the user connected in the browser.
@@ -20,11 +21,14 @@ final class EmailsStore: ObservableObject {
     @Published var query = ""
 
     let api: APIClient
+    /// The signed-in user, for their slot in multi-recipient envelopes.
+    let userID: Int?
     /// Bumped per reload, so a slow older response can't overwrite a newer one.
     private var generation = 0
 
-    init(api: APIClient) {
+    init(api: APIClient, userID: Int? = nil) {
         self.api = api
+        self.userID = userID
     }
 
     /// A search looks through all mail, as on the web.
@@ -86,16 +90,28 @@ final class EmailsStore: ObservableObject {
     }
 
     /// The message body, readable. Most stored bodies are sealed to the owner's
-    /// browser key, which the phone doesn't hold; `?live=true` has the server
-    /// fetch the message from the mail provider instead. Returns nil when the
-    /// body is end-to-end encrypted and can only be read in the browser.
+    /// end-to-end key: with that key on this phone it opens here, like in the
+    /// browser. Otherwise `?live=true` has the server fetch the message from the
+    /// mail provider. Returns nil when neither works (no key here and the
+    /// provider refetch failed, or a Fluxze-to-Fluxze message).
     func body(of email: EmailSummary) async throws -> String? {
         let stored: EmailBodyResponse = try await api.get("/api/emails/\(email.id)/body")
         let text = stored.body ?? ""
         guard EmailText.isSealed(text) else { return text }
+        if let opened = Self.open(text, userID: userID, key: KeyVault.privateKey()) {
+            return opened
+        }
         let live: EmailBodyResponse = try await api.get("/api/emails/\(email.id)/body?live=true")
         let liveText = live.body ?? ""
-        return EmailText.isSealed(liveText) ? nil : liveText
+        guard EmailText.isSealed(liveText) else { return liveText }
+        return Self.open(liveText, userID: userID, key: KeyVault.privateKey())
+    }
+
+    /// Opens a sealed body with this phone's key; nil if there's no key or it
+    /// isn't the key the body was sealed to.
+    static func open(_ text: String, userID: Int?, key: SecKey?) -> String? {
+        guard let key else { return nil }
+        return try? FluxzeCrypto.openSecure(text, userID: userID, key: key)
     }
 
     func markRead(_ email: EmailSummary) async {

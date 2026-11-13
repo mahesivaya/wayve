@@ -47,6 +47,8 @@ final class AppState: ObservableObject {
 
     func signOut(notice: String? = nil) {
         Keychain.deleteToken()
+        // The end-to-end key leaves with the session.
+        KeyVault.delete()
         api.token = nil
         self.notice = notice
         phase = .signedOut
