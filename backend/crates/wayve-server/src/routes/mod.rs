@@ -11,6 +11,7 @@ pub mod desktop_downloads;
 pub mod email;
 pub mod error_logs;
 pub mod health;
+pub mod mobile_installs;
 pub mod recovery;
 pub mod shared_inbox;
 pub mod sso;
@@ -40,6 +41,7 @@ pub fn routes(cfg: &mut actix_web::web::ServiceConfig) {
     error_logs::routes(cfg);
     visits::routes(cfg);
     desktop_downloads::routes(cfg);
+    mobile_installs::routes(cfg);
     chat_keys::routes(cfg);
     tracing::routes(cfg);
 }

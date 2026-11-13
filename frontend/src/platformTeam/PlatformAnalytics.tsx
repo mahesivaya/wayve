@@ -18,6 +18,7 @@ import "./platformTeam.css";
 const AppLogs = lazy(() => import("./PlatformLogs"));
 const Visitors = lazy(() => import("./PlatformVisitors"));
 const DesktopDownloads = lazy(() => import("./PlatformDesktopDownloads"));
+const MobileInstalls = lazy(() => import("./PlatformMobileInstalls"));
 const UserLogs = lazy(() => import("./PlatformUserLogs"));
 const AuditLogs = lazy(() => import("../settings/AuditSecurity"));
 const UserAudit = lazy(() => import("../settings/UserAudit"));
@@ -221,6 +222,11 @@ export default function PlatformAnalytics() {
         {canViewDownloads && (
           <LogBlock title="App Downloads">
             <DesktopDownloads />
+          </LogBlock>
+        )}
+        {canViewDownloads && (
+          <LogBlock title="Mobile Installs">
+            <MobileInstalls />
           </LogBlock>
         )}
         {canAccessSecurity && (

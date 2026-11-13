@@ -279,6 +279,8 @@ CREATE INDEX IF NOT EXISTS idx_team_members_team ON team_members (team_id);
 -- Relax NOT NULL on long-lived DBs whose teams table predates platform teams
 -- (idempotent — a no-op if already nullable).
 ALTER TABLE teams ALTER COLUMN organization_id DROP NOT NULL;
+-- An IANA name (e.g. America/New_York), set in the team's settings.
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS timezone TEXT;
 -- UNIQUE(organization_id, slug) does NOT constrain platform teams because NULL
 -- orgs compare distinct; enforce slug uniqueness among platform teams here.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_teams_platform_slug
@@ -2031,6 +2033,38 @@ CREATE INDEX IF NOT EXISTS idx_desktop_downloads_created_at
 -- is recorded once).
 CREATE INDEX IF NOT EXISTS idx_desktop_downloads_ip_build
     ON desktop_downloads (ip, build, created_at DESC);
+
+-- Mobile app installs, self-reported by the app (App Store installs are not
+-- visible to us): one row per install id, a random UUID the app creates on
+-- first launch, so a delete + reinstall is a new row. Every launch sends
+-- POST /api/mobile/installs, which bumps last_seen_at / launches (active
+-- counts). channel = app_store | testflight | debug. New ids per IP are capped
+-- per hour. Read by the platform Analytics page via GET /api/platform/mobile-installs.
+CREATE TABLE IF NOT EXISTS mobile_installs (
+    id BIGSERIAL PRIMARY KEY,
+    install_id TEXT NOT NULL UNIQUE,
+    platform TEXT NOT NULL,
+    channel TEXT,
+    app_version TEXT,
+    build TEXT,
+    os_version TEXT,
+    device_model TEXT,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    ip TEXT,
+    country TEXT,
+    region TEXT,
+    city TEXT,
+    launches INTEGER NOT NULL DEFAULT 1,
+    first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_mobile_installs_first_seen
+    ON mobile_installs (first_seen_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mobile_installs_last_seen
+    ON mobile_installs (last_seen_at DESC);
+-- Backs the per-IP hourly cap on new installs.
+CREATE INDEX IF NOT EXISTS idx_mobile_installs_ip_first_seen
+    ON mobile_installs (ip, first_seen_at DESC);
 
 -- ── Activity dashboard (GET /api/home/summary) supporting indexes ──
 -- Partial index on unread emails — both the COUNT and the "5 most recent

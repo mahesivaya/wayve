@@ -46,6 +46,7 @@ mod mailbox_policy_test;
 mod mcp_test;
 mod meeting_alert_minutes_test;
 mod meeting_link_test;
+mod mobile_installs_test;
 mod mode_switch_test;
 mod org_keys_test;
 mod organization_upgrade_test;
