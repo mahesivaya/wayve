@@ -7,19 +7,25 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0916AA7FBBA3CE863EFE5255 /* EmailsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBD71AB65E686B6DC03247E0 /* EmailsStore.swift */; };
 		0BBE1C9E2EB40AE8E0341226 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A674271AD3D40E66590E5DB /* Keychain.swift */; };
 		1616177A6BDB3080056EB642 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E651CF8ADBA667BBF007BA75 /* LoginView.swift */; };
+		1DA0AD0BCBD890DE1F496CB4 /* Email.swift in Sources */ = {isa = PBXBuildFile; fileRef = 005055985CBEB9EDC28B60D9 /* Email.swift */; };
 		20F35B7C59F6F9FCB66E102D /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05DB673F81598C323B400103 /* Models.swift */; };
 		224F8F76724FC221FFEE780E /* VerifyEmailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 817331078984942973AF5C35 /* VerifyEmailView.swift */; };
 		2532F2E869468B5CFD509268 /* MeetingEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E099D97C92A76F33D26A695E /* MeetingEditView.swift */; };
 		3735D1FBDD6EF156D337E1A3 /* ServerDate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 313FD5F6B7DFFD19AFE52E53 /* ServerDate.swift */; };
+		3B5DA4A7B278006D6E56E245 /* EmailDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6128E138195982F8D720BD56 /* EmailDetailView.swift */; };
+		414811EA3005AD65BC1BB791 /* InstallReporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F07EA18E18021F2ED048F028 /* InstallReporterTests.swift */; };
 		4A88651F4E4AEAF89E949FF4 /* TaskRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1D2B721538532E5FC5D1BD /* TaskRow.swift */; };
 		5E9BF6D3DC7B72BD9C81B32D /* Meeting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D97B1188C9AD10F6E6D0D71 /* Meeting.swift */; };
 		73D19A88E176F29E8FC90F4D /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E41182006D4E509E502D709 /* Config.swift */; };
+		8452CDD52614BF85AA467C42 /* EmailListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A806B322552A8E7FF2EFF97B /* EmailListView.swift */; };
 		8AD7DE320FBF74B36B8B88B2 /* FluxzeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F856A10844A2070DAF393C08 /* FluxzeApp.swift */; };
 		8FBF015FC9FE3E99C1254917 /* AuthKeyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56AAA9B20FBD68C3287066A5 /* AuthKeyTests.swift */; };
 		98010F5E01DDE86495B66BD6 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25AC528395147B038243E758 /* SettingsView.swift */; };
 		9B54F3A1F5391C3C163FA9F2 /* APIError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1901BA3A71A784EF22796A09 /* APIError.swift */; };
+		9EF14FD9C53A1C79CA55C000 /* InstallReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92BE301963A31FA5300B627E /* InstallReporter.swift */; };
 		A0C679395000CCF2F68E59F4 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5082E7A89DFB2BF26D61F627 /* APIClient.swift */; };
 		AB642C09E34CD8E7083813B5 /* ModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 744CBD373E925EC5B42D1DB6 /* ModelTests.swift */; };
 		B4AFB73D8AC5B56A4684E8EA /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B515DE16CD941B42060F87 /* AuthService.swift */; };
@@ -31,6 +37,7 @@
 		DAFA4D61E1091E95A5CAE167 /* MeetingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A793A25C948E6A811266F5D1 /* MeetingTests.swift */; };
 		DC42CD3CFCA4A54BC79A9C31 /* CalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 432C7A86D39313D45D09D5C4 /* CalendarView.swift */; };
 		E2ABF554072C9C0BBC3C8159 /* TasksStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B45F54C30DE426ACAF23DF0F /* TasksStore.swift */; };
+		EE5A5A0FDDC1BE2D24E9A87D /* EmailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF10773F318C79C658229FD2 /* EmailTests.swift */; };
 		EFADE8AAAB7ACBBE5A025EE1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D6C86A862A8B9BF2E002BE73 /* Assets.xcassets */; };
 		F2E495C7E51738682DF5BEFF /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5CDB34F920D4252DC05E8FD /* AppState.swift */; };
 		F477A9C3E8E0FE0FC044AF9A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B971D2516468DCCC5C85754C /* PrivacyInfo.xcprivacy */; };
@@ -49,6 +56,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		005055985CBEB9EDC28B60D9 /* Email.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Email.swift; sourceTree = "<group>"; };
 		05DB673F81598C323B400103 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		0A8E7F23FA3DE45DE3D418DE /* APIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClientTests.swift; sourceTree = "<group>"; };
 		1901BA3A71A784EF22796A09 /* APIError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIError.swift; sourceTree = "<group>"; };
@@ -63,23 +71,29 @@
 		5082E7A89DFB2BF26D61F627 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		50906CB2A4F8EFCAE833F769 /* Color+Hex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Hex.swift"; sourceTree = "<group>"; };
 		56AAA9B20FBD68C3287066A5 /* AuthKeyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthKeyTests.swift; sourceTree = "<group>"; };
+		6128E138195982F8D720BD56 /* EmailDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailDetailView.swift; sourceTree = "<group>"; };
 		6D1D2B721538532E5FC5D1BD /* TaskRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskRow.swift; sourceTree = "<group>"; };
 		72C615A41037C75B951C06A1 /* TaskListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskListView.swift; sourceTree = "<group>"; };
 		744CBD373E925EC5B42D1DB6 /* ModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTests.swift; sourceTree = "<group>"; };
 		7DBE2BFEE32652D17B0E1240 /* MeetingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingsStore.swift; sourceTree = "<group>"; };
 		817331078984942973AF5C35 /* VerifyEmailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifyEmailView.swift; sourceTree = "<group>"; };
+		92BE301963A31FA5300B627E /* InstallReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallReporter.swift; sourceTree = "<group>"; };
 		98649CB7D547514D52F29CBA /* Fluxze.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Fluxze.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2B515DE16CD941B42060F87 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		A793A25C948E6A811266F5D1 /* MeetingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTests.swift; sourceTree = "<group>"; };
+		A806B322552A8E7FF2EFF97B /* EmailListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailListView.swift; sourceTree = "<group>"; };
 		B45F54C30DE426ACAF23DF0F /* TasksStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksStore.swift; sourceTree = "<group>"; };
 		B971D2516468DCCC5C85754C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		BF10773F318C79C658229FD2 /* EmailTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailTests.swift; sourceTree = "<group>"; };
 		C5CDB34F920D4252DC05E8FD /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		D6C86A862A8B9BF2E002BE73 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		DBD71AB65E686B6DC03247E0 /* EmailsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailsStore.swift; sourceTree = "<group>"; };
 		E099D97C92A76F33D26A695E /* MeetingEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingEditView.swift; sourceTree = "<group>"; };
 		E571995527BF46F24154CE6E /* LiveAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveAPITests.swift; sourceTree = "<group>"; };
 		E651CF8ADBA667BBF007BA75 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		E813568665C36BC5FA9BF1CA /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		EB5E07DE9D030CD8E72E3742 /* TaskEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskEditView.swift; sourceTree = "<group>"; };
+		F07EA18E18021F2ED048F028 /* InstallReporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallReporterTests.swift; sourceTree = "<group>"; };
 		F856A10844A2070DAF393C08 /* FluxzeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxzeApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -96,6 +110,7 @@
 				BFEDAB7BA4F5E7FC69D96573 /* API */,
 				85AA1F905CDCCCE33832319A /* Auth */,
 				63FA68457627E877123BCCD7 /* Calendar */,
+				B3925A76F9676C694EF4420D /* Emails */,
 				31A6B14FC9FF64CC2472ED33 /* Tasks */,
 				B9ECE5C9EAF8D0132E946727 /* Views */,
 			);
@@ -133,11 +148,21 @@
 			children = (
 				0A8E7F23FA3DE45DE3D418DE /* APIClientTests.swift */,
 				56AAA9B20FBD68C3287066A5 /* AuthKeyTests.swift */,
+				BF10773F318C79C658229FD2 /* EmailTests.swift */,
+				F07EA18E18021F2ED048F028 /* InstallReporterTests.swift */,
 				E571995527BF46F24154CE6E /* LiveAPITests.swift */,
 				A793A25C948E6A811266F5D1 /* MeetingTests.swift */,
 				744CBD373E925EC5B42D1DB6 /* ModelTests.swift */,
 			);
 			path = FluxzeTests;
+			sourceTree = "<group>";
+		};
+		B3925A76F9676C694EF4420D /* Emails */ = {
+			isa = PBXGroup;
+			children = (
+				DBD71AB65E686B6DC03247E0 /* EmailsStore.swift */,
+			);
+			path = Emails;
 			sourceTree = "<group>";
 		};
 		B3AF2AFFE76FA5A75F626A00 = {
@@ -154,6 +179,8 @@
 			children = (
 				432C7A86D39313D45D09D5C4 /* CalendarView.swift */,
 				50906CB2A4F8EFCAE833F769 /* Color+Hex.swift */,
+				6128E138195982F8D720BD56 /* EmailDetailView.swift */,
+				A806B322552A8E7FF2EFF97B /* EmailListView.swift */,
 				E651CF8ADBA667BBF007BA75 /* LoginView.swift */,
 				E099D97C92A76F33D26A695E /* MeetingEditView.swift */,
 				25AC528395147B038243E758 /* SettingsView.swift */,
@@ -170,6 +197,8 @@
 			children = (
 				5082E7A89DFB2BF26D61F627 /* APIClient.swift */,
 				1901BA3A71A784EF22796A09 /* APIError.swift */,
+				005055985CBEB9EDC28B60D9 /* Email.swift */,
+				92BE301963A31FA5300B627E /* InstallReporter.swift */,
 				3D97B1188C9AD10F6E6D0D71 /* Meeting.swift */,
 				05DB673F81598C323B400103 /* Models.swift */,
 				313FD5F6B7DFFD19AFE52E53 /* ServerDate.swift */,
@@ -282,6 +311,8 @@
 			files = (
 				D39441B02CCE0745FC9C249E /* APIClientTests.swift in Sources */,
 				8FBF015FC9FE3E99C1254917 /* AuthKeyTests.swift in Sources */,
+				EE5A5A0FDDC1BE2D24E9A87D /* EmailTests.swift in Sources */,
+				414811EA3005AD65BC1BB791 /* InstallReporterTests.swift in Sources */,
 				FB3AC3E5DD538292CF37D152 /* LiveAPITests.swift in Sources */,
 				DAFA4D61E1091E95A5CAE167 /* MeetingTests.swift in Sources */,
 				AB642C09E34CD8E7083813B5 /* ModelTests.swift in Sources */,
@@ -300,7 +331,12 @@
 				DC42CD3CFCA4A54BC79A9C31 /* CalendarView.swift in Sources */,
 				B9B6CB9CA56C435C8F498513 /* Color+Hex.swift in Sources */,
 				73D19A88E176F29E8FC90F4D /* Config.swift in Sources */,
+				1DA0AD0BCBD890DE1F496CB4 /* Email.swift in Sources */,
+				3B5DA4A7B278006D6E56E245 /* EmailDetailView.swift in Sources */,
+				8452CDD52614BF85AA467C42 /* EmailListView.swift in Sources */,
+				0916AA7FBBA3CE863EFE5255 /* EmailsStore.swift in Sources */,
 				8AD7DE320FBF74B36B8B88B2 /* FluxzeApp.swift in Sources */,
+				9EF14FD9C53A1C79CA55C000 /* InstallReporter.swift in Sources */,
 				0BBE1C9E2EB40AE8E0341226 /* Keychain.swift in Sources */,
 				1616177A6BDB3080056EB642 /* LoginView.swift in Sources */,
 				5E9BF6D3DC7B72BD9C81B32D /* Meeting.swift in Sources */,
@@ -399,7 +435,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.2.1;
+				MARKETING_VERSION = 2.0.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -477,7 +513,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.2.1;
+				MARKETING_VERSION = 2.0.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";

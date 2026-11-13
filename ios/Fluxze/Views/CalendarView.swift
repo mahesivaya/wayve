@@ -16,12 +16,6 @@ struct CalendarView: View {
                 .navigationTitle("Calendar")
                 .refreshable { await store.load() }
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button { showingSettings = true } label: {
-                            Image(systemName: "person.crop.circle")
-                        }
-                        .accessibilityLabel("Account")
-                    }
                     ToolbarItemGroup(placement: .topBarTrailing) {
                         Button("Today") {
                             withAnimation { selectedDay = Calendar.current.startOfDay(for: Date()) }
@@ -29,6 +23,10 @@ struct CalendarView: View {
                         .disabled(Calendar.current.isDateInToday(selectedDay))
                         Button { creating = true } label: { Image(systemName: "plus") }
                             .accessibilityLabel("New meeting")
+                        Button { showingSettings = true } label: {
+                            Image(systemName: "person.crop.circle")
+                        }
+                        .accessibilityLabel("Account")
                     }
                 }
                 .sheet(isPresented: $creating) {
