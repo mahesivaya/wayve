@@ -14,6 +14,8 @@ private struct LoginBody: Encodable {
 
 private struct LoginResponse: Decodable {
     let token: String
+    /// Org and platform members: their private key locked under the password.
+    let loginWrap: FluxzeCrypto.LoginWrap?
 }
 
 private struct EmailBody: Encodable { let email: String }
@@ -53,10 +55,24 @@ struct AuthService {
 
         do {
             let response: LoginResponse = try await api.post("/api/login", body: body)
+            if let wrap = response.loginWrap {
+                await Self.unlockKey(wrap, password: password)
+            }
             return .signedIn(token: response.token)
         } catch let error as APIError where error.code == "email_unverified" {
             return .emailUnverified(message: error.errorDescription ?? "Please verify your email.")
         }
+    }
+
+    /// Unlocks the end-to-end key with the password just typed, as the web app
+    /// does at login, so encrypted mail opens on this phone. Best-effort: a
+    /// failure leaves the key locked (the recovery phrase can still unlock it)
+    /// and never blocks signing in.
+    static func unlockKey(_ wrap: FluxzeCrypto.LoginWrap, password: String) async {
+        let pkcs8 = await Task.detached(priority: .userInitiated) {
+            try? FluxzeCrypto.unwrapLoginWrap(wrap, password: password)
+        }.value
+        if let pkcs8 { try? KeyVault.save(pkcs8: pkcs8) }
     }
 
     func verifyEmail(email: String, code: String) async throws {
