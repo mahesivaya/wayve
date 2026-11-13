@@ -5,6 +5,9 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  /* The page shell has no padding, so keep the name and tabs off the pane's
+     left edge. */
+  padding: 20px 24px;
 }
 
 /* The member list is the whole page, so its heading row carries the title on
