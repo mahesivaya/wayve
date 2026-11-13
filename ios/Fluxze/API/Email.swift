@@ -40,7 +40,7 @@ struct EmailSummary: Codable, Identifiable, Hashable {
 
 /// The folders the ☰ menu offers, by their `/api/emails?folder=` value.
 enum MailFolder: String, CaseIterable, Identifiable {
-    case inbox, starred, snoozed, important, sent, drafts, all
+    case inbox, starred, snoozed, important, sent, drafts, all, trash
 
     var id: String { rawValue }
 
@@ -53,6 +53,7 @@ enum MailFolder: String, CaseIterable, Identifiable {
         case .sent: "Sent"
         case .drafts: "Drafts"
         case .all: "All Mail"
+        case .trash: "Trash"
         }
     }
 
@@ -65,8 +66,15 @@ enum MailFolder: String, CaseIterable, Identifiable {
         case .sent: "paperplane"
         case .drafts: "doc"
         case .all: "envelope.open"
+        case .trash: "trash"
         }
     }
+}
+
+/// `GET /api/emails/{id}`: the header fields the list row doesn't carry.
+struct EmailDetail: Decodable {
+    /// null until known (mail synced before Cc was stored), "" for none.
+    let cc: String?
 }
 
 /// `GET /api/emails/{id}/body`.
@@ -104,6 +112,32 @@ enum EmailText {
             return header.trimmingCharacters(in: .whitespaces)
         }
         return String(header[header.index(after: lt)..<gt])
+    }
+
+    /// Splits a To/Cc header into one entry per person, ignoring commas inside
+    /// quoted names ("Rao, Ayana" <a@x.com>) and <addresses>.
+    static func splitAddresses(_ header: String) -> [String] {
+        var parts: [String] = []
+        var current = ""
+        var inQuotes = false
+        var inAngle = false
+        for ch in header {
+            switch ch {
+            case "\"": inQuotes.toggle()
+            case "<": inAngle = true
+            case ">": inAngle = false
+            case ",", ";":
+                if !inQuotes && !inAngle {
+                    parts.append(current)
+                    current = ""
+                    continue
+                }
+            default: break
+            }
+            current.append(ch)
+        }
+        parts.append(current)
+        return parts.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
     /// Whether a body is HTML rather than plain text.

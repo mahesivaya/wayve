@@ -16,6 +16,9 @@ struct EmailDetailView: View {
     }
 
     @State private var state: BodyState = .loading
+    @State private var showDetails = false
+    /// Loaded the first time the details open; "" when there is none.
+    @State private var cc: String?
 
     var body: some View {
         ScrollView {
@@ -52,19 +55,58 @@ struct EmailDetailView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            if let receiver = email.receiver, !receiver.isEmpty {
-                Text("To: \(receiver)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { showDetails.toggle() }
+                if showDetails, cc == nil { Task { await loadDetails() } }
+            } label: {
+                HStack(spacing: 3) {
+                    Text(EmailsStore.recipientSummary(email.receiver))
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .rotationEffect(.degrees(showDetails ? 180 : 0))
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
-            if let mailbox = store.account(for: email.accountId) {
-                Label(mailbox.label, systemImage: "tray")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(showDetails ? "Hide details" : "Show details")
+            if showDetails { details }
         }
         .textSelection(.enabled)
+    }
+
+    /// Gmail-style header details: who, when, and which mailbox.
+    private var details: some View {
+        Grid(alignment: .topLeading, horizontalSpacing: 10, verticalSpacing: 6) {
+            detailRow("from", email.sender)
+            detailRow("to", email.receiver)
+            detailRow("cc", cc?.isEmpty == false ? cc : nil)
+            detailRow("date", (email.createdAt ?? email.listDate)?
+                .formatted(date: .abbreviated, time: .shortened))
+            detailRow("mailbox", store.account(for: email.accountId)?.email)
+        }
+        .font(.caption)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    @ViewBuilder
+    private func detailRow(_ label: String, _ value: String?) -> some View {
+        if let value, !value.isEmpty {
+            GridRow {
+                Text("\(label):")
+                    .foregroundStyle(.secondary)
+                    .gridColumnAlignment(.trailing)
+                Text(value)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    /// Cc loads the first time the details open; a failure leaves it out.
+    private func loadDetails() async {
+        cc = (try? await store.detail(of: email))?.cc ?? ""
     }
 
     @ViewBuilder

@@ -77,6 +77,17 @@ final class EmailTests: XCTestCase {
         print("LIVE: \(store.accounts.count) mailbox(es), \(store.emails.count) emails, first body \(body.map { "\($0.count) chars, html=\(EmailText.isHTML($0))" } ?? "sealed")")
     }
 
+    func testRecipientSummaryShowsAddresses() {
+        XCTAssertEqual(EmailsStore.recipientSummary("Mahesh <mahesh@fluxze.com>"), "to: mahesh@fluxze.com")
+        XCTAssertEqual(
+            EmailsStore.recipientSummary("\"Rao, Ayana\" <a@x.com>, mahesh@fluxze.com"),
+            "to: a@x.com, mahesh@fluxze.com")
+        XCTAssertEqual(
+            EmailsStore.recipientSummary("a@x.com, b@x.com, c@x.com, d@x.com"),
+            "to: a@x.com, b@x.com +2")
+        XCTAssertEqual(EmailsStore.recipientSummary(nil), "to: (no recipient)")
+    }
+
     func testSealedAndHTMLDetection() {
         XCTAssertTrue(EmailText.isSealed("WAYVE_SECURE_V1\n{...}"))
         XCTAssertTrue(EmailText.isSealed("WAYVE_CHAT_E2E_V1\n{...}"))
