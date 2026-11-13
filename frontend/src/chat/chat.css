@@ -217,7 +217,7 @@
   max-width: 248px;
 }
 
-/* The "Channels", "Users" and "Recent" headers keep normal title case and a
+/* The "Channels", "DMs" and "Recent" headers keep normal title case and a
    larger size — the shared section-title style otherwise uppercases them. */
 .conversation-section-header .conversation-section-title,
 .conversation-section-title--recent {

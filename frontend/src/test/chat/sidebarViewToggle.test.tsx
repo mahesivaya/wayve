@@ -1,4 +1,4 @@
-// The chat sidebar switches between "All" (Channels + Users directories) and
+// The chat sidebar switches between "All" (Channels + your DMs) and
 // "Recent" (every conversation with messages, newest first).
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -68,7 +68,6 @@ const renderSidebar = (
       onSelectChannel={vi.fn()}
       onJoinChannel={vi.fn()}
       onSelectUser={vi.fn()}
-      onStartChat={vi.fn()}
       onNewChat={onNewChat}
       composingNew={false}
       summary={summary}
@@ -86,7 +85,7 @@ const annDm: ChatConversationSummary = {
 afterEach(() => localStorage.clear());
 
 describe("chat sidebar All / Recent", () => {
-  it("starts on All with the Channels and Users directories", () => {
+  it("starts on All with Channels and only the people you have a DM with", () => {
     renderSidebar(annDm);
 
     expect(screen.getByRole("tab", { name: "All" })).toHaveAttribute(
@@ -94,9 +93,14 @@ describe("chat sidebar All / Recent", () => {
       "true"
     );
     expect(screen.getByText("Channels")).toBeTruthy();
-    expect(screen.getByText("Users")).toBeTruthy();
+    expect(screen.getByText("DMs")).toBeTruthy();
+    expect(screen.queryByText("Users")).toBeNull();
     expect(screen.getByText("quiet")).toBeTruthy();
-    expect(screen.getByText("bob@org.test")).toBeTruthy();
+    // Ann has a DM, Bob doesn't, so only Ann is listed.
+    expect(screen.getByText("ann@org.test")).toBeTruthy();
+    expect(screen.queryByText("bob@org.test")).toBeNull();
+    // Starting a chat is "New chat"'s job; the DMs header has no "+".
+    expect(screen.queryByLabelText("Message someone by email")).toBeNull();
   });
 
   it("Recent lists only conversations with messages, newest first", () => {
@@ -104,7 +108,7 @@ describe("chat sidebar All / Recent", () => {
     fireEvent.click(screen.getByRole("tab", { name: /Recent/ }));
 
     expect(screen.queryByText("Channels")).toBeNull();
-    expect(screen.queryByText("Users")).toBeNull();
+    expect(screen.queryByText("DMs")).toBeNull();
     const rows = screen
       .getAllByRole("button")
       .map((b) => b.textContent ?? "")

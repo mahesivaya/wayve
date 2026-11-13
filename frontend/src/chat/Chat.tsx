@@ -1217,11 +1217,6 @@ export default function Chat() {
           setComposingNew(false);
           void loadUserMessages(other);
         }}
-        onStartChat={(found) => {
-          setComposingNew(false);
-          addUser(found);
-          void loadUserMessages(found);
-        }}
         onNewChat={() => {
           setChannelSettingsOpen(false);
           setSelectedConversation(null);
