@@ -4,6 +4,7 @@ import { useAuth } from "../auth/useAuth";
 import { canViewIntegrations } from "../auth/permissions";
 import Avatar from "./Avatar";
 import { getApiBase } from "../config/env";
+import { ChevronUp, LogOut as LogOutIcon } from "lucide-react";
 import { PlatformIcon, SettingsIcon } from "../icons";
 
 export default function ProfileMenu({
@@ -52,14 +53,17 @@ export default function ProfileMenu({
 
   const inSidebar = placement === "sidebar";
 
+  // The account row shows the username when there is one, else the email.
+  const displayName = user.username?.trim() || user.email;
+
   const go = (path: string) => {
     setMenuOpen(false);
     void navigate(path);
   };
 
-  // Wide screens: the sidebar's account control is a Settings gear (with a
-  // small avatar badge). It opens a small menu: Settings, plus Platform admin
-  // for users who can open a Platform page.
+  // Wide screens: the sidebar's account control is the profile picture and
+  // name. It opens a small menu: Settings, Platform admin (platform admins
+  // only) and Log out.
   if (inSidebar && minimal) {
     return (
       <div className="profile-menu profile-menu--sidebar" ref={menuRef}>
@@ -69,22 +73,22 @@ export default function ProfileMenu({
           onClick={() => setMenuOpen((o) => !o)}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
-          title={`Settings — ${user.email}`}
-          aria-label="Settings"
+          title={user.email}
+          aria-label={`Account menu for ${displayName}`}
         >
-          <span className="profile-settings-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-            <Avatar
-              className="profile-settings-badge"
-              name={user.email}
-              src={`${getApiBase()}/api/users/${user.id}/avatar`}
-              size={14}
-            />
-          </span>
-          <span className="sidebar-label">Settings</span>
+          <Avatar
+            className="profile-avatar"
+            name={user.email}
+            src={`${getApiBase()}/api/users/${user.id}/avatar`}
+            size={22}
+          />
+          <span className="sidebar-label">{displayName}</span>
+          {/* The menu opens upward; the arrow flips while it's open. */}
+          <ChevronUp
+            className={`profile-menu-chevron${menuOpen ? " open" : ""}`}
+            size={16}
+            aria-hidden="true"
+          />
         </button>
 
         {menuOpen && (
@@ -115,6 +119,23 @@ export default function ProfileMenu({
                 <span className="profile-dropdown-label">Platform admin</span>
               </button>
             )}
+            <div className="profile-dropdown-divider" />
+            <button
+              type="button"
+              role="menuitem"
+              className="profile-dropdown-item profile-dropdown-logout"
+              title="Log out"
+              onClick={() => {
+                setMenuOpen(false);
+                // logout() owns the redirect (see the full menu below).
+                logout();
+              }}
+            >
+              <span className="profile-dropdown-icon" aria-hidden="true">
+                <LogOutIcon size={18} />
+              </span>
+              <span className="profile-dropdown-label">Log out</span>
+            </button>
           </div>
         )}
       </div>
