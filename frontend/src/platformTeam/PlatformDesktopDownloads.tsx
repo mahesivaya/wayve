@@ -11,6 +11,9 @@ import "./platformTeam.css";
 const BUILD_LABELS: Record<string, string> = {
   "mac-arm64": "macOS · Apple Silicon",
   "mac-x64": "macOS · Intel",
+  // Clicks through to the App Store listing; Apple reports actual installs
+  // only in App Store Connect.
+  ios: "iPhone · App Store",
 };
 
 function buildLabel(build: string): string {
@@ -18,7 +21,7 @@ function buildLabel(build: string): string {
 }
 
 // The backend only returns builds that have been downloaded at least once; show
-// Apple Silicon and Intel side by side even while one of them is still at 0.
+// every known build (macOS and iPhone) even while one of them is still at 0.
 function buildCounts(
   byBuild: { build: string; count: number }[]
 ): { build: string; count: number }[] {
@@ -39,7 +42,8 @@ function locationLabel(r: {
 }
 
 // Clicks on the site's Download App menu, counted server-side as each one
-// redirects to the installer. The backend requires platform scope + audit:read.
+// redirects to the installer or the App Store. The backend requires platform
+// scope + audit:read.
 export default function PlatformDesktopDownloads() {
   const { user } = useAuth();
   const canView =
@@ -86,7 +90,12 @@ export default function PlatformDesktopDownloads() {
         />
         <Stat label="Last 30 days" value={data.last_30_days} />
         {buildCounts(data.by_build).map((b) => (
-          <Stat key={b.build} label={buildLabel(b.build)} value={b.count} />
+          <Stat
+            key={b.build}
+            label={buildLabel(b.build)}
+            value={b.count}
+            sub={b.build === "ios" ? "App Store clicks" : undefined}
+          />
         ))}
       </section>
 

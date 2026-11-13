@@ -219,7 +219,7 @@ export default function PlatformAnalytics() {
           </LogBlock>
         )}
         {canViewDownloads && (
-          <LogBlock title="Desktop Downloads">
+          <LogBlock title="App Downloads">
             <DesktopDownloads />
           </LogBlock>
         )}

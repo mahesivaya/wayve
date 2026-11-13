@@ -1,9 +1,11 @@
-//! Desktop app download tracking.
+//! App download tracking (desktop installers and the iPhone app).
 //!
 //! The site's "Download App" menu links to `GET /api/desktop/download/{build}`
-//! rather than straight to S3. The handler records the download (anonymous
-//! included) with the caller's IP, user-agent and offline-geolocated location,
-//! then redirects to the installer. The same build from the same IP within ten
+//! rather than straight to S3 or the App Store. The handler records the download
+//! (anonymous included) with the caller's IP, user-agent and offline-geolocated
+//! location, then redirects to the installer, or to the App Store for `ios`.
+//! An `ios` row is a click through to the App Store listing, not a confirmed
+//! install: Apple reports installs only in App Store Connect. The same build from the same IP within ten
 //! minutes is recorded once. Recording is best-effort: a failed insert
 //! still sends the visitor to their download.
 //!
@@ -29,6 +31,10 @@ const BUILDS: &[(&str, &str)] = &[
     ("mac-x64", "Fluxze-mac-x64.dmg"),
 ];
 
+/// The iPhone app's App Store listing (`frontend/src/home/DownloadApp.tsx`).
+const IOS_BUILD: &str = "ios";
+const APP_STORE_URL: &str = "https://apps.apple.com/app/fluxze/id6833218739";
+
 const UA_MAX: usize = 500;
 /// Repeats of the same build from the same IP within this many minutes are
 /// recorded once.
@@ -38,6 +44,9 @@ const RECENT_MAX_LIMIT: i64 = 500;
 const LOCATIONS_LIMIT: i64 = 100;
 
 fn installer_url(build: &str) -> Option<String> {
+    if build == IOS_BUILD {
+        return Some(APP_STORE_URL.to_string());
+    }
     BUILDS
         .iter()
         .find(|(key, _)| *key == build)

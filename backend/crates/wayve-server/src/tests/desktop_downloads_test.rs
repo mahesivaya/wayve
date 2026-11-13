@@ -90,6 +90,20 @@ mod tests {
         assert_eq!(build, "mac-arm64");
         assert_eq!(ua.as_deref(), Some("Mozilla/5.0 (Macintosh)"));
 
+        // The iPhone link is counted too and sends the visitor to the App Store.
+        let req = actix_test::TestRequest::get()
+            .uri("/desktop/download/ios")
+            .insert_header(("Authorization", format!("Bearer {token}")))
+            .insert_header(("User-Agent", "Mozilla/5.0 (iPhone)"))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::FOUND);
+        assert_eq!(
+            resp.headers().get("location").and_then(|v| v.to_str().ok()),
+            Some("https://apps.apple.com/app/fluxze/id6833218739")
+        );
+        assert_eq!(count_for_user(&pool, user).await, 2);
+
         // An unknown build is refused and not counted.
         let req = actix_test::TestRequest::get()
             .uri("/desktop/download/windows")
@@ -97,7 +111,7 @@ mod tests {
             .to_request();
         let resp = actix_test::call_service(&app, req).await;
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-        assert_eq!(count_for_user(&pool, user).await, 1);
+        assert_eq!(count_for_user(&pool, user).await, 2);
 
         cleanup(&pool, &[user]).await;
     }
