@@ -126,14 +126,12 @@ export default function RecentConversations({
   const renderRow = (r: RecentRow) =>
     r.kind === "dm" ? renderDm(r) : renderChannel(r);
 
-  if (recent.length === 0) return null;
+  // The sidebar's "Recent" tab is the heading, so the list has none of its own.
+  if (recent.length === 0) {
+    return <p className="conversation-empty">No recent conversations yet.</p>;
+  }
 
   return (
-    <>
-      <div className="conversation-section-title conversation-section-title--recent">
-        Recent
-      </div>
-      {recent.map(renderRow)}
-    </>
+    <div className="conversation-recent-list">{recent.map(renderRow)}</div>
   );
 }
