@@ -27,6 +27,7 @@ struct RootView: View {
             }
         }
         .task { await appState.restore() }
+        .task { await InstallReporter.report(api: appState.api) }
     }
 }
 
@@ -36,6 +37,8 @@ struct MainTabView: View {
 
     var body: some View {
         TabView {
+            EmailListView(store: EmailsStore(api: api))
+                .tabItem { Label("Email", systemImage: "envelope") }
             TaskListView(store: TasksStore(api: api))
                 .tabItem { Label("Tasks", systemImage: "checklist") }
             CalendarView(store: MeetingsStore(api: api))

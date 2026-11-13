@@ -41,6 +41,8 @@ final class AppState: ObservableObject {
         api.token = token
         notice = nil
         await loadMe()
+        // Attach the account to this install for the Analytics page.
+        await InstallReporter.report(api: api)
     }
 
     func signOut(notice: String? = nil) {

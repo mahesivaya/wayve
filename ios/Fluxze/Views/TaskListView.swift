@@ -18,17 +18,15 @@ struct TaskListView: View {
                 .searchable(text: $search, prompt: "Search tasks")
                 .refreshable { await store.load() }
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button { showingSettings = true } label: {
-                            Image(systemName: "person.crop.circle")
-                        }
-                        .accessibilityLabel("Account")
-                    }
                     ToolbarItemGroup(placement: .topBarTrailing) {
                         filterMenu
                         Button { creating = true } label: { Image(systemName: "plus") }
                             .accessibilityLabel("New task")
                             .disabled(store.statuses.isEmpty)
+                        Button { showingSettings = true } label: {
+                            Image(systemName: "person.crop.circle")
+                        }
+                        .accessibilityLabel("Account")
                     }
                 }
                 .sheet(isPresented: $creating) {
