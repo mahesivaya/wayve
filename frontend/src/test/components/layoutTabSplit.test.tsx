@@ -2,7 +2,7 @@
 // right column. That column's app key is only a placeholder, so it must not be
 // treated as a duplicate of the same app on the left — the Tickets board beside
 // ticket #6 used to be "deduped" away, which looked like the drag closed the tab.
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   act,
   createEvent,
@@ -543,5 +543,50 @@ describe("dragging a header tab into a split", () => {
         .getAllByRole("tab")
         .map((t) => t.textContent)
     ).toEqual(["Home"]);
+  });
+
+  describe("shrunk sidebar hover", () => {
+    const renderShrunk = () => {
+      window.localStorage.setItem("rwayve.sidebar.collapsed", "1");
+      const view = render(
+        <MemoryRouter initialEntries={["/tickets"]}>
+          <PaneRoutesContext.Provider value={renderRoutes}>
+            <Layout>
+              <p>board</p>
+            </Layout>
+          </PaneRoutesContext.Provider>
+        </MemoryRouter>
+      );
+      const nav = view.container.querySelector("nav.sidebar") as HTMLElement;
+      return nav;
+    };
+    afterEach(() => {
+      vi.useRealTimers();
+      delete (window as { fluxzeDesktop?: unknown }).fluxzeDesktop;
+    });
+
+    it("keeps the browser sidebar open, with no shrink toggle", () => {
+      const nav = renderShrunk(); // a saved "shrunk" preference
+      expect(nav).not.toHaveClass("collapsed");
+      expect(
+        screen.queryByRole("button", {
+          name: /Collapse sidebar|Expand sidebar/,
+        })
+      ).toBeNull();
+    });
+
+    it("lets the desktop app shrink it, without hover peek", () => {
+      vi.useFakeTimers();
+      (window as { fluxzeDesktop?: unknown }).fluxzeDesktop = {
+        isDesktop: true,
+      };
+      const nav = renderShrunk();
+      fireEvent.mouseEnter(nav);
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+      expect(nav).toHaveClass("collapsed");
+      expect(nav).not.toHaveClass("peek");
+    });
   });
 });
