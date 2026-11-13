@@ -1,4 +1,4 @@
-// Platform Analytics → Desktop Downloads: totals, per-build counts and the
+// Platform Analytics → App Downloads: totals, per-build counts and the
 // per-location breakdown, with unlocatable downloads shown as "Unknown".
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
@@ -19,11 +19,12 @@ vi.mock("../../auth/useAuth", () => ({
 
 vi.mock("../../api/desktopDownloads", () => ({
   getDesktopDownloadStats: vi.fn().mockResolvedValue({
-    total: 7,
-    unique_ips: 5,
-    last_30_days: 4,
+    total: 10,
+    unique_ips: 8,
+    last_30_days: 6,
     by_build: [
       { build: "mac-arm64", count: 5 },
+      { build: "ios", count: 3 },
       { build: "mac-x64", count: 2 },
     ],
     by_location: [
@@ -67,16 +68,17 @@ describe("PlatformDesktopDownloads", () => {
       ]
     );
     expect(stats).toEqual([
-      ["Downloads", "7"],
-      ["Unique IPs", "5"],
-      ["Last 30 days", "4"],
+      ["Downloads", "10"],
+      ["Unique IPs", "8"],
+      ["Last 30 days", "6"],
       ["macOS · Apple Silicon", "5"],
       ["macOS · Intel", "2"],
+      ["iPhone · App Store", "3"],
     ]);
     expect(screen.getByText("Anonymous")).toBeTruthy();
   });
 
-  it("shows an Intel count of 0 when only Apple Silicon was downloaded", async () => {
+  it("shows 0 for builds nobody has downloaded yet", async () => {
     const { getDesktopDownloadStats } =
       await import("../../api/desktopDownloads");
     vi.mocked(getDesktopDownloadStats).mockResolvedValueOnce({
@@ -99,6 +101,7 @@ describe("PlatformDesktopDownloads", () => {
     expect(stats).toEqual([
       ["macOS · Apple Silicon", "3"],
       ["macOS · Intel", "0"],
+      ["iPhone · App Store", "0"],
     ]);
   });
 });

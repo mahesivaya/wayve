@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import DownloadApp, { APP_STORE_URL } from "../../home/DownloadApp";
+import DownloadApp from "../../home/DownloadApp";
 
 const openMenu = async (userAgent: string) => {
   vi.spyOn(navigator, "userAgent", "get").mockReturnValue(userAgent);
@@ -26,7 +26,7 @@ describe("DownloadApp", () => {
     expect(items.map((item) => item.getAttribute("href"))).toEqual([
       expect.stringMatching(/\/api\/desktop\/download\/mac-arm64$/),
       expect.stringMatching(/\/api\/desktop\/download\/mac-x64$/),
-      APP_STORE_URL,
+      expect.stringMatching(/\/api\/desktop\/download\/ios$/),
     ]);
     expect(screen.queryByText("Windows")).toBeNull();
   });
@@ -49,7 +49,10 @@ describe("DownloadApp", () => {
 
     const detected = document.querySelectorAll(".is-detected");
     expect(detected).toHaveLength(1);
-    expect(detected[0]).toHaveAttribute("href", APP_STORE_URL);
+    expect(detected[0]).toHaveAttribute(
+      "href",
+      expect.stringMatching(/\/api\/desktop\/download\/ios$/)
+    );
   });
 
   it("marks no build as detected on Windows", async () => {

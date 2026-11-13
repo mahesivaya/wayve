@@ -24,8 +24,9 @@ const BUILDS: Record<BuildKey, { label: string; sub: string }> = {
 
 const ORDER: BuildKey[] = ["mac-arm64", "mac-x64"];
 
-// The native iPhone app is distributed by the App Store, not our S3 bucket.
-export const APP_STORE_URL = "https://apps.apple.com/app/fluxze/id6833218739";
+// The native iPhone app is distributed by the App Store, not our S3 bucket. Its
+// link is counted the same way and the backend redirects to the App Store
+// listing (APP_STORE_URL in backend routes/desktop_downloads.rs).
 
 type Platform = BuildKey | "ios";
 
@@ -176,7 +177,7 @@ export default function DownloadApp() {
           <a
             role="menuitem"
             className={`hx-download-item ${primary === "ios" ? "is-detected" : ""}`}
-            href={APP_STORE_URL}
+            href={trackedDownloadUrl("ios")}
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => setOpen(false)}

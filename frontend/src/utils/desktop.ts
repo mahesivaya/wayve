@@ -32,9 +32,11 @@ export const MAC_ARM64_DOWNLOAD = `${DOWNLOADS}/Fluxze-mac-arm64.dmg`;
 export const MAC_X64_DOWNLOAD = `${DOWNLOADS}/Fluxze-mac-x64.dmg`;
 
 // The site's Download App menu goes through the backend, which counts the
-// download (for platform Analytics) and redirects to the installer above.
+// download (for platform Analytics) and redirects to the installer above, or
+// to the App Store listing for "ios".
 export type DesktopBuild = "mac-arm64" | "mac-x64";
-export function trackedDownloadUrl(build: DesktopBuild): string {
+export type TrackedBuild = DesktopBuild | "ios";
+export function trackedDownloadUrl(build: TrackedBuild): string {
   return `${getApiBase()}/api/desktop/download/${build}`;
 }
 
