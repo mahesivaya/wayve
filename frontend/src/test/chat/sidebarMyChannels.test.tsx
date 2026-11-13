@@ -46,6 +46,8 @@ const renderSidebar = (channels: ChatChannel[], myChannelsByDefault: boolean) =>
       onJoinChannel={vi.fn()}
       onSelectUser={vi.fn()}
       onStartChat={vi.fn()}
+      onNewChat={vi.fn()}
+      composingNew={false}
       summary={{ conversations: [], total_unread: 0 }}
       presence={new Map()}
     />

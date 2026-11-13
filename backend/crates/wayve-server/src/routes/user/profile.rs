@@ -58,13 +58,17 @@ pub async fn get_user_by_email(
         return Ok(HttpResponse::Unauthorized().finish());
     };
 
+    // Accepts an email or a username (case-insensitive, like sign-in), so
+    // "New chat" can find someone by either. An email match wins if both hit.
     let email = query.email.trim();
     if email.is_empty() {
         return Ok(HttpResponse::BadRequest().body("Email required"));
     }
 
     let user = sqlx::query_as::<_, UserResponse>(
-        "SELECT id, email, public_key FROM users WHERE email = $1",
+        "SELECT id, email, public_key FROM users \
+         WHERE email = $1 OR email = lower($1) OR lower(username) = lower($1) \
+         ORDER BY (email = $1 OR email = lower($1)) DESC LIMIT 1",
     )
     .bind(email)
     .fetch_optional(pool.get_ref())

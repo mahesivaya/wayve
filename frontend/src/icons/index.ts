@@ -13,6 +13,7 @@ export {
   House as HomeIcon,
   Mail as EmailsIcon,
   MessageCircle as ChatIcon,
+  MessageCirclePlus as NewChatIcon,
   Calendar as SchedulerIcon,
   CalendarDays as InviteIcon,
   Folder as DriveIcon,

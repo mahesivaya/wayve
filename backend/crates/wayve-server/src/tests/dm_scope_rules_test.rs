@@ -235,6 +235,26 @@ mod tests {
             assert_eq!(body["can_message"], expected, "lookup of {target}");
         }
 
+        // "New chat" also finds people by username, case-insensitively.
+        let handle = format!("dmuser{}", p.support);
+        sqlx::query("UPDATE users SET username = $1 WHERE id = $2")
+            .bind(&handle)
+            .bind(p.support)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("set username: {e}"));
+        let resp = web_test::call_service(
+            &app,
+            get(
+                format!("/users?email={}", handle.to_uppercase()),
+                p.org1_admin,
+            ),
+        )
+        .await;
+        let body: Value = web_test::read_body_json(resp).await;
+        assert_eq!(body["id"], p.support, "lookup by username");
+        assert_eq!(body["can_message"], true, "lookup by username");
+
         // Customers see support in their people list without any prior DM.
         for caller in [p.personal_a, p.org1_admin] {
             let resp = web_test::call_service(&app, get("/users/all".into(), caller)).await;
