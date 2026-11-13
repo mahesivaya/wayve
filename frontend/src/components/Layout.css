@@ -296,30 +296,19 @@
   content: none;
 }
 
-/* Wide screens: a Settings gear with a small avatar badge at its corner. */
-.profile-settings-icon {
-  position: relative;
-  display: inline-flex;
+/* The account row's arrow: pinned to the right, muted, and flipped while the
+   menu is open. */
+.profile-menu-chevron {
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  color: var(--color-text-primary);
+  margin-left: auto;
+  color: var(--color-text-muted);
+  transition: transform 0.15s;
 }
-.profile-settings-icon svg {
-  width: 22px;
-  height: 22px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.profile-menu-chevron.open {
+  transform: rotate(180deg);
 }
-.profile-settings-icon .profile-settings-badge {
-  position: absolute;
-  right: -5px;
-  bottom: -4px;
-  box-shadow: 0 0 0 2px var(--sidebar-surface, var(--color-chrome-surface));
-  font-size: 7px;
+.sidebar.collapsed .profile-menu-chevron {
+  display: none;
 }
 
 /* Open upward from the bottom-left instead of down from the top-right. */
@@ -328,6 +317,15 @@
   bottom: calc(100% + 8px);
   left: 0;
   right: auto;
+}
+/* Browser only: the menu spans the sidebar's width instead of a fixed 240px,
+   so it fits inside the menu bar rather than spilling past its edge. */
+html:not(.is-desktop)
+  .sidebar:not(.collapsed)
+  .profile-menu--sidebar
+  .profile-dropdown {
+  right: 0;
+  width: auto;
 }
 
 /* =============================

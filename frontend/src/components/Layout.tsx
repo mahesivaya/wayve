@@ -1937,7 +1937,10 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     {
       key: "platform",
       label: "Platform",
-      visible: hasPlatformSection,
+      // Wide screens reach these pages from the Settings gear's "Platform
+      // admin" item, and they get their own sidebar menu (platformNav), like
+      // Settings. Narrow screens have no gear menu, so they keep the group.
+      visible: hasPlatformSection && isNarrow,
       icon: <PlatformIcon size={16} />,
       links: [
         {
@@ -2022,6 +2025,21 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     },
   ];
 
+  // The Settings gear's menu offers "Platform admin": the first Platform page
+  // this user can open (none when the Platform group is hidden).
+  // Only platform admin accounts get Platform admin; everyone else's gear menu
+  // is just Settings and Log out.
+  const isPlatformAdminAccount = user.account_type === "platform_admin";
+  const platformLinks: SidebarLinkDef[] =
+    isPlatformAdminAccount && hasPlatformSection
+      ? (sectionDefs
+          .find((s) => s.key === "platform")
+          ?.links?.filter((l) => l.visible !== false) ?? [])
+      : [];
+  const platformAdminPath = platformLinks[0]?.path;
+  const onPlatformLink = (l: SidebarLinkDef) =>
+    location.pathname === l.path || location.pathname.startsWith(`${l.path}/`);
+
   // The profile control lives at the bottom of the sidebar in both runtimes
   // (a ProfileMenu dropdown, trimmed to Settings + Log out on wide screens).
   // `headerActions` is the cluster that stays in the header in both.
@@ -2046,6 +2064,10 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
         "/settings/repositories",
         "/settings/developers",
       ].includes(location.pathname));
+  // The Platform admin pages do the same with the Platform menu. /platform/home
+  // (the platform AI home) isn't one of its links, so it keeps the main menu.
+  const platformTakeover =
+    !isNarrow && !settingsTakeover && platformLinks.some(onPlatformLink);
   // Settings keeps the app's frame — sidebar, tab strip, top row — and only
   // swaps the sidebar's menu for the settings menu (see settingsNav below).
   const showTabs = !isNarrow;
@@ -2156,6 +2178,28 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           </span>
           <span className="sidebar-label">Log out</span>
         </button>
+      </div>
+    </>
+  );
+
+  // The Platform admin menu, shown in the main sidebar on Platform pages the
+  // same way the settings menu is: Back to Home, then the Platform pages.
+  const platformNav = (
+    <>
+      <div className="sidebar-section">
+        {renderSidebarLink(
+          user ? homePathForUser(user) : "/home",
+          "Back to Home",
+          <ArrowLeft size={18} />,
+          false
+        )}
+      </div>
+      <div className="sidebar-section">
+        {platformLinks.map((l) => (
+          <Fragment key={l.path}>
+            {renderSidebarLink(l.path, l.label, l.icon, onPlatformLink(l))}
+          </Fragment>
+        ))}
       </div>
     </>
   );
@@ -2341,6 +2385,8 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
               {showTabs && <div className="sidebar-brand">{brand}</div>}
               {settingsTakeover ? (
                 settingsNav
+              ) : platformTakeover ? (
+                platformNav
               ) : (
                 <>
                   <div className="sidebar-section">
@@ -2425,7 +2471,11 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
               Profile and Integrations back; Appearance is a card on the
               General settings page there instead. */}
                   <div className="sidebar-section sidebar-section-bottom">
-                    <ProfileMenu placement="sidebar" minimal={!isNarrow} />
+                    <ProfileMenu
+                      placement="sidebar"
+                      minimal={!isNarrow}
+                      platformAdminPath={platformAdminPath}
+                    />
                   </div>
                 </>
               )}
