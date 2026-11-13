@@ -141,9 +141,72 @@ final class EmailsStore: ObservableObject {
         return accounts.first { $0.id == id }
     }
 
+    // MARK: Actions on one email (the web inbox's, through the same endpoints)
+
+    func isStarred(_ id: Int) -> Bool {
+        emails.first { $0.id == id }?.isStarred == true
+    }
+
+    /// Stars or unstars it here and at the mail provider; puts it back if refused.
+    func setStarred(_ email: EmailSummary, _ starred: Bool) async throws {
+        setStar(email.id, starred)
+        do {
+            let _: Ignored = try await api.post(
+                "/api/emails/\(email.id)/\(starred ? "star" : "unstar")", body: [String: String]())
+        } catch {
+            setStar(email.id, !starred)
+            throw error
+        }
+    }
+
+    func markUnread(_ email: EmailSummary) async throws {
+        setRead(email.id, false)
+        do {
+            let _: Ignored = try await api.post("/api/emails/\(email.id)/unread", body: [String: String]())
+        } catch {
+            setRead(email.id, true)
+            throw error
+        }
+    }
+
+    /// Moves it to Trash, here and at the mail provider.
+    func trash(_ email: EmailSummary) async throws {
+        try await api.delete("/api/emails/\(email.id)")
+        if folder != .trash { emails.removeAll { $0.id == email.id } }
+    }
+
+    struct Outgoing: Encodable, Equatable {
+        var accountId: Int
+        var to: String
+        var cc: [String]?
+        var subject: String
+        var body: String
+        /// Reply only: threads it under the original at the recipient.
+        var replyToEmailId: Int?
+        /// Forward only: the original's stored attachments, sent along.
+        var forwardAttachmentIds: [Int]?
+    }
+
+    /// Sends through the mailbox it's from (`POST /api/emails`, plain text).
+    func send(_ message: Outgoing) async throws {
+        let _: Ignored = try await api.post("/api/emails", body: message)
+    }
+
+    func attachmentIDs(of email: EmailSummary) async -> [Int] {
+        struct Attachment: Decodable { let id: Int }
+        let list: [Attachment] = (try? await api.get("/api/emails/\(email.id)/attachments")) ?? []
+        return list.map(\.id)
+    }
+
     private func setRead(_ id: Int, _ read: Bool) {
         if let index = emails.firstIndex(where: { $0.id == id }) {
             emails[index].isRead = read
+        }
+    }
+
+    private func setStar(_ id: Int, _ starred: Bool) {
+        if let index = emails.firstIndex(where: { $0.id == id }) {
+            emails[index].isStarred = starred
         }
     }
 }

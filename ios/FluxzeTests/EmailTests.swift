@@ -88,6 +88,41 @@ final class EmailTests: XCTestCase {
         XCTAssertEqual(EmailsStore.recipientSummary(nil), "to: (no recipient)")
     }
 
+    func testPlainTextFromHTML() {
+        let html = "<html><head><style>p{}</style></head><body><p>Hi Ana,</p><p>Line&nbsp;one<br>Line two &amp; more</p><ul><li>a</li><li>b</li></ul></body></html>"
+        XCTAssertEqual(EmailText.plainText(html), "Hi Ana,\nLine one\nLine two & more\n• a\n• b")
+        XCTAssertEqual(EmailText.plainText("  plain\ntext \n"), "plain\ntext")
+    }
+
+    func testReplyAndForwardBodies() {
+        let original = EmailSummary(
+            id: 1, accountId: 2, subject: "Lunch?", sender: "Ana <ana@x.com>", receiver: "me@x.com",
+            isRead: true, isStarred: nil, hasAttachments: nil,
+            createdAt: Date(timeIntervalSince1970: 0), sortAt: nil)
+        XCTAssertEqual(ComposeView.prefixed("Lunch?", "Re:"), "Re: Lunch?")
+        XCTAssertEqual(ComposeView.prefixed("RE: Lunch?", "Re:"), "RE: Lunch?")
+
+        let reply = ComposeView.outgoingBody("Sure!", mode: .reply, original: original, originalText: "Noon?\nOr 1?")
+        XCTAssertTrue(reply.hasPrefix("Sure!\n\nOn "))
+        XCTAssertTrue(reply.hasSuffix("Ana <ana@x.com> wrote:\n> Noon?\n> Or 1?"))
+
+        let forward = ComposeView.outgoingBody("FYI", mode: .forward, original: original, originalText: "Noon?")
+        XCTAssertTrue(forward.contains("---------- Forwarded message ---------\nFrom: Ana <ana@x.com>"))
+        XCTAssertTrue(forward.hasSuffix("Noon?"))
+
+        XCTAssertEqual(ComposeView.outgoingBody("Hi", mode: .reply, original: original, originalText: nil), "Hi")
+    }
+
+    func testOutgoingEncodesTheServerFieldNames() throws {
+        let message = EmailsStore.Outgoing(accountId: 2, to: "a@x.com", cc: ["b@x.com"], subject: "S",
+                                           body: "B", replyToEmailId: 9, forwardAttachmentIds: nil)
+        let json = try JSONSerialization.jsonObject(with: APIClient.encoder.encode(message)) as? [String: Any]
+        XCTAssertEqual(json?["account_id"] as? Int, 2)
+        XCTAssertEqual(json?["reply_to_email_id"] as? Int, 9)
+        XCTAssertEqual(json?["cc"] as? [String], ["b@x.com"])
+        XCTAssertNil(json?["forward_attachment_ids"])
+    }
+
     func testSealedAndHTMLDetection() {
         XCTAssertTrue(EmailText.isSealed("WAYVE_SECURE_V1\n{...}"))
         XCTAssertTrue(EmailText.isSealed("WAYVE_CHAT_E2E_V1\n{...}"))

@@ -99,7 +99,9 @@ final class APIClient {
             throw error
         }
 
-        if T.self == Ignored.self, data.isEmpty {
+        // A caller that ignores the body accepts any 2xx, including an empty or
+        // plain-text one ("Email sent ✅" from POST /api/emails).
+        if T.self == Ignored.self {
             return try Self.decoder.decode(T.self, from: Data("{}".utf8))
         }
         do {

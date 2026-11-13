@@ -25,6 +25,7 @@
 		73D19A88E176F29E8FC90F4D /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E41182006D4E509E502D709 /* Config.swift */; };
 		8452CDD52614BF85AA467C42 /* EmailListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A806B322552A8E7FF2EFF97B /* EmailListView.swift */; };
 		8AD7DE320FBF74B36B8B88B2 /* FluxzeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F856A10844A2070DAF393C08 /* FluxzeApp.swift */; };
+		8B1F32F79D35A3B616DAF8BE /* ComposeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2023DC3671F1C6C4D109EAC /* ComposeView.swift */; };
 		8C350933D5FCE12F2BAA6613 /* make-crypto-vectors.mjs in Resources */ = {isa = PBXBuildFile; fileRef = 28791880EB1C7EEF9DB7B9FD /* make-crypto-vectors.mjs */; };
 		8FBF015FC9FE3E99C1254917 /* AuthKeyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56AAA9B20FBD68C3287066A5 /* AuthKeyTests.swift */; };
 		97687324319A3B3B60C6E3D2 /* BIP39Wordlist.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88F81FF196533060C4BCC785 /* BIP39Wordlist.swift */; };
@@ -92,6 +93,7 @@
 		88F81FF196533060C4BCC785 /* BIP39Wordlist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BIP39Wordlist.swift; sourceTree = "<group>"; };
 		92BE301963A31FA5300B627E /* InstallReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallReporter.swift; sourceTree = "<group>"; };
 		98649CB7D547514D52F29CBA /* Fluxze.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Fluxze.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A2023DC3671F1C6C4D109EAC /* ComposeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeView.swift; sourceTree = "<group>"; };
 		A2B515DE16CD941B42060F87 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		A793A25C948E6A811266F5D1 /* MeetingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingTests.swift; sourceTree = "<group>"; };
 		A806B322552A8E7FF2EFF97B /* EmailListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailListView.swift; sourceTree = "<group>"; };
@@ -207,6 +209,7 @@
 			children = (
 				432C7A86D39313D45D09D5C4 /* CalendarView.swift */,
 				50906CB2A4F8EFCAE833F769 /* Color+Hex.swift */,
+				A2023DC3671F1C6C4D109EAC /* ComposeView.swift */,
 				6128E138195982F8D720BD56 /* EmailDetailView.swift */,
 				A806B322552A8E7FF2EFF97B /* EmailListView.swift */,
 				E651CF8ADBA667BBF007BA75 /* LoginView.swift */,
@@ -379,6 +382,7 @@
 				97687324319A3B3B60C6E3D2 /* BIP39Wordlist.swift in Sources */,
 				DC42CD3CFCA4A54BC79A9C31 /* CalendarView.swift in Sources */,
 				B9B6CB9CA56C435C8F498513 /* Color+Hex.swift in Sources */,
+				8B1F32F79D35A3B616DAF8BE /* ComposeView.swift in Sources */,
 				73D19A88E176F29E8FC90F4D /* Config.swift in Sources */,
 				1DA0AD0BCBD890DE1F496CB4 /* Email.swift in Sources */,
 				3B5DA4A7B278006D6E56E245 /* EmailDetailView.swift in Sources */,
