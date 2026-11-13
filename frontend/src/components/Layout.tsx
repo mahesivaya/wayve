@@ -1785,7 +1785,7 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
               link or bookmark keeps working. */}
           <Link
             to="/user-stories"
-            title="User Stories"
+            title="User stories"
             className={workspaceLinkClass(
               "userstories",
               "/user-stories",
@@ -1793,7 +1793,7 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
             )}
             {...splitAppLinkProps("userstories")}
           >
-            <span>📖 User Stories</span>
+            <span>📖 User stories</span>
             {userStoriesCount > 0 && (
               <span
                 className="sidebar-badge"

@@ -83,7 +83,7 @@ export const SPLIT_APPS: SplitApp[] = [
   { key: "tasks", label: "Tasks", path: "/tasks", icon: "☑", Comp: TasksView },
   {
     key: "userstories",
-    label: "User Stories",
+    label: "User stories",
     path: "/user-stories",
     icon: "📖",
     Comp: UserStoriesView,

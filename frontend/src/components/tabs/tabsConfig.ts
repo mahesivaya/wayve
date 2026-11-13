@@ -7,7 +7,7 @@ const EXTRA_SOURCES: TitleSource[] = [
   { path: "/organization/home", label: "Home" },
   { path: "/platform/home", label: "Home" },
   { path: "/tickets", label: "Tickets" },
-  { path: "/user-stories", label: "User Stories" },
+  { path: "/user-stories", label: "User stories" },
   { path: "/settings", label: "Settings" },
   { path: "/profile", label: "Profile" },
   { path: "/billing", label: "Billing" },
