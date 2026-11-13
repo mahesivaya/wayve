@@ -36,7 +36,7 @@ const USER_STORIES_CONFIG: TasksConfig = {
   detailDrawer: true,
   detailPath: (id) => `/user-stories/${id}`,
   labels: {
-    title: "User Stories",
+    title: "User stories",
     subtitle: "A shared backlog of user stories for your workspace.",
     singular: "Story",
     lowerSingular: "story",

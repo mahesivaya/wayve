@@ -41,8 +41,8 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: 0 1 200px;
-  min-width: 90px;
+  flex: 0 1 480px;
+  min-width: 180px;
   padding: 0 6px 0 14px;
   border: 1px solid transparent;
   border-bottom: none;

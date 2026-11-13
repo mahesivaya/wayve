@@ -108,9 +108,9 @@ const WORKSPACE_ITEMS = [
     path: "/documents",
   },
   {
-    link: "User Stories",
+    link: "User stories",
     page: "stories page",
-    title: "User Stories",
+    title: "User stories",
     path: "/user-stories",
   },
   { link: "Tickets", page: "tickets page", title: "Tickets", path: "/tickets" },

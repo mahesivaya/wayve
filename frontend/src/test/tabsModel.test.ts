@@ -16,7 +16,7 @@ const SOURCES = [
   { path: "/", label: "Home" },
   { path: "/platform/home", label: "Home" },
   { path: "/tickets", label: "Tickets" },
-  { path: "/user-stories", label: "User Stories" },
+  { path: "/user-stories", label: "User stories" },
 ];
 
 describe("tabsModel", () => {
@@ -72,7 +72,7 @@ describe("tabsModel", () => {
     expect(t("/platform/api-keys")).toBe("Api keys");
     expect(t("/logs/audit")).toBe("Audit");
     // A record page shows its section + id until the page names itself.
-    expect(t("/user-stories/12")).toBe("User Stories #12");
+    expect(t("/user-stories/12")).toBe("User stories #12");
   });
 
   it("persists and ignores corrupt storage", () => {
