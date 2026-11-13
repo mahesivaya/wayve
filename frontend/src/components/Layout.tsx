@@ -2022,6 +2022,14 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     },
   ];
 
+  // The Settings gear's menu offers "Platform admin": the first Platform page
+  // this user can open (none when the Platform group is hidden).
+  const platformAdminPath = hasPlatformSection
+    ? sectionDefs
+        .find((s) => s.key === "platform")
+        ?.links?.find((l) => l.visible !== false)?.path
+    : undefined;
+
   // The profile control lives at the bottom of the sidebar in both runtimes
   // (a ProfileMenu dropdown, trimmed to Settings + Log out on wide screens).
   // `headerActions` is the cluster that stays in the header in both.
@@ -2425,7 +2433,11 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
               Profile and Integrations back; Appearance is a card on the
               General settings page there instead. */}
                   <div className="sidebar-section sidebar-section-bottom">
-                    <ProfileMenu placement="sidebar" minimal={!isNarrow} />
+                    <ProfileMenu
+                      placement="sidebar"
+                      minimal={!isNarrow}
+                      platformAdminPath={platformAdminPath}
+                    />
                   </div>
                 </>
               )}

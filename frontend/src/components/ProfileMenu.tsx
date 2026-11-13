@@ -4,10 +4,12 @@ import { useAuth } from "../auth/useAuth";
 import { canViewIntegrations } from "../auth/permissions";
 import Avatar from "./Avatar";
 import { getApiBase } from "../config/env";
+import { PlatformIcon, SettingsIcon } from "../icons";
 
 export default function ProfileMenu({
   placement = "header",
   minimal = false,
+  platformAdminPath,
 }: {
   placement?: "header" | "sidebar";
   // Only Settings and Log out. For wide screens, where
@@ -15,6 +17,9 @@ export default function ProfileMenu({
   // Appearance is never in this menu: it lives in Settings (the rail on wide
   // screens, a card on the General page on narrow ones).
   minimal?: boolean;
+  // Where the gear menu's "Platform admin" item goes; omitted for users who
+  // can't open any Platform page, which hides the item.
+  platformAdminPath?: string;
 } = {}) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -32,24 +37,38 @@ export default function ProfileMenu({
         setMenuOpen(false);
       }
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
     document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [menuOpen]);
 
   if (!user) return null;
 
   const inSidebar = placement === "sidebar";
 
+  const go = (path: string) => {
+    setMenuOpen(false);
+    void navigate(path);
+  };
+
   // Wide screens: the sidebar's account control is a Settings gear (with a
-  // small avatar badge) that opens Settings directly — its left rail carries
-  // Profile, Integrations, Appearance and Log out.
+  // small avatar badge). It opens a small menu: Settings, plus Platform admin
+  // for users who can open a Platform page.
   if (inSidebar && minimal) {
     return (
-      <div className="profile-menu profile-menu--sidebar">
+      <div className="profile-menu profile-menu--sidebar" ref={menuRef}>
         <button
           type="button"
           className="profile-trigger profile-settings-trigger"
-          onClick={() => void navigate("/settings")}
+          onClick={() => setMenuOpen((o) => !o)}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
           title={`Settings — ${user.email}`}
           aria-label="Settings"
         >
@@ -67,6 +86,37 @@ export default function ProfileMenu({
           </span>
           <span className="sidebar-label">Settings</span>
         </button>
+
+        {menuOpen && (
+          <div className="profile-dropdown" role="menu">
+            <button
+              type="button"
+              role="menuitem"
+              className="profile-dropdown-item"
+              title="Settings"
+              onClick={() => go("/settings")}
+            >
+              <span className="profile-dropdown-icon" aria-hidden="true">
+                <SettingsIcon size={18} />
+              </span>
+              <span className="profile-dropdown-label">Settings</span>
+            </button>
+            {platformAdminPath && (
+              <button
+                type="button"
+                role="menuitem"
+                className="profile-dropdown-item"
+                title="Platform admin"
+                onClick={() => go(platformAdminPath)}
+              >
+                <span className="profile-dropdown-icon" aria-hidden="true">
+                  <PlatformIcon size={18} />
+                </span>
+                <span className="profile-dropdown-label">Platform admin</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
     );
   }
