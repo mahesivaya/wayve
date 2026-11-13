@@ -37,13 +37,11 @@ export default function OrganizationAdminHome() {
     };
   }, [canBootstrap, orgId, navigate]);
 
+  // Same surface as the plain Home: the chat fills the pane, so a split's
+  // second Home tab looks identical to this one.
   return (
-    <div className="organization-admin-home u-page-shell">
-      <section className="organization-admin-panel u-panel org-ai-panel">
-        <div className="org-ai-chat">
-          <AIChat hideHeader />
-        </div>
-      </section>
+    <div className="home-authed-aichat">
+      <AIChat hideHeader />
     </div>
   );
 }
