@@ -38,12 +38,16 @@ struct MainTabView: View {
 
     var body: some View {
         TabView {
+            HomeView(api: api, userID: userID)
+                .tabItem { Label("Home", systemImage: "house") }
             EmailListView(store: EmailsStore(api: api, userID: userID))
-                .tabItem { Label("Email", systemImage: "envelope") }
+                .tabItem { Label("Inbox", systemImage: "tray") }
             TaskListView(store: TasksStore(api: api))
                 .tabItem { Label("Tasks", systemImage: "checklist") }
             CalendarView(store: MeetingsStore(api: api))
                 .tabItem { Label("Calendar", systemImage: "calendar") }
+            DriveView(api: api)
+                .tabItem { Label("Drive", systemImage: "folder") }
         }
     }
 }

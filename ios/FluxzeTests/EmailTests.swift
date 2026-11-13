@@ -123,6 +123,13 @@ final class EmailTests: XCTestCase {
         XCTAssertNil(json?["forward_attachment_ids"])
     }
 
+    func testHomeSearchMatchesEveryWord() {
+        XCTAssertTrue(HomeView.matches("acme review", ["Review of ACME's plan", nil]))
+        XCTAssertTrue(HomeView.matches("cafe", ["Café meeting"]))
+        XCTAssertFalse(HomeView.matches("acme budget", ["Review of ACME's plan"]))
+        XCTAssertFalse(HomeView.matches("   ", ["anything"]))
+    }
+
     func testSealedAndHTMLDetection() {
         XCTAssertTrue(EmailText.isSealed("WAYVE_SECURE_V1\n{...}"))
         XCTAssertTrue(EmailText.isSealed("WAYVE_CHAT_E2E_V1\n{...}"))

@@ -13,16 +13,25 @@ struct CalendarView: View {
     var body: some View {
         NavigationStack {
             content
-                .navigationTitle("Calendar")
+                .navigationTitle("")
+                .navigationBarTitleDisplayMode(.inline)
                 .refreshable { await store.load() }
                 .toolbar {
-                    ToolbarItemGroup(placement: .topBarTrailing) {
+                    ToolbarItem(placement: .topBarLeading) {
                         Button("Today") {
                             withAnimation { selectedDay = Calendar.current.startOfDay(for: Date()) }
                         }
                         .disabled(Calendar.current.isDateInToday(selectedDay))
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
                         Button { creating = true } label: { Image(systemName: "plus") }
                             .accessibilityLabel("New meeting")
+                    }
+                    // The account button stands apart, in its own glass bubble.
+                    if #available(iOS 26.0, *) {
+                        ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
                         Button { showingSettings = true } label: {
                             Image(systemName: "person.crop.circle")
                         }
@@ -86,6 +95,10 @@ struct CalendarView: View {
                 Section {
                     DatePicker("Day", selection: $selectedDay, displayedComponents: .date)
                         .datePickerStyle(.graphical)
+                        // Trim the row's padding and the picker's own top
+                        // margin so the month header sits near the card's edge.
+                        .padding(.top, -6)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
                 }
 
                 let dayMeetings = store.meetings(on: selectedDay)
@@ -112,6 +125,9 @@ struct CalendarView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            // The month sits right under the toolbar instead of below a gap.
+            .contentMargins(.top, 0, for: .scrollContent)
+            .listSectionSpacing(.compact)
         }
     }
 
