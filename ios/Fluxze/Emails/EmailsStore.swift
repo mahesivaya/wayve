@@ -108,6 +108,18 @@ final class EmailsStore: ObservableObject {
         }
     }
 
+    func detail(of email: EmailSummary) async throws -> EmailDetail {
+        try await api.get("/api/emails/\(email.id)")
+    }
+
+    /// "to: a@x.com", or "to: a@x.com, b@x.com +2": the recipients' addresses.
+    static func recipientSummary(_ receiver: String?) -> String {
+        let addresses = EmailText.splitAddresses(receiver ?? "").map(EmailText.address(of:))
+        guard !addresses.isEmpty else { return "to: (no recipient)" }
+        let shown = addresses.prefix(2).joined(separator: ", ")
+        return addresses.count > 2 ? "to: \(shown) +\(addresses.count - 2)" : "to: \(shown)"
+    }
+
     func account(for id: Int?) -> MailAccount? {
         guard let id else { return nil }
         return accounts.first { $0.id == id }
