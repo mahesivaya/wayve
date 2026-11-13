@@ -17,6 +17,7 @@ struct EmailDetailView: View {
 
     @State private var state: BodyState = .loading
     @State private var showDetails = false
+    @State private var unlocking = false
     /// Loaded the first time the details open; "" when there is none.
     @State private var cc: String?
 
@@ -36,6 +37,9 @@ struct EmailDetailView: View {
         .task {
             await store.markRead(email)
             await loadBody()
+        }
+        .sheet(isPresented: $unlocking) {
+            UnlockKeyView { Task { await loadBody() } }
         }
     }
 
@@ -120,10 +124,16 @@ struct EmailDetailView: View {
             EmailBodyView(text: text)
         case .sealed:
             ContentUnavailableView {
-                Label("Encrypted for your browser", systemImage: "lock")
+                Label("Encrypted message", systemImage: "lock")
             } description: {
-                Text("This message is stored encrypted with your browser's key, and Fluxze couldn't fetch a fresh copy from your mail provider. Read it in Fluxze on the web, or reconnect this mailbox there.")
+                Text(KeyVault.hasKey
+                     ? "This message is encrypted with a key that isn't on this iPhone. Read it in Fluxze on the web."
+                     : "This message is end-to-end encrypted. Unlock your key on this iPhone to read it here.")
             } actions: {
+                if !KeyVault.hasKey {
+                    Button("Unlock with recovery phrase") { unlocking = true }
+                        .buttonStyle(.borderedProminent)
+                }
                 Link("Open in Fluxze", destination: Config.webURL("/emails"))
             }
         case .failed(let message):

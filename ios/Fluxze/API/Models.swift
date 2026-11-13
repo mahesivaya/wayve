@@ -89,6 +89,8 @@ struct Project: Codable, Identifiable, Hashable {
 
 /// The parts of `GET /api/me` the app uses.
 struct Me: Codable, Equatable {
+    /// Picks this user's slot in multi-recipient envelopes.
+    let id: Int?
     let email: String
     let username: String?
     let accountType: String?
