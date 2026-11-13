@@ -1678,6 +1678,27 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   // underneath, deliberately without the `.sidebar-subitems` wrapper.
   const renderSection = (s: SidebarSectionDef) => {
     if (!s.visible) return null;
+    // In the icon rail a group shows just its icon, never its links — even an
+    // always-open group like Organization. Clicking the icon opens the sidebar
+    // (with the group expanded, for collapsible ones).
+    const expandFromRail = () => {
+      if (s.collapsible !== false) sections.setOpen(s.key, true);
+      if (isNarrow) setNavOpen(true);
+      else setSidebarCollapsed(false);
+    };
+    if (s.collapsible === false && railCollapsed) {
+      return (
+        <div className="sidebar-section" key={s.key}>
+          {renderSectionToggle(
+            s.label,
+            false,
+            expandFromRail,
+            undefined,
+            s.icon
+          )}
+        </div>
+      );
+    }
     if (s.collapsible === false) {
       return (
         <div className="sidebar-section" key={s.key}>
@@ -1698,11 +1719,7 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     // section expanded instead.
     const open = sections.isOpen(s.key) && !railCollapsed;
     const onToggle = railCollapsed
-      ? () => {
-          sections.setOpen(s.key, true);
-          if (isNarrow) setNavOpen(true);
-          else setSidebarCollapsed(false);
-        }
+      ? expandFromRail
       : () => sections.toggle(s.key);
     return (
       <div className="sidebar-section" key={s.key}>
