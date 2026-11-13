@@ -24,6 +24,11 @@ const BUILDS: Record<BuildKey, { label: string; sub: string }> = {
 
 const ORDER: BuildKey[] = ["mac-arm64", "mac-x64"];
 
+// The native iPhone app is distributed by the App Store, not our S3 bucket.
+export const APP_STORE_URL = "https://apps.apple.com/app/fluxze/id6833218739";
+
+type Platform = BuildKey | "ios";
+
 function AppleIcon() {
   return (
     <svg
@@ -35,6 +40,15 @@ function AppleIcon() {
     >
       <path d="M16.37 1.43c0 1.06-.39 2.05-1.05 2.79-.78.88-2.06 1.56-3.11 1.47-.13-1.03.4-2.12 1.01-2.8.72-.81 1.98-1.4 3.15-1.46zM20.6 17.02c-.58 1.34-.86 1.94-1.61 3.12-1.05 1.66-2.53 3.72-4.37 3.74-1.63.02-2.05-1.06-4.26-1.05-2.21.01-2.67 1.07-4.3 1.05-1.83-.02-3.24-1.86-4.29-3.52C-1.34 17.16-.04 11.95 2.92 10.17c1.31-.79 2.68-1.08 3.8-1.08 1.63 0 2.65 1.08 4.27 1.08 1.55 0 2.5-1.08 4.27-1.08 1 0 2.6.32 3.8 1.45-3.34 1.83-2.8 6.58.54 7.48z" />
     </svg>
+  );
+}
+
+// iPhone UAs also contain "Mac OS X", so check this before isMac. iPadOS
+// reports itself as a Mac; touch support tells them apart.
+function isIOS(): boolean {
+  return (
+    /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+    (/Mac/i.test(navigator.platform || "") && navigator.maxTouchPoints > 1)
   );
 }
 
@@ -82,14 +96,16 @@ async function detectMacArch(): Promise<"mac-arm64" | "mac-x64"> {
 }
 
 export default function DownloadApp() {
-  // Stays null off a Mac, so no build is marked as the visitor's own.
-  const [primary, setPrimary] = useState<BuildKey | null>(null);
+  // Stays null off Apple devices, so no build is marked as the visitor's own.
+  const [primary, setPrimary] = useState<Platform | null>(() =>
+    isIOS() ? "ios" : null
+  );
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLSpanElement | null>(null);
 
   useEffect(() => {
     let alive = true;
-    if (isMac()) {
+    if (!isIOS() && isMac()) {
       void detectMacArch().then((k) => {
         if (alive) setPrimary(k);
       });
@@ -157,6 +173,27 @@ export default function DownloadApp() {
               </a>
             );
           })}
+          <a
+            role="menuitem"
+            className={`hx-download-item ${primary === "ios" ? "is-detected" : ""}`}
+            href={APP_STORE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => setOpen(false)}
+          >
+            <span className="hx-download-ico">
+              <AppleIcon />
+            </span>
+            <span className="hx-download-text">
+              <strong>iPhone</strong>
+              <small>App Store</small>
+            </span>
+            {primary === "ios" && (
+              <span className="hx-download-check" aria-hidden="true">
+                ✓
+              </span>
+            )}
+          </a>
         </div>
       )}
     </span>
