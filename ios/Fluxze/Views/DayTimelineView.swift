@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// One day hour by hour, 00:00 to 24:00, with its meetings drawn at their times
-/// (overlapping meetings side by side). Opened by tapping a date in Calendar.
+/// (overlapping meetings side by side). Opened from "Day view" in Calendar.
 struct DayTimelineView: View {
     @ObservedObject var store: MeetingsStore
     @State var day: Date
@@ -53,7 +53,9 @@ struct DayTimelineView: View {
             MeetingEditView(store: store, meeting: meeting, day: day, onSaved: { _ in })
         }
         .sheet(isPresented: Binding(get: { creatingAt != nil }, set: { if !$0 { creatingAt = nil } })) {
-            MeetingEditView(store: store, meeting: nil, day: day, onSaved: { _ in })
+            // Starts at the hour that was tapped.
+            MeetingEditView(store: store, meeting: nil, day: day,
+                            startMinutes: creatingAt.map { $0 * 60 }, onSaved: { _ in })
         }
     }
 
@@ -147,7 +149,8 @@ struct DayTimelineView: View {
     }
 
     static func defaultStartHour(day: Date) -> Int {
-        Calendar.current.isDateInToday(day) ? Calendar.current.component(.hour, from: .now) + 1 : 9
+        // The next hour today (never past 11 pm), else 9 am.
+        Calendar.current.isDateInToday(day) ? min(Calendar.current.component(.hour, from: .now) + 1, 23) : 9
     }
 
     struct Placed {

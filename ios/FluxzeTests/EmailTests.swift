@@ -161,6 +161,34 @@ final class EmailTests: XCTestCase {
                        "/api/emails?folder=all&q=x")
     }
 
+    func testSearchScopeMatchesTheWeb() {
+        // Most folders search all mail; Spam, Drafts and Trash search in place.
+        XCTAssertEqual(EmailsStore.listPath(folder: .starred, accountID: nil, query: "x", before: nil),
+                       "/api/emails?folder=all&q=x")
+        for folder in [MailFolder.spam, .drafts, .trash] {
+            XCTAssertEqual(EmailsStore.searchScope(folder: folder, label: nil), folder)
+            XCTAssertEqual(EmailsStore.listPath(folder: folder, accountID: nil, query: "x", before: nil),
+                           "/api/emails?folder=\(folder.rawValue)&q=x")
+        }
+        XCTAssertEqual(EmailsStore.searchScope(folder: .inbox, label: nil), .all)
+    }
+
+    func testReplyFromSentGoesToTheRecipients() {
+        func email(sender: String, receiver: String?) -> EmailSummary {
+            EmailSummary(id: 1, accountId: 2, subject: "Hi", sender: sender, receiver: receiver,
+                         isRead: true, isStarred: nil, hasAttachments: nil, createdAt: nil, sortAt: nil)
+        }
+        // Someone else's email: reply to them.
+        XCTAssertEqual(ComposeView.replyAddress(email(sender: "Ana <ana@x.com>", receiver: "me@x.com"),
+                                                mailbox: "me@x.com"), "ana@x.com")
+        // One you sent: reply to whoever you sent it to.
+        XCTAssertEqual(ComposeView.replyAddress(email(sender: "Me <ME@x.com>", receiver: "Ana <ana@x.com>, bo@x.com"),
+                                                mailbox: "me@x.com"), "ana@x.com, bo@x.com")
+        // Unknown mailbox: the sender, as before.
+        XCTAssertEqual(ComposeView.replyAddress(email(sender: "me@x.com", receiver: "ana@x.com"), mailbox: nil),
+                       "me@x.com")
+    }
+
     func testSealedAndHTMLDetection() {
         XCTAssertTrue(EmailText.isSealed("WAYVE_SECURE_V1\n{...}"))
         XCTAssertTrue(EmailText.isSealed("WAYVE_CHAT_E2E_V1\n{...}"))

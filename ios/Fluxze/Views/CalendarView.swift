@@ -103,6 +103,12 @@ struct CalendarView: View {
 
                 let dayMeetings = store.meetings(on: selectedDay)
                 Section(selectedDay.formatted(.dateTime.weekday(.wide).month(.wide).day())) {
+                    // The day hour by hour, meetings drawn at their times.
+                    NavigationLink {
+                        DayTimelineView(store: store, day: selectedDay)
+                    } label: {
+                        Label("Day view", systemImage: "calendar.day.timeline.left")
+                    }
                     if dayMeetings.isEmpty {
                         Text("No meetings")
                             .foregroundStyle(.secondary)

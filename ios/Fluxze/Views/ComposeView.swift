@@ -115,13 +115,23 @@ struct ComposeView: View {
         case .new:
             break
         case .reply:
-            to = original.sender.map(EmailText.address(of:)) ?? ""
+            to = Self.replyAddress(original, mailbox: store.account(for: original.accountId)?.email)
             subject = Self.prefixed(base, "Re:")
             focus = .message
         case .forward:
             subject = Self.prefixed(base, "Fwd:")
             focus = .to
         }
+    }
+
+    /// Who a reply goes to: the sender, unless the sender is this mailbox (an
+    /// email you sent), in which case it's the people you sent it to.
+    static func replyAddress(_ original: EmailSummary, mailbox: String?) -> String {
+        let sender = original.sender.map(EmailText.address(of:)) ?? ""
+        guard let mailbox, !sender.isEmpty,
+              sender.caseInsensitiveCompare(mailbox) == .orderedSame else { return sender }
+        let recipients = EmailText.splitAddresses(original.receiver ?? "").map(EmailText.address(of:))
+        return recipients.isEmpty ? sender : recipients.joined(separator: ", ")
     }
 
     /// "Re: Hello", without stacking "Re: Re:".

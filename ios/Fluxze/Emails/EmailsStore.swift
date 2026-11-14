@@ -35,10 +35,21 @@ final class EmailsStore: ObservableObject {
         self.userID = userID
     }
 
-    /// A search looks through all mail, as on the web.
+    /// All Mail leaves these out, so a search started in one of them stays
+    /// there (as on the web, `frontend/src/emails/searchScope.ts`).
+    static let searchedInPlace: Set<MailFolder> = [.spam, .drafts, .trash]
+
+    /// Where a search from this folder or label looks: all mail, as in Gmail,
+    /// except in Spam, Drafts and Trash, which only a search there can reach.
+    static func searchScope(folder: MailFolder, label: MailLabel?) -> MailFolder {
+        label == nil && searchedInPlace.contains(folder) ? folder : .all
+    }
+
     static func listPath(folder: MailFolder, label: MailLabel? = nil, accountID: Int?, query: String, before: EmailSummary?) -> String {
-        let shown = label?.folderKey ?? folder.rawValue
-        var items = [URLQueryItem(name: "folder", value: query.isEmpty ? shown : MailFolder.all.rawValue)]
+        let shown = query.isEmpty
+            ? label?.folderKey ?? folder.rawValue
+            : searchScope(folder: folder, label: label).rawValue
+        var items = [URLQueryItem(name: "folder", value: shown)]
         if let accountID { items.append(URLQueryItem(name: "account_id", value: String(accountID))) }
         if !query.isEmpty { items.append(URLQueryItem(name: "q", value: query)) }
         if let before, let date = before.listDate {

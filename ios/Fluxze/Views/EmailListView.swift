@@ -79,12 +79,18 @@ struct EmailListView: View {
         .opacity(store.accounts.isEmpty ? 0 : 1)
     }
 
+    private var searchPrompt: String {
+        let scope = EmailsStore.searchScope(folder: store.folder, label: store.label)
+        return scope == .all ? "Search mail" : "Search in \(scope.title)"
+    }
+
     private var searchField: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField(store.isInbox ? "Search mail" : "Search in \(store.viewTitle)",
-                      text: $searchText)
+            // Says where the search really looks: all mail, unless this is
+            // Spam, Drafts or Trash (EmailsStore.searchScope).
+            TextField(searchPrompt, text: $searchText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.search)
