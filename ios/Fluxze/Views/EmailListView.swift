@@ -173,6 +173,8 @@ struct EmailListView: View {
                     .onAppear {
                         if email.id == store.emails.last?.id { Task { await store.loadMore() } }
                     }
+                    // Tighter left margin than the list's default.
+                    .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 12))
                 }
                 if store.isLoadingMore {
                     HStack { Spacer(); ProgressView(); Spacer() }
@@ -196,11 +198,11 @@ struct EmailRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 6) {
             Circle()
                 .fill(email.isRead ? Color.clear : Color.accentColor)
-                .frame(width: 8, height: 8)
-                .padding(.top, 6)
+                .frame(width: 7, height: 7)
+                .padding(.top, 7)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline) {
