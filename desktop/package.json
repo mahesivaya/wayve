@@ -1,6 +1,6 @@
 {
   "name": "fluxze-desktop",
-  "version": "0.3.2",
+  "version": "1.0.0",
   "description": "Fluxze desktop app — native macOS shell around https://fluxze.com",
   "private": true,
   "author": "Fluxze",
