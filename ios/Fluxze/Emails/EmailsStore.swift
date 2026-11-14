@@ -175,6 +175,46 @@ final class EmailsStore: ObservableObject {
         if folder != .trash { emails.removeAll { $0.id == email.id } }
     }
 
+    /// Brings it back from Trash to the Inbox, here and at the mail provider.
+    func restore(_ email: EmailSummary) async throws {
+        let _: Ignored = try await api.post("/api/emails/\(email.id)/restore", body: [String: String]())
+        if folder == .trash { emails.removeAll { $0.id == email.id } }
+    }
+
+    /// Hides it until `until` (Fluxze only; it returns to the top of the Inbox).
+    func snooze(_ email: EmailSummary, until: Date) async throws {
+        struct Body: Encodable { let until: String }
+        let _: Ignored = try await api.post(
+            "/api/emails/\(email.id)/snooze",
+            body: Body(until: ISO8601DateFormatter().string(from: until)))
+        if folder != .snoozed { emails.removeAll { $0.id == email.id } }
+    }
+
+    /// The snooze presets, as in Gmail: later today, tomorrow, this weekend
+    /// and next week, at 8 am (later today: in three hours, or 6 pm).
+    static func snoozeOptions(now: Date = .now, calendar: Calendar = .current) -> [(title: String, date: Date)] {
+        func at(_ day: Date, hour: Int) -> Date {
+            calendar.date(bySettingHour: hour, minute: 0, second: 0, of: day) ?? day
+        }
+        var options: [(String, Date)] = []
+        let hour = calendar.component(.hour, from: now)
+        if hour < 17 {
+            options.append(("Later today", hour < 15 ? at(now, hour: 18) : now.addingTimeInterval(3 * 3600)))
+        }
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) {
+            options.append(("Tomorrow", at(tomorrow, hour: 8)))
+        }
+        let weekday = calendar.component(.weekday, from: now)  // 1 = Sunday … 7 = Saturday
+        if weekday != 7, weekday != 1,
+           let saturday = calendar.nextDate(after: now, matching: DateComponents(weekday: 7), matchingPolicy: .nextTime) {
+            options.append(("This weekend", at(saturday, hour: 8)))
+        }
+        if let monday = calendar.nextDate(after: now, matching: DateComponents(weekday: 2), matchingPolicy: .nextTime) {
+            options.append(("Next week", at(monday, hour: 8)))
+        }
+        return options
+    }
+
     struct Outgoing: Encodable, Equatable {
         var accountId: Int
         var to: String

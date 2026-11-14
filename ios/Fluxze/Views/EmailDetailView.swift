@@ -90,11 +90,49 @@ struct EmailDetailView: View {
                     .frame(width: 36, height: 36, alignment: .trailing)
             }
             .accessibilityLabel("Delete")
+            moveMenu
         }
         .foregroundStyle(.primary)
         .padding(.horizontal)
         .frame(height: 40)
         .background(.bar)
+    }
+
+    /// ⋮ in the slim bar: Move to and Snooze. Label isn't offered until the
+    /// server can apply labels.
+    private var moveMenu: some View {
+        Menu {
+            Menu {
+                Button {
+                    run { try await store.restore(email); dismiss() }
+                } label: { Label("Inbox", systemImage: "tray") }
+                .disabled(store.folder != .trash)
+                Button(role: .destructive) { confirmDelete = true } label: {
+                    Label("Trash", systemImage: "trash")
+                }
+                .disabled(store.folder == .trash)
+            } label: {
+                Label("Move to", systemImage: "folder")
+            }
+            Menu {
+                ForEach(EmailsStore.snoozeOptions(), id: \.date) { option in
+                    Button {
+                        run { try await store.snooze(email, until: option.date); dismiss() }
+                    } label: {
+                        Text(option.title)
+                        Text(option.date.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
+                    }
+                }
+            } label: {
+                Label("Snooze", systemImage: "clock")
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .rotationEffect(.degrees(90))
+                .font(.body)
+                .frame(width: 32, height: 36, alignment: .trailing)
+        }
+        .accessibilityLabel("More")
     }
 
     /// ☆ ↩ ⋮ beside the sender, like Gmail.
