@@ -299,8 +299,11 @@ struct EmailBodyView: View {
 
     var body: some View {
         if EmailText.isHTML(text) {
-            HTMLView(html: text, height: $height)
-                .frame(height: height)
+            // The width is passed in so turning the phone re-fits the email.
+            GeometryReader { geo in
+                HTMLView(html: text, width: geo.size.width, height: $height)
+            }
+            .frame(height: height)
         } else {
             Text(text)
                 .font(.body)
@@ -312,6 +315,9 @@ struct EmailBodyView: View {
 
 struct HTMLView: UIViewRepresentable {
     let html: String
+    /// The space available; when it changes (the phone turns), the email is
+    /// fitted again.
+    var width: CGFloat = 0
     @Binding var height: CGFloat
 
     func makeCoordinator() -> Coordinator { Coordinator(height: $height) }
@@ -329,9 +335,18 @@ struct HTMLView: UIViewRepresentable {
     }
 
     func updateUIView(_ view: WKWebView, context: Context) {
-        guard context.coordinator.loaded != html else { return }
-        context.coordinator.loaded = html
-        view.loadHTMLString(Self.document(html), baseURL: nil)
+        let coordinator = context.coordinator
+        if coordinator.loaded != html {
+            coordinator.loaded = html
+            coordinator.width = width
+            view.loadHTMLString(Self.document(html), baseURL: nil)
+        } else if abs(coordinator.width - width) > 1 {
+            coordinator.width = width
+            // Let the web view take its new size before measuring.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak view] in
+                if let view { coordinator.refit(view) }
+            }
+        }
     }
 
     /// Fits the email to the phone's width and follows light/dark mode, without
@@ -351,6 +366,7 @@ struct HTMLView: UIViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate {
         var loaded: String?
+        var width: CGFloat = 0
         @Binding var height: CGFloat
 
         init(height: Binding<CGFloat>) {
@@ -387,6 +403,8 @@ struct HTMLView: UIViewRepresentable {
                 if let webView { self?.fit(webView) }
             }
         }
+
+        func refit(_ webView: WKWebView) { fit(webView) }
 
         private func fit(_ webView: WKWebView) {
             // Scripts are off for the page, but the app may still evaluate.
