@@ -342,10 +342,10 @@ struct HTMLView: UIViewRepresentable {
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="color-scheme" content="light dark">
         <style>
-        body { margin: 0; font: -apple-system-body; word-wrap: break-word; }
-        img, table { max-width: 100% !important; height: auto; }
+        body { margin: 0; font: -apple-system-body; word-wrap: break-word; overflow-x: hidden; }
+        img { max-width: 100%; height: auto; }
         pre { white-space: pre-wrap; }
-        </style></head><body>\(html)</body></html>
+        </style></head><body><div id="fz">\(html)</div></body></html>
         """
     }
 
@@ -357,9 +357,40 @@ struct HTMLView: UIViewRepresentable {
             _height = height
         }
 
+        /// Fits a wide email to the screen, as Mail and Gmail do: most HTML
+        /// mail is a fixed ~600px layout, so if the content is wider than the
+        /// view it's scaled down to fit, then the view takes its new height.
+        /// Run again shortly after load, for images that size themselves late.
+        /// The email is laid out at its natural width inside #fz, then scaled
+        /// as a whole (a transform, not zoom, so text keeps its own spacing).
+        static let fitScript = """
+        (function () {
+          var wrap = document.getElementById('fz');
+          wrap.style.transform = '';
+          wrap.style.width = '';
+          var view = window.innerWidth;
+          var wide = Math.max(wrap.scrollWidth, document.documentElement.scrollWidth);
+          if (wide > view + 1) {
+            var scale = view / wide;
+            wrap.style.width = wide + 'px';
+            wrap.style.transformOrigin = '0 0';
+            wrap.style.transform = 'scale(' + scale + ')';
+            return Math.ceil(wrap.getBoundingClientRect().height) + 4;
+          }
+          return document.documentElement.scrollHeight;
+        })()
+        """
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            fit(webView)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self, weak webView] in
+                if let webView { self?.fit(webView) }
+            }
+        }
+
+        private func fit(_ webView: WKWebView) {
             // Scripts are off for the page, but the app may still evaluate.
-            webView.evaluateJavaScript("document.documentElement.scrollHeight") { [weak self] value, _ in
+            webView.evaluateJavaScript(Self.fitScript) { [weak self] value, _ in
                 if let h = value as? CGFloat, h > 0 {
                     DispatchQueue.main.async { self?.height = h }
                 }
