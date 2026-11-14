@@ -1,5 +1,5 @@
-// Workspace sidebar items follow the active pane. Library, User Stories, Tickets
-// and Skills were plain links, so with the second pane focused a click still
+// Workspace sidebar items follow the active pane. Library, User Stories and
+// Tickets were plain links, so with the second pane focused a click still
 // navigated and replaced the routed first pane. Drives the real sidebar on both
 // admin homes; the page modules are stubbed so only Layout is under test.
 import { describe, expect, it, vi, beforeEach } from "vitest";
@@ -114,7 +114,6 @@ const WORKSPACE_ITEMS = [
     path: "/user-stories",
   },
   { link: "Tickets", page: "tickets page", title: "Tickets", path: "/tickets" },
-  { link: "Skills", page: "skills page", title: "Skills", path: "/skills" },
   {
     link: "Code & reviews",
     page: "repo page",
@@ -160,6 +159,12 @@ describe.each(ACCOUNTS)("Workspace items on the $name home", (account) => {
   beforeEach(() => {
     window.localStorage.clear();
     authState.user = account.user;
+  });
+
+  // Skills is off the menu for every account, owners included.
+  it("does not list Skills", () => {
+    renderAt(account.home);
+    expect(screen.queryByRole("link", { name: /Skills/ })).toBeNull();
   });
 
   it.each(WORKSPACE_ITEMS)(
