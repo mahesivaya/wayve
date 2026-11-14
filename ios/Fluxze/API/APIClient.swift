@@ -64,7 +64,28 @@ final class APIClient {
         let _: Ignored = try await send("DELETE", path, body: Optional<NoBody>.none)
     }
 
+    /// The raw bytes of a GET, such as a file download.
+    func download(_ path: String) async throws -> Data {
+        try await perform("GET", path, body: Optional<NoBody>.none)
+    }
+
     func send<T: Decodable, B: Encodable>(_ method: String, _ path: String, body: B?) async throws -> T {
+        let data = try await perform(method, path, body: body)
+        // A caller that ignores the body accepts any 2xx, including an empty or
+        // plain-text one ("Email sent ✅" from POST /api/emails).
+        if T.self == Ignored.self {
+            return try Self.decoder.decode(T.self, from: Data("{}".utf8))
+        }
+        do {
+            return try Self.decoder.decode(T.self, from: data)
+        } catch {
+            throw APIError.decoding(String(describing: error))
+        }
+    }
+
+    /// Sends the request and returns the body of a 2xx; anything else throws
+    /// (a 401 on an authenticated request also signs out).
+    private func perform<B: Encodable>(_ method: String, _ path: String, body: B?) async throws -> Data {
         guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
             throw APIError.network("Invalid address: \(path)")
         }
@@ -98,14 +119,6 @@ final class APIClient {
             }
             throw error
         }
-
-        if T.self == Ignored.self, data.isEmpty {
-            return try Self.decoder.decode(T.self, from: Data("{}".utf8))
-        }
-        do {
-            return try Self.decoder.decode(T.self, from: data)
-        } catch {
-            throw APIError.decoding(String(describing: error))
-        }
+        return data
     }
 }

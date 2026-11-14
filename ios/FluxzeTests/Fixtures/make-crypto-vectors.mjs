@@ -76,6 +76,15 @@ const multi = await seal("Fluxze to Fluxze");
 const note = await seal("A private note");
 const envelope = (o) => "WAYVE_SECURE_V1\n" + JSON.stringify(o);
 
+// A Drive file in the WV1 binary envelope (crypto/fileEnvelope.ts).
+const fileBody = new TextEncoder().encode("%PDF-1.4 drive file ✓");
+const fileAes = await subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
+const fileIv = rand(12);
+const fileCt = new Uint8Array(await subtle.encrypt({ name: "AES-GCM", iv: fileIv }, fileAes, fileBody));
+const fileWrapped = new Uint8Array(await subtle.encrypt({ name: "RSA-OAEP" }, pair.publicKey, await subtle.exportKey("raw", fileAes)));
+const wlen = new Uint8Array([(fileWrapped.length >>> 24) & 255, (fileWrapped.length >>> 16) & 255, (fileWrapped.length >>> 8) & 255, fileWrapped.length & 255]);
+const fileEnvelope = new Uint8Array([0x57, 0x56, 0x31, 0x00, 0, 1, ...fileIv, ...wlen, ...fileWrapped, ...fileCt]);
+
 const v = {
   pkcs8: b64(pkcs8),
   spki: b64(spki),
@@ -87,6 +96,8 @@ const v = {
   userId,
   single: envelope({ type: "wayve_encrypted", data: single.data, key: single.key, iv: single.iv }),
   multi: envelope({ type: "wayve_encrypted_multi", data: multi.data, iv: multi.iv, keys: { [userId]: multi.key } }),
+  file: b64(fileEnvelope),
+  fileText: "%PDF-1.4 drive file ✓",
   note: envelope({ type: "wayve_self_v1", data: note.data, iv: note.iv, keys: { [userId]: note.key } }),
 };
 

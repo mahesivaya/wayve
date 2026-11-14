@@ -176,6 +176,32 @@ enum FluxzeCrypto {
         return string
     }
 
+    /// The binary envelope Drive files are stored in
+    /// (`frontend/src/crypto/fileEnvelope.ts`), big-endian:
+    ///   "WV1\0" | version u16 = 1 | iv (12) | wlen u32 | wrapped key | AES-GCM data + tag
+    static let fileMagic: [UInt8] = [0x57, 0x56, 0x31, 0x00]
+
+    static func isFileEnvelope(_ data: Data) -> Bool {
+        data.count >= 6 && Array(data.prefix(4)) == fileMagic
+    }
+
+    static func openFileEnvelope(_ data: Data, key: SecKey) throws -> Data {
+        let bytes = [UInt8](data)
+        guard isFileEnvelope(data), bytes.count >= 22 else { throw Failure.unsupportedEnvelope }
+        let version = Int(bytes[4]) << 8 | Int(bytes[5])
+        guard version == 1 else { throw Failure.unsupportedEnvelope }
+        let iv = Data(bytes[6..<18])
+        let wrappedLength = bytes[18..<22].reduce(0) { $0 << 8 | Int($1) }
+        // RSA-2048 wraps to 256 bytes, RSA-4096 to 512; the web caps it at 1 KB.
+        guard wrappedLength > 0, wrappedLength <= 1024, 22 + wrappedLength <= bytes.count else {
+            throw Failure.unsupportedEnvelope
+        }
+        let wrapped = Data(bytes[22..<22 + wrappedLength])
+        let ciphertext = Data(bytes[(22 + wrappedLength)...])
+        let aesKey = try rsaOAEPDecrypt(wrapped, with: key)
+        return try aesGCMOpen(key: aesKey, iv: iv, ciphertextAndTag: ciphertext)
+    }
+
     private static func bytes(_ values: [Int]) -> Data {
         Data(values.map { UInt8(truncatingIfNeeded: $0) })
     }

@@ -14,7 +14,8 @@ struct TaskListView: View {
     var body: some View {
         NavigationStack {
             content
-                .navigationTitle("Tasks")
+                .navigationTitle("")
+                .navigationBarTitleDisplayMode(.inline)
                 .searchable(text: $search, prompt: "Search tasks")
                 .refreshable { await store.load() }
                 .toolbar {
@@ -23,6 +24,12 @@ struct TaskListView: View {
                         Button { creating = true } label: { Image(systemName: "plus") }
                             .accessibilityLabel("New task")
                             .disabled(store.statuses.isEmpty)
+                    }
+                    // The account button stands apart, in its own glass bubble.
+                    if #available(iOS 26.0, *) {
+                        ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
                         Button { showingSettings = true } label: {
                             Image(systemName: "person.crop.circle")
                         }

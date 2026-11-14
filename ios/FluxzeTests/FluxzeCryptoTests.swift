@@ -15,6 +15,8 @@ final class FluxzeCryptoTests: XCTestCase {
         let single: String
         let multi: String
         let note: String
+        let file: String
+        let fileText: String
     }
 
     private let v: Vectors = {
@@ -60,6 +62,17 @@ final class FluxzeCryptoTests: XCTestCase {
         XCTAssertEqual(try FluxzeCrypto.openSecure(v.note, userID: v.userId, key: key), "A private note")
         XCTAssertNil(try FluxzeCrypto.openSecure("plain text", userID: v.userId, key: key))
         XCTAssertThrowsError(try FluxzeCrypto.openSecure(v.multi, userID: v.userId + 1, key: key))
+    }
+
+    func testOpensADriveFileEnvelope() throws {
+        let key = try FluxzeCrypto.privateKey(pkcs8: pkcs8)
+        let envelope = Data(base64Encoded: v.file)!
+        XCTAssertTrue(FluxzeCrypto.isFileEnvelope(envelope))
+        XCTAssertEqual(try FluxzeCrypto.openFileEnvelope(envelope, key: key), Data(v.fileText.utf8))
+        XCTAssertFalse(FluxzeCrypto.isFileEnvelope(Data("%PDF-1.4 plain".utf8)))
+        var tampered = envelope
+        tampered[tampered.count - 1] ^= 0xFF
+        XCTAssertThrowsError(try FluxzeCrypto.openFileEnvelope(tampered, key: key))
     }
 
     @MainActor

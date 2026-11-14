@@ -5,6 +5,9 @@ struct EmailListView: View {
     @StateObject var store: EmailsStore
     @State private var showingSettings = false
     @State private var searchText = ""
+    @State private var composing = false
+    /// The screen's width, so the search bar can fill the top bar.
+    @State private var barWidth: CGFloat = 0
 
     var body: some View {
         NavigationStack {
@@ -12,15 +15,16 @@ struct EmailListView: View {
                 // The inbox has no title; other folders say where you are.
                 .navigationTitle(title)
                 .navigationBarTitleDisplayMode(.inline)
-                .searchable(text: $searchText, prompt: "Search mail")
-                .onSubmit(of: .search) { applySearch(searchText) }
                 .onChange(of: searchText) { _, new in
-                    // Clearing the field goes back to the inbox.
+                    // Clearing the field goes back to the folder.
                     if new.isEmpty, !store.query.isEmpty { applySearch("") }
                 }
                 .refreshable { await store.load() }
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) { folderMenu }
+                    // Search sits in the top bar itself, between ☰ and the
+                    // account button, rather than in a row of its own below.
+                    ToolbarItem(placement: .principal) { searchField }
                     ToolbarItem(placement: .topBarTrailing) {
                         Button { showingSettings = true } label: {
                             Image(systemName: "person.crop.circle")
@@ -29,6 +33,10 @@ struct EmailListView: View {
                     }
                 }
                 .sheet(isPresented: $showingSettings) { SettingsView() }
+                .overlay(alignment: .bottomTrailing) { composeButton }
+                .sheet(isPresented: $composing) {
+                    ComposeView(store: store, original: nil, mode: .new, originalText: nil)
+                }
                 .navigationDestination(for: EmailSummary.self) { email in
                     EmailDetailView(store: store, email: email)
                 }
@@ -42,7 +50,59 @@ struct EmailListView: View {
                     Text(store.errorMessage ?? "")
                 }
         }
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { barWidth = proxy.size.width }
+                    .onChange(of: proxy.size.width) { _, width in barWidth = width }
+            }
+        }
         .task { if !store.hasLoaded { await store.load() } }
+    }
+
+    /// The round ✎ button floating over the list, for a new email.
+    private var composeButton: some View {
+        Button { composing = true } label: {
+            Image(systemName: "square.and.pencil")
+                .font(.title2.weight(.medium))
+                .foregroundStyle(.primary)
+                .frame(width: 58, height: 58)
+                .background(Color(.secondarySystemBackground), in: Circle())
+                .shadow(color: .black.opacity(0.2), radius: 8, y: 3)
+        }
+        .accessibilityLabel("New email")
+        .padding(.trailing, 20)
+        .padding(.bottom, 16)
+        .disabled(store.accounts.isEmpty)
+        .opacity(store.accounts.isEmpty ? 0 : 1)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField(store.folder == .inbox ? "Search mail" : "Search in \(store.folder.title)",
+                      text: $searchText)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .onSubmit { applySearch(searchText) }
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 12)
+        .frame(height: 36)
+        // Everything between ☰ and the account button (two 44pt buttons plus
+        // the bar's margins); the toolbar would otherwise keep it narrow.
+        .frame(width: max(200, barWidth - 128))
+        .background(Color(.secondarySystemBackground), in: Capsule())
     }
 
     private var title: String {

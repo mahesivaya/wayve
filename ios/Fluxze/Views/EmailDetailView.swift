@@ -1,4 +1,5 @@
 import SwiftUI
+import Translation
 import WebKit
 
 /// One email: its headers and body. Opening it marks it read.
@@ -20,6 +21,17 @@ struct EmailDetailView: View {
     @State private var unlocking = false
     /// Loaded the first time the details open; "" when there is none.
     @State private var cc: String?
+    @State private var composing: ComposeView.Mode?
+    @State private var translating = false
+    @State private var confirmDelete = false
+    @State private var actionError: String?
+    @Environment(\.dismiss) private var dismiss
+
+    /// The body as plain text, for quoting, translating and sharing.
+    private var bodyText: String? {
+        if case .loaded(let text) = state { return EmailText.plainText(text) }
+        return nil
+    }
 
     var body: some View {
         ScrollView {
@@ -30,6 +42,7 @@ struct EmailDetailView: View {
                 header
                 Divider()
                 bodyView
+                if email.accountId != nil { bottomActions }
             }
             .padding()
         }
@@ -41,23 +54,139 @@ struct EmailDetailView: View {
         .sheet(isPresented: $unlocking) {
             UnlockKeyView { Task { await loadBody() } }
         }
+        .sheet(item: $composing) { mode in
+            ComposeView(store: store, original: email, mode: mode, originalText: bodyText)
+        }
+        .modifier(TranslateSheet(isPresented: $translating, text: bodyText ?? ""))
+        .confirmationDialog("Move this email to Trash?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) { run { try await store.trash(email); dismiss() } }
+        }
+        .alert("Something went wrong",
+               isPresented: Binding(get: { actionError != nil }, set: { if !$0 { actionError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(actionError ?? "")
+        }
+    }
+
+    /// ☆ ↩ ⋮ beside the sender, like Gmail.
+    private var actions: some View {
+        HStack(spacing: 18) {
+            let starred = store.isStarred(email.id)
+            Button {
+                run { try await store.setStarred(email, !starred) }
+            } label: {
+                Image(systemName: starred ? "star.fill" : "star")
+                    .foregroundStyle(starred ? Color.yellow : Color.primary)
+            }
+            .accessibilityLabel(starred ? "Unstar" : "Star")
+
+            Button { composing = .reply } label: { Image(systemName: "arrowshape.turn.up.left") }
+                .accessibilityLabel("Reply")
+                .disabled(email.accountId == nil)
+
+            Menu {
+                Section {
+                    Button { composing = .reply } label: { Label("Reply", systemImage: "arrowshape.turn.up.left") }
+                    Button { composing = .forward } label: { Label("Forward", systemImage: "arrowshape.turn.up.right") }
+                }
+                .disabled(email.accountId == nil)
+                Section {
+                    Button(role: .destructive) { confirmDelete = true } label: { Label("Delete", systemImage: "trash") }
+                    Button {
+                        run { try await store.markUnread(email); dismiss() }
+                    } label: { Label("Mark as unread", systemImage: "envelope.badge") }
+                }
+                Section {
+                    if #available(iOS 17.4, *) {
+                        Button { translating = true } label: { Label("Translate", systemImage: "translate") }
+                            .disabled(bodyText == nil)
+                    }
+                    Button { print() } label: { Label("Print", systemImage: "printer") }
+                        .disabled(bodyText == nil)
+                    if let bodyText {
+                        ShareLink(item: shareText(bodyText), subject: Text(email.displaySubject)) {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                        }
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .rotationEffect(.degrees(90))
+                    .frame(width: 24, height: 24)
+            }
+            .accessibilityLabel("More")
+        }
+        .font(.body)
+        .foregroundStyle(.primary)
+    }
+
+    /// Reply and Forward under the message, like the end of a Gmail email.
+    private var bottomActions: some View {
+        HStack(spacing: 12) {
+            Button { composing = .reply } label: {
+                Label("Reply", systemImage: "arrowshape.turn.up.left")
+                    .frame(maxWidth: .infinity)
+            }
+            Button { composing = .forward } label: {
+                Label("Forward", systemImage: "arrowshape.turn.up.right")
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .buttonStyle(.bordered)
+        .buttonBorderShape(.capsule)
+        .controlSize(.large)
+        .tint(.primary)
+        .padding(.top, 16)
+    }
+
+    /// Runs an action, showing its error instead of failing silently.
+    private func run(_ action: @escaping () async throws -> Void) {
+        Task {
+            do { try await action() } catch { actionError = error.localizedDescription }
+        }
+    }
+
+    private func shareText(_ body: String) -> String {
+        "From: \(email.sender ?? "")\nSubject: \(email.displaySubject)\n\n\(body)"
+    }
+
+    private func print() {
+        guard case .loaded(let text) = state else { return }
+        let header = "<h3>\(Self.escape(email.displaySubject))</h3><p><b>From:</b> \(Self.escape(email.sender ?? ""))<br><b>To:</b> \(Self.escape(email.receiver ?? ""))</p><hr>"
+        let content = EmailText.isHTML(text) ? text : "<pre style=\"white-space:pre-wrap\">\(Self.escape(text))</pre>"
+        let controller = UIPrintInteractionController.shared
+        let info = UIPrintInfo.printInfo()
+        info.jobName = email.displaySubject
+        controller.printInfo = info
+        controller.printFormatter = UIMarkupTextPrintFormatter(markupText: header + content)
+        controller.present(animated: true)
+    }
+
+    private static func escape(_ text: String) -> String {
+        text.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(EmailText.name(of: email.sender)).font(.headline)
-                Spacer()
-                if let date = email.createdAt ?? email.listDate {
-                    Text(date.formatted(date: .abbreviated, time: .shortened))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(EmailText.name(of: email.sender)).font(.headline)
+                    if let sender = email.sender, sender.contains("<") {
+                        Text(EmailText.address(of: sender))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let date = email.createdAt ?? email.listDate {
+                        Text(date.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-            }
-            if let sender = email.sender, sender.contains("<") {
-                Text(EmailText.address(of: sender))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                actions
             }
             Button {
                 withAnimation(.easeInOut(duration: 0.15)) { showDetails.toggle() }
@@ -248,6 +377,24 @@ struct HTMLView: UIViewRepresentable {
                 return
             }
             decisionHandler(.allow)
+        }
+    }
+}
+
+extension ComposeView.Mode: Identifiable {
+    var id: Self { self }
+}
+
+/// iOS's built-in Translate sheet (iOS 17.4+); nothing on older systems.
+private struct TranslateSheet: ViewModifier {
+    @Binding var isPresented: Bool
+    let text: String
+
+    func body(content: Content) -> some View {
+        if #available(iOS 17.4, *) {
+            content.translationPresentation(isPresented: $isPresented, text: text)
+        } else {
+            content
         }
     }
 }

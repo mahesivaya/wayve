@@ -24,7 +24,7 @@ struct EmailSummary: Codable, Identifiable, Hashable {
     let sender: String?
     let receiver: String?
     var isRead: Bool
-    let isStarred: Bool?
+    var isStarred: Bool?
     let hasAttachments: Bool?
     let createdAt: Date?
     let sortAt: Date?
@@ -138,6 +138,31 @@ enum EmailText {
         }
         parts.append(current)
         return parts.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
+    /// A body as plain text, for quoting in a reply, translating and sharing:
+    /// HTML loses its tags (line breaks kept), plain text is returned as is.
+    static func plainText(_ body: String) -> String {
+        guard isHTML(body) else { return body.trimmingCharacters(in: .whitespacesAndNewlines) }
+        var text = body
+        let replacements: [(String, String)] = [
+            (#"(?is)<(script|style|head)\b.*?</\1>"#, ""),
+            (#"(?i)<br\s*/?>"#, "\n"),
+            (#"(?i)</(p|div|tr|li|h[1-6]|table|blockquote)>"#, "\n"),
+            (#"(?i)<li\b[^>]*>"#, "• "),
+            (#"<[^>]+>"#, ""),
+        ]
+        for (pattern, template) in replacements {
+            text = text.replacingOccurrences(of: pattern, with: template, options: .regularExpression)
+        }
+        let entities = ["&nbsp;": " ", "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#39;": "'", "&apos;": "'"]
+        for (entity, char) in entities {
+            text = text.replacingOccurrences(of: entity, with: char)
+        }
+        return text
+            .replacingOccurrences(of: #"[ \t]+\n"#, with: "\n", options: .regularExpression)
+            .replacingOccurrences(of: #"\n{3,}"#, with: "\n\n", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Whether a body is HTML rather than plain text.
