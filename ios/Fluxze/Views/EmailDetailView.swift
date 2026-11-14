@@ -123,19 +123,19 @@ struct EmailDetailView: View {
 
     /// Reply and Forward under the message, like the end of a Gmail email.
     private var bottomActions: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Button { composing = .reply } label: {
                 Label("Reply", systemImage: "arrowshape.turn.up.left")
-                    .frame(maxWidth: .infinity)
             }
             Button { composing = .forward } label: {
                 Label("Forward", systemImage: "arrowshape.turn.up.right")
-                    .frame(maxWidth: .infinity)
             }
+            Spacer(minLength: 0)
         }
+        .font(.subheadline)
         .buttonStyle(.bordered)
         .buttonBorderShape(.capsule)
-        .controlSize(.large)
+        .controlSize(.regular)
         .tint(.primary)
         .padding(.top, 16)
     }
