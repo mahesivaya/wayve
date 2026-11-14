@@ -5,6 +5,7 @@ struct EmailListView: View {
     @StateObject var store: EmailsStore
     @State private var showingSettings = false
     @State private var searchText = ""
+    @State private var composing = false
     /// The screen's width, so the search bar can fill the top bar.
     @State private var barWidth: CGFloat = 0
 
@@ -32,6 +33,10 @@ struct EmailListView: View {
                     }
                 }
                 .sheet(isPresented: $showingSettings) { SettingsView() }
+                .overlay(alignment: .bottomTrailing) { composeButton }
+                .sheet(isPresented: $composing) {
+                    ComposeView(store: store, original: nil, mode: .new, originalText: nil)
+                }
                 .navigationDestination(for: EmailSummary.self) { email in
                     EmailDetailView(store: store, email: email)
                 }
@@ -53,6 +58,23 @@ struct EmailListView: View {
             }
         }
         .task { if !store.hasLoaded { await store.load() } }
+    }
+
+    /// The round ✎ button floating over the list, for a new email.
+    private var composeButton: some View {
+        Button { composing = true } label: {
+            Image(systemName: "square.and.pencil")
+                .font(.title2.weight(.medium))
+                .foregroundStyle(.primary)
+                .frame(width: 58, height: 58)
+                .background(Color(.secondarySystemBackground), in: Circle())
+                .shadow(color: .black.opacity(0.2), radius: 8, y: 3)
+        }
+        .accessibilityLabel("New email")
+        .padding(.trailing, 20)
+        .padding(.bottom, 16)
+        .disabled(store.accounts.isEmpty)
+        .opacity(store.accounts.isEmpty ? 0 : 1)
     }
 
     private var searchField: some View {

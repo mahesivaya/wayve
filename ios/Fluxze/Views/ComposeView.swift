@@ -1,15 +1,18 @@
 import SwiftUI
 
-/// Reply to or forward an email, sent as plain text from the mailbox it came
-/// to, like the web app's reply box.
+/// Write a new email, or reply to or forward one, sent as plain text: a reply
+/// or forward from the mailbox the original came to, a new email from the
+/// mailbox picked under From.
 struct ComposeView: View {
     enum Mode {
+        case new
         case reply
         case forward
     }
 
     @ObservedObject var store: EmailsStore
-    let original: EmailSummary
+    /// The email being replied to or forwarded; nil for a new email.
+    let original: EmailSummary?
     let mode: Mode
     /// The original's readable text, quoted below the new message.
     let originalText: String?
@@ -22,6 +25,8 @@ struct ComposeView: View {
     @State private var message = ""
     @State private var isSending = false
     @State private var errorMessage: String?
+    /// A new email's mailbox; a reply or forward uses the original's.
+    @State private var fromAccountID: Int?
     @FocusState private var focus: Field?
 
     private enum Field { case to, message }
@@ -30,7 +35,13 @@ struct ComposeView: View {
         NavigationStack {
             Form {
                 Section {
-                    if let from = store.account(for: original.accountId)?.email {
+                    if mode == .new {
+                        Picker("From", selection: $fromAccountID) {
+                            ForEach(store.accounts) { account in
+                                Text(account.email).tag(Int?.some(account.id))
+                            }
+                        }
+                    } else if let from = store.account(for: original?.accountId)?.email {
                         LabeledContent("From", value: from)
                     }
                     TextField("To", text: $to)
@@ -59,7 +70,7 @@ struct ComposeView: View {
                     Section { Text(errorMessage).foregroundStyle(.red) }
                 }
             }
-            .navigationTitle(mode == .reply ? "Reply" : "Forward")
+            .navigationTitle(mode == .new ? "New email" : mode == .reply ? "Reply" : "Forward")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -79,16 +90,30 @@ struct ComposeView: View {
         .interactiveDismissDisabled(isSending)
     }
 
+    private var sendingAccountID: Int? {
+        mode == .new ? fromAccountID : original?.accountId
+    }
+
     private var canSend: Bool {
         !to.trimmingCharacters(in: .whitespaces).isEmpty
             && !subject.trimmingCharacters(in: .whitespaces).isEmpty
-            && original.accountId != nil
+            && sendingAccountID != nil
     }
 
     private func prefill() {
-        guard subject.isEmpty else { return }
+        if mode == .new {
+            if fromAccountID == nil {
+                // The mailbox the inbox is filtered to, else the first one.
+                fromAccountID = store.accountID ?? store.accounts.first?.id
+                focus = .to
+            }
+            return
+        }
+        guard subject.isEmpty, let original else { return }
         let base = original.displaySubject
         switch mode {
+        case .new:
+            break
         case .reply:
             to = original.sender.map(EmailText.address(of:)) ?? ""
             subject = Self.prefixed(base, "Re:")
@@ -106,12 +131,14 @@ struct ComposeView: View {
 
     /// The text that goes out: the new message, then the original, quoted for a
     /// reply and set off with a header for a forward.
-    static func outgoingBody(_ message: String, mode: Mode, original: EmailSummary, originalText: String?) -> String {
-        guard let originalText, !originalText.isEmpty else { return message }
+    static func outgoingBody(_ message: String, mode: Mode, original: EmailSummary?, originalText: String?) -> String {
+        guard let original, let originalText, !originalText.isEmpty else { return message }
         let when = (original.createdAt ?? original.listDate)?
             .formatted(date: .abbreviated, time: .shortened) ?? ""
         let from = original.sender ?? ""
         switch mode {
+        case .new:
+            return message
         case .reply:
             let quoted = originalText
                 .split(separator: "\n", omittingEmptySubsequences: false)
@@ -134,7 +161,7 @@ struct ComposeView: View {
     }
 
     private func send() async {
-        guard let accountID = original.accountId else { return }
+        guard let accountID = sendingAccountID else { return }
         isSending = true
         errorMessage = nil
         defer { isSending = false }
@@ -146,11 +173,14 @@ struct ComposeView: View {
             subject: subject.trimmingCharacters(in: .whitespaces),
             body: Self.outgoingBody(message, mode: mode, original: original, originalText: originalText)
         )
-        switch mode {
-        case .reply: outgoing.replyToEmailId = original.id
-        case .forward:
+        switch (mode, original) {
+        case (.reply, let original?):
+            outgoing.replyToEmailId = original.id
+        case (.forward, let original?):
             let ids = await store.attachmentIDs(of: original)
             outgoing.forwardAttachmentIds = ids.isEmpty ? nil : ids
+        default:
+            break
         }
         do {
             try await store.send(outgoing)
