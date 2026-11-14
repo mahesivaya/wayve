@@ -10,7 +10,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "2.1.0"
+    MARKETING_VERSION: "2.2.0"
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: XTFKA6B688
 targets:
