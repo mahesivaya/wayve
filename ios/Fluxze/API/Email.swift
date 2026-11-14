@@ -40,7 +40,8 @@ struct EmailSummary: Codable, Identifiable, Hashable {
 
 /// The folders the ☰ menu offers, by their `/api/emails?folder=` value.
 enum MailFolder: String, CaseIterable, Identifiable {
-    case inbox, starred, snoozed, important, sent, drafts, all, trash
+    // Menu order, as in Gmail: Updates with Important, Spam just above Trash.
+    case inbox, starred, snoozed, important, updates, sent, drafts, all, spam, trash
 
     var id: String { rawValue }
 
@@ -50,9 +51,11 @@ enum MailFolder: String, CaseIterable, Identifiable {
         case .starred: "Starred"
         case .snoozed: "Snoozed"
         case .important: "Important"
+        case .updates: "Updates"
         case .sent: "Sent"
         case .drafts: "Drafts"
         case .all: "All Mail"
+        case .spam: "Spam"
         case .trash: "Trash"
         }
     }
@@ -63,12 +66,34 @@ enum MailFolder: String, CaseIterable, Identifiable {
         case .starred: "star"
         case .snoozed: "clock"
         case .important: "tag"
+        case .updates: "info.circle"
         case .sent: "paperplane"
         case .drafts: "doc"
         case .all: "envelope.open"
+        case .spam: "exclamationmark.octagon"
         case .trash: "trash"
         }
     }
+}
+
+/// A label from one mailbox (`GET /api/emails/sidebar` → `labels`): Gmail's
+/// own user labels, with nested ones written "parent/child".
+struct MailLabel: Codable, Identifiable, Hashable {
+    let accountId: Int
+    let accountEmail: String
+    let labelId: String
+    let name: String
+    let color: String?
+    let unread: Int?
+
+    var id: String { "\(accountId):\(labelId)" }
+
+    /// The `folder` value that lists this label's mail.
+    var folderKey: String { "label:\(accountId):\(labelId)" }
+}
+
+struct MailSidebar: Decodable {
+    let labels: [MailLabel]
 }
 
 /// `GET /api/emails/{id}`: the header fields the list row doesn't carry.

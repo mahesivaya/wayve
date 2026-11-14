@@ -146,6 +146,21 @@ final class EmailTests: XCTestCase {
         XCTAssertEqual(EmailsStore.snoozeOptions(now: saturday, calendar: calendar).map(\.title), ["Tomorrow", "Next week"])
     }
 
+    func testLabelsDecodeAndListByFolderKey() throws {
+        let sidebar = try APIClient.decoder.decode(MailSidebar.self, from: Data("""
+        {"counts": {"inbox": 3}, "labels": [{"account_id": 4, "account_email": "me@x.com",
+          "label_id": "Label_9", "name": "Clients/Acme", "color": "#16a766", "unread": 2}]}
+        """.utf8))
+        let label = try XCTUnwrap(sidebar.labels.first)
+        XCTAssertEqual(label.name, "Clients/Acme")
+        XCTAssertEqual(label.folderKey, "label:4:Label_9")
+        XCTAssertEqual(EmailsStore.listPath(folder: .inbox, label: label, accountID: nil, query: "", before: nil),
+                       "/api/emails?folder=label:4:Label_9")
+        // A search still covers all mail.
+        XCTAssertEqual(EmailsStore.listPath(folder: .inbox, label: label, accountID: nil, query: "x", before: nil),
+                       "/api/emails?folder=all&q=x")
+    }
+
     func testSealedAndHTMLDetection() {
         XCTAssertTrue(EmailText.isSealed("WAYVE_SECURE_V1\n{...}"))
         XCTAssertTrue(EmailText.isSealed("WAYVE_CHAT_E2E_V1\n{...}"))

@@ -134,6 +134,172 @@ pub async fn refresh_gmail_labels(pool: &PgPool, account_id: i32, token: &str) {
     }
 }
 
+/// Gmail's limit on a label name.
+const LABEL_NAME_MAX: usize = 225;
+
+/// How creating a label at Gmail went.
+#[derive(Debug, PartialEq)]
+pub enum CreatedLabel {
+    Created(GmailLabel),
+    /// Gmail already has a label with that name.
+    Exists,
+}
+
+/// Creates a user label in a Gmail mailbox (`users.labels.create`), shown in
+/// Gmail's label list and its message list.
+pub async fn create_gmail_label(token: &str, name: &str) -> anyhow::Result<CreatedLabel> {
+    let url = format!(
+        "{}/gmail/v1/users/me/labels",
+        crate::external::gmail_api_base()
+    );
+    let res = HTTP_CLIENT
+        .post(&url)
+        .bearer_auth(token)
+        .json(&serde_json::json!({
+            "name": name,
+            "labelListVisibility": "labelShow",
+            "messageListVisibility": "show",
+        }))
+        .send()
+        .await?;
+    if res.status() == reqwest::StatusCode::CONFLICT {
+        return Ok(CreatedLabel::Exists);
+    }
+    if !res.status().is_success() {
+        anyhow::bail!("labels.create returned HTTP {}", res.status());
+    }
+    let body: Value = res.json().await?;
+    let id = body
+        .get("id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("labels.create returned no id"))?;
+    Ok(CreatedLabel::Created(GmailLabel {
+        id: id.to_string(),
+        name: body
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or(name)
+            .to_string(),
+        color: body
+            .pointer("/color/backgroundColor")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+    }))
+}
+
+/// Adds one label to the account's stored labels (the sidebar reads these),
+/// without waiting for the next labels refresh.
+pub async fn store_one(pool: &PgPool, account_id: i32, label: &GmailLabel) -> sqlx::Result<()> {
+    sqlx::query(
+        r#"
+        INSERT INTO mailbox_labels (account_id, label_id, name, color, synced_at)
+        VALUES ($1, $2, $3, $4, NOW())
+        ON CONFLICT (account_id, label_id)
+        DO UPDATE SET name = EXCLUDED.name, color = EXCLUDED.color, synced_at = NOW()
+        "#,
+    )
+    .bind(account_id)
+    .bind(&label.id)
+    .bind(&label.name)
+    .bind(label.color.as_deref())
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+#[derive(Deserialize)]
+pub struct CreateLabelBody {
+    pub account_id: i32,
+    pub name: String,
+}
+
+/// `POST /api/emails/labels`: create a label in one of the caller's own Gmail
+/// mailboxes. Answers the new label in the sidebar's shape.
+#[post("/emails/labels")]
+#[tracing::instrument(target = "http", skip(req, pool, body))]
+pub async fn create_label(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    body: web::Json<CreateLabelBody>,
+) -> AppResult {
+    let user_id =
+        wayve_security::jwt::get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let name = body.name.split_whitespace().collect::<Vec<_>>().join(" ");
+    if name.is_empty() || name.chars().count() > LABEL_NAME_MAX {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "message": format!("A label name needs 1 to {LABEL_NAME_MAX} characters.")
+        })));
+    }
+    let Some(account) = crate::email::account::load_email_account_for_user(
+        pool.get_ref(),
+        body.account_id,
+        user_id,
+    )
+    .await?
+    else {
+        return Ok(HttpResponse::NotFound().json(serde_json::json!({
+            "message": "Mailbox not found"
+        })));
+    };
+    if !matches!(
+        account.provider,
+        crate::email::provider::MailProvider::Google
+    ) {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "message": "Labels can be created in Gmail mailboxes only."
+        })));
+    }
+    let reconnect = || {
+        HttpResponse::Conflict().json(serde_json::json!({
+            "message": "Reconnect this Gmail mailbox in Fluxze to create labels."
+        }))
+    };
+    let Some(refresh) = account
+        .refresh_token
+        .as_deref()
+        .filter(|t| !t.trim().is_empty())
+    else {
+        return Ok(reconnect());
+    };
+    let token = match crate::email::provider::refresh_and_persist_email_token(
+        pool.get_ref(),
+        account.id,
+        account.provider,
+        refresh,
+    )
+    .await
+    {
+        Ok(token) => token.access_token,
+        Err(e) => {
+            warn!(target: "gmail", account_id = account.id, error = ?e, "label create: token refresh failed");
+            return Ok(reconnect());
+        }
+    };
+    let label = match create_gmail_label(&token, &name).await {
+        Ok(CreatedLabel::Created(label)) => label,
+        Ok(CreatedLabel::Exists) => {
+            return Ok(HttpResponse::Conflict().json(serde_json::json!({
+                "message": format!("A label named \"{name}\" already exists.")
+            })));
+        }
+        Err(e) => {
+            warn!(target: "gmail", account_id = account.id, error = ?e, "label create failed");
+            return Ok(HttpResponse::BadGateway().json(serde_json::json!({
+                "message": "Gmail couldn't create the label. Try again."
+            })));
+        }
+    };
+    store_one(pool.get_ref(), account.id, &label).await?;
+    Ok(HttpResponse::Created().json(serde_json::json!({
+        "account_id": account.id,
+        "account_email": account.email,
+        "label_id": label.id,
+        "name": label.name,
+        "color": label.color,
+        "unread": 0,
+    })))
+}
+
 /// A label in the sidebar, with its unread count.
 #[derive(Serialize, FromRow)]
 pub struct SidebarLabel {

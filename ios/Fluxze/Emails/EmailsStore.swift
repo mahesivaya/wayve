@@ -18,6 +18,10 @@ final class EmailsStore: ObservableObject {
     /// nil = every mailbox.
     @Published var accountID: Int?
     @Published var folder: MailFolder = .inbox
+    /// A label being listed instead of `folder`.
+    @Published var label: MailLabel?
+    /// The labels of every mailbox, for the ☰ menu.
+    @Published private(set) var labels: [MailLabel] = []
     @Published var query = ""
 
     let api: APIClient
@@ -32,8 +36,9 @@ final class EmailsStore: ObservableObject {
     }
 
     /// A search looks through all mail, as on the web.
-    static func listPath(folder: MailFolder, accountID: Int?, query: String, before: EmailSummary?) -> String {
-        var items = [URLQueryItem(name: "folder", value: query.isEmpty ? folder.rawValue : MailFolder.all.rawValue)]
+    static func listPath(folder: MailFolder, label: MailLabel? = nil, accountID: Int?, query: String, before: EmailSummary?) -> String {
+        let shown = label?.folderKey ?? folder.rawValue
+        var items = [URLQueryItem(name: "folder", value: query.isEmpty ? shown : MailFolder.all.rawValue)]
         if let accountID { items.append(URLQueryItem(name: "account_id", value: String(accountID))) }
         if !query.isEmpty { items.append(URLQueryItem(name: "q", value: query)) }
         if let before, let date = before.listDate {
@@ -55,12 +60,14 @@ final class EmailsStore: ObservableObject {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
             async let accountList: [MailAccount] = api.get("/api/accounts")
-            let page: [EmailSummary] = try await api.get(Self.listPath(folder: folder, accountID: accountID, query: q, before: nil))
+            async let sidebar: MailSidebar = api.get("/api/emails/sidebar")
+            let page: [EmailSummary] = try await api.get(Self.listPath(folder: folder, label: label, accountID: accountID, query: q, before: nil))
             guard mine == generation else { return }
             emails = page
             hasMore = page.count >= Self.pageSize
             // Accounts only fill the mailbox menu; a failure there shouldn't hide mail.
             accounts = (try? await accountList) ?? accounts
+            labels = (try? await sidebar)?.labels ?? labels
             errorMessage = nil
         } catch APIError.unauthorized {
             // AppState signs out.
@@ -78,7 +85,7 @@ final class EmailsStore: ObservableObject {
         defer { isLoadingMore = false }
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
-            let page: [EmailSummary] = try await api.get(Self.listPath(folder: folder, accountID: accountID, query: q, before: last))
+            let page: [EmailSummary] = try await api.get(Self.listPath(folder: folder, label: label, accountID: accountID, query: q, before: last))
             guard mine == generation else { return }
             let known = Set(emails.map(\.id))
             emails.append(contentsOf: page.filter { !known.contains($0.id) })
@@ -122,6 +129,33 @@ final class EmailsStore: ObservableObject {
         } catch {
             setRead(email.id, false)
         }
+    }
+
+    /// What's being listed: the label's name, else the folder's.
+    var viewTitle: String { label?.name ?? folder.title }
+
+    /// The plain inbox (no label picked).
+    var isInbox: Bool { folder == .inbox && label == nil }
+
+    func show(_ folder: MailFolder) {
+        self.folder = folder
+        label = nil
+        Task { await load() }
+    }
+
+    func show(_ label: MailLabel) {
+        self.label = label
+        Task { await load() }
+    }
+
+    /// Creates a label in one Gmail mailbox (`POST /api/emails/labels`) and
+    /// adds it to the menu.
+    func createLabel(named name: String, in accountID: Int) async throws -> MailLabel {
+        struct Body: Encodable { let accountId: Int; let name: String }
+        let created: MailLabel = try await api.post("/api/emails/labels", body: Body(accountId: accountID, name: name))
+        labels = (labels.filter { $0.id != created.id } + [created])
+            .sorted { ($0.accountEmail, $0.name.lowercased()) < ($1.accountEmail, $1.name.lowercased()) }
+        return created
     }
 
     func detail(of email: EmailSummary) async throws -> EmailDetail {
