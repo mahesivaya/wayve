@@ -17,7 +17,10 @@ struct MeetingEditView: View {
     @State private var errorMessage: String?
     @State private var confirmDelete = false
 
-    init(store: MeetingsStore, meeting: Meeting?, day: Date, onSaved: @escaping (Bool?) -> Void = { _ in }) {
+    /// `startMinutes` sets a new meeting's start (minutes after midnight), as
+    /// when an hour is tapped in the day timeline.
+    init(store: MeetingsStore, meeting: Meeting?, day: Date, startMinutes requestedStart: Int? = nil,
+         onSaved: @escaping (Bool?) -> Void = { _ in }) {
         self.store = store
         self.meeting = meeting
         self.onSaved = onSaved
@@ -28,6 +31,9 @@ struct MeetingEditView: View {
         if let meeting {
             startMinutes = meeting.startMinutes
             endMinutes = meeting.endMinutes
+        } else if let requestedStart {
+            startMinutes = min(max(requestedStart, 0), 23 * 60)
+            endMinutes = min(startMinutes + 30, 23 * 60 + 59)
         } else {
             // The next half hour (today) or 9:00 (another day), for 30 minutes.
             if Calendar.current.isDateInToday(day) {
