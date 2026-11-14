@@ -7,7 +7,7 @@
 #            ios/Fluxze/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png  iPhone app icon (white on dark)
 #            ios/Fluxze/Assets.xcassets/Logo.imageset/Logo.png               iPhone sign-in logo (same image)
 #
-# Every platform shows the same dark icon: the white logo on dark slate.
+# Every platform shows the same dark icon: the white logo on black.
 #
 # The generated files are committed (each platform needs its own copy inside
 # its project), but never edit them by hand: change the source logo and re-run
@@ -27,7 +27,7 @@ IOS_ASSETS="$ROOT/ios/Fluxze/Assets.xcassets"
 IOS_ICON="$IOS_ASSETS/AppIcon.appiconset/AppIcon-1024.png"
 IOS_LOGO="$IOS_ASSETS/Logo.imageset/Logo.png"
 
-BG="0F172A"            # icon background (white logo); dark slate
+BG="000000"            # icon background (white logo); black
 ICON_SIZE=1024
 ICON_LOGO=700          # logo size inside the 1024 icon (leaves a safe margin)
 
