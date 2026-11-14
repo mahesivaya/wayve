@@ -52,6 +52,7 @@
 		E1213DB9BA911F5AB1F426E7 /* FluxzeCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F4E368C5A7B23425891B961 /* FluxzeCrypto.swift */; };
 		E2ABF554072C9C0BBC3C8159 /* TasksStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B45F54C30DE426ACAF23DF0F /* TasksStore.swift */; };
 		EE5A5A0FDDC1BE2D24E9A87D /* EmailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF10773F318C79C658229FD2 /* EmailTests.swift */; };
+		EEF07746F012F2489091DF70 /* NewLabelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55A137460DFFA70FE657997C /* NewLabelView.swift */; };
 		EFADE8AAAB7ACBBE5A025EE1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D6C86A862A8B9BF2E002BE73 /* Assets.xcassets */; };
 		F2E495C7E51738682DF5BEFF /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5CDB34F920D4252DC05E8FD /* AppState.swift */; };
 		F477A9C3E8E0FE0FC044AF9A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B971D2516468DCCC5C85754C /* PrivacyInfo.xcprivacy */; };
@@ -90,6 +91,7 @@
 		5082E7A89DFB2BF26D61F627 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		50906CB2A4F8EFCAE833F769 /* Color+Hex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Hex.swift"; sourceTree = "<group>"; };
 		5213878C2E83209B514FF266 /* DriveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveTests.swift; sourceTree = "<group>"; };
+		55A137460DFFA70FE657997C /* NewLabelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewLabelView.swift; sourceTree = "<group>"; };
 		56AAA9B20FBD68C3287066A5 /* AuthKeyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthKeyTests.swift; sourceTree = "<group>"; };
 		6128E138195982F8D720BD56 /* EmailDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailDetailView.swift; sourceTree = "<group>"; };
 		6A3C7267EBB0F47D337E2AF3 /* DriveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveView.swift; sourceTree = "<group>"; };
@@ -231,6 +233,7 @@
 				4ABF6F83BD66877FC4290D24 /* HomeView.swift */,
 				E651CF8ADBA667BBF007BA75 /* LoginView.swift */,
 				E099D97C92A76F33D26A695E /* MeetingEditView.swift */,
+				55A137460DFFA70FE657997C /* NewLabelView.swift */,
 				25AC528395147B038243E758 /* SettingsView.swift */,
 				7F4673915E26DA75AFCD4675 /* SwipeBack.swift */,
 				EB5E07DE9D030CD8E72E3742 /* TaskEditView.swift */,
@@ -429,6 +432,7 @@
 				2532F2E869468B5CFD509268 /* MeetingEditView.swift in Sources */,
 				BFE5BFA694E56506EF74B3B3 /* MeetingsStore.swift in Sources */,
 				20F35B7C59F6F9FCB66E102D /* Models.swift in Sources */,
+				EEF07746F012F2489091DF70 /* NewLabelView.swift in Sources */,
 				3735D1FBDD6EF156D337E1A3 /* ServerDate.swift in Sources */,
 				98010F5E01DDE86495B66BD6 /* SettingsView.swift in Sources */,
 				C51AE5E5382B7989C40EBA62 /* SwipeBack.swift in Sources */,
