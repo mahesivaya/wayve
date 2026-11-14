@@ -44,9 +44,15 @@ struct EmailDetailView: View {
                 bodyView
                 if email.accountId != nil { bottomActions }
             }
-            .padding()
+            // A small gap under the ‹ and 🗑 buttons, less than the default.
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .padding(.bottom)
         }
-        .navigationBarTitleDisplayMode(.inline)
+        // A slim bar of our own (small ‹ and 🗑) instead of the system bar
+        // and its large round buttons. Swipe-back still works (SwipeBack.swift).
+        .toolbar(.hidden, for: .navigationBar)
+        .safeAreaInset(edge: .top, spacing: 0) { slimBar }
         .task {
             await store.markRead(email)
             await loadBody()
@@ -67,6 +73,28 @@ struct EmailDetailView: View {
         } message: {
             Text(actionError ?? "")
         }
+    }
+
+    private var slimBar: some View {
+        HStack {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 36, height: 36, alignment: .leading)
+            }
+            .accessibilityLabel("Back")
+            Spacer()
+            Button { confirmDelete = true } label: {
+                Image(systemName: "trash")
+                    .font(.body)
+                    .frame(width: 36, height: 36, alignment: .trailing)
+            }
+            .accessibilityLabel("Delete")
+        }
+        .foregroundStyle(.primary)
+        .padding(.horizontal)
+        .frame(height: 40)
+        .background(.bar)
     }
 
     /// ☆ ↩ ⋮ beside the sender, like Gmail.
@@ -92,7 +120,6 @@ struct EmailDetailView: View {
                 }
                 .disabled(email.accountId == nil)
                 Section {
-                    Button(role: .destructive) { confirmDelete = true } label: { Label("Delete", systemImage: "trash") }
                     Button {
                         run { try await store.markUnread(email); dismiss() }
                     } label: { Label("Mark as unread", systemImage: "envelope.badge") }
