@@ -34,8 +34,11 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSRequiresIPhoneOS: true
         UILaunchScreen: {}
+        # Portrait, and sideways for wider email and calendar views.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         # HTTPS + PBKDF2 for sign-in only: exempt from export documentation.
         ITSAppUsesNonExemptEncryption: false
         # Lets a Debug build talk to the local dev stack (http://localhost).
