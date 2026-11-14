@@ -44,9 +44,15 @@ struct EmailDetailView: View {
                 bodyView
                 if email.accountId != nil { bottomActions }
             }
-            .padding()
+            // A small gap under the ‹ and 🗑 buttons, less than the default.
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .padding(.bottom)
         }
-        .navigationBarTitleDisplayMode(.inline)
+        // A slim bar of our own (small ‹ and 🗑) instead of the system bar
+        // and its large round buttons. Swipe-back still works (SwipeBack.swift).
+        .toolbar(.hidden, for: .navigationBar)
+        .safeAreaInset(edge: .top, spacing: 0) { slimBar }
         .task {
             await store.markRead(email)
             await loadBody()
@@ -67,6 +73,66 @@ struct EmailDetailView: View {
         } message: {
             Text(actionError ?? "")
         }
+    }
+
+    private var slimBar: some View {
+        HStack {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 36, height: 36, alignment: .leading)
+            }
+            .accessibilityLabel("Back")
+            Spacer()
+            Button { confirmDelete = true } label: {
+                Image(systemName: "trash")
+                    .font(.body)
+                    .frame(width: 36, height: 36, alignment: .trailing)
+            }
+            .accessibilityLabel("Delete")
+            moveMenu
+        }
+        .foregroundStyle(.primary)
+        .padding(.horizontal)
+        .frame(height: 40)
+        .background(.bar)
+    }
+
+    /// ⋮ in the slim bar: Move to and Snooze. Label isn't offered until the
+    /// server can apply labels.
+    private var moveMenu: some View {
+        Menu {
+            Menu {
+                Button {
+                    run { try await store.restore(email); dismiss() }
+                } label: { Label("Inbox", systemImage: "tray") }
+                .disabled(store.folder != .trash)
+                Button(role: .destructive) { confirmDelete = true } label: {
+                    Label("Trash", systemImage: "trash")
+                }
+                .disabled(store.folder == .trash)
+            } label: {
+                Label("Move to", systemImage: "folder")
+            }
+            Menu {
+                ForEach(EmailsStore.snoozeOptions(), id: \.date) { option in
+                    Button {
+                        run { try await store.snooze(email, until: option.date); dismiss() }
+                    } label: {
+                        Text(option.title)
+                        Text(option.date.formatted(.dateTime.weekday(.abbreviated).hour().minute()))
+                    }
+                }
+            } label: {
+                Label("Snooze", systemImage: "clock")
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .rotationEffect(.degrees(90))
+                .font(.body)
+                .frame(width: 32, height: 36, alignment: .trailing)
+        }
+        .accessibilityLabel("More")
     }
 
     /// ☆ ↩ ⋮ beside the sender, like Gmail.
@@ -92,7 +158,6 @@ struct EmailDetailView: View {
                 }
                 .disabled(email.accountId == nil)
                 Section {
-                    Button(role: .destructive) { confirmDelete = true } label: { Label("Delete", systemImage: "trash") }
                     Button {
                         run { try await store.markUnread(email); dismiss() }
                     } label: { Label("Mark as unread", systemImage: "envelope.badge") }
@@ -123,7 +188,7 @@ struct EmailDetailView: View {
 
     /// Reply and Forward under the message, like the end of a Gmail email.
     private var bottomActions: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Button { composing = .reply } label: {
                 Label("Reply", systemImage: "arrowshape.turn.up.left")
                     .frame(maxWidth: .infinity)
@@ -133,9 +198,10 @@ struct EmailDetailView: View {
                     .frame(maxWidth: .infinity)
             }
         }
+        .font(.subheadline)
         .buttonStyle(.bordered)
         .buttonBorderShape(.capsule)
-        .controlSize(.large)
+        .controlSize(.regular)
         .tint(.primary)
         .padding(.top, 16)
     }
@@ -299,8 +365,11 @@ struct EmailBodyView: View {
 
     var body: some View {
         if EmailText.isHTML(text) {
-            HTMLView(html: text, height: $height)
-                .frame(height: height)
+            // The width is passed in so turning the phone re-fits the email.
+            GeometryReader { geo in
+                HTMLView(html: text, width: geo.size.width, height: $height)
+            }
+            .frame(height: height)
         } else {
             Text(text)
                 .font(.body)
@@ -312,6 +381,9 @@ struct EmailBodyView: View {
 
 struct HTMLView: UIViewRepresentable {
     let html: String
+    /// The space available; when it changes (the phone turns), the email is
+    /// fitted again.
+    var width: CGFloat = 0
     @Binding var height: CGFloat
 
     func makeCoordinator() -> Coordinator { Coordinator(height: $height) }
@@ -329,9 +401,18 @@ struct HTMLView: UIViewRepresentable {
     }
 
     func updateUIView(_ view: WKWebView, context: Context) {
-        guard context.coordinator.loaded != html else { return }
-        context.coordinator.loaded = html
-        view.loadHTMLString(Self.document(html), baseURL: nil)
+        let coordinator = context.coordinator
+        if coordinator.loaded != html {
+            coordinator.loaded = html
+            coordinator.width = width
+            view.loadHTMLString(Self.document(html), baseURL: nil)
+        } else if abs(coordinator.width - width) > 1 {
+            coordinator.width = width
+            // Let the web view take its new size before measuring.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak view] in
+                if let view { coordinator.refit(view) }
+            }
+        }
     }
 
     /// Fits the email to the phone's width and follows light/dark mode, without
@@ -342,24 +423,58 @@ struct HTMLView: UIViewRepresentable {
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="color-scheme" content="light dark">
         <style>
-        body { margin: 0; font: -apple-system-body; word-wrap: break-word; }
-        img, table { max-width: 100% !important; height: auto; }
+        body { margin: 0; font: -apple-system-body; word-wrap: break-word; overflow-x: hidden; }
+        img { max-width: 100%; height: auto; }
         pre { white-space: pre-wrap; }
-        </style></head><body>\(html)</body></html>
+        </style></head><body><div id="fz">\(html)</div></body></html>
         """
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate {
         var loaded: String?
+        var width: CGFloat = 0
         @Binding var height: CGFloat
 
         init(height: Binding<CGFloat>) {
             _height = height
         }
 
+        /// Fits a wide email to the screen, as Mail and Gmail do: most HTML
+        /// mail is a fixed ~600px layout, so if the content is wider than the
+        /// view it's scaled down to fit, then the view takes its new height.
+        /// Run again shortly after load, for images that size themselves late.
+        /// The email is laid out at its natural width inside #fz, then scaled
+        /// as a whole (a transform, not zoom, so text keeps its own spacing).
+        static let fitScript = """
+        (function () {
+          var wrap = document.getElementById('fz');
+          wrap.style.transform = '';
+          wrap.style.width = '';
+          var view = window.innerWidth;
+          var wide = Math.max(wrap.scrollWidth, document.documentElement.scrollWidth);
+          if (wide > view + 1) {
+            var scale = view / wide;
+            wrap.style.width = wide + 'px';
+            wrap.style.transformOrigin = '0 0';
+            wrap.style.transform = 'scale(' + scale + ')';
+            return Math.ceil(wrap.getBoundingClientRect().height) + 4;
+          }
+          return document.documentElement.scrollHeight;
+        })()
+        """
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            fit(webView)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self, weak webView] in
+                if let webView { self?.fit(webView) }
+            }
+        }
+
+        func refit(_ webView: WKWebView) { fit(webView) }
+
+        private func fit(_ webView: WKWebView) {
             // Scripts are off for the page, but the app may still evaluate.
-            webView.evaluateJavaScript("document.documentElement.scrollHeight") { [weak self] value, _ in
+            webView.evaluateJavaScript(Self.fitScript) { [weak self] value, _ in
                 if let h = value as? CGFloat, h > 0 {
                     DispatchQueue.main.async { self?.height = h }
                 }

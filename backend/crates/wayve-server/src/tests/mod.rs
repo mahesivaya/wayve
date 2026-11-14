@@ -26,6 +26,7 @@ mod email_conversation_list_test;
 mod email_forward_attachments_test;
 mod email_invite_test;
 mod email_label_history_test;
+mod email_labels_create_test;
 mod email_native_read_test;
 mod email_no_false_logout_test;
 mod email_provider_isp_test;

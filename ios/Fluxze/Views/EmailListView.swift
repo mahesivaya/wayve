@@ -6,6 +6,7 @@ struct EmailListView: View {
     @State private var showingSettings = false
     @State private var searchText = ""
     @State private var composing = false
+    @State private var creatingLabel = false
     /// The screen's width, so the search bar can fill the top bar.
     @State private var barWidth: CGFloat = 0
 
@@ -34,6 +35,7 @@ struct EmailListView: View {
                 }
                 .sheet(isPresented: $showingSettings) { SettingsView() }
                 .overlay(alignment: .bottomTrailing) { composeButton }
+                .sheet(isPresented: $creatingLabel) { NewLabelView(store: store) }
                 .sheet(isPresented: $composing) {
                     ComposeView(store: store, original: nil, mode: .new, originalText: nil)
                 }
@@ -81,7 +83,7 @@ struct EmailListView: View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField(store.folder == .inbox ? "Search mail" : "Search in \(store.folder.title)",
+            TextField(store.isInbox ? "Search mail" : "Search in \(store.viewTitle)",
                       text: $searchText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -107,27 +109,41 @@ struct EmailListView: View {
 
     private var title: String {
         if !store.query.isEmpty { return "Search" }
-        return store.folder == .inbox ? "" : store.folder.title
+        return store.isInbox ? "" : store.viewTitle
     }
 
     /// ☰: switch folder, like the web inbox's sidebar.
     private var folderMenu: some View {
         Menu {
-            Picker("Folder", selection: Binding(
-                get: { store.folder },
-                set: { folder in
-                    store.folder = folder
-                    Task { await store.load() }
-                }
-            )) {
+            Section {
                 ForEach(MailFolder.allCases) { folder in
-                    Label(folder.title, systemImage: folder.systemImage).tag(folder)
+                    Button { store.show(folder) } label: {
+                        let current = store.label == nil && store.folder == folder
+                        Label(folder.title, systemImage: current ? "checkmark" : folder.systemImage)
+                    }
+                }
+            }
+            // A line, then the mailboxes' own labels, as in Gmail's sidebar.
+            Section("Labels") {
+                Button { creatingLabel = true } label: {
+                    Label("New label", systemImage: "plus")
+                }
+                .disabled(store.accounts.isEmpty)
+                ForEach(store.labels) { label in
+                    Button { store.show(label) } label: {
+                        Label(labelTitle(label), systemImage: store.label == label ? "checkmark" : "tag")
+                    }
                 }
             }
         } label: {
             Image(systemName: "line.3.horizontal")
         }
         .accessibilityLabel("Folders")
+    }
+
+    /// A label's name, with its mailbox when several are connected.
+    private func labelTitle(_ label: MailLabel) -> String {
+        store.accounts.count > 1 ? "\(label.name) · \(label.accountEmail)" : label.name
     }
 
     private func applySearch(_ text: String) {
@@ -147,7 +163,7 @@ struct EmailListView: View {
             } actions: {
                 Button("Try again") { Task { await store.load() } }
             }
-        } else if store.emails.isEmpty, store.accounts.isEmpty, store.query.isEmpty, store.folder == .inbox {
+        } else if store.emails.isEmpty, store.accounts.isEmpty, store.query.isEmpty, store.isInbox {
             ContentUnavailableView {
                 Label("No mailbox connected", systemImage: "envelope")
             } description: {
@@ -157,8 +173,8 @@ struct EmailListView: View {
             }
         } else if store.emails.isEmpty {
             ContentUnavailableView(
-                store.query.isEmpty ? "Nothing in \(store.folder.title)" : "No results",
-                systemImage: store.query.isEmpty ? store.folder.systemImage : "magnifyingglass",
+                store.query.isEmpty ? "Nothing in \(store.viewTitle)" : "No results",
+                systemImage: store.query.isEmpty ? (store.label == nil ? store.folder.systemImage : "tag") : "magnifyingglass",
                 description: store.query.isEmpty ? nil : Text("Nothing matches “\(store.query)”.")
             )
         } else {
@@ -168,11 +184,13 @@ struct EmailListView: View {
                         EmailRow(email: email,
                                  mailbox: store.accountID == nil && store.accounts.count > 1
                                     ? store.account(for: email.accountId)?.label : nil,
-                                 showRecipient: store.query.isEmpty && [.sent, .drafts].contains(store.folder))
+                                 showRecipient: store.query.isEmpty && store.label == nil && [.sent, .drafts].contains(store.folder))
                     }
                     .onAppear {
                         if email.id == store.emails.last?.id { Task { await store.loadMore() } }
                     }
+                    // Tighter left margin than the list's default.
+                    .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 12))
                 }
                 if store.isLoadingMore {
                     HStack { Spacer(); ProgressView(); Spacer() }
@@ -196,11 +214,11 @@ struct EmailRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 6) {
             Circle()
                 .fill(email.isRead ? Color.clear : Color.accentColor)
-                .frame(width: 8, height: 8)
-                .padding(.top, 6)
+                .frame(width: 7, height: 7)
+                .padding(.top, 7)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline) {

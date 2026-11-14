@@ -130,6 +130,37 @@ final class EmailTests: XCTestCase {
         XCTAssertFalse(HomeView.matches("   ", ["anything"]))
     }
 
+    func testSnoozeOptions() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        // Wednesday 2026-11-11 10:00 New York.
+        let wednesday = calendar.date(from: DateComponents(year: 2026, month: 11, day: 11, hour: 10))!
+        let options = EmailsStore.snoozeOptions(now: wednesday, calendar: calendar)
+        XCTAssertEqual(options.map(\.title), ["Later today", "Tomorrow", "This weekend", "Next week"])
+        let parts = options.map { calendar.dateComponents([.day, .hour], from: $0.date) }
+        XCTAssertEqual(parts.map(\.day), [11, 12, 14, 16])
+        XCTAssertEqual(parts.map(\.hour), [18, 8, 8, 8])
+
+        // Saturday evening: no "later today" or "this weekend".
+        let saturday = calendar.date(from: DateComponents(year: 2026, month: 11, day: 14, hour: 19))!
+        XCTAssertEqual(EmailsStore.snoozeOptions(now: saturday, calendar: calendar).map(\.title), ["Tomorrow", "Next week"])
+    }
+
+    func testLabelsDecodeAndListByFolderKey() throws {
+        let sidebar = try APIClient.decoder.decode(MailSidebar.self, from: Data("""
+        {"counts": {"inbox": 3}, "labels": [{"account_id": 4, "account_email": "me@x.com",
+          "label_id": "Label_9", "name": "Clients/Acme", "color": "#16a766", "unread": 2}]}
+        """.utf8))
+        let label = try XCTUnwrap(sidebar.labels.first)
+        XCTAssertEqual(label.name, "Clients/Acme")
+        XCTAssertEqual(label.folderKey, "label:4:Label_9")
+        XCTAssertEqual(EmailsStore.listPath(folder: .inbox, label: label, accountID: nil, query: "", before: nil),
+                       "/api/emails?folder=label:4:Label_9")
+        // A search still covers all mail.
+        XCTAssertEqual(EmailsStore.listPath(folder: .inbox, label: label, accountID: nil, query: "x", before: nil),
+                       "/api/emails?folder=all&q=x")
+    }
+
     func testSealedAndHTMLDetection() {
         XCTAssertTrue(EmailText.isSealed("WAYVE_SECURE_V1\n{...}"))
         XCTAssertTrue(EmailText.isSealed("WAYVE_CHAT_E2E_V1\n{...}"))

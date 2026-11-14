@@ -18,6 +18,10 @@ final class EmailsStore: ObservableObject {
     /// nil = every mailbox.
     @Published var accountID: Int?
     @Published var folder: MailFolder = .inbox
+    /// A label being listed instead of `folder`.
+    @Published var label: MailLabel?
+    /// The labels of every mailbox, for the ☰ menu.
+    @Published private(set) var labels: [MailLabel] = []
     @Published var query = ""
 
     let api: APIClient
@@ -32,8 +36,9 @@ final class EmailsStore: ObservableObject {
     }
 
     /// A search looks through all mail, as on the web.
-    static func listPath(folder: MailFolder, accountID: Int?, query: String, before: EmailSummary?) -> String {
-        var items = [URLQueryItem(name: "folder", value: query.isEmpty ? folder.rawValue : MailFolder.all.rawValue)]
+    static func listPath(folder: MailFolder, label: MailLabel? = nil, accountID: Int?, query: String, before: EmailSummary?) -> String {
+        let shown = label?.folderKey ?? folder.rawValue
+        var items = [URLQueryItem(name: "folder", value: query.isEmpty ? shown : MailFolder.all.rawValue)]
         if let accountID { items.append(URLQueryItem(name: "account_id", value: String(accountID))) }
         if !query.isEmpty { items.append(URLQueryItem(name: "q", value: query)) }
         if let before, let date = before.listDate {
@@ -55,12 +60,14 @@ final class EmailsStore: ObservableObject {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
             async let accountList: [MailAccount] = api.get("/api/accounts")
-            let page: [EmailSummary] = try await api.get(Self.listPath(folder: folder, accountID: accountID, query: q, before: nil))
+            async let sidebar: MailSidebar = api.get("/api/emails/sidebar")
+            let page: [EmailSummary] = try await api.get(Self.listPath(folder: folder, label: label, accountID: accountID, query: q, before: nil))
             guard mine == generation else { return }
             emails = page
             hasMore = page.count >= Self.pageSize
             // Accounts only fill the mailbox menu; a failure there shouldn't hide mail.
             accounts = (try? await accountList) ?? accounts
+            labels = (try? await sidebar)?.labels ?? labels
             errorMessage = nil
         } catch APIError.unauthorized {
             // AppState signs out.
@@ -78,7 +85,7 @@ final class EmailsStore: ObservableObject {
         defer { isLoadingMore = false }
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         do {
-            let page: [EmailSummary] = try await api.get(Self.listPath(folder: folder, accountID: accountID, query: q, before: last))
+            let page: [EmailSummary] = try await api.get(Self.listPath(folder: folder, label: label, accountID: accountID, query: q, before: last))
             guard mine == generation else { return }
             let known = Set(emails.map(\.id))
             emails.append(contentsOf: page.filter { !known.contains($0.id) })
@@ -122,6 +129,33 @@ final class EmailsStore: ObservableObject {
         } catch {
             setRead(email.id, false)
         }
+    }
+
+    /// What's being listed: the label's name, else the folder's.
+    var viewTitle: String { label?.name ?? folder.title }
+
+    /// The plain inbox (no label picked).
+    var isInbox: Bool { folder == .inbox && label == nil }
+
+    func show(_ folder: MailFolder) {
+        self.folder = folder
+        label = nil
+        Task { await load() }
+    }
+
+    func show(_ label: MailLabel) {
+        self.label = label
+        Task { await load() }
+    }
+
+    /// Creates a label in one Gmail mailbox (`POST /api/emails/labels`) and
+    /// adds it to the menu.
+    func createLabel(named name: String, in accountID: Int) async throws -> MailLabel {
+        struct Body: Encodable { let accountId: Int; let name: String }
+        let created: MailLabel = try await api.post("/api/emails/labels", body: Body(accountId: accountID, name: name))
+        labels = (labels.filter { $0.id != created.id } + [created])
+            .sorted { ($0.accountEmail, $0.name.lowercased()) < ($1.accountEmail, $1.name.lowercased()) }
+        return created
     }
 
     func detail(of email: EmailSummary) async throws -> EmailDetail {
@@ -173,6 +207,46 @@ final class EmailsStore: ObservableObject {
     func trash(_ email: EmailSummary) async throws {
         try await api.delete("/api/emails/\(email.id)")
         if folder != .trash { emails.removeAll { $0.id == email.id } }
+    }
+
+    /// Brings it back from Trash to the Inbox, here and at the mail provider.
+    func restore(_ email: EmailSummary) async throws {
+        let _: Ignored = try await api.post("/api/emails/\(email.id)/restore", body: [String: String]())
+        if folder == .trash { emails.removeAll { $0.id == email.id } }
+    }
+
+    /// Hides it until `until` (Fluxze only; it returns to the top of the Inbox).
+    func snooze(_ email: EmailSummary, until: Date) async throws {
+        struct Body: Encodable { let until: String }
+        let _: Ignored = try await api.post(
+            "/api/emails/\(email.id)/snooze",
+            body: Body(until: ISO8601DateFormatter().string(from: until)))
+        if folder != .snoozed { emails.removeAll { $0.id == email.id } }
+    }
+
+    /// The snooze presets, as in Gmail: later today, tomorrow, this weekend
+    /// and next week, at 8 am (later today: in three hours, or 6 pm).
+    static func snoozeOptions(now: Date = .now, calendar: Calendar = .current) -> [(title: String, date: Date)] {
+        func at(_ day: Date, hour: Int) -> Date {
+            calendar.date(bySettingHour: hour, minute: 0, second: 0, of: day) ?? day
+        }
+        var options: [(String, Date)] = []
+        let hour = calendar.component(.hour, from: now)
+        if hour < 17 {
+            options.append(("Later today", hour < 15 ? at(now, hour: 18) : now.addingTimeInterval(3 * 3600)))
+        }
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now) {
+            options.append(("Tomorrow", at(tomorrow, hour: 8)))
+        }
+        let weekday = calendar.component(.weekday, from: now)  // 1 = Sunday … 7 = Saturday
+        if weekday != 7, weekday != 1,
+           let saturday = calendar.nextDate(after: now, matching: DateComponents(weekday: 7), matchingPolicy: .nextTime) {
+            options.append(("This weekend", at(saturday, hour: 8)))
+        }
+        if let monday = calendar.nextDate(after: now, matching: DateComponents(weekday: 2), matchingPolicy: .nextTime) {
+            options.append(("Next week", at(monday, hour: 8)))
+        }
+        return options
     }
 
     struct Outgoing: Encodable, Equatable {
