@@ -13,7 +13,6 @@ export type AppKey =
   | "userstories"
   | "tickets"
   | "documents"
-  | "skills"
   | "aichat"
   | "github"
   | "about"
@@ -31,7 +30,6 @@ const TasksView = lazy(() => import("../tasks/Tasks"));
 const UserStoriesView = lazy(() => import("../userstories/UserStories"));
 const TicketsView = lazy(() => import("../tickets/Tickets"));
 const DocumentsView = lazy(() => import("../documents/DocumentsBox"));
-const SkillsView = lazy(() => import("../skills/SkillsBox"));
 const AIChatView = lazy(() => import("../aichat/AIChat"));
 const GitHubRepoView = lazy(() => import("../github/GitHubRepo"));
 const AboutView = lazy(() => import("../about/About"));
@@ -105,15 +103,6 @@ export const SPLIT_APPS: SplitApp[] = [
     // into the focused split pane.
     autoRoute: false,
     Comp: DocumentsView,
-  },
-  {
-    key: "skills",
-    label: "Skills",
-    path: "/skills",
-    icon: "🧠",
-    // Same as Library: App.tsx owns the route.
-    autoRoute: false,
-    Comp: SkillsView,
   },
   {
     key: "aichat",
