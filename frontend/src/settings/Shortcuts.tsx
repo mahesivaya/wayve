@@ -1,36 +1,63 @@
+import { useState } from "react";
 import SettingsShell from "../profile/SettingsShell";
 import { isDesktopApp } from "../utils/desktop";
 import "./shortcuts.css";
 
 // Every keyboard shortcut in the app, in one place. Keep this list in step
-// with the handlers it describes (TabBar, Layout's split keys, EmailDetail's
-// useShortcuts map, the chat composers, and the desktop menu in
+// with the handlers it describes (TabBar, TabSwitcher, Layout's split keys,
+// EmailDetail's useShortcuts map, the chat composers, and the desktop menu in
 // desktop/main.cjs).
 
 /** A key in a combo. "mod" is Cmd on a Mac and Ctrl elsewhere; "ctrl" is
  *  Control on every platform. */
 type Key = string;
 
-type Shortcut = { keys: Key[]; action: string; note?: string };
+/** Where a shortcut works. Unset: in the desktop app and in a web browser.
+ *  "desktop": only in the desktop app (a browser keeps the keys for itself,
+ *  or the shortcut comes from the app's own menu). */
+type Where = "desktop";
+
+type Shortcut = { keys: Key[]; action: string; note?: string; only?: Where };
 type Group = {
   title: string;
   hint?: string;
   items: Shortcut[];
-  desktopOnly?: boolean;
+  only?: Where;
 };
+
+type View = "desktop" | "browser";
+
+const worksIn = (view: View, only?: Where) => !only || only === view;
 
 const GROUPS: Group[] = [
   {
     title: "Tabs",
     items: [
       {
+        keys: ["ctrl", "alt"],
+        action: "Show all open tabs",
+        note: "Keep holding: ← → or Tab to pick, let go to open, Esc to cancel",
+      },
+      {
         keys: ["mod", "←"],
         action: "Previous tab",
-        note: "Stops at the first tab",
+        note: "Stops at the first tab. In a text box it moves to the line start instead",
       },
-      { keys: ["mod", "→"], action: "Next tab", note: "Stops at the last tab" },
-      { keys: ["ctrl", "Tab"], action: "Next tab, looping round" },
-      { keys: ["ctrl", "shift", "Tab"], action: "Previous tab, looping round" },
+      {
+        keys: ["mod", "→"],
+        action: "Next tab",
+        note: "Stops at the last tab. In a text box it moves to the line end instead",
+      },
+      {
+        keys: ["ctrl", "Tab"],
+        action: "Next tab, looping round",
+        only: "desktop",
+      },
+      {
+        keys: ["ctrl", "shift", "Tab"],
+        action: "Previous tab, looping round",
+        only: "desktop",
+      },
       { keys: ["mod", "alt", "T"], action: "New tab" },
       { keys: ["mod", "alt", "W"], action: "Close tab" },
     ],
@@ -67,8 +94,9 @@ const GROUPS: Group[] = [
     ],
   },
   {
-    title: "Desktop app",
-    desktopOnly: true,
+    title: "Desktop app window",
+    hint: "From the desktop app's menu bar.",
+    only: "desktop",
     items: [
       { keys: ["mod", "["], action: "Back" },
       { keys: ["mod", "]"], action: "Forward" },
@@ -104,13 +132,62 @@ function label(key: Key, mac: boolean): string {
   }
 }
 
+const VIEWS: { id: View; label: string }[] = [
+  { id: "desktop", label: "Desktop app" },
+  { id: "browser", label: "Web browser" },
+];
+
 export default function Shortcuts() {
   const mac = isMac();
-  const desktop = isDesktopApp();
-  const groups = GROUPS.filter((g) => !g.desktopOnly || desktop);
+  // Start on wherever the page is open; the toggle shows the other one.
+  const [view, setView] = useState<View>(() =>
+    isDesktopApp() ? "desktop" : "browser"
+  );
+
+  const groups = GROUPS.filter((g) => worksIn(view, g.only))
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((item) => worksIn(view, item.only ?? g.only)),
+    }))
+    .filter((g) => g.items.length > 0);
+  const desktopOnlyCount = GROUPS.flatMap((g) =>
+    g.items.filter((item) => (item.only ?? g.only) === "desktop")
+  ).length;
 
   return (
     <SettingsShell title="Shortcuts">
+      <div
+        className="shortcuts-views"
+        role="group"
+        aria-label="Show shortcuts for"
+      >
+        {VIEWS.map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            className={`shortcuts-view${view === v.id ? " active" : ""}`}
+            aria-pressed={view === v.id}
+            onClick={() => setView(v.id)}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
+      <p className="shortcuts-intro">
+        {view === "desktop" ? (
+          <>
+            Everything below works in the Fluxze desktop app. Shortcuts tagged{" "}
+            <span className="shortcuts-badge">Desktop app only</span> don't work
+            in a web browser.
+          </>
+        ) : (
+          <>
+            These work when you use Fluxze in a web browser. {desktopOnlyCount}{" "}
+            more work only in the desktop app; switch to Desktop app above to
+            see them.
+          </>
+        )}
+      </p>
       {groups.map((group) => (
         <section className="settings-card shortcuts-card" key={group.title}>
           <h2 className="settings-card-title">{group.title}</h2>
@@ -120,6 +197,9 @@ export default function Shortcuts() {
               <div className="shortcuts-row" key={item.action}>
                 <dt>
                   {item.action}
+                  {(item.only ?? group.only) === "desktop" && (
+                    <span className="shortcuts-badge">Desktop app only</span>
+                  )}
                   {item.note && (
                     <span className="shortcuts-note">{item.note}</span>
                   )}

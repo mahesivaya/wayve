@@ -31,19 +31,10 @@ import {
 import { TAB_TITLE_EVENT, type TabTitleDetail } from "./useTabTitle";
 import type { TabDragPayload } from "../paneDnd";
 import TabStrip from "./TabStrip";
+import TabSwitcher from "./TabSwitcher";
+import { isTypingTarget } from "./isTypingTarget";
 
 const NEW_TAB_PATH = "/";
-
-/** Focus is somewhere the user types, where arrow keys move the caret. */
-function isTypingTarget(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  return (
-    !!el &&
-    (el.isContentEditable ||
-      ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) ||
-      el.getAttribute?.("role") === "textbox")
-  );
-}
 
 function currentUrl(loc: { pathname: string; search: string; hash: string }) {
   return `${loc.pathname}${loc.search}${loc.hash}`;
@@ -223,34 +214,47 @@ export default function TabBar({
   }, []);
 
   return (
-    <TabStrip
-      stripId="main"
-      ariaLabel="Open tabs"
-      tabs={state.tabs}
-      activeId={state.activeId}
-      titleOf={titleOf}
-      onSelect={select}
-      onClose={close}
-      canClose={state.tabs.length > 1 || !!onCloseLast}
-      closeLabel={(_tab, title) =>
-        state.tabs.length <= 1 && onCloseLast
-          ? closeLastLabel
-          : `Close ${title}`
-      }
-      onReorder={(from, to) => setState((s) => moveTab(s, from, to))}
-      onReceive={(payload, index) => {
-        go(
-          insertTab(state, { path: payload.path, title: payload.title }, index)
-        );
-        onReceivedFromRight?.(payload);
-      }}
-      onTabDragStart={(e, tab, title) =>
-        onPaneDragStart?.(e, tab, title, state.tabs.length <= 1)
-      }
-      onTabDragEnd={onPaneDragEnd}
-      onAdd={open}
-      addDisabled={state.tabs.length >= MAX_TABS}
-      trailing={trailing}
-    />
+    <>
+      <TabStrip
+        stripId="main"
+        ariaLabel="Open tabs"
+        tabs={state.tabs}
+        activeId={state.activeId}
+        titleOf={titleOf}
+        onSelect={select}
+        onClose={close}
+        canClose={state.tabs.length > 1 || !!onCloseLast}
+        closeLabel={(_tab, title) =>
+          state.tabs.length <= 1 && onCloseLast
+            ? closeLastLabel
+            : `Close ${title}`
+        }
+        onReorder={(from, to) => setState((s) => moveTab(s, from, to))}
+        onReceive={(payload, index) => {
+          go(
+            insertTab(
+              state,
+              { path: payload.path, title: payload.title },
+              index
+            )
+          );
+          onReceivedFromRight?.(payload);
+        }}
+        onTabDragStart={(e, tab, title) =>
+          onPaneDragStart?.(e, tab, title, state.tabs.length <= 1)
+        }
+        onTabDragEnd={onPaneDragEnd}
+        onAdd={open}
+        addDisabled={state.tabs.length >= MAX_TABS}
+        trailing={trailing}
+      />
+      {/* Hold Ctrl+Option (Ctrl+Alt) to see every open tab, like Cmd+Tab. */}
+      <TabSwitcher
+        tabs={state.tabs}
+        activeId={state.activeId}
+        titleOf={titleOf}
+        onPick={select}
+      />
+    </>
   );
 }
