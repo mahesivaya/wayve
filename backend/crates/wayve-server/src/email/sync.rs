@@ -1256,8 +1256,11 @@ where
         .collect();
     let returned = upsert_batch(pool, account_id, &insert_batch).await?;
 
-    // Place each email in its conversation. Re-synced emails keep theirs.
-    for r in &returned {
+    // Place each new email in its conversation. A re-synced email already has
+    // one (threading is what wrote its meta row); one whose threading failed has
+    // no meta row and is picked up by `threading::backfill_batch` instead, so
+    // re-running ~4 statements per changed-but-old row every tick buys nothing.
+    for r in returned.iter().filter(|r| r.is_new) {
         if let Some((_, sender, receiver, subject, created_at, _, _, threading, _)) =
             batch.iter().find(|h| h.0 == r.gmail_id)
         {
@@ -1275,6 +1278,12 @@ where
             )
             .await;
         }
+    }
+
+    // Events and audit rows are for new mail only; a steady-state re-sync of
+    // already-stored mail has none, so skip the owner lookup entirely.
+    if !returned.iter().any(|r| r.is_new) {
+        return Ok(());
     }
 
     // The account's owner can't change mid-tick, so resolve it once per batch.
