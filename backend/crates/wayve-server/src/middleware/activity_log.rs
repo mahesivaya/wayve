@@ -1,16 +1,15 @@
 //! Records every authenticated API request into the `activity_events` stream,
 //! the non-consequential audit. Unauthenticated traffic, CORS preflight, and
-//! the activity ingest endpoint itself are skipped. The write is
-//! fire-and-forget, so request latency is unaffected.
+//! the activity ingest endpoint itself are skipped. The row goes onto the
+//! bounded queue in `crate::activity`, so the request never waits on, or holds,
+//! a DB connection for it.
 
 use actix_web::{
     Error,
     dev::{Service, ServiceRequest, ServiceResponse, Transform},
     http::Method,
-    web,
 };
 use futures::future::{LocalBoxFuture, Ready, ok};
-use sqlx::PgPool;
 use std::{
     rc::Rc,
     task::{Context, Poll},
@@ -63,30 +62,19 @@ where
         let path = req.path().to_string();
         let user_id = get_user_id_from_request(req.request());
         let ip = crate::client_ip::client_ip(req.request());
-        let pool = req
-            .app_data::<web::Data<PgPool>>()
-            .map(|p| p.get_ref().clone());
-
         // Never record the ingest path itself; it would log itself on every
         // page view and click.
-        let skip = method == Method::OPTIONS
-            || path.starts_with("/api/activity")
-            || user_id.is_none()
-            || pool.is_none();
+        let skip = method == Method::OPTIONS || path.starts_with("/api/activity");
 
         Box::pin(async move {
             let res = srv.call(req).await?;
-            if !skip && let (Some(uid), Some(pool)) = (user_id, pool) {
-                crate::activity::spawn_record(
-                    pool,
-                    uid,
-                    "api_request",
-                    None,
-                    Some(method.to_string()),
-                    Some(path),
-                    Some(i32::from(res.status().as_u16())),
-                    ip,
-                );
+            if !skip && let Some(uid) = user_id {
+                let mut row = crate::activity::ActivityRow::new(uid, "api_request");
+                row.method = Some(method.to_string());
+                row.path = Some(path);
+                row.status_code = Some(i32::from(res.status().as_u16()));
+                row.ip = ip;
+                crate::activity::enqueue(row);
             }
             Ok(res)
         })
