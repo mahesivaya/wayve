@@ -4,7 +4,7 @@
 // reflects the same per-user byte sum the profile endpoint uses.
 #[cfg(test)]
 mod tests {
-    use crate::platform_team::handler::{platform_users, users_summary};
+    use crate::platform_team::handler::{delete_personal_user, platform_users, users_summary};
     use crate::test_support::{insert_local_user, jwt_for, random_email, test_pool};
     use actix_web::{App, http::StatusCode, test as actix_test, web};
     use sqlx::{PgPool, Row};
@@ -207,5 +207,98 @@ mod tests {
         );
 
         cleanup(&pool, &[owner_id, personal_id, org_user_id], &[org_id]).await;
+    }
+
+    // DELETE /platform-team/users/{id}: platform owner can remove a personal
+    // account (and its notes); org accounts and non-platform callers are refused.
+    #[actix_web::test]
+    async fn delete_personal_user_is_personal_only_and_platform_gated() {
+        let pool = test_pool().await;
+        let owner_email = random_email();
+        let owner_id = make_platform_owner(&pool, &owner_email).await;
+        let personal_id = insert_local_user(&pool, &random_email(), "password123").await;
+        let (org_user_id, org_id) = make_org_owner(&pool, &random_email()).await;
+
+        let mut note_tx = pool.begin().await.unwrap_or_else(|e| panic!("begin: {e}"));
+        sqlx::query("SELECT set_config('app.bypass', 'on', true)")
+            .execute(&mut *note_tx)
+            .await
+            .unwrap_or_else(|e| panic!("bypass: {e}"));
+        sqlx::query("INSERT INTO notes (user_id, content) VALUES ($1, 'bye')")
+            .bind(personal_id)
+            .execute(&mut *note_tx)
+            .await
+            .unwrap_or_else(|e| panic!("insert note: {e}"));
+        note_tx
+            .commit()
+            .await
+            .unwrap_or_else(|e| panic!("commit: {e}"));
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(delete_personal_user),
+        )
+        .await;
+        let del = |token: &str, id: i32| {
+            actix_test::TestRequest::delete()
+                .uri(&format!("/platform-team/users/{id}"))
+                .insert_header(("Authorization", format!("Bearer {token}")))
+                .to_request()
+        };
+
+        // An org owner is not platform scope.
+        let org_token = jwt_for(org_user_id, "ignored@example.com");
+        assert_eq!(
+            actix_test::call_service(&app, del(&org_token, personal_id))
+                .await
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+
+        let token = jwt_for(owner_id, &owner_email);
+        // Org accounts can't be removed through this route.
+        assert_eq!(
+            actix_test::call_service(&app, del(&token, org_user_id))
+                .await
+                .status(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            actix_test::call_service(&app, del(&token, personal_id))
+                .await
+                .status(),
+            StatusCode::NO_CONTENT
+        );
+
+        let users_left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE id = $1")
+            .bind(personal_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("count users: {e}"));
+        assert_eq!(users_left, 0, "personal user row should be gone");
+
+        let mut tx = pool.begin().await.unwrap_or_else(|e| panic!("begin: {e}"));
+        sqlx::query("SELECT set_config('app.bypass', 'on', true)")
+            .execute(&mut *tx)
+            .await
+            .unwrap_or_else(|e| panic!("bypass: {e}"));
+        let notes_left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM notes WHERE user_id = $1")
+            .bind(personal_id)
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap_or_else(|e| panic!("count notes: {e}"));
+        let _ = tx.commit().await;
+        assert_eq!(notes_left, 0, "personal user's notes should be gone");
+
+        // Already deleted → 404.
+        assert_eq!(
+            actix_test::call_service(&app, del(&token, personal_id))
+                .await
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+
+        cleanup(&pool, &[owner_id, org_user_id], &[org_id]).await;
     }
 }

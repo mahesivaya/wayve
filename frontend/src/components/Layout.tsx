@@ -1935,6 +1935,12 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           visible: canAccessPlatformMembers,
         },
         {
+          path: "/platform/personal-accounts",
+          label: "Personal accounts",
+          icon: <PersonIcon size={16} />,
+          visible: canAccessPlatformMembers,
+        },
+        {
           path: "/platform/billing",
           label: "Billing",
           icon: <BillingIcon size={16} />,

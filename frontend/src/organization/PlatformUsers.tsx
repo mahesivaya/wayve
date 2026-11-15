@@ -1,18 +1,41 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  deletePersonalUser,
   getUsersSummary,
   listPlatformUsers,
   type UsersSummary,
   type PlatformUserRow,
 } from "../api/platformTeam";
+import { useAuth } from "../auth/useAuth";
+import { hasPermission } from "../auth/permissions";
 import { formatBytes } from "../utils/bytes";
+import { fmtDate, fmtDateTime } from "../utils/datetime";
+import ConfirmDeleteDialog from "./ConfirmDeleteDialog";
 import "./admin-ui.css";
 import "./platformAdmin.css";
 
 const PAGE_SIZE = 50;
 
+const PROVIDER_LABELS: Record<string, string> = {
+  local: "Email",
+  google: "Google",
+  github: "GitHub",
+  sso: "SSO",
+};
+
+function displayName(u: PlatformUserRow): string | null {
+  const full = [u.first_name, u.last_name].filter(Boolean).join(" ").trim();
+  return full || u.username || null;
+}
+
+// Platform admin "Personal accounts" page: every personal (non-org) account
+// with its details, plus a type-to-confirm permanent delete for staff holding
+// members:manage. The backend re-checks scope + permission on every call.
 export default function PlatformUsers() {
+  const { user } = useAuth();
+  const canDelete = hasPermission(user, "members:manage");
+
   const [data, setData] = useState<UsersSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -23,6 +46,11 @@ export default function PlatformUsers() {
   const [search, setSearch] = useState("");
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  const [pendingDelete, setPendingDelete] = useState<PlatformUserRow | null>(
+    null
+  );
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -98,6 +126,19 @@ export default function PlatformUsers() {
     }
   };
 
+  // Throws on failure so ConfirmDeleteDialog shows the server's message.
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const target = pendingDelete;
+    await deletePersonalUser(target.id);
+    setUsers((prev) => prev.filter((u) => u.id !== target.id));
+    setData((prev) =>
+      prev ? { ...prev, users_total: Math.max(0, prev.users_total - 1) } : prev
+    );
+    setPendingDelete(null);
+    setNotice(`Deleted ${target.email}.`);
+  };
+
   const stats = data
     ? [
         { label: "Total users", value: data.users_total.toLocaleString() },
@@ -115,8 +156,8 @@ export default function PlatformUsers() {
     <div className="platform-admin-home u-page-shell">
       <div className="platform-admin-header u-panel u-flex-between">
         <div>
-          <h1>Users</h1>
-          <p>Personal user totals, growth and storage usage.</p>
+          <h1>Personal accounts</h1>
+          <p>Every personal account registered on the platform.</p>
         </div>
         <Link to="/platform/home" className="u-btn-primary">
           ← Back to platform home
@@ -142,43 +183,110 @@ export default function PlatformUsers() {
 
       <section className="platform-admin-panel u-panel">
         <div className="platform-users-toolbar">
-          <h2>Personal users</h2>
+          <h2>Personal accounts</h2>
           <input
             type="search"
             className="platform-users-search"
             placeholder="Search by email…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            aria-label="Search personal users by email"
+            aria-label="Search personal accounts by email"
           />
         </div>
+
+        {notice && (
+          <div
+            className="platform-admin-success platform-users-notice"
+            role="status"
+          >
+            {notice}
+          </div>
+        )}
 
         {usersLoading ? (
           <div className="platform-admin-empty">Loading users…</div>
         ) : usersError ? (
           <div className="platform-admin-error">{usersError}</div>
         ) : users.length === 0 ? (
-          <div className="platform-admin-empty">No personal users found.</div>
+          <div className="platform-admin-empty">
+            No personal accounts found.
+          </div>
         ) : (
           <>
-            <table className="platform-users-table">
-              <thead>
-                <tr>
-                  <th>Email</th>
-                  <th className="platform-users-num">Memory used</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.id}>
-                    <td>{u.email}</td>
-                    <td className="platform-users-num">
-                      {formatBytes(u.storage_bytes)}
-                    </td>
+            <div className="platform-users-scroll">
+              <table className="platform-users-table">
+                <thead>
+                  <tr>
+                    <th>Account</th>
+                    <th>Sign-in</th>
+                    <th>Plan</th>
+                    <th className="platform-users-num">Mailboxes</th>
+                    <th>Joined</th>
+                    <th>Last seen</th>
+                    <th className="platform-users-num">Storage</th>
+                    {canDelete && <th aria-label="Actions" />}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {users.map((u) => {
+                    const name = displayName(u);
+                    return (
+                      <tr key={u.id}>
+                        <td>
+                          <div className="platform-users-account">
+                            <span className="platform-users-email">
+                              {u.email}
+                            </span>
+                            {name && (
+                              <span className="platform-users-name">
+                                {name}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="platform-users-nowrap">
+                          {PROVIDER_LABELS[u.auth_provider] ??
+                            (u.auth_provider || "—")}
+                          {!u.email_verified && (
+                            <span className="platform-users-badge">
+                              Unverified
+                            </span>
+                          )}
+                        </td>
+                        <td>{u.plan_name ?? "Free"}</td>
+                        <td className="platform-users-num">
+                          {u.mailbox_count}
+                        </td>
+                        <td className="platform-users-nowrap">
+                          {fmtDate(u.created_at)}
+                        </td>
+                        <td className="platform-users-nowrap">
+                          {u.last_seen ? fmtDateTime(u.last_seen) : "Never"}
+                        </td>
+                        <td className="platform-users-num">
+                          {formatBytes(u.storage_bytes)}
+                        </td>
+                        {canDelete && (
+                          <td>
+                            <button
+                              type="button"
+                              className="danger-outline-btn"
+                              onClick={() => {
+                                setNotice("");
+                                setPendingDelete(u);
+                              }}
+                              aria-label={`Delete account ${u.email}`}
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
             {hasMore && (
               <div className="platform-users-more">
@@ -195,6 +303,24 @@ export default function PlatformUsers() {
           </>
         )}
       </section>
+
+      {pendingDelete && (
+        <ConfirmDeleteDialog
+          title="Delete personal account?"
+          confirmText={pendingDelete.email}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={confirmDelete}
+        >
+          <p>
+            This permanently deletes <strong>{pendingDelete.email}</strong> and
+            all of its data: mail, drive files, chats, notes and tasks.
+          </p>
+          <p>
+            Any active subscription is cancelled immediately. This cannot be
+            undone.
+          </p>
+        </ConfirmDeleteDialog>
+      )}
     </div>
   );
 }

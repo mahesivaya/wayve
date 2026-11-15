@@ -432,7 +432,15 @@ export default function App() {
             path="/platform/organizations"
             element={<PlatformOrganizations />}
           />
-          <Route path="/platform/users" element={<PlatformUsers />} />
+          <Route
+            path="/platform/personal-accounts"
+            element={<PlatformUsers />}
+          />
+          {/* Old URL of the same page; keep bookmarks working. */}
+          <Route
+            path="/platform/users"
+            element={<Navigate to="/platform/personal-accounts" replace />}
+          />
           <Route
             path="/platform/members/:id"
             element={<MemberDetail scope="platform" />}
