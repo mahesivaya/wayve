@@ -21,8 +21,23 @@ declare global {
         onReady: (listener: (version: string) => void) => () => void;
         install: () => Promise<void>;
       };
+      // "Remember password on this Mac". The shell keeps it encrypted with a
+      // Keychain key. Absent on installs from before 1.0.1.
+      savedLogin?: {
+        get: () => Promise<SavedLogin | null>;
+        // Resolves false when the Mac couldn't encrypt it.
+        save: (email: string, password: string) => Promise<boolean>;
+        clear: () => Promise<void>;
+      };
     };
   }
+}
+
+export type SavedLogin = { email: string; password: string };
+
+// The desktop shell's saved-login store, or null in a browser or an older shell.
+export function desktopSavedLogin() {
+  return isDesktopApp() ? (window.fluxzeDesktop?.savedLogin ?? null) : null;
 }
 
 // Installers are hosted on S3. The original Fluxze-arm64/x64.dmg objects are
