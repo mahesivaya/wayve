@@ -41,7 +41,7 @@ struct RootView: View {
             case .signedOut:
                 LoginView()
             case .signedIn:
-                MainTabView(api: appState.api, userID: appState.me?.id)
+                MainTabView(api: appState.api, me: appState.me)
             }
         }
         .task { await appState.restore() }
@@ -53,13 +53,32 @@ struct RootView: View {
 struct MainTabView: View {
     let api: APIClient
     let userID: Int?
+    /// Guests never see code, so they get no Reviews tab.
+    let canSeeCode: Bool
+    /// Held here, not in the Chat tab, so the unread badge and the live
+    /// connection work before the tab is opened.
+    @StateObject private var chat: ChatStore
+
+    init(api: APIClient, me: Me?) {
+        self.api = api
+        userID = me?.id
+        canSeeCode = me?.canSeeCode ?? true
+        _chat = StateObject(wrappedValue: ChatStore(api: api, me: me))
+    }
 
     var body: some View {
+        // Inbox is the first tab, so the app opens on it.
         TabView {
-            HomeView(api: api, userID: userID)
-                .tabItem { Label("Home", systemImage: "house") }
             EmailListView(store: EmailsStore(api: api, userID: userID))
                 .tabItem { Label("Inbox", systemImage: "tray") }
+            ChatListView(store: chat)
+                .tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right") }
+                .badge(chat.totalUnread)
+            if canSeeCode {
+                ReviewsView(store: ReviewsStore(api: api))
+                    // GitHub's pull request icon; tab bars draw icons in one tint.
+                    .tabItem { Label("Reviews", image: "PullRequest") }
+            }
             TaskListView(store: TasksStore(api: api))
                 .tabItem { Label("Tasks", systemImage: "checklist") }
             CalendarView(store: MeetingsStore(api: api))
@@ -67,5 +86,11 @@ struct MainTabView: View {
             DriveView(api: api)
                 .tabItem { Label("Drive", systemImage: "folder") }
         }
+        .task {
+            chat.start()
+            if !chat.hasLoaded { await chat.load() }
+        }
+        // Signing out removes this view; the connection goes with it.
+        .onDisappear { chat.stop() }
     }
 }

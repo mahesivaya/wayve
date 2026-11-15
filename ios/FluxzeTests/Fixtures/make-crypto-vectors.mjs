@@ -85,6 +85,13 @@ const fileWrapped = new Uint8Array(await subtle.encrypt({ name: "RSA-OAEP" }, pa
 const wlen = new Uint8Array([(fileWrapped.length >>> 24) & 255, (fileWrapped.length >>> 16) & 255, (fileWrapped.length >>> 8) & 255, fileWrapped.length & 255]);
 const fileEnvelope = new Uint8Array([0x57, 0x56, 0x31, 0x00, 0, 1, ...fileIv, ...wlen, ...fileWrapped, ...fileCt]);
 
+// A chat message in the WAYVE_CHAT_E2E_V1 envelope (frontend/src/chat/e2ee.ts).
+const chatAes = await subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
+const chatIv = rand(12);
+const chatData = new Uint8Array(await subtle.encrypt({ name: "AES-GCM", iv: chatIv }, chatAes, new TextEncoder().encode("Hi from the web ✓")));
+const chatWrapped = new Uint8Array(await subtle.encrypt({ name: "RSA-OAEP" }, pair.publicKey, await subtle.exportKey("raw", chatAes)));
+const chat = "WAYVE_CHAT_E2E_V1\n" + JSON.stringify({ type: "wayve_chat_e2e", data: Array.from(chatData), iv: Array.from(chatIv), keys: { [userId]: Array.from(chatWrapped) } });
+
 const v = {
   pkcs8: b64(pkcs8),
   spki: b64(spki),
@@ -98,6 +105,8 @@ const v = {
   multi: envelope({ type: "wayve_encrypted_multi", data: multi.data, iv: multi.iv, keys: { [userId]: multi.key } }),
   file: b64(fileEnvelope),
   fileText: "%PDF-1.4 drive file ✓",
+  chat,
+  chatText: "Hi from the web ✓",
   note: envelope({ type: "wayve_self_v1", data: note.data, iv: note.iv, keys: { [userId]: note.key } }),
 };
 

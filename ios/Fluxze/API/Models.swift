@@ -94,6 +94,37 @@ struct Me: Codable, Equatable {
     let email: String
     let username: String?
     let accountType: String?
+    /// "personal", "organization" or "platform"; older servers leave it out.
+    var scope: String? = nil
+    var currentPlan: Plan? = nil
+    /// The role in that scope ("owner" … "guest"). Guests never see code.
+    var effectiveRole: String? = nil
+
+    var canSeeCode: Bool { effectiveRole != "guest" }
+
+    struct Plan: Codable, Equatable {
+        let tier: String?
+    }
+
+    /// The scope, falling back to the account type as the web does
+    /// (`resolveScope` in `frontend/src/auth/permissions.ts`).
+    var resolvedScope: String? {
+        if let scope { return scope }
+        switch accountType {
+        case "personal": return "personal"
+        case "organization", "organization_admin": return "organization"
+        case "platform_admin": return "platform"
+        default: return nil
+        }
+    }
+
+    /// Organization and platform chat (and enterprise plans) uses standard,
+    /// server-side encryption: messages go out as text. Everyone else seals
+    /// each message end to end. Mirrors `usesStandardChatEncryption` on the
+    /// web; the server rejects plain text from anyone it doesn't allow.
+    var usesStandardChatEncryption: Bool {
+        resolvedScope == "organization" || resolvedScope == "platform" || currentPlan?.tier == "enterprise"
+    }
 }
 
 enum Priority {

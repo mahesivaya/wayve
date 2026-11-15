@@ -64,6 +64,18 @@ final class APIClient {
         let _: Ignored = try await send("DELETE", path, body: Optional<NoBody>.none)
     }
 
+    /// A GET whose 401 doesn't end the session: the GitHub proxy passes on
+    /// GitHub's own 401 when the server has no GitHub token, which says nothing
+    /// about this sign-in (the web's `preserve401`).
+    func getKeepingSession<T: Decodable>(_ path: String) async throws -> T {
+        let data = try await perform("GET", path, body: Optional<NoBody>.none, signOutOn401: false)
+        do {
+            return try Self.decoder.decode(T.self, from: data)
+        } catch {
+            throw APIError.decoding(String(describing: error))
+        }
+    }
+
     /// The raw bytes of a GET, such as a file download.
     func download(_ path: String) async throws -> Data {
         try await perform("GET", path, body: Optional<NoBody>.none)
@@ -85,7 +97,8 @@ final class APIClient {
 
     /// Sends the request and returns the body of a 2xx; anything else throws
     /// (a 401 on an authenticated request also signs out).
-    private func perform<B: Encodable>(_ method: String, _ path: String, body: B?) async throws -> Data {
+    private func perform<B: Encodable>(_ method: String, _ path: String, body: B?,
+                                       signOutOn401: Bool = true) async throws -> Data {
         guard let url = URL(string: path, relativeTo: baseURL)?.absoluteURL else {
             throw APIError.network("Invalid address: \(path)")
         }
@@ -114,7 +127,7 @@ final class APIClient {
 
         guard (200..<300).contains(http.statusCode) else {
             let error = APIError.from(status: http.statusCode, data: data)
-            if case .unauthorized = error, sentToken != nil {
+            if case .unauthorized = error, sentToken != nil, signOutOn401 {
                 onUnauthorized?()
             }
             throw error
