@@ -436,8 +436,8 @@ CREATE TABLE IF NOT EXISTS org_sso_configs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS idx_org_sso_configs_domain
-    ON org_sso_configs(allowed_domain);
+-- `allowed_domain TEXT NOT NULL UNIQUE` already indexes the domain lookup.
+DROP INDEX IF EXISTS idx_org_sso_configs_domain;
 
 -- Custom-domain ownership for organizations. An org claims a domain
 -- (e.g. acme.com) and proves it controls the DNS by publishing a TXT
@@ -2150,7 +2150,9 @@ ON email_accounts(user_id);
 
 -- Speed up the per-user storage SUMs in GET /api/profile.
 CREATE INDEX IF NOT EXISTS idx_drive_files_user_id ON drive_files(user_id);
-CREATE INDEX IF NOT EXISTS idx_notes_user_id ON notes(user_id);
+-- notes needs none: idx_notes_user_updated (user_id, updated_at DESC) starts
+-- with user_id, so it serves every user_id lookup.
+DROP INDEX IF EXISTS idx_notes_user_id;
 
 -- ============================================================
 -- 💳 BILLING (Stripe)
@@ -3099,8 +3101,11 @@ CREATE TABLE IF NOT EXISTS email_contacts (
     UNIQUE (user_id, address)
 );
 ALTER TABLE email_contacts ADD COLUMN IF NOT EXISTS photo_url TEXT;
-CREATE INDEX IF NOT EXISTS idx_email_contacts_user_addr
-    ON email_contacts (user_id, address text_pattern_ops);
+-- UNIQUE (user_id, address) already indexes this table. A separate
+-- text_pattern_ops index only helps `LIKE 'prefix%'`; the typeahead
+-- (routes/email.rs search_contacts) uses `ILIKE '%q%'`, which no btree can
+-- serve, so only its user_id column was ever used.
+DROP INDEX IF EXISTS idx_email_contacts_user_addr;
 
 -- Throttle marker for the People API photo sync (see email::people). NULL = never
 -- synced; the sync worker refreshes photos at most every few hours per account.
