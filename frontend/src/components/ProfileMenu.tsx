@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { canViewIntegrations } from "../auth/permissions";
@@ -6,6 +6,70 @@ import Avatar from "./Avatar";
 import { getApiBase } from "../config/env";
 import { ChevronUp, LogOut as LogOutIcon } from "lucide-react";
 import { PlatformIcon, SettingsIcon } from "../icons";
+import {
+  STATUS_OPTIONS,
+  chooseMyStatus,
+  loadMyStatus,
+  statusClass,
+  statusLabel,
+  useMyStatus,
+} from "../chat/myStatus";
+import type { ChatStatus } from "../api/chat";
+
+// Your chat status, set from the account menu on any page (the Chat page's
+// picker shares the same store). Shown as a dot on your avatar.
+function StatusItems({
+  status,
+  onPick,
+}: {
+  status: ChatStatus;
+  onPick: (s: ChatStatus) => void;
+}) {
+  return (
+    <div role="group" aria-label="Status">
+      <div className="profile-dropdown-heading">Status</div>
+      {STATUS_OPTIONS.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          role="menuitemradio"
+          aria-checked={o.value === status}
+          className="profile-dropdown-item profile-status-item"
+          onClick={() => onPick(o.value)}
+        >
+          <span className="profile-dropdown-icon" aria-hidden="true">
+            <span className={`profile-status-dot ${o.cls}`} />
+          </span>
+          <span className="profile-dropdown-label">{o.label}</span>
+          {o.value === status && (
+            <span className="profile-status-check" aria-hidden="true">
+              ✓
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function AvatarWithStatus({
+  status,
+  children,
+}: {
+  status: ChatStatus;
+  children: ReactNode;
+}) {
+  return (
+    <span className="profile-avatar-wrap">
+      {children}
+      <span
+        className={`profile-status-dot profile-status-dot--avatar ${statusClass(status)}`}
+        role="img"
+        aria-label={`Status: ${statusLabel(status)}`}
+      />
+    </span>
+  );
+}
 
 export default function ProfileMenu({
   placement = "header",
@@ -26,6 +90,13 @@ export default function ProfileMenu({
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const status = useMyStatus(user?.id);
+
+  // Opening the menu re-reads the status, in case it changed on another device
+  // while no chat connection was open on this page.
+  useEffect(() => {
+    if (menuOpen && user?.id) void loadMyStatus(user.id);
+  }, [menuOpen, user?.id]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -61,6 +132,11 @@ export default function ProfileMenu({
     void navigate(path);
   };
 
+  const pickStatus = (next: ChatStatus) => {
+    setMenuOpen(false);
+    void chooseMyStatus(next);
+  };
+
   // Wide screens: the sidebar's account control is the profile picture and
   // name. It opens a small menu: Settings, Platform admin (platform admins
   // only) and Log out.
@@ -76,12 +152,14 @@ export default function ProfileMenu({
           title={user.email}
           aria-label={`Account menu for ${displayName}`}
         >
-          <Avatar
-            className="profile-avatar"
-            name={user.email}
-            src={`${getApiBase()}/api/users/${user.id}/avatar`}
-            size={22}
-          />
+          <AvatarWithStatus status={status}>
+            <Avatar
+              className="profile-avatar"
+              name={user.email}
+              src={`${getApiBase()}/api/users/${user.id}/avatar`}
+              size={22}
+            />
+          </AvatarWithStatus>
           <span className="sidebar-label">{displayName}</span>
           {/* The menu opens upward; the arrow flips while it's open. */}
           <ChevronUp
@@ -93,6 +171,8 @@ export default function ProfileMenu({
 
         {menuOpen && (
           <div className="profile-dropdown" role="menu">
+            <StatusItems status={status} onPick={pickStatus} />
+            <div className="profile-dropdown-divider" />
             <button
               type="button"
               role="menuitem"
@@ -156,17 +236,21 @@ export default function ProfileMenu({
         data-tooltip-align={inSidebar ? "left" : undefined}
         aria-label={user.email}
       >
-        <Avatar
-          className="profile-avatar"
-          name={user.email}
-          src={`${getApiBase()}/api/users/${user.id}/avatar`}
-          size={inSidebar ? 22 : 30}
-        />
+        <AvatarWithStatus status={status}>
+          <Avatar
+            className="profile-avatar"
+            name={user.email}
+            src={`${getApiBase()}/api/users/${user.id}/avatar`}
+            size={inSidebar ? 22 : 30}
+          />
+        </AvatarWithStatus>
         {inSidebar && <span className="sidebar-label">{user.email}</span>}
       </button>
 
       {menuOpen && (
         <div className="profile-dropdown" role="menu">
+          <StatusItems status={status} onPick={pickStatus} />
+          <div className="profile-dropdown-divider" />
           {!minimal && (
             <button
               className="profile-dropdown-item"

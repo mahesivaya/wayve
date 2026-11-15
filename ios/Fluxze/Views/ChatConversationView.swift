@@ -46,6 +46,26 @@ struct ChatConversationView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) { composer }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        // A DM's header: the name, and under it Active, Away, Do Not Disturb
+        // or when they were last seen, kept live by the store.
+        .toolbar {
+            if let presence = store.presence(for: conversation) {
+                ToolbarItem(placement: .principal) {
+                    VStack(spacing: 1) {
+                        Text(title)
+                            .font(.headline)
+                            .lineLimit(1)
+                        HStack(spacing: 5) {
+                            PresenceDot(presence: presence, size: 8)
+                            Text(presence.line())
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+        }
         .task { await store.open(conversation) }
         .onDisappear { if store.current == conversation { store.close() } }
         .sheet(isPresented: $unlocking) {

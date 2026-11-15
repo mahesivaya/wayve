@@ -246,6 +246,57 @@
   margin: 6px 0;
 }
 
+/* Status in the account menu: a small heading, then Active / Do Not Disturb /
+   Away, each with its dot and a check on the current one. Colours match the
+   chat presence dots (chat.css). */
+.profile-dropdown-heading {
+  padding: 4px 12px 2px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.profile-status-check {
+  margin-left: auto;
+  font-size: var(--text-md);
+  color: var(--color-text-muted);
+}
+
+.profile-status-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #15803d;
+}
+.profile-status-dot.dnd {
+  background: #dc2626;
+}
+.profile-status-dot.away {
+  background: #d97706;
+}
+
+/* Your status on your avatar's corner. */
+.profile-avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.profile-status-dot--avatar {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--color-surface);
+  box-sizing: content-box;
+}
+
+.sidebar.collapsed .profile-dropdown-heading,
+.sidebar.collapsed .profile-status-check {
+  display: none;
+}
+
 .profile-dropdown-logout {
   color: var(--color-danger-hover);
 }

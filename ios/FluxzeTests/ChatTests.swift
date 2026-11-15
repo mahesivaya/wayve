@@ -89,6 +89,61 @@ final class ChatTests: XCTestCase {
         XCTAssertFalse(ChatConversation.dm(ana).contains(inChannel, me: 1))
     }
 
+    func testPresenceLikeTheWeb() throws {
+        struct Snapshot: Decodable { let presence: [ChatPresenceEntry] }
+        let snapshot = try APIClient.decoder.decode(Snapshot.self, from: Data("""
+        {"presence": [
+          {"user_id": 5, "online": true, "last_seen": "2026-11-15T02:00:00+00:00", "status": "away"},
+          {"user_id": 6, "online": false, "last_seen": "2026-11-15T01:00:00+00:00", "status": "dnd"},
+          {"user_id": 7, "online": true, "last_seen": null, "status": "active"},
+          {"user_id": 8, "online": false, "last_seen": null, "status": "active"}]}
+        """.utf8))
+        let kinds = snapshot.presence.map(\.presence.kind)
+        // Offline wins over the chosen status.
+        XCTAssertEqual(kinds, [.away, .offline, .active, .offline])
+        XCTAssertEqual(snapshot.presence[0].presence.line(), "Away")
+        XCTAssertTrue(snapshot.presence[1].presence.line().hasPrefix("Last seen"))
+        XCTAssertEqual(snapshot.presence[3].presence.line(), "Offline")
+
+        // A live frame has the same fields, plus its type.
+        let frame = try APIClient.decoder.decode(ChatPresenceEntry.self, from: Data("""
+        {"type": "presence", "user_id": 9, "online": true, "last_seen": null, "status": "dnd"}
+        """.utf8))
+        XCTAssertEqual(frame.presence.kind, .dnd)
+        XCTAssertEqual(ChatStore.presencePath([5, 9]), "/api/chat/presence?ids=5,9")
+    }
+
+    func testPresenceFramesUpdateTheStore() {
+        let s = store(Me(id: 1, email: "me@x.com", username: nil, accountType: "personal"))
+        let ana = ChatUser(id: 5, email: "ana@x.com", publicKey: nil)
+        XCTAssertNil(s.presence(for: .dm(ana)))
+        s.handle(frame: Data(#"{"type":"presence","user_id":5,"online":true,"last_seen":null,"status":"away"}"#.utf8))
+        XCTAssertEqual(s.presence(for: .dm(ana))?.kind, .away)
+        s.handle(frame: Data(#"{"type":"presence","user_id":5,"online":false,"last_seen":null,"status":"away"}"#.utf8))
+        XCTAssertEqual(s.presence(for: .dm(ana))?.kind, .offline)
+    }
+
+    func testYourOwnStatusFollowsPushes() {
+        let s = store(Me(id: 1, email: "me@x.com", username: nil, accountType: "personal"))
+        XCTAssertEqual(s.myStatus, "active")
+        // Set on the web or desktop: the server pushes it to your own clients.
+        s.handle(frame: Data(#"{"type":"presence","user_id":1,"online":true,"last_seen":null,"status":"away"}"#.utf8))
+        XCTAssertEqual(s.myStatus, "away")
+        // Your own row isn't listed as someone else's presence.
+        XCTAssertNil(s.presence[1])
+        XCTAssertFalse(s.presenceIDs.contains(1))
+    }
+
+    func testRowTimeLikeMessages() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 14, hour: 21))!
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: now)!
+        XCTAssertEqual(ConversationRow.timeLabel(yesterday, now: now, calendar: calendar), "Yesterday")
+        let lastWeek = calendar.date(byAdding: .day, value: -10, to: now)!
+        XCTAssertNotEqual(ConversationRow.timeLabel(lastWeek, now: now, calendar: calendar), "Yesterday")
+    }
+
     func testSocketURLAndBackoff() {
         XCTAssertEqual(ChatSocket.url(base: URL(string: "https://fluxze.com")!, token: "t")?.absoluteString,
                        "wss://fluxze.com/ws/chat?token=t")
