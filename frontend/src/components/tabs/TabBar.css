@@ -1,6 +1,6 @@
-/* The main pane's tab strip, styled after Cursor / VS Code editor tabs: flush
-   tabs on the chrome surface, the active one sharing the page's background with
-   an accent line on top. */
+/* The main pane's tab strip: each tab a separate rounded card on the chrome
+   surface with a small gap between them, the open one on the page's
+   background. */
 .app-tabbar {
   position: relative;
   /* Above the pane drop overlay, so tabs can still be reordered mid-drag. */
@@ -26,7 +26,15 @@
    "+" after it never leaves the screen; tabs narrow first, then scroll. */
 .app-tabbar-tabs {
   display: flex;
-  align-items: stretch;
+  /* Each tab is its own rounded card with a small gap on each side, so open
+     tabs read as separate tabs rather than one continuous bar. */
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
+  /* Span the strip's full 38px (cancelling its 5px top padding), so the cards
+     centre on the top row's centre line, level with the sidebar toggle and
+     the split button. */
+  margin-top: -5px;
   flex: 0 1 auto;
   min-width: 0;
   overflow-x: auto;
@@ -43,10 +51,14 @@
   gap: 6px;
   flex: 0 1 480px;
   min-width: 180px;
-  padding: 0 6px 0 14px;
+  height: 28px;
+  box-sizing: border-box;
+  padding: 0 6px 0 12px;
   border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: 7px 7px 0 0;
+  border-radius: 8px;
+  /* A faint tint of the text colour, so closed tabs show as cards on the
+     chrome surface in any theme or accent. */
+  background: color-mix(in srgb, var(--color-text-primary) 5%, transparent);
   color: var(--color-text-muted);
   font-size: 13px;
   cursor: pointer;
@@ -56,15 +68,13 @@
     color 0.12s;
 }
 .app-tab:hover {
-  background: var(--color-surface-hover);
+  background: color-mix(in srgb, var(--color-text-primary) 9%, transparent);
   color: var(--color-text-primary);
 }
 .app-tab.active {
-  /* The page card's surface, so the open tab and its page read as one. */
   background: var(--color-surface);
   color: var(--color-text-primary);
   border-color: var(--color-border);
-  box-shadow: inset 0 2px 0 var(--color-primary);
 }
 .app-tab:focus-visible {
   outline: 2px solid var(--color-primary);
@@ -111,10 +121,16 @@
 }
 
 .app-tab-add {
-  width: 32px;
+  align-self: center;
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
   color: var(--color-text-muted);
-  border-radius: 7px 7px 0 0;
+  border-radius: 8px;
+  /* Level with the tab cards (the strip's 5px top padding would centre it
+     ~2px low; see .app-tab-split). */
+  position: relative;
+  top: -2px;
 }
 .app-tab-add:hover:not(:disabled) {
   background: var(--color-surface-hover);
@@ -455,11 +471,9 @@ html.is-titlebar-inset.is-fullscreen
   padding-left: 50px;
 }
 
-/* Under a tab strip the page card hangs straight off it, like an editor's
-   open tab: flush at the top and sides, no top border or top corners. The
-   strip's bottom line is the card's top edge, and the active tab (same
-   background, covering that line) opens into it — its side borders run
-   straight on into the card's. */
+/* Under a tab strip the page card hangs straight off it: flush at the top and
+   sides, no top border or top corners. The strip's bottom line is the card's
+   top edge. */
 .app-tabbar ~ * .page-card-frame {
   padding-top: 0;
   padding-left: 0;
