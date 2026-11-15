@@ -1,0 +1,95 @@
+import XCTest
+@testable import Fluxze
+
+@MainActor
+final class ChatTests: XCTestCase {
+    private func store(_ me: Me) -> ChatStore {
+        ChatStore(api: APIClient(baseURL: URL(string: "https://fluxze.test")!), me: me)
+    }
+
+    func testDecodesTheServerShapes() throws {
+        let users = try APIClient.decoder.decode([ChatUser].self, from: Data("""
+        [{"id": 5, "email": "ana@x.com", "public_key": [48, 130]}, {"id": 6, "email": "bo@x.com", "public_key": null}]
+        """.utf8))
+        XCTAssertEqual(users.map(\.publicKey), [[48, 130], nil])
+
+        let summary = try APIClient.decoder.decode(ChatSummary.self, from: Data("""
+        {"total_unread": 3, "conversations": [{"user_id": 5, "unread_count": 3, "last_message_at": "2026-11-14T10:00:00+00:00"}]}
+        """.utf8))
+        XCTAssertEqual(summary.totalUnread, 3)
+        XCTAssertNotNil(summary.conversations.first?.lastMessageAt)
+
+        let channels = try APIClient.decoder.decode([ChatChannel].self, from: Data("""
+        [{"id": 2, "name": "general", "visibility": "public", "created_by": 1, "created_at": "2026-11-01T00:00:00Z",
+          "last_message_at": null, "is_member": true, "member_ids": [1, 5], "member_emails": []}]
+        """.utf8))
+        XCTAssertEqual(channels.first?.memberIds, [1, 5])
+
+        let message = try APIClient.decoder.decode(ChatWireMessage.self, from: Data("""
+        {"message_id": 9, "channel_id": 2, "sender_id": 5, "sender_name": "Ana", "content": "hi",
+         "status": "sent", "created_at": "2026-11-14T10:00:00+00:00", "parent_message_id": null, "reply_count": 0}
+        """.utf8))
+        XCTAssertEqual(message.messageId, 9)
+        XCTAssertEqual(message.senderName, "Ana")
+    }
+
+    func testStandardEncryptionFollowsTheScope() {
+        func me(_ type: String?, scope: String? = nil, tier: String? = nil) -> Me {
+            Me(id: 1, email: "me@x.com", username: nil, accountType: type, scope: scope,
+               currentPlan: tier.map { Me.Plan(tier: $0) })
+        }
+        XCTAssertFalse(me("personal").usesStandardChatEncryption)
+        XCTAssertTrue(me("organization_admin").usesStandardChatEncryption)
+        XCTAssertTrue(me("platform_admin").usesStandardChatEncryption)
+        XCTAssertTrue(me("personal", scope: "organization").usesStandardChatEncryption)
+        XCTAssertTrue(me("personal", tier: "enterprise").usesStandardChatEncryption)
+        XCTAssertTrue(store(me("personal")).sendsEncrypted)
+        XCTAssertTrue(store(me("organization")).canSend)
+    }
+
+    func testFramesGoOutInTheServerShape() throws {
+        let frame = ChatWireMessage(senderId: 1, receiverId: 5, content: "hi", status: "sent", clientId: "abc")
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: ChatStore.frameEncoder.encode(frame)) as? [String: Any])
+        XCTAssertEqual(json["sender_id"] as? Int, 1)
+        XCTAssertEqual(json["receiver_id"] as? Int, 5)
+        XCTAssertEqual(json["client_id"] as? String, "abc")
+        XCTAssertNil(json["channel_id"])
+    }
+
+    func testHistoryPathsAndOrder() {
+        let s = store(Me(id: 1, email: "me@x.com", username: nil, accountType: "personal"))
+        let ana = ChatUser(id: 5, email: "ana@x.com", publicKey: nil)
+        XCTAssertEqual(s.historyPath(.dm(ana), sinceID: nil), "/api/chat/direct-messages?user1=1&user2=5")
+        let general = ChatChannel(id: 2, name: "general", isMember: true, memberIds: [1, 5], lastMessageAt: nil)
+        XCTAssertEqual(s.historyPath(.channel(general), sinceID: 40), "/api/chat/channel-messages?channel_id=2&since_id=40")
+
+        let t = Date(timeIntervalSince1970: 100)
+        let rows = [
+            ChatWireMessage(messageId: 3, senderId: 5, content: "c", createdAt: t.addingTimeInterval(5)),
+            ChatWireMessage(messageId: 2, senderId: 1, content: "b", createdAt: t),
+            ChatWireMessage(messageId: 1, senderId: 5, content: "a", createdAt: t),
+        ]
+        XCTAssertEqual(ChatStore.sorted(rows).map(\.messageId), [1, 2, 3])
+    }
+
+    func testConversationMembership() {
+        let ana = ChatUser(id: 5, email: "ana@x.com", publicKey: nil)
+        let toMe = ChatWireMessage(senderId: 5, receiverId: 1, content: "hi")
+        let toBo = ChatWireMessage(senderId: 5, receiverId: 6, content: "hi")
+        let inChannel = ChatWireMessage(senderId: 5, channelId: 2, content: "hi")
+        XCTAssertTrue(ChatConversation.dm(ana).contains(toMe, me: 1))
+        XCTAssertFalse(ChatConversation.dm(ana).contains(toBo, me: 1))
+        XCTAssertFalse(ChatConversation.dm(ana).contains(inChannel, me: 1))
+    }
+
+    func testSocketURLAndBackoff() {
+        XCTAssertEqual(ChatSocket.url(base: URL(string: "https://fluxze.com")!, token: "t")?.absoluteString,
+                       "wss://fluxze.com/ws/chat?token=t")
+        XCTAssertEqual(ChatSocket.url(base: URL(string: "http://localhost")!, token: "t")?.absoluteString,
+                       "ws://localhost/ws/chat?token=t")
+        for attempt in 0..<10 {
+            XCTAssertLessThanOrEqual(ChatSocket.backoff(attempt: attempt), 15 * 1.2)
+        }
+        XCTAssertGreaterThanOrEqual(ChatSocket.backoff(attempt: 0), 0.8)
+    }
+}

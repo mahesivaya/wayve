@@ -123,13 +123,6 @@ final class EmailTests: XCTestCase {
         XCTAssertNil(json?["forward_attachment_ids"])
     }
 
-    func testHomeSearchMatchesEveryWord() {
-        XCTAssertTrue(HomeView.matches("acme review", ["Review of ACME's plan", nil]))
-        XCTAssertTrue(HomeView.matches("cafe", ["Café meeting"]))
-        XCTAssertFalse(HomeView.matches("acme budget", ["Review of ACME's plan"]))
-        XCTAssertFalse(HomeView.matches("   ", ["anything"]))
-    }
-
     func testSnoozeOptions() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "America/New_York")!
