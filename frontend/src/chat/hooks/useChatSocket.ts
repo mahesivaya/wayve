@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import type { ChatMessage, ChatStatus, ReactionGroup } from "../../api/chat";
 import { getWsBase } from "../../config/env";
 import { logger } from "../../utils/logger";
+import { applyMyStatus } from "../myStatus";
 import type { Conversation } from "../types";
 
 type User = {
@@ -128,6 +129,8 @@ export function useChatSocket(
               msg.last_seen ?? null,
               presenceStatus
             );
+            // Our own status, set on another device: keep every picker in step.
+            if (msg.user_id === userId) applyMyStatus(presenceStatus);
           }
           return;
         }

@@ -1,45 +1,22 @@
 import { useEffect, useRef, useState } from "react";
-import { getPresence, setChatStatus, type ChatStatus } from "../../api/chat";
-import { logger } from "../../utils/logger";
-
-// The three selectable modes, in menu order, each with its dot color class.
-const OPTIONS: { value: ChatStatus; label: string; cls: string }[] = [
-  { value: "active", label: "Active", cls: "online" },
-  { value: "dnd", label: "Do Not Disturb", cls: "dnd" },
-  { value: "away", label: "Away", cls: "away" },
-];
-
-const labelOf = (s: ChatStatus) =>
-  OPTIONS.find((o) => o.value === s)?.label ?? "Active";
-const clsOf = (s: ChatStatus) =>
-  OPTIONS.find((o) => o.value === s)?.cls ?? "online";
+import {
+  STATUS_OPTIONS as OPTIONS,
+  chooseMyStatus,
+  statusClass as clsOf,
+  statusLabel as labelOf,
+  useMyStatus,
+} from "../myStatus";
 
 /**
  * The current user's own presence-status picker, shown above the Messages
- * search bar. Seeds from the server so a reload reflects the real status, then
- * updates optimistically (rolling back if the PUT fails).
+ * search bar. Shares one store (../myStatus) with the account menu, so setting
+ * it in either place shows in both; updates optimistically, rolling back if the
+ * PUT fails.
  */
 export default function StatusSelector({ myUserId }: { myUserId: number }) {
-  const [status, setStatus] = useState<ChatStatus>("active");
+  const status = useMyStatus(myUserId);
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
-
-  // Seed the real status once (the presence snapshot carries our own row).
-  useEffect(() => {
-    if (!myUserId) return;
-    let alive = true;
-    void getPresence([myUserId])
-      .then((rows) => {
-        const mine = rows.find((r) => r.user_id === myUserId);
-        if (alive && mine?.status) setStatus(mine.status);
-      })
-      .catch(() => {
-        // Best-effort: leave the default "active" if the seed fails.
-      });
-    return () => {
-      alive = false;
-    };
-  }, [myUserId]);
 
   // Close on outside click.
   useEffect(() => {
@@ -53,15 +30,9 @@ export default function StatusSelector({ myUserId }: { myUserId: number }) {
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  const choose = (next: ChatStatus) => {
+  const choose = (next: (typeof OPTIONS)[number]["value"]) => {
     setOpen(false);
-    if (next === status) return;
-    const prev = status;
-    setStatus(next); // optimistic
-    void setChatStatus(next).catch((err) => {
-      logger.error("set chat status failed", err);
-      setStatus(prev); // roll back
-    });
+    void chooseMyStatus(next);
   };
 
   return (

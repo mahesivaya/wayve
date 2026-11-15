@@ -17,6 +17,10 @@ final class ChatStore: ObservableObject {
     @Published private(set) var bubbles: [ChatBubble] = []
     @Published private(set) var isLoadingMessages = false
     @Published private(set) var isConnected = false
+    /// Who's in chat now, for the people you DM.
+    @Published private(set) var presence: [Int: ChatPresence] = [:]
+    /// Your own status (active, away or dnd), as on the web and desktop.
+    @Published private(set) var myStatus = "active"
 
     let api: APIClient
     let me: Me?
@@ -42,12 +46,74 @@ final class ChatStore: ObservableObject {
 
     // MARK: Loading
 
+    private var presencePoll: Task<Void, Never>?
+
     func start() {
         socket.start()
+        // Live frames carry most changes; a poll catches anyone whose change
+        // was never pushed (as the web's usePresence does every 30s).
+        if presencePoll == nil {
+            presencePoll = Task { [weak self] in
+                while !Task.isCancelled {
+                    await self?.refreshPresence()
+                    try? await Task.sleep(for: .seconds(30))
+                }
+            }
+        }
     }
 
     func stop() {
         socket.stop()
+        presencePoll?.cancel()
+        presencePoll = nil
+    }
+
+    /// The people whose presence is shown: everyone you have a DM with, plus
+    /// the open conversation's person.
+    var presenceIDs: [Int] {
+        var ids = Set(summary.keys)
+        if case .dm(let user) = current { ids.insert(user.id) }
+        ids.remove(myID ?? -1)
+        return ids.sorted()
+    }
+
+    func presence(for conversation: ChatConversation) -> ChatPresence? {
+        if case .dm(let user) = conversation { return presence[user.id] }
+        return nil
+    }
+
+    static func presencePath(_ ids: [Int]) -> String {
+        "/api/chat/presence?ids=" + ids.map(String.init).joined(separator: ",")
+    }
+
+    func refreshPresence() async {
+        struct Snapshot: Decodable { let presence: [ChatPresenceEntry] }
+        // Your own row comes along, for your status.
+        let ids = presenceIDs + (myID.map { [$0] } ?? [])
+        guard !ids.isEmpty,
+              let snapshot: Snapshot = try? await api.get(Self.presencePath(ids)) else { return }
+        for entry in snapshot.presence {
+            if entry.userId == myID {
+                myStatus = entry.status ?? "active"
+            } else {
+                presence[entry.userId] = entry.presence
+            }
+        }
+    }
+
+    /// Sets your status (`PUT /api/chat/presence/status`): shown at once, put
+    /// back if the server refuses. Your other devices get it pushed.
+    func setMyStatus(_ status: String) async {
+        guard status != myStatus else { return }
+        struct Body: Encodable { let status: String }
+        let previous = myStatus
+        myStatus = status
+        do {
+            let _: Ignored = try await api.put("/api/chat/presence/status", body: Body(status: status))
+        } catch {
+            myStatus = previous
+            errorMessage = error.localizedDescription
+        }
     }
 
     func load() async {
@@ -61,6 +127,7 @@ final class ChatStore: ObservableObject {
             apply(summary: s)
             for user in u { names[user.id] = user.email }
             await fillMissingNames()
+            await refreshPresence()
             errorMessage = nil
         } catch APIError.unauthorized {
             // AppState signs out.
@@ -145,6 +212,9 @@ final class ChatStore: ObservableObject {
         current = conversation
         bubbles = []
         isLoadingMessages = true
+        if case .dm(let user) = conversation, presence[user.id] == nil {
+            Task { await refreshPresence() }
+        }
         defer { isLoadingMessages = false }
         do {
             let rows: [ChatWireMessage] = try await api.get(historyPath(conversation, sinceID: nil))
@@ -316,8 +386,17 @@ final class ChatStore: ObservableObject {
             if let id = typed.userId, let dm = summary[id] {
                 summary[id] = ChatSummary.DM(userId: id, unreadCount: 0, lastMessageAt: dm.lastMessageAt)
             }
+        case "presence":
+            if let entry = try? APIClient.decoder.decode(ChatPresenceEntry.self, from: data) {
+                if entry.userId == myID {
+                    // Set on another device (the web, the desktop app).
+                    myStatus = entry.status ?? "active"
+                } else {
+                    presence[entry.userId] = entry.presence
+                }
+            }
         default:
-            break  // presence, reactions and read ticks aren't shown yet
+            break  // reactions and read ticks aren't shown yet
         }
     }
 

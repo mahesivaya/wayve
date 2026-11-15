@@ -203,6 +203,9 @@ pub async fn set_status(
     // Setting a status implies the user is online (they have an open client), so
     // broadcast an online frame carrying the fresh status.
     broadcast_presence(pool.get_ref(), cache.get_ref(), user_id, true).await;
+    // Their own other clients (another tab, the desktop app, the iPhone) follow
+    // too, so a status picked on one shows on the rest without a reload.
+    fan_out_user(cache.get_ref(), user_id, self_status_frame(user_id, status)).await;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({ "status": status })))
 }
@@ -285,6 +288,18 @@ async fn fetch_status(pool: &PgPool, user_id: i32) -> String {
         .unwrap_or_else(|| "active".to_string())
 }
 
+/// The `presence` frame telling a user's own clients their new status.
+pub fn self_status_frame(user_id: i32, status: &str) -> String {
+    serde_json::json!({
+        "type": "presence",
+        "user_id": user_id,
+        "online": true,
+        "last_seen": chrono::Utc::now().to_rfc3339(),
+        "status": status,
+    })
+    .to_string()
+}
+
 /// Push a presence change to the user's contacts over the per-user fan-out.
 async fn broadcast_presence(pool: &PgPool, cache: &Option<Cache>, user_id: i32, online: bool) {
     let contacts = contacts_of(pool, user_id).await;
@@ -336,4 +351,20 @@ async fn contacts_of(pool: &PgPool, user_id: i32) -> Vec<i32> {
         warn!(target: "ws", user_id, error = ?e, "presence contacts lookup failed");
         Vec::new()
     })
+}
+
+#[cfg(test)]
+mod self_status_frame_tests {
+    use super::self_status_frame;
+
+    #[test]
+    fn tells_your_own_clients_the_new_status() {
+        let frame: serde_json::Value = serde_json::from_str(&self_status_frame(7, "away"))
+            .unwrap_or_else(|e| panic!("frame is JSON: {e}"));
+        assert_eq!(frame["type"], "presence");
+        assert_eq!(frame["user_id"], 7);
+        assert_eq!(frame["online"], true);
+        assert_eq!(frame["status"], "away");
+        assert!(frame["last_seen"].is_string());
+    }
 }

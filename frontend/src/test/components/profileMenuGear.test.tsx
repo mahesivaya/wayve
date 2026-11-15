@@ -1,8 +1,8 @@
 // The wide-screen sidebar's account row (profile picture + username or email)
 // opens a small menu: Settings, Platform admin (platform admins only) and Log
 // out.
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 
 const logout = vi.fn();
@@ -13,7 +13,18 @@ vi.mock("../../auth/useAuth", () => ({
   }),
 }));
 
+// Status reads and writes go through the chat API; keep them off the network.
+const getPresence = vi.fn(async () => [
+  { user_id: 7, online: true, last_seen: null, status: "away" as const },
+]);
+const setChatStatus = vi.fn(async () => undefined);
+vi.mock("../../api/chat", () => ({
+  getPresence: (...a: unknown[]) => getPresence(...(a as [])),
+  setChatStatus: (...a: unknown[]) => setChatStatus(...(a as [])),
+}));
+
 import ProfileMenu from "../../components/ProfileMenu";
+import { resetMyStatusForTests } from "../../chat/myStatus";
 
 function Where() {
   return <div data-testid="where">{useLocation().pathname}</div>;
@@ -34,6 +45,11 @@ const renderGear = (platformAdminPath?: string) =>
   );
 
 describe("Account menu", () => {
+  beforeEach(() => {
+    resetMyStatusForTests();
+    setChatStatus.mockClear();
+  });
+
   it("shows the email when there is no username", () => {
     renderGear();
     const trigger = screen.getByRole("button", { name: /account menu/i });
@@ -84,5 +100,41 @@ describe("Account menu", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Log out" }));
     expect(logout).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("shows your status on the avatar and lists the three choices", async () => {
+    renderGear();
+    // Seeded from the server (the presence snapshot says "away").
+    expect(
+      await screen.findByRole("img", { name: "Status: Away" })
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /account menu/i }));
+    const choices = screen.getAllByRole("menuitemradio");
+    expect(choices.map((c) => c.textContent?.replace("✓", "").trim())).toEqual([
+      "Active",
+      "Do Not Disturb",
+      "Away",
+    ]);
+    expect(
+      screen
+        .getByRole("menuitemradio", { name: /Away/ })
+        .getAttribute("aria-checked")
+    ).toBe("true");
+  });
+
+  it("sets a status from the menu, saves it and closes", async () => {
+    renderGear();
+    await screen.findByRole("img", { name: "Status: Away" });
+    fireEvent.click(screen.getByRole("button", { name: /account menu/i }));
+    fireEvent.click(
+      screen.getByRole("menuitemradio", { name: /Do Not Disturb/ })
+    );
+    expect(setChatStatus).toHaveBeenCalledWith("dnd");
+    expect(screen.queryByRole("menu")).toBeNull();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("img", { name: "Status: Do Not Disturb" })
+      ).toBeTruthy()
+    );
   });
 });

@@ -107,3 +107,51 @@ struct ChatBubble: Identifiable, Equatable {
         return false
     }
 }
+
+/// Whether someone is in chat right now (`GET /api/chat/presence`, and live
+/// `presence` frames): online with their chosen status, or when last seen.
+struct ChatPresence: Equatable {
+    let online: Bool
+    let lastSeen: Date?
+    /// active, away or dnd: the status they picked, shown while online.
+    let status: String
+
+    enum Kind: Equatable { case active, away, dnd, offline }
+
+    /// Offline wins over the chosen status, as on the web.
+    var kind: Kind {
+        guard online else { return .offline }
+        switch status {
+        case "away": return .away
+        case "dnd": return .dnd
+        default: return .active
+        }
+    }
+
+    var label: String {
+        switch kind {
+        case .active: "Active"
+        case .away: "Away"
+        case .dnd: "Do Not Disturb"
+        case .offline: "Offline"
+        }
+    }
+
+    /// "Active", "Away", or "Last seen 5 min ago" when offline.
+    func line(now: Date = .now) -> String {
+        guard kind == .offline, let lastSeen else { return label }
+        return "Last seen \(lastSeen.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))"
+    }
+}
+
+/// One row of `GET /api/chat/presence?ids=…` and of a live `presence` frame.
+struct ChatPresenceEntry: Decodable {
+    let userId: Int
+    let online: Bool?
+    let lastSeen: Date?
+    let status: String?
+
+    var presence: ChatPresence {
+        ChatPresence(online: online ?? false, lastSeen: lastSeen, status: status ?? "active")
+    }
+}
