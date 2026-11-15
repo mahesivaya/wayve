@@ -38,6 +38,20 @@ struct PullRequest: Decodable, Hashable {
     struct Ref: Decodable, Hashable { let ref: String }
 }
 
+/// One changed file in a pull request (`GET …/pulls/{number}/files`).
+struct PullFile: Decodable, Hashable, Identifiable {
+    let filename: String
+    /// added, removed, modified, renamed, copied, changed or unchanged.
+    let status: String
+    let additions: Int
+    let deletions: Int
+    /// The unified diff; GitHub leaves it out for binary and very large files.
+    let patch: String?
+    let previousFilename: String?
+
+    var id: String { filename }
+}
+
 /// A pull request with the repository it belongs to.
 struct ReviewItem: Hashable, Identifiable {
     let repo: GitRepo
@@ -183,6 +197,27 @@ final class ReviewsStore: ObservableObject {
             }
         }
         return (found, refused, failed.sorted())
+    }
+
+    // MARK: A pull request's changed files
+
+    static let filesPerPage = 100
+    /// GitHub lists at most 3,000 files; 10 pages of 100 covers most of that.
+    static let maxFilePages = 10
+
+    static func filesPath(_ item: ReviewItem, page: Int) -> String {
+        "/api/github/repos/\(item.repo.owner.login)/\(item.repo.name)/pulls/\(item.pr.number)/files?per_page=\(filesPerPage)&page=\(page)"
+    }
+
+    /// Every changed file, a page at a time until a short page.
+    static func files(of item: ReviewItem, api: APIClient) async throws -> [PullFile] {
+        var all: [PullFile] = []
+        for page in 1...maxFilePages {
+            let batch: [PullFile] = try await api.getKeepingSession(filesPath(item, page: page))
+            all += batch
+            if batch.count < filesPerPage { break }
+        }
+        return all
     }
 
     static func describe(_ error: Error) -> String {

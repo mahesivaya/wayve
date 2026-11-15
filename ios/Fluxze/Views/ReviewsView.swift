@@ -26,7 +26,8 @@ struct ReviewsView: View {
                     }
                 }
                 .sheet(isPresented: $showingSettings) { SettingsView() }
-                .navigationDestination(for: ReviewItem.self) { PullRequestDetailView(item: $0) }
+                .navigationDestination(for: ReviewItem.self) { PullRequestDetailView(item: $0, api: store.api) }
+                .navigationDestination(for: PullFile.self) { PullFileDiffView(file: $0) }
         }
         .task { if !store.hasLoaded { await store.load() } }
     }
@@ -194,11 +195,39 @@ struct StatusIcon: View {
     }
 }
 
-/// One pull request: who, where, and its description, with a way to GitHub.
+/// One pull request, with Overview and Code at the top: Overview (the
+/// default) is who, where and the description; Code lists the changed files.
 struct PullRequestDetailView: View {
     let item: ReviewItem
+    let api: APIClient
+
+    enum Tab: String, CaseIterable, Identifiable {
+        case overview = "Overview", code = "Code"
+        var id: String { rawValue }
+    }
+
+    @State private var tab: Tab = .overview
 
     var body: some View {
+        Group {
+            switch tab {
+            case .overview: overview
+            case .code: PullRequestFilesView(item: item, api: api)
+            }
+        }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("View", selection: $tab) {
+                    ForEach(Tab.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 200)
+            }
+        }
+    }
+
+    private var overview: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 Text(item.pr.title)
@@ -246,8 +275,6 @@ struct PullRequestDetailView: View {
             }
             .padding()
         }
-        .navigationTitle("#\(item.pr.number)")
-        .navigationBarTitleDisplayMode(.inline)
     }
 
     /// GitHub-flavoured Markdown as far as iOS renders it (bold, links, code,
@@ -257,5 +284,169 @@ struct PullRequestDetailView: View {
             markdown: text,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         )) ?? AttributedString(text)
+    }
+}
+
+/// Code: every file the pull request touches, with its added and removed
+/// line counts. Tapping one shows its diff.
+struct PullRequestFilesView: View {
+    let item: ReviewItem
+    let api: APIClient
+
+    @State private var files: [PullFile]?
+    @State private var errorMessage: String?
+
+    var body: some View {
+        Group {
+            if let files {
+                if files.isEmpty {
+                    ContentUnavailableView("No changed files", systemImage: "doc")
+                } else {
+                    List {
+                        Section {
+                            ForEach(files) { file in
+                                NavigationLink(value: file) { PullFileRow(file: file) }
+                                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                            }
+                        } header: {
+                            summary(files)
+                        }
+                    }
+                    .listStyle(.plain)
+                }
+            } else if let errorMessage {
+                ContentUnavailableView {
+                    Label("Couldn't load the changes", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(errorMessage)
+                } actions: {
+                    Button("Try again") { Task { await load() } }
+                }
+            } else {
+                ProgressView()
+            }
+        }
+        .task { if files == nil { await load() } }
+        .refreshable { await load() }
+    }
+
+    /// "12 files  +340  −25", as GitHub's Files changed tab.
+    private func summary(_ files: [PullFile]) -> some View {
+        HStack(spacing: 8) {
+            Text("\(files.count) \(files.count == 1 ? "file" : "files")")
+            Text("+\(files.reduce(0) { $0 + $1.additions })").foregroundStyle(StatusIcon.green)
+            Text("−\(files.reduce(0) { $0 + $1.deletions })").foregroundStyle(.red)
+        }
+        .font(.footnote.weight(.semibold))
+        .textCase(nil)
+    }
+
+    private func load() async {
+        do {
+            files = try await ReviewsStore.files(of: item, api: api)
+            errorMessage = nil
+        } catch {
+            errorMessage = ReviewsStore.describe(error)
+        }
+    }
+}
+
+private struct PullFileRow: View {
+    let file: PullFile
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: Self.icon(file.status))
+                .foregroundStyle(Self.color(file.status))
+                .accessibilityLabel(file.status)
+            VStack(alignment: .leading, spacing: 2) {
+                Text((file.filename as NSString).lastPathComponent)
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(1)
+                Text(file.previousFilename.map { "\($0) → \(file.filename)" } ?? file.filename)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+            }
+            Spacer(minLength: 8)
+            HStack(spacing: 4) {
+                Text("+\(file.additions)").foregroundStyle(StatusIcon.green)
+                Text("−\(file.deletions)").foregroundStyle(.red)
+            }
+            .font(.caption.monospacedDigit())
+        }
+    }
+
+    static func icon(_ status: String) -> String {
+        switch status {
+        case "added": "plus.square"
+        case "removed": "minus.square"
+        case "renamed", "copied": "arrow.right.square"
+        default: "pencil.line"
+        }
+    }
+
+    static func color(_ status: String) -> Color {
+        switch status {
+        case "added": StatusIcon.green
+        case "removed": .red
+        default: .secondary
+        }
+    }
+}
+
+/// One file's diff: added lines green, removed lines red, hunk headers blue.
+/// Scrolls sideways for long lines rather than wrapping code.
+struct PullFileDiffView: View {
+    let file: PullFile
+
+    var body: some View {
+        Group {
+            if let patch = file.patch, !patch.isEmpty {
+                ScrollView([.vertical, .horizontal]) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(patch.split(separator: "\n", omittingEmptySubsequences: false).enumerated()),
+                                id: \.offset) { _, line in
+                            let kind = Self.kind(of: line)
+                            Text(line.isEmpty ? " " : String(line))
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(kind == .hunk ? Color.blue : Color.primary)
+                                .padding(.horizontal, 8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Self.background(kind))
+                        }
+                    }
+                    .padding(.vertical, 8)
+                    .textSelection(.enabled)
+                }
+            } else {
+                ContentUnavailableView(
+                    "No diff to show",
+                    systemImage: "doc",
+                    description: Text("GitHub doesn't show a diff for binary or very large files.")
+                )
+            }
+        }
+        .navigationTitle((file.filename as NSString).lastPathComponent)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    enum Kind { case added, removed, hunk, context }
+
+    static func kind<S: StringProtocol>(of line: S) -> Kind {
+        if line.hasPrefix("@@") { return .hunk }
+        if line.hasPrefix("+") { return .added }
+        if line.hasPrefix("-") { return .removed }
+        return .context
+    }
+
+    static func background(_ kind: Kind) -> Color {
+        switch kind {
+        case .added: StatusIcon.green.opacity(0.15)
+        case .removed: Color.red.opacity(0.15)
+        case .hunk: Color.blue.opacity(0.08)
+        case .context: .clear
+        }
     }
 }

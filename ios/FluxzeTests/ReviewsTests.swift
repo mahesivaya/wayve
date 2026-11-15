@@ -62,6 +62,31 @@ final class ReviewsTests: XCTestCase {
         XCTAssertTrue(Me(id: 1, email: "p@x.com", username: nil, accountType: "personal").canSeeCode)
     }
 
+    func testChangedFilesDecodeAndPage() throws {
+        let files = try APIClient.decoder.decode([PullFile].self, from: Data("""
+        [{"sha": "a", "filename": "ios/Fluxze/Chat/ChatStore.swift", "status": "added", "additions": 352,
+          "deletions": 0, "changes": 352, "patch": "@@ -0,0 +1,2 @@\\n+import Foundation\\n+"},
+         {"sha": "b", "filename": "docs/new.md", "previous_filename": "docs/old.md", "status": "renamed",
+          "additions": 0, "deletions": 0, "changes": 0}]
+        """.utf8))
+        XCTAssertEqual(files.map(\.status), ["added", "renamed"])
+        XCTAssertEqual(files[1].previousFilename, "docs/old.md")
+        XCTAssertNil(files[1].patch)
+
+        let item = ReviewItem(repo: repo, pr: PullRequest(
+            id: 1, number: 232, title: "t", htmlUrl: URL(string: "https://github.com")!, state: "open",
+            draft: nil, user: nil, body: nil, createdAt: nil, updatedAt: nil, mergedAt: nil, head: nil, base: nil))
+        XCTAssertEqual(ReviewsStore.filesPath(item, page: 2),
+                       "/api/github/repos/acme/web/pulls/232/files?per_page=100&page=2")
+    }
+
+    func testDiffLineKinds() {
+        XCTAssertEqual(PullFileDiffView.kind(of: "@@ -1,3 +1,4 @@"), .hunk)
+        XCTAssertEqual(PullFileDiffView.kind(of: "+let x = 1"), .added)
+        XCTAssertEqual(PullFileDiffView.kind(of: "-let x = 0"), .removed)
+        XCTAssertEqual(PullFileDiffView.kind(of: " unchanged"), .context)
+    }
+
     func testRefusedReposAreNotFailures() {
         // 403: on GitHub but not linked to a Fluxze project (or not granted).
         guard case .refused = ReviewsStore.result(of: .failure(
