@@ -74,6 +74,7 @@ export {
   Plus as PlusIcon,
   // Addable "fake" personal apps (placeholder catalog)
   Palette as CanvasIcon,
+  Keyboard as ShortcutsIcon,
   FileSpreadsheet as FormsIcon,
   Workflow as AutomationsIcon,
   PenTool as WhiteboardIcon,
