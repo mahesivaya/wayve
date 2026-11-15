@@ -1136,6 +1136,7 @@ pub async fn spawn_role_workers(role: RuntimeRole, pool: &PgPool, cache: &Option
             tokio::spawn(async move {
                 webhooks::spawn_dispatcher(webhook_pool).await;
             });
+            crate::activity::spawn_writer(pool.clone());
             spawn_log_retention_pruner(pool.clone());
             spawn_chat_pubsub(has_redis);
             spawn_presence_sweeper(pool, cache);
@@ -1148,6 +1149,7 @@ pub async fn spawn_role_workers(role: RuntimeRole, pool: &PgPool, cache: &Option
             tokio::spawn(async move {
                 webhooks::spawn_dispatcher(webhook_pool).await;
             });
+            crate::activity::spawn_writer(pool.clone());
             spawn_log_retention_pruner(pool.clone());
             spawn_chat_pubsub(has_redis);
             spawn_presence_sweeper(pool, cache);

@@ -26,12 +26,8 @@ fn truncate(value: Option<String>) -> Option<String> {
 }
 
 #[post("/activity")]
-#[instrument(target = "http", skip(req, pool, data))]
-pub async fn record_activity(
-    req: HttpRequest,
-    pool: web::Data<PgPool>,
-    data: web::Json<ActivityInput>,
-) -> AppResult {
+#[instrument(target = "http", skip(req, data))]
+pub async fn record_activity(req: HttpRequest, data: web::Json<ActivityInput>) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
 
     // Clients may only record UI events; `api_request` is middleware-owned.
@@ -44,17 +40,11 @@ pub async fn record_activity(
         }
     };
 
-    let ip = crate::audit::client_ip(&req);
-    crate::activity::spawn_record(
-        pool.get_ref().clone(),
-        user_id,
-        kind,
-        truncate(data.label.clone()),
-        None,
-        truncate(data.path.clone()),
-        None,
-        ip,
-    );
+    let mut row = crate::activity::ActivityRow::new(user_id, kind);
+    row.label = truncate(data.label.clone());
+    row.path = truncate(data.path.clone());
+    row.ip = crate::audit::client_ip(&req);
+    crate::activity::enqueue(row);
 
     Ok(HttpResponse::Ok().json(serde_json::json!({ "ok": true })))
 }
