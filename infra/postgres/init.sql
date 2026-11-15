@@ -3143,3 +3143,19 @@ CREATE INDEX IF NOT EXISTS idx_emails_unthreaded      ON emails (account_id, cre
 CREATE INDEX IF NOT EXISTS api_key_audit_created_idx  ON api_key_audit_log (created_at DESC);
 CREATE INDEX IF NOT EXISTS ai_usage_events_created    ON ai_usage_events (created_at);
 CREATE INDEX IF NOT EXISTS idx_tasks_jira_key         ON tasks (jira_issue_key) WHERE jira_issue_key IS NOT NULL;
+
+-- Foreign-key indexes. Postgres doesn't index the referencing side of an FK, so
+-- deleting a parent row (a user, an org, a project, a folder) scans the child
+-- table to cascade or to check NO ACTION. These cover the children that grow
+-- with usage; the remaining unindexed FKs are created_by / updated_by columns
+-- on small config tables. Same block as migrations/2026-11-fk-indexes.sql.
+CREATE INDEX IF NOT EXISTS idx_channel_messages_sender       ON channel_messages (sender_id);
+CREATE INDEX IF NOT EXISTS idx_message_reactions_user        ON message_reactions (user_id);
+CREATE INDEX IF NOT EXISTS idx_api_key_audit_user            ON api_key_audit_log (user_id);
+CREATE INDEX IF NOT EXISTS idx_email_accounts_org            ON email_accounts (organization_id);
+CREATE INDEX IF NOT EXISTS idx_user_stories_project          ON user_stories (project_id);
+CREATE INDEX IF NOT EXISTS idx_user_story_events_story       ON user_story_status_events (user_story_id);
+CREATE INDEX IF NOT EXISTS idx_workspace_tickets_project     ON workspace_tickets (project_id);
+CREATE INDEX IF NOT EXISTS idx_folders_parent                ON folders (parent_folder_id);
+CREATE INDEX IF NOT EXISTS idx_org_document_folders_parent   ON org_document_folders (parent_folder_id);
+CREATE INDEX IF NOT EXISTS idx_org_documents_folder          ON org_documents (folder_id);
