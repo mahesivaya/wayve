@@ -15,12 +15,14 @@ const {
   ipcMain,
   Menu,
   Notification,
+  safeStorage,
   session,
   shell,
   systemPreferences,
 } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const path = require("path");
+const savedLogin = require("./savedLogin.cjs");
 
 const APP_URL = process.env.FLUXZE_URL || "https://fluxze.com";
 // Open straight to the login screen, skipping the marketing home page. The web
@@ -164,6 +166,23 @@ function setUpAutoUpdate() {
   });
   checkForUpdate();
   setInterval(checkForUpdate, UPDATE_CHECK_INTERVAL_MS);
+}
+
+// The login page's "Remember password on this Mac". Google's sign-in pages load
+// in this window with the same preload, so only the app itself may read, save
+// or clear the saved login.
+function setUpSavedLogin() {
+  const dir = app.getPath("userData");
+  const fromApp = (event) => isAppUrl(event.senderFrame?.url ?? "");
+  ipcMain.handle("fluxze:saved-login-get", (event) =>
+    fromApp(event) ? savedLogin.read(dir, safeStorage) : null,
+  );
+  ipcMain.handle("fluxze:saved-login-save", (event, email, password) =>
+    fromApp(event) ? savedLogin.save(dir, safeStorage, email, password) : false,
+  );
+  ipcMain.handle("fluxze:saved-login-clear", (event) => {
+    if (fromApp(event)) savedLogin.clear(dir);
+  });
 }
 
 function createWindow() {
@@ -440,6 +459,7 @@ app.whenReady().then(() => {
   if (isMac) Notification.isSupported();
 
   buildMenu();
+  setUpSavedLogin();
   createWindow();
   setUpAutoUpdate();
 

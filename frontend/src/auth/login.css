@@ -386,6 +386,35 @@
   color: var(--color-text-secondary, var(--color-text-generic-mid));
 }
 
+/* Desktop app: "Remember password on this Mac". */
+.login-card .login-remember {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -4px 0 14px;
+  font-size: var(--text-sm, 13px);
+  color: var(--color-text-secondary, var(--color-text-generic-mid));
+}
+
+.login-card .login-remember label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+/* Undo the text-field styling every .login-card input gets. */
+.login-card .login-remember input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  box-shadow: none;
+  accent-color: var(--color-brand-indigo-from);
+  cursor: pointer;
+}
+
 .login-card .link-button {
   background: none;
   border: none;

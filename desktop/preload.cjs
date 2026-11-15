@@ -25,6 +25,13 @@ contextBridge.exposeInMainWorld("fluxzeDesktop", {
     },
     install: () => ipcRenderer.invoke("fluxze:install-update"),
   },
+  // "Remember password on this Mac" on the login page. Absent on older installs.
+  savedLogin: {
+    get: () => ipcRenderer.invoke("fluxze:saved-login-get"),
+    save: (email, password) =>
+      ipcRenderer.invoke("fluxze:saved-login-save", email, password),
+    clear: () => ipcRenderer.invoke("fluxze:saved-login-clear"),
+  },
 });
 
 // The DOM is shared with the page, so a class is all the web app's CSS needs.

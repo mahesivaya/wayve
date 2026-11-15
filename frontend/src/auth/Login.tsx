@@ -8,7 +8,7 @@ import { homePathForUser } from "../auth/accountHome";
 import { getApiBase } from "../config";
 import { ssoStartUrl } from "../api/sso";
 import PublicHeader from "../components/PublicHeader";
-import { isDesktopApp } from "../utils/desktop";
+import { desktopSavedLogin, isDesktopApp } from "../utils/desktop";
 import { parseJwt } from "./bootToken";
 import { unwrapAndCacheMemberKeys } from "../orgKeys/memberLogin";
 import { AuthDowngradeError } from "./authKey";
@@ -75,6 +75,53 @@ export default function Login() {
   const navigate = useNavigate();
   const { login: authLogin } = useAuth();
 
+  // Desktop app only: "Remember password on this Mac". The shell keeps one
+  // login, encrypted with a Keychain key, and it is filled in here next time.
+  const savedLoginStore = desktopSavedLogin();
+  const [remember, setRemember] = useState(true);
+  const [hasSavedLogin, setHasSavedLogin] = useState(false);
+
+  useEffect(() => {
+    if (!savedLoginStore) return;
+    let cancelled = false;
+    savedLoginStore
+      .get()
+      .then((saved) => {
+        if (cancelled || !saved) return;
+        setHasSavedLogin(true);
+        // Never overwrite what someone already typed, or the email a link
+        // (e.g. the verification screen) brought them here with.
+        const linkEmail = params.get("email");
+        if (linkEmail && linkEmail.toLowerCase() !== saved.email.toLowerCase()) return;
+        setEmail((current) => current || saved.email);
+        setPassword((current) => current || saved.password);
+      })
+      .catch((err: unknown) => logger.warn("reading the saved login failed", err));
+    return () => {
+      cancelled = true;
+    };
+    // Once, on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const forgetSavedLogin = () => {
+    savedLoginStore
+      ?.clear()
+      .catch((err: unknown) => logger.warn("clearing the saved login failed", err));
+    setHasSavedLogin(false);
+    setPassword("");
+  };
+
+  // After a successful sign-in: keep these details for next time, or drop any
+  // saved ones when the box is unticked. Never blocks signing in.
+  const rememberLogin = (loginEmail: string, loginPassword: string) => {
+    if (!savedLoginStore) return;
+    const done = remember
+      ? savedLoginStore.save(loginEmail, loginPassword).then(() => undefined)
+      : savedLoginStore.clear();
+    done.catch((err: unknown) => logger.warn("updating the saved login failed", err));
+  };
+
   // Strip the SSO error fragment once displayed, so a refresh doesn't repeat it.
   useEffect(() => {
     if (window.location.hash.includes("sso_error")) {
@@ -127,6 +174,8 @@ export default function Login() {
           return;
         }
       }
+
+      rememberLogin(email, password);
 
       // The password is forwarded only so AuthContext can derive the PBKDF2
       // login-wrap on a personal user's first login from this device.
@@ -271,6 +320,28 @@ export default function Login() {
               placeholder="Password"
               required
             />
+
+            {savedLoginStore && (
+              <div className="login-remember">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={remember}
+                    onChange={(e) => setRemember(e.target.checked)}
+                  />
+                  Remember password on this Mac
+                </label>
+                {hasSavedLogin && (
+                  <button
+                    type="button"
+                    className="link-button"
+                    onClick={forgetSavedLogin}
+                  >
+                    Forget saved password
+                  </button>
+                )}
+              </div>
+            )}
 
             <button type="submit">Login</button>
 
