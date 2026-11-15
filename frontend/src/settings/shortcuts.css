@@ -1,0 +1,70 @@
+/* Settings → Shortcuts: one card per area, each a list of action + keys. */
+.shortcuts-hint {
+  margin: -12px 0 12px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.shortcuts-list {
+  margin: 0;
+}
+
+.shortcuts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 0;
+  border-top: 1px solid var(--color-border);
+}
+.shortcuts-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+.shortcuts-row:last-child {
+  padding-bottom: 0;
+}
+
+.shortcuts-row dt {
+  min-width: 0;
+  font-size: 14px;
+  color: var(--color-text-primary);
+}
+
+.shortcuts-note {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.shortcuts-row dd {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+  margin: 0;
+}
+
+.shortcuts-row kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  box-sizing: border-box;
+  padding: 0 6px;
+  border: 1px solid var(--color-border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--color-chrome-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.shortcuts-footnote {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}

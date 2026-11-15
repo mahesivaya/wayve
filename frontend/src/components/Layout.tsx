@@ -108,6 +108,7 @@ import {
   PersonIcon,
   IntegrationsIcon,
   CanvasIcon,
+  ShortcutsIcon,
   LibrariesIcon,
   DevelopersIcon,
 } from "../icons";
@@ -2044,6 +2045,7 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
         "/profile",
         "/integrations",
         "/appearance",
+        "/settings/shortcuts",
         "/settings/statuses",
         "/settings/repositories",
         "/settings/developers",
@@ -2106,6 +2108,11 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       path: "/appearance",
       label: "Appearance",
       icon: <CanvasIcon size={18} />,
+    },
+    {
+      path: "/settings/shortcuts",
+      label: "Shortcuts",
+      icon: <ShortcutsIcon size={18} />,
     },
     {
       path: "/settings/repositories",

@@ -141,6 +141,8 @@ export default function ColorGrid({ hue, chroma, mode, onChange }: Props) {
     const el = containerRef.current;
     if (!el) return;
     const onKey = (e: KeyboardEvent) => {
+      // Cmd/Ctrl+arrows switch tabs (see TabBar); leave them to that.
+      if (e.metaKey || e.ctrlKey) return;
       if (e.key === "ArrowLeft") {
         onChange({
           hue: hueForCol(Math.max(0, markerCol - 1)),

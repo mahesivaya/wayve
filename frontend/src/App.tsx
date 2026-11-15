@@ -116,6 +116,7 @@ const PlanAdmin = lazy(() => import("./settings/PlanAdmin"));
 const AiSettings = lazy(() => import("./settings/AiSettings"));
 const TaskStatuses = lazy(() => import("./settings/TaskStatuses"));
 const RepositorySettings = lazy(() => import("./settings/RepositorySettings"));
+const Shortcuts = lazy(() => import("./settings/Shortcuts"));
 const RepoSettingsPage = lazy(() => import("./settings/RepoSettingsPage"));
 const AiUsageGovernance = lazy(() => import("./settings/AiUsageGovernance"));
 const SecureMessageView = lazy(() => import("./emails/SecureMessageView"));
@@ -389,6 +390,7 @@ export default function App() {
             path="/settings/billing"
             element={<Settings section="billing" />}
           />
+          <Route path="/settings/shortcuts" element={<Shortcuts />} />
           {/* Integrations is for personal accounts, whose only route to
                 connecting a Gmail mailbox it is, and for organization and
                 platform owners. Other members are bounced home. The sidebar and
