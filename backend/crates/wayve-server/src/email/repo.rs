@@ -1257,6 +1257,17 @@ pub async fn upsert_batch(
     // so a plain assignment would flip just-opened mail back to unread. Mail
     // re-marked unread in Gmail is caught up by email/label_history.rs instead.
     // An unknown (NULL) Cc keeps the stored one.
+    //
+    // The trailing WHERE skips rows the re-sync would not change, so the
+    // every-tick re-fetch of the last hour doesn't rewrite (and re-encrypt)
+    // every recent row. Ciphertexts use a random nonce and can't be compared,
+    // so change is judged on the deterministic columns: labels, read state,
+    // timestamp, the plaintext/hash address columns, and whether an envelope
+    // is missing or a plaintext subject is still present (legacy rows). A
+    // provider message's subject and Cc never change for the same id, so only
+    // Cc going from unknown/empty to known/empty (or back) counts. Skipped
+    // rows are not RETURNed, which callers rely on: only new or changed rows
+    // come back.
     query.push_str(
         " ON CONFLICT (account_id, gmail_id) DO UPDATE SET \
          sender = EXCLUDED.sender, \
@@ -1275,6 +1286,20 @@ pub async fn upsert_batch(
          created_at = EXCLUDED.created_at, \
          is_read = emails.is_read OR EXCLUDED.is_read, \
          labels = EXCLUDED.labels \
+         WHERE emails.labels IS DISTINCT FROM EXCLUDED.labels \
+            OR (EXCLUDED.is_read AND NOT emails.is_read) \
+            OR emails.created_at IS DISTINCT FROM EXCLUDED.created_at \
+            OR emails.sender IS DISTINCT FROM EXCLUDED.sender \
+            OR emails.receiver IS DISTINCT FROM EXCLUDED.receiver \
+            OR emails.sender_hash IS DISTINCT FROM EXCLUDED.sender_hash \
+            OR emails.receiver_hash IS DISTINCT FROM EXCLUDED.receiver_hash \
+            OR emails.subject IS NOT NULL \
+            OR (COALESCE(emails.subject_encrypted, '') = '' AND EXCLUDED.subject_encrypted <> '') \
+            OR (COALESCE(emails.sender_encrypted, '') = '' AND EXCLUDED.sender_encrypted <> '') \
+            OR (COALESCE(emails.receiver_encrypted, '') = '' AND EXCLUDED.receiver_encrypted <> '') \
+            OR (EXCLUDED.cc_encrypted IS NOT NULL \
+                AND (emails.cc_encrypted IS NULL \
+                     OR (emails.cc_encrypted = '') <> (EXCLUDED.cc_encrypted = ''))) \
          RETURNING id, gmail_id, sender, subject, subject_iv, subject_encrypted, \
          sender_iv, sender_encrypted, receiver_iv, receiver_encrypted, \
          created_at, (xmax = 0) AS is_new",
