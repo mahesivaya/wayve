@@ -80,6 +80,24 @@ final class ReviewsTests: XCTestCase {
                        "/api/github/repos/acme/web/pulls/232/files?per_page=100&page=2")
     }
 
+    func testFileIconsByName() {
+        XCTAssertEqual(FileTypeIcon.kind(for: "backend/src/email/drafts.rs").icon, .logo("rust"))
+        XCTAssertEqual(FileTypeIcon.kind(for: "frontend/src/api/emailDrafts.ts").icon, .logo("typescript"))
+        XCTAssertEqual(FileTypeIcon.kind(for: "frontend/src/emails/DraftsList.tsx").icon, .logo("react"))
+        XCTAssertEqual(FileTypeIcon.kind(for: "frontend/src/emails/emails.css").icon, .logo("css"))
+        XCTAssertEqual(FileTypeIcon.kind(for: "infra/Dockerfile").icon, .logo("docker"))
+        XCTAssertEqual(FileTypeIcon.kind(for: "README.MD").icon, .logo("markdown"))
+        XCTAssertEqual(FileTypeIcon.kind(for: "LICENSE").icon, .symbol("doc"))
+        XCTAssertEqual(FileTypeIcon.kind(for: ".gitignore").icon, .symbol("doc"))
+        // Every logo the table names is in the app.
+        let logos = Set(FileTypeIcon.byExtension.values.compactMap { kind -> String? in
+            if case .logo(let name) = kind.icon { return name } else { return nil }
+        }).union(["docker", "gnubash"])
+        for name in logos {
+            XCTAssertNotNil(UIImage(named: "FileTypes/\(name)", in: Bundle(for: AppState.self), compatibleWith: nil), name)
+        }
+    }
+
     func testDiffLineKinds() {
         XCTAssertEqual(PullFileDiffView.kind(of: "@@ -1,3 +1,4 @@"), .hunk)
         XCTAssertEqual(PullFileDiffView.kind(of: "+let x = 1"), .added)

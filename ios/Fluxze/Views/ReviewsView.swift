@@ -27,7 +27,6 @@ struct ReviewsView: View {
                 }
                 .sheet(isPresented: $showingSettings) { SettingsView() }
                 .navigationDestination(for: ReviewItem.self) { PullRequestDetailView(item: $0, api: store.api) }
-                .navigationDestination(for: PullFile.self) { PullFileDiffView(file: $0) }
         }
         .task { if !store.hasLoaded { await store.load() } }
     }
@@ -295,6 +294,8 @@ struct PullRequestFilesView: View {
 
     @State private var files: [PullFile]?
     @State private var errorMessage: String?
+    /// Files whose diff is open under their row.
+    @State private var expanded: Set<String> = []
 
     var body: some View {
         Group {
@@ -305,8 +306,24 @@ struct PullRequestFilesView: View {
                     List {
                         Section {
                             ForEach(files) { file in
-                                NavigationLink(value: file) { PullFileRow(file: file) }
-                                    .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                                // Tapping a file opens its diff right under it, on
+                                // this screen; tapping again closes it.
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Button {
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            if expanded.contains(file.id) { expanded.remove(file.id) } else { expanded.insert(file.id) }
+                                        }
+                                    } label: {
+                                        PullFileRow(file: file, isExpanded: expanded.contains(file.id))
+                                    }
+                                    .buttonStyle(.plain)
+                                    if expanded.contains(file.id) {
+                                        PullFileDiffView(file: file)
+                                    }
+                                }
+                                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                                // No lines between rows, as in the pull request list.
+                                .listRowSeparator(.hidden)
                             }
                         } header: {
                             summary(files)
@@ -337,7 +354,7 @@ struct PullRequestFilesView: View {
             Text("+\(files.reduce(0) { $0 + $1.additions })").foregroundStyle(StatusIcon.green)
             Text("−\(files.reduce(0) { $0 + $1.deletions })").foregroundStyle(.red)
         }
-        .font(.footnote.weight(.semibold))
+        .font(.caption.weight(.semibold))
         .textCase(nil)
     }
 
@@ -353,15 +370,17 @@ struct PullRequestFilesView: View {
 
 private struct PullFileRow: View {
     let file: PullFile
+    let isExpanded: Bool
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: Self.icon(file.status))
-                .foregroundStyle(Self.color(file.status))
-                .accessibilityLabel(file.status)
+        // Laid out like a pull request row: an 18pt icon, the name in the
+        // same type, the path under it in small grey.
+        HStack(alignment: .top, spacing: 10) {
+            FileTypeIcon(path: file.filename)
+                .padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
                 Text((file.filename as NSString).lastPathComponent)
-                    .font(.subheadline.weight(.medium))
+                    .font(.body.weight(.medium))
                     .lineLimit(1)
                 Text(file.previousFilename.map { "\($0) → \(file.filename)" } ?? file.filename)
                     .font(.caption)
@@ -375,36 +394,28 @@ private struct PullFileRow: View {
                 Text("−\(file.deletions)").foregroundStyle(.red)
             }
             .font(.caption.monospacedDigit())
+            .padding(.top, 3)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                .padding(.top, 4)
         }
-    }
-
-    static func icon(_ status: String) -> String {
-        switch status {
-        case "added": "plus.square"
-        case "removed": "minus.square"
-        case "renamed", "copied": "arrow.right.square"
-        default: "pencil.line"
-        }
-    }
-
-    static func color(_ status: String) -> Color {
-        switch status {
-        case "added": StatusIcon.green
-        case "removed": .red
-        default: .secondary
-        }
+        .contentShape(Rectangle())
+        .accessibilityHint(isExpanded ? "Hides the diff" : "Shows the diff")
     }
 }
 
-/// One file's diff: added lines green, removed lines red, hunk headers blue.
-/// Scrolls sideways for long lines rather than wrapping code.
+/// One file's diff, shown under its row: added lines green, removed lines
+/// red, hunk headers blue. Scrolls sideways for long lines rather than
+/// wrapping code; the list scrolls it up and down.
 struct PullFileDiffView: View {
     let file: PullFile
 
     var body: some View {
         Group {
             if let patch = file.patch, !patch.isEmpty {
-                ScrollView([.vertical, .horizontal]) {
+                ScrollView(.horizontal) {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(patch.split(separator: "\n", omittingEmptySubsequences: false).enumerated()),
                                 id: \.offset) { _, line in
@@ -417,19 +428,16 @@ struct PullFileDiffView: View {
                                 .background(Self.background(kind))
                         }
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 6)
                     .textSelection(.enabled)
                 }
+                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
             } else {
-                ContentUnavailableView(
-                    "No diff to show",
-                    systemImage: "doc",
-                    description: Text("GitHub doesn't show a diff for binary or very large files.")
-                )
+                Text("No diff to show. GitHub doesn't show one for binary or very large files.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle((file.filename as NSString).lastPathComponent)
-        .navigationBarTitleDisplayMode(.inline)
     }
 
     enum Kind { case added, removed, hunk, context }
@@ -448,5 +456,86 @@ struct PullFileDiffView: View {
         case .hunk: Color.blue.opacity(0.08)
         case .context: .clear
         }
+    }
+}
+
+/// A file's language logo, picked from its name as on the web
+/// (`frontend/src/github/FileTypeIcon.tsx`), drawn in grey. Logos are Simple
+/// Icons (CC0) in Assets.xcassets/FileTypes; other kinds use SF Symbols.
+struct FileTypeIcon: View {
+    let path: String
+    var size: CGFloat = 18
+
+    var body: some View {
+        let kind = Self.kind(for: path)
+        Group {
+            switch kind.icon {
+            case .logo(let name): Image("FileTypes/\(name)").resizable()
+            case .symbol(let name): Image(systemName: name).resizable()
+            }
+        }
+        .scaledToFit()
+        .frame(width: size, height: size)
+        .foregroundStyle(.secondary)
+        .accessibilityLabel(kind.label)
+    }
+
+    enum Icon: Equatable {
+        /// An image in Assets.xcassets/FileTypes.
+        case logo(String)
+        case symbol(String)
+    }
+
+    struct Kind: Equatable {
+        let label: String
+        let icon: Icon
+    }
+
+    private static func logo(_ label: String, _ name: String) -> Kind { Kind(label: label, icon: .logo(name)) }
+    private static func symbol(_ label: String, _ name: String) -> Kind { Kind(label: label, icon: .symbol(name)) }
+
+    static let byExtension: [String: Kind] = {
+        let config = { symbol($0, "gearshape") }
+        let image = symbol("Image", "photo")
+        let shell = logo("Shell script", "gnubash")
+        return [
+            "tsx": logo("TypeScript React", "react"), "jsx": logo("JavaScript React", "react"),
+            "ts": logo("TypeScript", "typescript"), "mts": logo("TypeScript", "typescript"),
+            "js": logo("JavaScript", "javascript"), "mjs": logo("JavaScript", "javascript"),
+            "cjs": logo("JavaScript", "javascript"),
+            "rs": logo("Rust", "rust"), "py": logo("Python", "python"), "go": logo("Go", "go"),
+            "rb": logo("Ruby", "ruby"), "php": logo("PHP", "php"),
+            "c": logo("C", "c"), "h": logo("C header", "c"), "cpp": logo("C++", "cplusplus"),
+            "hpp": logo("C++ header", "cplusplus"), "cc": logo("C++", "cplusplus"),
+            "swift": logo("Swift", "swift"), "kt": logo("Kotlin", "kotlin"), "kts": logo("Kotlin", "kotlin"),
+            "java": symbol("Java", "chevron.left.forwardslash.chevron.right"),
+            "json": logo("JSON", "json"),
+            "css": logo("Stylesheet", "css"), "scss": logo("Sass", "sass"), "sass": logo("Sass", "sass"),
+            "html": logo("HTML", "html5"), "htm": logo("HTML", "html5"),
+            "xml": symbol("XML", "chevron.left.forwardslash.chevron.right"),
+            "md": logo("Markdown", "markdown"), "mdx": logo("Markdown", "markdown"),
+            "txt": symbol("Text", "doc.text"),
+            "sql": logo("SQL", "postgresql"),
+            "sh": shell, "bash": shell, "zsh": shell,
+            "yml": logo("YAML", "yaml"), "yaml": logo("YAML", "yaml"), "toml": logo("TOML", "toml"),
+            "ini": config("Config"), "env": config("Environment"), "conf": config("Config"),
+            "lock": symbol("Lock file", "lock"),
+            "png": image, "jpg": image, "jpeg": image, "gif": image, "webp": image, "svg": image, "ico": image,
+        ]
+    }()
+
+    /// Names that say more than their extension, or have none, come first.
+    static func kind(for path: String) -> Kind {
+        let name = (path.split(separator: "/").last.map(String.init) ?? path).lowercased()
+        if name == "dockerfile" || name.hasPrefix("dockerfile.") || name.hasPrefix("docker-compose") {
+            return logo("Dockerfile", "docker")
+        }
+        if name == "justfile" || name == "makefile" { return logo("Shell script", "gnubash") }
+        if name == "package-lock.json" { return symbol("Lock file", "lock") }
+        if name == ".env" || name.hasPrefix(".env.") { return symbol("Environment", "gearshape") }
+        guard let dot = name.lastIndex(of: "."), dot != name.startIndex || name.count > 1 else {
+            return symbol("File", "doc")
+        }
+        return byExtension[String(name[name.index(after: dot)...])] ?? symbol("File", "doc")
     }
 }
