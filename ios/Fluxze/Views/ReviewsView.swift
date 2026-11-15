@@ -368,7 +368,7 @@ struct PullRequestFilesView: View {
     }
 }
 
-private struct PullFileRow: View {
+struct PullFileRow: View {
     let file: PullFile
     let isExpanded: Bool
 
@@ -382,11 +382,15 @@ private struct PullFileRow: View {
                 Text((file.filename as NSString).lastPathComponent)
                     .font(.body.weight(.medium))
                     .lineLimit(1)
-                Text(file.previousFilename.map { "\($0) → \(file.filename)" } ?? file.filename)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.head)
+                // The folder only (the name is the line above), cut in the
+                // middle when long so both ends stay readable.
+                if let detail = Self.detail(file) {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
             }
             Spacer(minLength: 8)
             HStack(spacing: 4) {
@@ -403,6 +407,20 @@ private struct PullFileRow: View {
         }
         .contentShape(Rectangle())
         .accessibilityHint(isExpanded ? "Hides the diff" : "Shows the diff")
+    }
+
+    /// "backend/crates/wayve-server/src/email/", or what a rename came from;
+    /// nil for a file at the top of the repository.
+    static func detail(_ file: PullFile) -> String? {
+        if let old = file.previousFilename, old != file.filename {
+            return "Renamed from \(old)"
+        }
+        return folder(of: file.filename)
+    }
+
+    static func folder(of path: String) -> String? {
+        guard let slash = path.lastIndex(of: "/") else { return nil }
+        return String(path[...slash])
     }
 }
 

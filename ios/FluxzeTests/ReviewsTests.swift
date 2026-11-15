@@ -98,6 +98,12 @@ final class ReviewsTests: XCTestCase {
         }
     }
 
+    func testFileRowShowsTheFolder() {
+        XCTAssertEqual(PullFileRow.folder(of: "backend/crates/wayve-server/src/email/drafts.rs"),
+                       "backend/crates/wayve-server/src/email/")
+        XCTAssertNil(PullFileRow.folder(of: "README.md"))
+    }
+
     func testDiffLineKinds() {
         XCTAssertEqual(PullFileDiffView.kind(of: "@@ -1,3 +1,4 @@"), .hunk)
         XCTAssertEqual(PullFileDiffView.kind(of: "+let x = 1"), .added)
