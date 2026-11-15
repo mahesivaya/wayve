@@ -2101,6 +2101,17 @@ ON messages (receiver_id, sender_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_unread
 ON messages (receiver_id, status);
 
+-- Mark-read (`UPDATE messages SET status = 'read' WHERE receiver_id = $1 AND
+-- sender_id = $2 AND status <> 'read'`, run on every read receipt in
+-- chat/websocket.rs and on every history fetch in chat/direct_messages.rs).
+-- Without this the planner walks idx_messages_reverse over the WHOLE
+-- conversation and heap-checks each row's status; the partial index holds only
+-- unread rows, so the cost is the number of unread messages, not the history
+-- length. The predicate must stay textually equal to the query's for the
+-- planner to use it.
+CREATE INDEX IF NOT EXISTS idx_messages_pair_unread
+ON messages (receiver_id, sender_id) WHERE status <> 'read';
+
 CREATE INDEX IF NOT EXISTS idx_channel_members_user
 ON channel_members (user_id, channel_id);
 
