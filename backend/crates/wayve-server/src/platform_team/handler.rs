@@ -1,14 +1,16 @@
 use crate::prelude::*;
+use actix_web::delete;
 use chrono::{DateTime, Utc};
 use sqlx::Row;
-use tracing::instrument;
-use wayve_security::rbac::{Permission, RoleContext, Scope, require_permission};
+use tracing::{info, instrument};
+use wayve_security::rbac::{self, Permission, RoleContext, Scope, require_permission};
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(developer_summary)
         .service(support_summary)
         .service(users_summary)
-        .service(platform_users);
+        .service(platform_users)
+        .service(delete_personal_user);
 }
 
 async fn gate(
@@ -444,8 +446,14 @@ pub async fn platform_users(
     let rows = sqlx::query(
         r#"
         SELECT
-            u.id, u.email, u.username,
+            u.id, u.email, u.username, u.first_name, u.last_name,
+            u.auth_provider, u.email_verified, u.last_seen,
             u.created_at AT TIME ZONE 'UTC' AS created_at,
+            (SELECT COUNT(*) FROM email_accounts ea WHERE ea.user_id = u.id)::BIGINT
+              AS mailbox_count,
+            (SELECT p.name FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+              WHERE s.user_id = u.id AND s.status IN ('active', 'trialing')
+              ORDER BY s.created_at DESC LIMIT 1) AS plan_name,
             (
               (SELECT COALESCE(SUM(octet_length(e.body_encrypted)), 0)::BIGINT FROM emails e
                  JOIN email_accounts ea ON e.account_id = ea.id WHERE ea.user_id = u.id)
@@ -473,15 +481,129 @@ pub async fn platform_users(
         .into_iter()
         .map(|row| {
             let created_at: Option<DateTime<Utc>> = row.try_get("created_at").ok();
+            let last_seen: Option<DateTime<Utc>> = row.try_get("last_seen").ok().flatten();
+            let opt_str = |col: &str| row.try_get::<Option<String>, _>(col).ok().flatten();
             serde_json::json!({
                 "id": row.try_get::<i32, _>("id").unwrap_or(0),
                 "email": row.try_get::<String, _>("email").unwrap_or_default(),
-                "username": row.try_get::<Option<String>, _>("username").ok().flatten(),
+                "username": opt_str("username"),
+                "first_name": opt_str("first_name"),
+                "last_name": opt_str("last_name"),
+                "auth_provider": row.try_get::<String, _>("auth_provider").unwrap_or_default(),
+                "email_verified": row.try_get::<bool, _>("email_verified").unwrap_or(true),
+                "plan_name": opt_str("plan_name"),
+                "mailbox_count": row.try_get::<i64, _>("mailbox_count").unwrap_or(0),
                 "created_at": created_at,
+                "last_seen": last_seen,
                 "storage_bytes": row.try_get::<i64, _>("storage_bytes").unwrap_or(0),
             })
         })
         .collect();
 
     Ok(HttpResponse::Ok().json(serde_json::json!({ "users": users })))
+}
+
+/// Permanently delete a PERSONAL account from the platform Personal accounts
+/// page. `admin_delete_user` can't serve this: personal users resolve to
+/// `Role::Owner`, which it refuses ("an owner cannot delete another owner").
+/// Restricted to personal targets so it can never remove org or platform
+/// members. A live Stripe subscription is cancelled immediately, since its
+/// local rows cascade away with the user.
+#[delete("/platform-team/users/{id}")]
+#[instrument(target = "auth", skip(req, pool))]
+pub async fn delete_personal_user(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> AppResult {
+    let ctx = match gate(&req, pool.get_ref(), Permission::MembersManage).await {
+        Ok(ctx) => ctx,
+        Err(resp) => return Ok(resp),
+    };
+    let target_user_id = path.into_inner();
+
+    let target_ctx = match rbac::resolve_role_context(pool.get_ref(), target_user_id).await {
+        Ok(target_ctx) => target_ctx,
+        Err(sqlx::Error::RowNotFound) => {
+            return Ok(
+                HttpResponse::NotFound().json(serde_json::json!({ "message": "User not found" }))
+            );
+        }
+        Err(e) => return Err(AppError::Db(e)),
+    };
+    if target_ctx.scope != Scope::Personal {
+        return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+            "message": "Only personal accounts can be deleted here"
+        })));
+    }
+
+    // The local subscription rows cascade away with the user, so cancel any live
+    // Stripe subscription now or it would keep charging with nothing to track it.
+    let stripe_ids: Vec<Option<String>> = sqlx::query_scalar(
+        "SELECT stripe_subscription_id FROM subscriptions \
+          WHERE user_id = $1 AND status IN ('active', 'trialing')",
+    )
+    .bind(target_user_id)
+    .fetch_all(pool.get_ref())
+    .await?;
+    for stripe_id in stripe_ids.into_iter().flatten().filter(|s| !s.is_empty()) {
+        if let Err(e) = crate::billing::provider::cancel_now(&stripe_id).await {
+            tracing::error!(target: "billing", error = ?e, target_user_id, "stripe immediate-cancel on platform user delete failed");
+            return Ok(HttpResponse::BadGateway().json(serde_json::json!({
+                "message": "Could not cancel the user's subscription with the payment provider. Try again."
+            })));
+        }
+    }
+
+    // audit_logs keeps no FK to the deleted row, so the email in metadata is
+    // what keeps the event attributable afterwards.
+    let email: Option<String> = sqlx::query_scalar("SELECT email FROM users WHERE id = $1")
+        .bind(target_user_id)
+        .fetch_optional(pool.get_ref())
+        .await?;
+
+    let mut tx = pool.begin().await?;
+    crate::db::apply_rls_bypass(&mut tx).await?;
+    // notes.user_id has no FK, so it does not ride the cascade on `users`.
+    sqlx::query("DELETE FROM notes WHERE user_id = $1")
+        .bind(target_user_id)
+        .execute(&mut *tx)
+        .await?;
+    // Re-check account_type in the DELETE so a concurrent promotion into an
+    // org between the scope check and here can't be deleted by this route.
+    let result = sqlx::query("DELETE FROM users WHERE id = $1 AND account_type = 'personal'")
+        .bind(target_user_id)
+        .execute(&mut *tx)
+        .await?;
+    if result.rows_affected() == 0 {
+        return Ok(
+            HttpResponse::NotFound().json(serde_json::json!({ "message": "User not found" }))
+        );
+    }
+    tx.commit().await?;
+
+    crate::routes::user::invalidate_profile_cache(target_user_id).await;
+    crate::email::profile::invalidate_me_cache(target_user_id).await;
+    rbac::invalidate_role_context(target_user_id).await;
+
+    info!(
+        target: "auth",
+        actor = ctx.user_id,
+        target_user_id,
+        "platform admin deleted personal account"
+    );
+    crate::audit::record_action(
+        pool.get_ref(),
+        &req,
+        crate::audit::AuditEvent {
+            actor_user_id: ctx.user_id,
+            action: "user_delete",
+            resource_type: "user",
+            resource_id: Some(target_user_id.to_string()),
+            metadata: Some(serde_json::json!({ "scope": "Personal", "email": email })),
+        },
+    )
+    .await;
+
+    Ok(HttpResponse::NoContent().finish())
 }

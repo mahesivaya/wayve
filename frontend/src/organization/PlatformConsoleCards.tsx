@@ -354,10 +354,10 @@ export default function PlatformConsoleCards() {
   const consoles: ConsoleCard[] = [
     {
       key: "users",
-      label: "Users",
+      label: "Personal accounts",
       description:
-        "Browse the total number of users registered on the platform.",
-      path: "/platform/users",
+        "Browse and manage every personal account registered on the platform.",
+      path: "/platform/personal-accounts",
       visible: canSeeAnalytics,
     },
     {

@@ -1,4 +1,4 @@
-import { apiFetchJson } from "./client";
+import { apiFetch, apiFetchJson } from "./client";
 
 export type DeveloperKeyRow = {
   id: number;
@@ -110,8 +110,21 @@ export type PlatformUserRow = {
   id: number;
   email: string;
   username: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  auth_provider: string;
+  email_verified: boolean;
+  plan_name: string | null;
+  mailbox_count: number;
   created_at: string | null;
+  last_seen: string | null;
   storage_bytes: number;
+};
+
+// Permanently delete a personal account (platform staff with members:manage).
+// The backend refuses non-personal accounts and cancels any live subscription.
+export const deletePersonalUser = async (userId: number): Promise<void> => {
+  await apiFetch(`/api/platform-team/users/${userId}`, { method: "DELETE" });
 };
 
 export type ListPlatformUsersParams = {

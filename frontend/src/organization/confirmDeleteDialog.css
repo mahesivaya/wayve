@@ -1,0 +1,113 @@
+/* Type-to-confirm delete dialog (ConfirmDeleteDialog.tsx). */
+.confirm-delete-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 1100;
+}
+
+.confirm-delete-dialog {
+  width: min(440px, 100%);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.confirm-delete-dialog h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.confirm-delete-body {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.confirm-delete-body p {
+  margin: 0 0 6px;
+}
+
+.confirm-delete-body strong {
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.confirm-delete-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.confirm-delete-label input {
+  padding: 8px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+}
+
+.confirm-delete-error {
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-danger-border);
+  background: var(--color-danger-soft);
+  color: var(--color-danger-strong);
+  font-size: var(--text-sm);
+}
+
+.confirm-delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confirm-delete-btn {
+  padding: 8px 14px;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-danger);
+  color: #fff;
+  font-weight: 600;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.confirm-delete-btn:hover:not(:disabled) {
+  background: var(--color-danger-hover);
+}
+
+.confirm-delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Small outline-danger trigger used in table rows. */
+.danger-outline-btn {
+  padding: 5px 10px;
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-danger-strong);
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.danger-outline-btn:hover {
+  background: var(--color-danger-soft);
+}
