@@ -1,13 +1,14 @@
 // Finished-backfill bookkeeping (email/backfill_state.rs) against a real
-// Postgres: a marked kind is reported finished, a stale mark is not (so it gets
-// re-checked), reopen clears one kind only, and the Cc backfill marks itself
-// finished once nothing is left to fill in.
+// Postgres: a marked backfill is reported finished, a stale mark is not (so it
+// gets re-checked), reopen clears one backfill only, `run` marks an exhausted
+// batch, never polls a finished one and keeps the state on error, and a Gmail
+// error reply surfaces as an error rather than an empty page.
 #[cfg(test)]
 mod tests {
-    use crate::email::backfill_state as state;
-    use crate::email::provider::MailProvider;
+    use crate::email::backfill_state::{self as state, Backfill, Batch};
     use crate::test_support::{insert_local_user, random_email, test_pool};
     use sqlx::PgPool;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     async fn mailbox(pool: &PgPool) -> i32 {
         let user = insert_local_user(pool, &random_email(), "password123").await;
@@ -22,16 +23,21 @@ mod tests {
     }
 
     #[actix_web::test]
-    async fn marks_expire_and_reopen_clears_one_kind() {
+    async fn marks_expire_and_reopen_clears_one_backfill() {
         let pool = test_pool().await;
         let account = mailbox(&pool).await;
-        assert!(state::finished(&pool, account).await.is_empty());
+        assert!(
+            !state::finished(&pool, account)
+                .await
+                .contains(Backfill::Threading)
+        );
 
-        state::mark_finished(&pool, account, state::THREADING).await;
-        state::mark_finished(&pool, account, &state::label("SENT")).await;
+        state::mark_finished(&pool, account, Backfill::Threading).await;
+        state::mark_finished(&pool, account, Backfill::Label("SENT")).await;
         let done = state::finished(&pool, account).await;
-        assert!(done.contains(state::THREADING));
-        assert!(done.contains("label:SENT"));
+        assert!(done.contains(Backfill::Threading));
+        assert!(done.contains(Backfill::Label("SENT")));
+        assert!(!done.contains(Backfill::Label("DRAFT")));
 
         // A mark older than the re-check window no longer counts.
         sqlx::query(
@@ -43,31 +49,55 @@ mod tests {
         .await
         .unwrap_or_else(|e| panic!("age mark: {e}"));
         let done = state::finished(&pool, account).await;
-        assert!(!done.contains("label:SENT"));
-        assert!(done.contains(state::THREADING));
+        assert!(!done.contains(Backfill::Label("SENT")));
+        assert!(done.contains(Backfill::Threading));
 
-        state::reopen(&pool, account, state::THREADING).await;
-        assert!(
-            !state::finished(&pool, account)
-                .await
-                .contains(state::THREADING)
-        );
+        state::reopen(&pool, account, Backfill::Threading).await;
+        let done = state::finished(&pool, account).await;
+        assert!(!done.contains(Backfill::Threading));
     }
 
     #[actix_web::test]
-    async fn cc_backfill_marks_itself_finished_when_nothing_is_pending() {
+    async fn run_marks_exhausted_skips_finished_and_keeps_state_on_error() {
         let pool = test_pool().await;
         let account = mailbox(&pool).await;
-        let filled = crate::email::cc_backfill::backfill_batch(
-            &pool,
-            account,
-            &MailProvider::Google,
-            "token",
-        )
-        .await
-        .unwrap_or_else(|e| panic!("cc backfill: {e}"));
-        assert_eq!(filled, 0);
-        assert!(state::finished(&pool, account).await.contains(state::CC));
+        let done = state::finished(&pool, account).await;
+
+        // More leaves it open; an error leaves it open too.
+        state::run(&pool, account, &done, Backfill::Cc, async {
+            Ok(Batch::More)
+        })
+        .await;
+        state::run(&pool, account, &done, Backfill::Older, async {
+            Err(anyhow::anyhow!("gmail said 429"))
+        })
+        .await;
+        let after = state::finished(&pool, account).await;
+        assert!(!after.contains(Backfill::Cc), "{after:?}");
+        assert!(!after.contains(Backfill::Older), "{after:?}");
+
+        // Exhausted marks it finished.
+        state::run(&pool, account, &done, Backfill::Cc, async {
+            Ok(Batch::Exhausted)
+        })
+        .await;
+        let done = state::finished(&pool, account).await;
+        assert!(done.contains(Backfill::Cc));
+
+        // A finished backfill's batch is never polled.
+        let ran = AtomicBool::new(false);
+        state::run(&pool, account, &done, Backfill::Cc, async {
+            ran.store(true, Ordering::SeqCst);
+            Ok(Batch::More)
+        })
+        .await;
+        assert!(!ran.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn an_empty_pending_list_is_exhausted() {
+        assert_eq!(Batch::from_pending(0), Batch::Exhausted);
+        assert_eq!(Batch::from_pending(3), Batch::More);
     }
 
     /// A Gmail error reply must surface as an error: read as an empty page, it

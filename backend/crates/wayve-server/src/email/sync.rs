@@ -1,6 +1,7 @@
 use crate::prelude::*;
 
 use crate::email::account::load_syncable_email_accounts;
+use crate::email::backfill_state::Batch;
 use crate::email::oauth::HTTP_CLIENT;
 use crate::email::provider::refresh_and_persist_email_token;
 
@@ -160,6 +161,23 @@ fn extract_gmail_timestamp(res: &Value) -> NaiveDateTime {
         .unwrap_or_else(|| chrono::Utc::now().naive_utc())
 }
 
+/// Gmail labels walked back through history, one batch per tick each.
+const BACKFILL_LABELS: [&str; 10] = [
+    "SENT",
+    "DRAFT",
+    "SPAM",
+    "TRASH",
+    "IMPORTANT",
+    "CATEGORY_PERSONAL",
+    "CATEGORY_SOCIAL",
+    "CATEGORY_PROMOTIONS",
+    "CATEGORY_UPDATES",
+    "CATEGORY_FORUMS",
+];
+
+/// The search that pulls GitHub notification mail (see `sync_one_account`).
+const GITHUB_QUERY: &str = "from:github.com";
+
 /// Runs the full per-account workload: token refresh, forward sync, backfill,
 /// label backfill, and cache invalidation. Errors are logged and swallowed so
 /// one bad account doesn't abort the rest of the tick.
@@ -194,62 +212,50 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
         return;
     }
 
-    // History backfills. Each one marks itself finished once the provider has
-    // nothing older (or nothing is left to fill in), and a finished one is
-    // skipped for a day: no scan of the account's mail, no provider request.
-    use crate::email::backfill_state as state;
-    let done = state::finished(pool, account.id).await;
+    // History backfills. `state::run` skips one that finished within the last
+    // day (no scan of the account's mail, no provider request) and marks one
+    // finished when its batch reports nothing left.
+    use crate::email::backfill_state::{self as state, Backfill};
+    let id = account.id;
+    let access_token = token.access_token.as_str();
+    let done = state::finished(pool, id).await;
 
-    if !done.contains(state::OLDER)
-        && let Err(err) =
-            backfill_older(pool, account.id, &account.provider, &token.access_token).await
-    {
-        warn!(target: "worker", account_id = account.id, error = ?err, "backfill batch failed");
-    }
+    state::run(
+        pool,
+        id,
+        &done,
+        Backfill::Older,
+        backfill_older(pool, id, &account.provider, access_token),
+    )
+    .await;
 
     // Thread a batch of mail that predates conversation threading.
-    if !done.contains(state::THREADING)
-        && let Err(err) = crate::email::threading::backfill_batch(
-            pool,
-            account.id,
-            &account.provider,
-            &token.access_token,
-        )
-        .await
-    {
-        warn!(target: "worker", account_id = account.id, error = ?err, "threading backfill failed");
-    }
-    // Fill in the Cc of a batch of mail synced before Cc was stored (Reply all).
-    if !done.contains(state::CC)
-        && let Err(err) = crate::email::cc_backfill::backfill_batch(
-            pool,
-            account.id,
-            &account.provider,
-            &token.access_token,
-        )
-        .await
-    {
-        warn!(target: "worker", account_id = account.id, error = ?err, "cc backfill failed");
-    }
+    state::run(pool, id, &done, Backfill::Threading, async {
+        let pending =
+            crate::email::threading::backfill_batch(pool, id, &account.provider, access_token)
+                .await?;
+        Ok(Batch::from_pending(pending))
+    })
+    .await;
 
-    for label in [
-        "SENT",
-        "DRAFT",
-        "SPAM",
-        "TRASH",
-        "IMPORTANT",
-        "CATEGORY_PERSONAL",
-        "CATEGORY_SOCIAL",
-        "CATEGORY_PROMOTIONS",
-        "CATEGORY_UPDATES",
-        "CATEGORY_FORUMS",
-    ] {
-        if done.contains(&state::label(label)) {
-            continue;
-        }
-        if let Err(err) = backfill_label_older(pool, account.id, &token.access_token, label).await {
-            warn!(target: "worker", account_id = account.id, label, error = ?err, "label backfill failed");
-        }
+    // Fill in the Cc of a batch of mail synced before Cc was stored (Reply all).
+    state::run(pool, id, &done, Backfill::Cc, async {
+        let batch =
+            crate::email::cc_backfill::backfill_batch(pool, id, &account.provider, access_token)
+                .await?;
+        Ok(Batch::from_pending(batch.pending))
+    })
+    .await;
+
+    for label in BACKFILL_LABELS {
+        state::run(
+            pool,
+            id,
+            &done,
+            Backfill::Label(label),
+            backfill_label_older(pool, id, access_token, label),
+        )
+        .await;
     }
 
     // GitHub mail is pulled by search because the label walk above can't reach
@@ -258,18 +264,14 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
     // ingested, and `fetch_headers_only` tags only the pull-request ones, which
     // is what the Reviews folder selects on. Narrowing the search here would
     // drop issues and security alerts from the inbox entirely.
-    if !done.contains(&state::query("from:github.com"))
-        && let Err(err) = backfill_query_older(
-            pool,
-            account.id,
-            &token.access_token,
-            "from:github.com",
-            "%github.com%",
-        )
-        .await
-    {
-        warn!(target: "worker", account_id = account.id, error = ?err, "github backfill failed");
-    }
+    state::run(
+        pool,
+        id,
+        &done,
+        Backfill::Query(GITHUB_QUERY),
+        backfill_query_older(pool, id, access_token, GITHUB_QUERY, "%github.com%"),
+    )
+    .await;
 
     // Calendar rides the email cadence, reusing the token refreshed above.
     // Idempotent: import_upcoming_events upserts on (user_id, google_event_id).
@@ -465,7 +467,7 @@ async fn backfill_older(
     account_id: i32,
     provider: &crate::email::provider::MailProvider,
     access_token: &str,
-) -> Result<()> {
+) -> Result<Batch> {
     let oldest: Option<NaiveDateTime> =
         sqlx::query_scalar("SELECT MIN(created_at) FROM emails WHERE account_id = $1")
             .bind(account_id)
@@ -475,7 +477,7 @@ async fn backfill_older(
 
     // No local mail yet: the forward sync seeds it, so check again next tick.
     let Some(oldest_naive) = oldest else {
-        return Ok(());
+        return Ok(Batch::More);
     };
 
     let before_timestamp = oldest_naive.and_utc().timestamp();
@@ -490,15 +492,7 @@ async fn backfill_older(
         .await?;
     // The provider listed nothing older: history is exhausted (IMAP has no
     // history walk, so it reports 0 and is finished from the start).
-    if listed == 0 {
-        crate::email::backfill_state::mark_finished(
-            pool,
-            account_id,
-            crate::email::backfill_state::OLDER,
-        )
-        .await;
-    }
-    Ok(())
+    Ok(Batch::from_pending(listed))
 }
 
 pub async fn fetch_ids(token: &str, last_sync: Option<i64>) -> Result<Vec<String>> {
@@ -647,8 +641,7 @@ async fn backfill_label_older(
     account_id: i32,
     token: &str,
     label: &str,
-) -> Result<()> {
-    use crate::email::backfill_state as state;
+) -> Result<Batch> {
     // `labels @> ARRAY[..]` (not `= ANY(labels)`) so idx_emails_labels applies.
     let oldest: Option<NaiveDateTime> = sqlx::query_scalar(
         "SELECT MIN(created_at) FROM emails WHERE account_id = $1 AND labels @> ARRAY[$2::text]",
@@ -663,14 +656,13 @@ async fn backfill_label_older(
     // Not finished: the forward sync seeds one, and the walk starts on the next
     // tick (this lookup is a GIN probe that matches nothing, so it is cheap).
     let Some(oldest_naive) = oldest else {
-        return Ok(());
+        return Ok(Batch::More);
     };
 
     let before_timestamp = oldest_naive.and_utc().timestamp();
     let ids = fetch_label_ids_before(token, label, before_timestamp, BACKFILL_BATCH).await?;
     if ids.is_empty() {
-        state::mark_finished(pool, account_id, &state::label(label)).await;
-        return Ok(());
+        return Ok(Batch::Exhausted);
     }
     debug!(
         target: "worker",
@@ -692,7 +684,7 @@ async fn backfill_label_older(
     while !tasks.is_empty() {
         process_batch(pool, account_id, &mut tasks).await?;
     }
-    Ok(())
+    Ok(Batch::More)
 }
 
 /// Message ids matching a Gmail search `query`, optionally older than
@@ -740,7 +732,7 @@ async fn backfill_query_older(
     token: &str,
     query: &str,
     sender_like: &str,
-) -> Result<()> {
+) -> Result<Batch> {
     let oldest: Option<NaiveDateTime> = sqlx::query_scalar(
         "SELECT MIN(created_at) FROM emails \
          WHERE account_id = $1 AND lower(coalesce(sender, '')) LIKE $2",
@@ -756,9 +748,7 @@ async fn backfill_query_older(
     let before_timestamp = oldest.map(|dt| dt.and_utc().timestamp());
     let ids = fetch_query_ids(token, query, before_timestamp, BACKFILL_BATCH).await?;
     if ids.is_empty() {
-        let state = crate::email::backfill_state::query(query);
-        crate::email::backfill_state::mark_finished(pool, account_id, &state).await;
-        return Ok(());
+        return Ok(Batch::Exhausted);
     }
     debug!(
         target: "worker",
@@ -780,7 +770,7 @@ async fn backfill_query_older(
     while !tasks.is_empty() {
         process_batch(pool, account_id, &mut tasks).await?;
     }
-    Ok(())
+    Ok(Batch::More)
 }
 
 /// The synthetic label marking a GitHub *pull request* notification.

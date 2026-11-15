@@ -220,8 +220,8 @@ pub async fn assign_best_effort(pool: &PgPool, account_id: i32, input: ThreadInp
 /// so emails a sync failed to thread are retried rather than waiting out the
 /// finished mark.
 pub async fn retry_unthreaded(pool: &PgPool, account_id: i32) {
-    use crate::email::backfill_state as state;
-    state::reopen(pool, account_id, state::THREADING).await;
+    use crate::email::backfill_state::{Backfill, reopen};
+    reopen(pool, account_id, Backfill::Threading).await;
 }
 
 async fn assign(pool: &PgPool, account_id: i32, input: ThreadInput<'_>) -> sqlx::Result<i32> {
@@ -486,11 +486,6 @@ pub async fn backfill_batch(
     .fetch_all(pool)
     .await?;
     let count = pending.len();
-    if count == 0 {
-        use crate::email::backfill_state as state;
-        state::mark_finished(pool, account_id, state::THREADING).await;
-        return Ok(0);
-    }
 
     stream::iter(pending)
         .for_each_concurrent(BACKFILL_CONCURRENCY, |(email_id, provider_id)| async move {
