@@ -34,6 +34,17 @@ import TabStrip from "./TabStrip";
 
 const NEW_TAB_PATH = "/";
 
+/** Focus is somewhere the user types, where arrow keys move the caret. */
+function isTypingTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  return (
+    !!el &&
+    (el.isContentEditable ||
+      ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) ||
+      el.getAttribute?.("role") === "textbox")
+  );
+}
+
 function currentUrl(loc: { pathname: string; search: string; hash: string }) {
   return `${loc.pathname}${loc.search}${loc.hash}`;
 }
@@ -169,9 +180,18 @@ export default function TabBar({
     };
   }, []);
 
-  // Keyboard: Ctrl/Cmd+Alt+T new tab, Ctrl/Cmd+Alt+W close, Ctrl+Tab cycles.
+  // Keyboard: Ctrl/Cmd+Alt+T new tab, Ctrl/Cmd+Alt+W close, Ctrl+Tab cycles
+  // (wrapping), Cmd/Ctrl+Left/Right open the tab to the left/right (stopping
+  // at the first/last tab).
   // (Plain Cmd+T/W belong to the browser and can't be intercepted there.)
   useEffect(() => {
+    const step = (s: TabsState, by: number, wrap: boolean) => {
+      const i = s.tabs.findIndex((t) => t.id === s.activeId);
+      const n = s.tabs.length;
+      const j = wrap ? (i + by + n) % n : i + by;
+      if (j < 0 || j >= n || j === i) return;
+      goRef.current(activateTab(s, s.tabs[j].id));
+    };
     const onKey = (e: KeyboardEvent) => {
       const s = stateRef.current;
       const mod = e.metaKey || e.ctrlKey;
@@ -183,10 +203,19 @@ export default function TabBar({
         goRef.current(closeTab(s, s.activeId));
       } else if (e.ctrlKey && e.key === "Tab" && s.tabs.length > 1) {
         e.preventDefault();
-        const i = s.tabs.findIndex((t) => t.id === s.activeId);
-        const step = e.shiftKey ? -1 : 1;
-        const next = s.tabs[(i + step + s.tabs.length) % s.tabs.length];
-        goRef.current(activateTab(s, next.id));
+        step(s, e.shiftKey ? -1 : 1, true);
+      } else if (
+        mod &&
+        !e.altKey &&
+        !e.shiftKey &&
+        (e.key === "ArrowLeft" || e.key === "ArrowRight") &&
+        s.tabs.length > 1 &&
+        !isTypingTarget(e.target)
+      ) {
+        // In a text field Cmd+Left/Right is the OS's line start/end (and
+        // Shift selects to it), so those keep their meaning there.
+        e.preventDefault();
+        step(s, e.key === "ArrowLeft" ? -1 : 1, false);
       }
     };
     document.addEventListener("keydown", onKey);

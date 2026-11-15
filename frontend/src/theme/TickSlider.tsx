@@ -68,6 +68,8 @@ export default function TickSlider({
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
+      // Cmd/Ctrl+arrows switch tabs (see TabBar); leave them to that.
+      if (e.metaKey || e.ctrlKey) return;
       const delta = step ?? (max - min) / 100;
       if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
         onChange(Math.max(min, value - delta));
