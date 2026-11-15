@@ -75,14 +75,38 @@ final class ChatStore: ObservableObject {
         totalUnread = s.totalUnread
     }
 
-    /// DMs with someone outside the directory still get a name.
+    /// DMs with someone outside the directory still get a name and key.
     private func fillMissingNames() async {
-        struct Profile: Decodable { let id: Int; let email: String }
         for id in summary.keys where names[id] == nil {
-            if let profile: Profile = try? await api.get("/api/chat/users/\(id)/profile") {
-                names[id] = profile.email
-            }
+            _ = await refreshPeer(id)
         }
+    }
+
+    /// Asks the server for someone's current email and public key, as the web
+    /// does before refusing a send: the directory is loaded once, and personal
+    /// accounts only list people already talked to, so a new contact (or one
+    /// who set up encryption since) looks keyless until looked up again.
+    @discardableResult
+    func refreshPeer(_ id: Int) async -> ChatUser? {
+        struct Profile: Decodable { let email: String }
+        var email = names[id]
+        if email == nil {
+            email = (try? await api.get("/api/chat/users/\(id)/profile") as Profile)?.email
+        }
+        guard let email else { return nil }
+        names[id] = email
+        var components = URLComponents()
+        components.path = "/api/users"
+        components.queryItems = [URLQueryItem(name: "email", value: email)]
+        guard let path = components.string,
+              let found: ChatUser? = try? await api.get(path),
+              let found, found.id == id else { return nil }
+        if let index = users.firstIndex(where: { $0.id == id }) {
+            users[index] = found
+        } else {
+            users.append(found)
+        }
+        return found
     }
 
     func user(_ id: Int) -> ChatUser {
@@ -213,10 +237,15 @@ final class ChatStore: ObservableObject {
         }
     }
 
-    func send(_ text: String) throws {
+    func send(_ text: String) async throws {
         let plain = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !plain.isEmpty, let conversation = current, let me = myID else { return }
         guard isConnected else { throw SendError.offline }
+        // A DM peer without a known key may have set one up since: look again.
+        if sendsEncrypted, case .dm(let peer) = conversation,
+           (users.first { $0.id == peer.id }?.publicKey ?? []).isEmpty {
+            await refreshPeer(peer.id)
+        }
 
         let content = sendsEncrypted ? try seal(plain, for: conversation, me: me) : plain
         let clientID = UUID().uuidString.lowercased()
@@ -242,7 +271,7 @@ final class ChatStore: ObservableObject {
         case .dm(let peer):
             let current = users.first { $0.id == peer.id } ?? peer
             guard let spki = current.publicKey, !spki.isEmpty, let key = try? ChatCrypto.publicKey(spki: spki) else {
-                throw SendError.noKey(peer.email)
+                throw SendError.noKey(current.email)
             }
             recipients[peer.id] = key
         case .channel(let channel):
@@ -317,6 +346,10 @@ final class ChatStore: ObservableObject {
 
         // Another conversation: bump its unread count and move it up.
         if message.channelId == nil, message.senderId != me {
+            // Someone new: fetch their name (and key) for the list.
+            if names[message.senderId] == nil, !users.contains(where: { $0.id == message.senderId }) {
+                Task { await refreshPeer(message.senderId) }
+            }
             let dm = summary[message.senderId]
             summary[message.senderId] = ChatSummary.DM(
                 userId: message.senderId, unreadCount: (dm?.unreadCount ?? 0) + 1,

@@ -12,6 +12,13 @@ final class ChatTests: XCTestCase {
         [{"id": 5, "email": "ana@x.com", "public_key": [48, 130]}, {"id": 6, "email": "bo@x.com", "public_key": null}]
         """.utf8))
         XCTAssertEqual(users.map(\.publicKey), [[48, 130], nil])
+        // The by-email lookup (used to fetch a key the directory didn't have).
+        let found = try APIClient.decoder.decode(ChatUser?.self, from: Data("""
+        {"id": 117, "email": "new@x.com", "public_key": [48, 130], "can_message": true}
+        """.utf8))
+        XCTAssertEqual(found?.id, 117)
+        XCTAssertEqual(found?.canMessage, true)
+        XCTAssertNil(try APIClient.decoder.decode(ChatUser?.self, from: Data("null".utf8)))
 
         let summary = try APIClient.decoder.decode(ChatSummary.self, from: Data("""
         {"total_unread": 3, "conversations": [{"user_id": 5, "unread_count": 3, "last_message_at": "2026-11-14T10:00:00+00:00"}]}

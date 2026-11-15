@@ -6,6 +6,8 @@ struct ChatUser: Codable, Identifiable, Hashable {
     let email: String
     /// SPKI DER bytes; nil until they've opened Fluxze and set up encryption.
     let publicKey: [UInt8]?
+    /// From the by-email lookup only: false when the rules forbid a DM.
+    var canMessage: Bool? = nil
 }
 
 /// A channel (`GET /api/chat/channels`); only the fields the app shows.
