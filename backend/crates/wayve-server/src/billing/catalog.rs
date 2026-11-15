@@ -81,6 +81,25 @@ pub const PLAN_CATALOG: &[PlanDef] = &[
         ],
     },
     PlanDef {
+        code: "business_basic",
+        name: "Basic",
+        description: "Affordable plan for small organizations up to 25 members.",
+        audience: "organization",
+        tier: "business",
+        amount_cents: 500,
+        storage_limit_bytes: 107_374_182_400, // 100 GiB
+        seat_limit: 25,
+        rate_limit_per_min: 600,
+        monthly_quota: 1_000_000,
+        features: &[
+            "Up to 25 members",
+            "100 GB shared storage",
+            "Shared org workspace",
+            "Admin & billing controls",
+            "Fully encrypted",
+        ],
+    },
+    PlanDef {
         code: "organization",
         name: "Advanced Organization",
         description: "For growing organizations up to 100 members.",

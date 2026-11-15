@@ -70,6 +70,23 @@ export const PLAN_CATALOG: PlanTier[] = [
     cta: "Get started",
   },
   {
+    code: "business_basic",
+    name: "Basic",
+    audience: "organization",
+    tier: "business",
+    price: "5.00 USD",
+    interval: "user / month",
+    tagline: "Affordable plan for small organizations up to 25 members.",
+    features: [
+      "Up to 25 members",
+      "100 GB shared storage",
+      "Shared org workspace",
+      "Admin & billing controls",
+      "Fully encrypted",
+    ],
+    cta: "Get started",
+  },
+  {
     code: "organization",
     name: "Advanced Organization",
     audience: "organization",
