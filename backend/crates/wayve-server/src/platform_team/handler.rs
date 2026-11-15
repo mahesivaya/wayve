@@ -213,11 +213,18 @@ pub async fn support_summary(req: HttpRequest, pool: web::Data<PgPool>) -> AppRe
     .fetch_one(pool.get_ref())
     .await?;
 
+    // A mailbox belongs to its owner (`user_id`), so an organization's mailboxes
+    // are its members' mailboxes, counted the same way as `member_count`.
+    // `email_accounts.organization_id` is not the mailbox's organization: it is
+    // only set when a mailbox is shared, so counting it showed 0 for almost
+    // every organization.
     let top_orgs = sqlx::query(
         r#"
         SELECT o.id, o.name, o.slug,
                (SELECT COUNT(*) FROM users WHERE organization_id = o.id)::BIGINT AS member_count,
-               (SELECT COUNT(*) FROM email_accounts WHERE organization_id = o.id)::BIGINT AS mailboxes,
+               (SELECT COUNT(*) FROM email_accounts ea
+                  JOIN users u ON u.id = ea.user_id
+                 WHERE u.organization_id = o.id)::BIGINT AS mailboxes,
                COALESCE(s.status, 'free') AS sub_status,
                p.name AS plan_name
           FROM organizations o
