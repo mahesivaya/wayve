@@ -709,13 +709,19 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
 /// WHERE clause. Inlined rather than calling db::apply_rls_user because callers
 /// return sqlx::Result. `user_id` is an i32, so there is no injection surface
 /// in the formatted statement below.
+///
+/// JIT is off for these reads: the list's planner estimate crosses
+/// `jit_above_cost` on a mailbox of a few thousand emails, and compiling the
+/// query then costs 150-200 ms on every request, more than running it, for a
+/// page-sized result that never pays it back.
 async fn begin_as_user(
     pool: &PgPool,
     uid: i32,
 ) -> sqlx::Result<sqlx::Transaction<'static, sqlx::Postgres>> {
     let mut tx = pool.begin().await?;
     sqlx::raw_sql(&format!(
-        "SELECT set_config('app.user_id', '{uid}', true); SET LOCAL ROLE wayve_app;"
+        "SELECT set_config('app.user_id', '{uid}', true); SET LOCAL ROLE wayve_app; \
+         SET LOCAL jit = off;"
     ))
     .execute(&mut *tx)
     .await?;
@@ -730,23 +736,8 @@ pub async fn count(pool: &PgPool, filters: &EmailListFilters) -> sqlx::Result<i6
     if filters.group_threads && folder_groups_threads(filters.folder.as_deref()) {
         // The same conversations as `push_grouped_list`, each judged by its
         // newest message's snooze, without building the rows themselves.
-        push_matched(&mut qb, filters);
-        qb.push(", conv AS (SELECT ");
-        qb.push(CONV_KEY);
-        qb.push(" AS conv_key, e.id, e.created_at, zs.snoozed_until");
-        push_scope(&mut qb, filters.user_id);
-        qb.push(" AND ");
-        qb.push(CONV_KEY);
-        qb.push(
-            r#" IN (SELECT conv_key FROM matched)
-              AND NOT ('TRASH' = ANY(e.labels))
-              AND NOT ('SPAM' = ANY(e.labels))
-              AND NOT ('DRAFT' = ANY(e.labels))),
-        latest AS (
-            SELECT DISTINCT ON (conv_key) * FROM conv
-            ORDER BY conv_key, created_at DESC, id DESC)
-        SELECT COUNT(*) FROM latest l WHERE TRUE"#,
-        );
+        push_conv_heads(&mut qb, filters);
+        qb.push(" SELECT COUNT(*) FROM head l WHERE TRUE");
         push_latest_snooze(&mut qb, filters);
     } else {
         qb.push("SELECT COUNT(*)");
@@ -794,6 +785,44 @@ fn push_matched(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFi
     qb.push(")");
 }
 
+/// The emails of a conversation the caller can see: trash, spam and drafts
+/// aside. Shared by the narrow pass that picks the page (`push_conv_heads`)
+/// and the wide one that builds its rows, so both see the same messages.
+const CONV_MEMBER: &str = r#"
+              AND NOT ('TRASH' = ANY(e.labels))
+              AND NOT ('SPAM' = ANY(e.labels))
+              AND NOT ('DRAFT' = ANY(e.labels))"#;
+
+/// `WITH matched AS (…), heads AS (…), head AS (…)`: one row per conversation
+/// in this view — its newest message's id and snooze (`l` in
+/// `push_latest_snooze`) and the conversation's `sort_at` — read from narrow
+/// columns only. Every conversation in the view is judged here, so this pass
+/// stays cheap: no attachment lookups, ciphertexts or arrays, which only the
+/// page's own conversations get (`push_grouped_list`). Shared with `count`.
+fn push_conv_heads(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFilters) {
+    push_matched(qb, filters);
+    let order = list_order(filters.folder.as_deref());
+    qb.push(", heads AS (SELECT ");
+    qb.push(CONV_KEY);
+    qb.push(format!(
+        " AS conv_key, e.id, e.created_at, zs.snoozed_until, {} AS sort_at",
+        order.per_message
+    ));
+    push_scope(qb, filters.user_id);
+    qb.push(" AND ");
+    qb.push(CONV_KEY);
+    qb.push(" IN (SELECT conv_key FROM matched)");
+    qb.push(CONV_MEMBER);
+    qb.push(
+        r#"),
+        head AS (
+            SELECT DISTINCT ON (conv_key) conv_key, id, snoozed_until,
+                   MAX(sort_at) OVER (PARTITION BY conv_key) AS sort_at
+            FROM heads
+            ORDER BY conv_key, created_at DESC, id DESC)"#,
+    );
+}
+
 /// One row per conversation, the way Gmail lists mail.
 ///
 /// 1. `matched`: the conversations with at least one email in this view, using
@@ -801,32 +830,53 @@ fn push_matched(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFi
 ///    conversation by its newest *incoming* email still in the inbox, so a
 ///    reply of yours can't pull a conversation into Signal and the two chips
 ///    stay disjoint.
-/// 2. `conv`: every email of those conversations the caller can see (trash,
-///    spam and drafts aside), so your own sent reply counts as the newest
-///    message and the conversation sorts by it, as in Gmail.
-/// 3. The newest email of each conversation is its row, with the count, the
-///    unread count, any attachment, every message id (for bulk actions) and
-///    the unread ones (so marking read touches only those).
+/// 2. `head` (`push_conv_heads`): each conversation's newest message and sort
+///    time, over every email of it the caller can see, so your own sent reply
+///    counts as the newest message and the conversation sorts by it, as in
+///    Gmail. `page` keeps the snooze filter, cursor and LIMIT there, so the
+///    rest runs on one page of conversations, not the whole mailbox.
+/// 3. `conv`: the full rows of the page's conversations. The newest email of
+///    each is its row, with the count, the unread count, any attachment,
+///    every message id (for bulk actions) and the unread ones (so marking
+///    read touches only those).
 fn push_grouped_list(
     qb: &mut QueryBuilder<'_, sqlx::Postgres>,
     filters: &EmailListFilters,
     query_limit: i64,
 ) {
-    push_matched(qb, filters);
+    push_conv_heads(qb, filters);
     let order = list_order(filters.folder.as_deref());
-    qb.push(", conv AS (SELECT ");
+    let (dir, past) = order.direction();
+    qb.push(", page AS (SELECT l.conv_key, l.sort_at FROM head l WHERE TRUE");
+    push_latest_snooze(qb, filters);
+    if let Some((before_ms, before_id)) = filters.before {
+        // Millisecond precision, as the cursor has (see `list`).
+        qb.push(format!(
+            " AND (date_trunc('milliseconds', l.sort_at), l.id) {past} (to_timestamp("
+        ));
+        qb.push_bind(before_ms);
+        qb.push("::double precision / 1000.0), ");
+        qb.push_bind(before_id);
+        qb.push(")");
+    }
+    qb.push(format!(" ORDER BY l.sort_at {dir}, l.id {dir} LIMIT "));
+    qb.push_bind(query_limit);
+    qb.push("), conv AS (SELECT ");
     qb.push(LIST_COLUMNS);
-    qb.push(format!(", {} AS sort_at, ", order.per_message));
+    qb.push(", ");
     qb.push(CONV_KEY);
     qb.push(" AS conv_key, e.thread_id, e.sender_hash");
     push_scope(qb, filters.user_id);
-    qb.push(" AND ");
-    qb.push(CONV_KEY);
+    // `CONV_KEY IN page`, spelled so the thread and primary-key indexes find
+    // the page's messages instead of a scan of the whole mailbox.
     qb.push(
-        r#" IN (SELECT conv_key FROM matched)
-              AND NOT ('TRASH' = ANY(e.labels))
-              AND NOT ('SPAM' = ANY(e.labels))
-              AND NOT ('DRAFT' = ANY(e.labels))),
+        " AND (e.thread_id = ANY(ARRAY(SELECT conv_key FROM page WHERE conv_key > 0)) \
+           OR (e.thread_id IS NULL \
+               AND e.id = ANY(ARRAY(SELECT -conv_key FROM page WHERE conv_key < 0))))",
+    );
+    qb.push(CONV_MEMBER);
+    qb.push(
+        r#"),
         latest AS (
             SELECT DISTINCT ON (conv_key) * FROM conv
             ORDER BY conv_key, created_at DESC, id DESC),
@@ -840,8 +890,7 @@ fn push_grouped_list(
                    COALESCE(ARRAY_AGG(id ORDER BY created_at DESC, id DESC)
                             FILTER (WHERE is_read = FALSE), '{}') AS unread_ids,
                    COALESCE(ARRAY_AGG(id ORDER BY created_at DESC, id DESC)
-                            FILTER (WHERE is_starred), '{}') AS starred_ids,
-                   MAX(sort_at) AS sort_at
+                            FILTER (WHERE is_starred), '{}') AS starred_ids
             FROM conv GROUP BY conv_key),
         -- Who wrote in each conversation, once each, in order of their first
         -- message (capped), and whether any of their messages is unread, for
@@ -869,25 +918,12 @@ fn push_grouped_list(
                l.inbox_status, l.inbox_assignee_id, l.thread_id,
                g.message_count, g.unread_count, g.message_ids, g.unread_ids,
                g.starred_ids, (cardinality(g.starred_ids) > 0) AS is_starred,
-               l.snoozed_until, g.sort_at,
+               l.snoozed_until, pg.sort_at,
                p.p_iv, p.p_enc, p.p_plain, p.p_unread
-        FROM latest l JOIN agg g USING (conv_key) JOIN senders p USING (conv_key)
-        WHERE TRUE"#,
+        FROM page pg JOIN latest l USING (conv_key) JOIN agg g USING (conv_key)
+             JOIN senders p USING (conv_key)"#,
     );
-    push_latest_snooze(qb, filters);
-    let (dir, past) = order.direction();
-    if let Some((before_ms, before_id)) = filters.before {
-        // Millisecond precision, as the cursor has (see `list`).
-        qb.push(format!(
-            " AND (date_trunc('milliseconds', g.sort_at), l.id) {past} (to_timestamp("
-        ));
-        qb.push_bind(before_ms);
-        qb.push("::double precision / 1000.0), ");
-        qb.push_bind(before_id);
-        qb.push(")");
-    }
-    qb.push(format!(" ORDER BY g.sort_at {dir}, l.id {dir} LIMIT "));
-    qb.push_bind(query_limit);
+    qb.push(format!(" ORDER BY pg.sort_at {dir}, l.id {dir}"));
 }
 
 /// A conversation's snooze is its newest message's (see `push_folder`); `l` is
