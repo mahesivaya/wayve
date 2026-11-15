@@ -19,6 +19,7 @@ mod dm_details_test;
 mod dm_scope_rules_test;
 mod documents_rbac_test;
 mod email_account_tokens_test;
+mod email_backfill_state_test;
 mod email_body_seal_test;
 mod email_bulk_trash_test;
 mod email_cc_test;

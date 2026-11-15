@@ -67,6 +67,7 @@ pub async fn sync_older_page(
                         page.limit,
                     )
                     .await
+                    .map(|_| ())
             }
             .boxed(),
         );

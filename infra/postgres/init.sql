@@ -610,6 +610,11 @@ ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS is_shared BOOLEAN NOT NULL D
 -- Human label for the inbox (e.g. "Support", "Sales"). Falls back to the
 -- email address when unset.
 ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS shared_label TEXT;
+-- Per-account history backfills that found nothing left to do, as
+-- {kind: finished-at}. The sync worker skips a finished kind (no provider call,
+-- no scan of the account's mail) and re-checks it a day later. See
+-- email/backfill_state.rs.
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS backfill_done JSONB NOT NULL DEFAULT '{}';
 
 CREATE TABLE IF NOT EXISTS shared_inbox_members (
     account_id INTEGER NOT NULL REFERENCES email_accounts(id) ON DELETE CASCADE,

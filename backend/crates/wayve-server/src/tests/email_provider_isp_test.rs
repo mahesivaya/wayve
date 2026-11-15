@@ -116,8 +116,8 @@ mod tests {
                 _access_token: &str,
                 _before_timestamp: i64,
                 _limit: usize,
-            ) -> Result<()> {
-                Ok(())
+            ) -> Result<usize> {
+                Ok(0)
             }
         }
 

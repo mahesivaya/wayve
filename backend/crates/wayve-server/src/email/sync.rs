@@ -194,30 +194,40 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
         return;
     }
 
-    if let Err(err) = backfill_older(pool, account.id, &account.provider, &token.access_token).await
+    // History backfills. Each one marks itself finished once the provider has
+    // nothing older (or nothing is left to fill in), and a finished one is
+    // skipped for a day: no scan of the account's mail, no provider request.
+    use crate::email::backfill_state as state;
+    let done = state::finished(pool, account.id).await;
+
+    if !done.contains(state::OLDER)
+        && let Err(err) =
+            backfill_older(pool, account.id, &account.provider, &token.access_token).await
     {
         warn!(target: "worker", account_id = account.id, error = ?err, "backfill batch failed");
     }
 
     // Thread a batch of mail that predates conversation threading.
-    if let Err(err) = crate::email::threading::backfill_batch(
-        pool,
-        account.id,
-        &account.provider,
-        &token.access_token,
-    )
-    .await
+    if !done.contains(state::THREADING)
+        && let Err(err) = crate::email::threading::backfill_batch(
+            pool,
+            account.id,
+            &account.provider,
+            &token.access_token,
+        )
+        .await
     {
         warn!(target: "worker", account_id = account.id, error = ?err, "threading backfill failed");
     }
     // Fill in the Cc of a batch of mail synced before Cc was stored (Reply all).
-    if let Err(err) = crate::email::cc_backfill::backfill_batch(
-        pool,
-        account.id,
-        &account.provider,
-        &token.access_token,
-    )
-    .await
+    if !done.contains(state::CC)
+        && let Err(err) = crate::email::cc_backfill::backfill_batch(
+            pool,
+            account.id,
+            &account.provider,
+            &token.access_token,
+        )
+        .await
     {
         warn!(target: "worker", account_id = account.id, error = ?err, "cc backfill failed");
     }
@@ -234,6 +244,9 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
         "CATEGORY_UPDATES",
         "CATEGORY_FORUMS",
     ] {
+        if done.contains(&state::label(label)) {
+            continue;
+        }
         if let Err(err) = backfill_label_older(pool, account.id, &token.access_token, label).await {
             warn!(target: "worker", account_id = account.id, label, error = ?err, "label backfill failed");
         }
@@ -245,14 +258,15 @@ pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::Ema
     // ingested, and `fetch_headers_only` tags only the pull-request ones, which
     // is what the Reviews folder selects on. Narrowing the search here would
     // drop issues and security alerts from the inbox entirely.
-    if let Err(err) = backfill_query_older(
-        pool,
-        account.id,
-        &token.access_token,
-        "from:github.com",
-        "%github.com%",
-    )
-    .await
+    if !done.contains(&state::query("from:github.com"))
+        && let Err(err) = backfill_query_older(
+            pool,
+            account.id,
+            &token.access_token,
+            "from:github.com",
+            "%github.com%",
+        )
+        .await
     {
         warn!(target: "worker", account_id = account.id, error = ?err, "github backfill failed");
     }
@@ -459,12 +473,13 @@ async fn backfill_older(
             .await?
             .flatten();
 
+    // No local mail yet: the forward sync seeds it, so check again next tick.
     let Some(oldest_naive) = oldest else {
         return Ok(());
     };
 
     let before_timestamp = oldest_naive.and_utc().timestamp();
-    provider
+    let listed = provider
         .sync_before(
             pool,
             account_id,
@@ -472,7 +487,18 @@ async fn backfill_older(
             before_timestamp,
             BACKFILL_BATCH,
         )
-        .await
+        .await?;
+    // The provider listed nothing older: history is exhausted (IMAP has no
+    // history walk, so it reports 0 and is finished from the start).
+    if listed == 0 {
+        crate::email::backfill_state::mark_finished(
+            pool,
+            account_id,
+            crate::email::backfill_state::OLDER,
+        )
+        .await;
+    }
+    Ok(())
 }
 
 pub async fn fetch_ids(token: &str, last_sync: Option<i64>) -> Result<Vec<String>> {
@@ -522,22 +548,17 @@ pub async fn fetch_ids(token: &str, last_sync: Option<i64>) -> Result<Vec<String
     Ok(ids)
 }
 
-pub async fn fetch_recent_ids(token: &str, max_results: usize) -> Result<Vec<String>> {
-    let url = format!(
-        "{}/gmail/v1/users/me/messages?maxResults={}",
-        crate::external::gmail_api_base(),
-        max_results
-    );
-
-    let res: Value = HTTP_CLIENT
-        .get(&url)
-        .bearer_auth(token)
-        .send()
-        .await?
-        .json()
-        .await?;
-
-    let ids = res["messages"]
+/// The ids in a Gmail `messages.list` reply. A non-success reply (expired
+/// access, rate limit, outage) is an error, never an empty page: the backfills
+/// read an empty page as "no older mail left" and stop for a day.
+async fn listed_message_ids(resp: reqwest::Response) -> Result<Vec<String>> {
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        anyhow::bail!("gmail messages.list returned {status}: {}", body.trim());
+    }
+    let res: Value = resp.json().await?;
+    Ok(res["messages"]
         .as_array()
         .map(|messages| {
             messages
@@ -545,9 +566,18 @@ pub async fn fetch_recent_ids(token: &str, max_results: usize) -> Result<Vec<Str
                 .filter_map(|m| m["id"].as_str().map(str::to_string))
                 .collect()
         })
-        .unwrap_or_default();
+        .unwrap_or_default())
+}
 
-    Ok(ids)
+pub async fn fetch_recent_ids(token: &str, max_results: usize) -> Result<Vec<String>> {
+    let url = format!(
+        "{}/gmail/v1/users/me/messages?maxResults={}",
+        crate::external::gmail_api_base(),
+        max_results
+    );
+
+    let resp = HTTP_CLIENT.get(&url).bearer_auth(token).send().await?;
+    listed_message_ids(resp).await
 }
 
 /// Most-recent message ids carrying a given label. `includeSpamTrash=true` is
@@ -566,25 +596,8 @@ pub async fn fetch_recent_ids_with_label(
         label
     );
 
-    let res: Value = HTTP_CLIENT
-        .get(&url)
-        .bearer_auth(token)
-        .send()
-        .await?
-        .json()
-        .await?;
-
-    let ids = res["messages"]
-        .as_array()
-        .map(|messages| {
-            messages
-                .iter()
-                .filter_map(|m| m["id"].as_str().map(str::to_string))
-                .collect()
-        })
-        .unwrap_or_default();
-
-    Ok(ids)
+    let resp = HTTP_CLIENT.get(&url).bearer_auth(token).send().await?;
+    listed_message_ids(resp).await
 }
 
 pub async fn fetch_ids_before(
@@ -601,25 +614,8 @@ pub async fn fetch_ids_before(
         before_timestamp
     );
 
-    let res: Value = HTTP_CLIENT
-        .get(&url)
-        .bearer_auth(token)
-        .send()
-        .await?
-        .json()
-        .await?;
-
-    let ids = res["messages"]
-        .as_array()
-        .map(|messages| {
-            messages
-                .iter()
-                .filter_map(|m| m["id"].as_str().map(str::to_string))
-                .collect()
-        })
-        .unwrap_or_default();
-
-    Ok(ids)
+    let resp = HTTP_CLIENT.get(&url).bearer_auth(token).send().await?;
+    listed_message_ids(resp).await
 }
 
 /// `messages.list` filtered by label and a `before:` timestamp. Needed for the
@@ -639,25 +635,8 @@ pub async fn fetch_label_ids_before(
         before_timestamp
     );
 
-    let res: Value = HTTP_CLIENT
-        .get(&url)
-        .bearer_auth(token)
-        .send()
-        .await?
-        .json()
-        .await?;
-
-    let ids = res["messages"]
-        .as_array()
-        .map(|messages| {
-            messages
-                .iter()
-                .filter_map(|m| m["id"].as_str().map(str::to_string))
-                .collect()
-        })
-        .unwrap_or_default();
-
-    Ok(ids)
+    let resp = HTTP_CLIENT.get(&url).bearer_auth(token).send().await?;
+    listed_message_ids(resp).await
 }
 
 /// Backfills one BACKFILL_BATCH window older than the oldest local message
@@ -669,8 +648,10 @@ async fn backfill_label_older(
     token: &str,
     label: &str,
 ) -> Result<()> {
+    use crate::email::backfill_state as state;
+    // `labels @> ARRAY[..]` (not `= ANY(labels)`) so idx_emails_labels applies.
     let oldest: Option<NaiveDateTime> = sqlx::query_scalar(
-        "SELECT MIN(created_at) FROM emails WHERE account_id = $1 AND $2 = ANY(labels)",
+        "SELECT MIN(created_at) FROM emails WHERE account_id = $1 AND labels @> ARRAY[$2::text]",
     )
     .bind(account_id)
     .bind(label)
@@ -678,6 +659,9 @@ async fn backfill_label_older(
     .await?
     .flatten();
 
+    // No local mail carries the label yet, so the walk has no starting point.
+    // Not finished: the forward sync seeds one, and the walk starts on the next
+    // tick (this lookup is a GIN probe that matches nothing, so it is cheap).
     let Some(oldest_naive) = oldest else {
         return Ok(());
     };
@@ -685,6 +669,7 @@ async fn backfill_label_older(
     let before_timestamp = oldest_naive.and_utc().timestamp();
     let ids = fetch_label_ids_before(token, label, before_timestamp, BACKFILL_BATCH).await?;
     if ids.is_empty() {
+        state::mark_finished(pool, account_id, &state::label(label)).await;
         return Ok(());
     }
     debug!(
@@ -729,7 +714,7 @@ pub async fn fetch_query_ids(
         crate::external::gmail_api_base()
     );
 
-    let res: Value = HTTP_CLIENT
+    let resp = HTTP_CLIENT
         .get(&url)
         .bearer_auth(token)
         .query(&[
@@ -738,21 +723,8 @@ pub async fn fetch_query_ids(
             ("includeSpamTrash", "true".to_string()),
         ])
         .send()
-        .await?
-        .json()
         .await?;
-
-    let ids = res["messages"]
-        .as_array()
-        .map(|messages| {
-            messages
-                .iter()
-                .filter_map(|m| m["id"].as_str().map(str::to_string))
-                .collect()
-        })
-        .unwrap_or_default();
-
-    Ok(ids)
+    listed_message_ids(resp).await
 }
 
 /// Backfills one BACKFILL_BATCH window of mail matching a Gmail search.
@@ -784,6 +756,8 @@ async fn backfill_query_older(
     let before_timestamp = oldest.map(|dt| dt.and_utc().timestamp());
     let ids = fetch_query_ids(token, query, before_timestamp, BACKFILL_BATCH).await?;
     if ids.is_empty() {
+        let state = crate::email::backfill_state::query(query);
+        crate::email::backfill_state::mark_finished(pool, account_id, &state).await;
         return Ok(());
     }
     debug!(
@@ -1110,16 +1084,18 @@ pub async fn sync_account_before(
     token: &str,
     before_timestamp: i64,
     max_results: usize,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<usize> {
     let ids = fetch_ids_before(token, before_timestamp, max_results).await?;
+    let listed = ids.len();
     debug!(
         target: "worker",
         account_id,
-        count = ids.len(),
+        count = listed,
         before_timestamp,
         "fetched older gmail ids"
     );
-    sync_ids(pool, account_id, token, ids).await
+    sync_ids(pool, account_id, token, ids).await?;
+    Ok(listed)
 }
 
 /// `sync_account_before` for the inbox only: scrolling the Inbox wants older
@@ -1256,15 +1232,33 @@ where
         .collect();
     let returned = upsert_batch(pool, account_id, &insert_batch).await?;
 
-    // Place each new email in its conversation. A re-synced email already has
-    // one (threading is what wrote its meta row); one whose threading failed has
-    // no meta row and is picked up by `threading::backfill_batch` instead, so
-    // re-running ~4 statements per changed-but-old row every tick buys nothing.
-    for r in returned.iter().filter(|r| r.is_new) {
+    // Place each new email in its conversation. A re-synced email normally has
+    // one already, and re-running ~4 statements per changed-but-old row every
+    // tick buys nothing; but one left without (its threading failed, or the
+    // worker stopped between the upsert and here) is threaded now, while its
+    // headers are in hand. One indexed lookup finds those.
+    let resynced: Vec<i32> = returned
+        .iter()
+        .filter(|r| !r.is_new)
+        .map(|r| r.id)
+        .collect();
+    let unthreaded_resynced: Vec<i32> = if resynced.is_empty() {
+        Vec::new()
+    } else {
+        sqlx::query_scalar("SELECT id FROM emails WHERE id = ANY($1) AND thread_id IS NULL")
+            .bind(&resynced)
+            .fetch_all(pool)
+            .await?
+    };
+    let mut unthreaded = false;
+    for r in returned
+        .iter()
+        .filter(|r| r.is_new || unthreaded_resynced.contains(&r.id))
+    {
         if let Some((_, sender, receiver, subject, created_at, _, _, threading, _)) =
             batch.iter().find(|h| h.0 == r.gmail_id)
         {
-            crate::email::threading::assign_best_effort(
+            unthreaded |= !crate::email::threading::assign_best_effort(
                 pool,
                 account_id,
                 crate::email::threading::ThreadInput {
@@ -1278,6 +1272,9 @@ where
             )
             .await;
         }
+    }
+    if unthreaded {
+        crate::email::threading::retry_unthreaded(pool, account_id).await;
     }
 
     // Events and audit rows are for new mail only; a steady-state re-sync of

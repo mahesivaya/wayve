@@ -48,6 +48,11 @@ pub async fn backfill_batch(
     .bind(BATCH)
     .fetch_all(pool)
     .await?;
+    if pending.is_empty() {
+        use crate::email::backfill_state as state;
+        state::mark_finished(pool, account_id, state::CC).await;
+        return Ok(0);
+    }
 
     // After the first refusal (rate limit, expired access) no new request is
     // started; answers already on their way are still stored, and whatever is
