@@ -1,4 +1,62 @@
 /* Settings → Shortcuts: one card per area, each a list of action + keys. */
+
+/* Desktop app / Web browser toggle above the cards. */
+.shortcuts-views {
+  display: inline-flex;
+  /* Centred under the page title, like the cards' headings. */
+  align-self: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-chrome-surface);
+}
+.shortcuts-view {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.shortcuts-view:hover {
+  color: var(--color-text-primary);
+}
+.shortcuts-view.active {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  box-shadow: 0 1px 2px rgb(0, 0, 0, 0.12);
+}
+.shortcuts-view:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.shortcuts-intro {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+
+/* Marks a shortcut that only works in the desktop app. */
+.shortcuts-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+.shortcuts-intro .shortcuts-badge {
+  margin-left: 0;
+}
 .shortcuts-hint {
   margin: -12px 0 12px;
   font-size: 13px;
@@ -27,6 +85,9 @@
 
 .shortcuts-row dt {
   min-width: 0;
+  /* The settings cards centre their text; a row's action (and the note under
+     it) reads as a list, so it stays left-aligned. */
+  text-align: left;
   font-size: 14px;
   color: var(--color-text-primary);
 }
