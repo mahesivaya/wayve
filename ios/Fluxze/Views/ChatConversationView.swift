@@ -44,7 +44,7 @@ struct ChatConversationView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) { composer }
-        .navigationTitle(conversation.title)
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .task { await store.open(conversation) }
         .onDisappear { if store.current == conversation { store.close() } }
@@ -57,6 +57,12 @@ struct ChatConversationView: View {
         } message: {
             Text(sendError ?? "")
         }
+    }
+
+    /// A DM's name as now known (it may have been looked up since it opened).
+    private var title: String {
+        if case .dm(let user) = conversation { return store.user(user.id).email }
+        return conversation.title
     }
 
     private var isChannel: Bool {
@@ -117,14 +123,19 @@ struct ChatConversationView: View {
     }
 
     private func send() {
-        guard !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        do {
-            try store.send(draft)
-            draft = ""
-            // Keep the keyboard up for the next message.
-            composing = true
-        } catch {
-            sendError = error.localizedDescription
+        let text = draft
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        // Cleared at once so Return can't send it twice while a key is looked up.
+        draft = ""
+        // Keep the keyboard up for the next message.
+        composing = true
+        Task {
+            do {
+                try await store.send(text)
+            } catch {
+                draft = text
+                sendError = error.localizedDescription
+            }
         }
     }
 }
