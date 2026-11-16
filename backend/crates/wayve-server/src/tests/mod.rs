@@ -20,6 +20,7 @@ mod dm_scope_rules_test;
 mod documents_rbac_test;
 mod email_account_tokens_test;
 mod email_body_seal_test;
+mod email_body_threads_test;
 mod email_bulk_trash_test;
 mod email_cc_test;
 mod email_conversation_list_test;
