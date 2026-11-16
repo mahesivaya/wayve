@@ -27,6 +27,21 @@ const POLL_INTERVAL: Duration = Duration::from_secs(5);
 /// Per-delivery HTTP request timeout.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// Most deliveries claimed per tick. They are sent one after another.
+const CLAIM_BATCH: i64 = 25;
+
+/// How far the claim pushes `next_attempt_at` forward. The row lock from
+/// `FOR UPDATE SKIP LOCKED` ends with the claim statement, so this lease is what
+/// keeps another dispatcher (one per API instance) from sending the same row
+/// while this one works through its batch. Every outcome then either changes
+/// `status` or sets `next_attempt_at` itself, so the lease only decides when a
+/// row is retried after a dispatcher died mid-batch.
+const CLAIM_LEASE: Duration = Duration::from_secs(10 * 60);
+
+// The lease must outlast the slowest possible batch, or a second dispatcher
+// could reclaim a row that is still being sent.
+const _: () = assert!(CLAIM_LEASE.as_secs() > CLAIM_BATCH as u64 * REQUEST_TIMEOUT.as_secs() * 2);
+
 /// Spawn the delivery worker. Returns immediately; the loop runs forever in a
 /// tokio task.
 pub async fn spawn_dispatcher(pool: PgPool) {
@@ -54,29 +69,7 @@ pub async fn spawn_dispatcher(pool: PgPool) {
 
 #[instrument(target = "webhook", skip(pool, client))]
 async fn run_iteration(pool: &PgPool, client: &reqwest::Client) -> Result<()> {
-    // `FOR UPDATE SKIP LOCKED` lets several dispatchers run concurrently without
-    // double-sending, though only one runs today.
-    let rows = sqlx::query(
-        r#"
-        WITH claimed AS (
-            SELECT id FROM webhook_deliveries
-             WHERE status = 'pending'
-               AND next_attempt_at <= NOW()
-             ORDER BY next_attempt_at
-             FOR UPDATE SKIP LOCKED
-             LIMIT 25
-        )
-        UPDATE webhook_deliveries d
-           SET attempt_count = d.attempt_count + 1,
-               updated_at = NOW()
-          FROM claimed
-         WHERE d.id = claimed.id
-        RETURNING d.id, d.endpoint_id, d.event_id, d.event_type,
-                  d.payload, d.attempt_count
-        "#,
-    )
-    .fetch_all(pool)
-    .await?;
+    let rows = claim_due(pool).await?;
 
     if rows.is_empty() {
         return Ok(());
@@ -137,6 +130,40 @@ async fn run_iteration(pool: &PgPool, client: &reqwest::Client) -> Result<()> {
         .await;
     }
     Ok(())
+}
+
+/// Claim up to `CLAIM_BATCH` due deliveries for this dispatcher.
+///
+/// `FOR UPDATE SKIP LOCKED` keeps two concurrent claims from picking the same
+/// row, but the lock ends with this statement. Moving `next_attempt_at` forward
+/// by `CLAIM_LEASE` takes the row out of the due set, so another dispatcher's
+/// later claim skips it while this one is still sending.
+pub(crate) async fn claim_due(pool: &PgPool) -> Result<Vec<sqlx::postgres::PgRow>> {
+    let rows = sqlx::query(
+        r#"
+        WITH claimed AS (
+            SELECT id FROM webhook_deliveries
+             WHERE status = 'pending'
+               AND next_attempt_at <= NOW()
+             ORDER BY next_attempt_at
+             FOR UPDATE SKIP LOCKED
+             LIMIT $1
+        )
+        UPDATE webhook_deliveries d
+           SET attempt_count = d.attempt_count + 1,
+               next_attempt_at = NOW() + make_interval(secs => $2),
+               updated_at = NOW()
+          FROM claimed
+         WHERE d.id = claimed.id
+        RETURNING d.id, d.endpoint_id, d.event_id, d.event_type,
+                  d.payload, d.attempt_count
+        "#,
+    )
+    .bind(CLAIM_BATCH)
+    .bind(CLAIM_LEASE.as_secs_f64())
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
 }
 
 struct DeliveryJob<'a> {
