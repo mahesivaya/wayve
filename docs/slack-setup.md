@@ -122,7 +122,7 @@ docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.production
 1. Slack app → **Event Subscriptions** → toggle **Enable Events** to **On**.
 2. **Request URL:**
    ```
-   https://fluxze.com/webhooks/slack_events
+   https://hadalspace.com/webhooks/slack_events
    ```
    Slack sends a signed challenge → Fluxze echoes it → field flips to **Verified ✓**.
    *(No `?token=` — auth is the signature.)*
@@ -143,7 +143,7 @@ the Fluxze bot itself posts (your outbound) are ignored, so there's **no echo lo
 |---|---|---|---|
 | **Bot token** | Connect / import / outbound | OAuth & Permissions | `xoxb-…` |
 | **Signing secret** | Events webhook | Basic Information → App Credentials | ~32-char hex |
-| **Request URL** | Events webhook | fixed | `https://fluxze.com/webhooks/slack_events` |
+| **Request URL** | Events webhook | fixed | `https://hadalspace.com/webhooks/slack_events` |
 | **`message.channels`** | Events webhook | Event Subscriptions → bot events | — |
 
 ---

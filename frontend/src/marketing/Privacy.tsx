@@ -10,7 +10,7 @@ import "./privacy.css";
 // scopes requested in backend/crates/wayve-server/src/email/oauth_flow.rs.
 
 const EFFECTIVE_DATE = "October 25, 2026";
-const CONTACT_EMAIL = "mahesh@fluxze.com";
+const CONTACT_EMAIL = "mahesh@hadalspace.com";
 const USER_DATA_POLICY_URL =
   "https://developers.google.com/terms/api-services-user-data-policy";
 
@@ -78,7 +78,7 @@ export default function Privacy() {
         <p>
           This policy explains how {BRAND_NAME} (&ldquo;we&rdquo;,
           &ldquo;us&rdquo;) collects, uses, stores and shares information when
-          you use the email, calendar, chat and workspace app at fluxze.com,
+          you use the email, calendar, chat and workspace app at hadalspace.com,
           shown in the app as {HEADER_NAME} (the &ldquo;Service&rdquo;). It
           includes how we handle information we receive from Google APIs when
           you connect a Google account.

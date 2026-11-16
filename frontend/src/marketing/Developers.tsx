@@ -34,14 +34,14 @@ const TUTORIALS: Tutorial[] = [
       {
         caption:
           "List connected mailboxes → grab the account_id you want to send from.",
-        code: `curl https://fluxze.com/api/accounts \\
+        code: `curl https://hadalspace.com/api/accounts \\
   -H "X-API-KEY: $WAYVE_KEY"
 
 # [ { "id": 42, "email": "you@gmail.com", "unread_count": 7, ... } ]`,
       },
       {
         caption: "POST to /api/emails with that account_id + recipient + body.",
-        code: `curl https://fluxze.com/api/emails \\
+        code: `curl https://hadalspace.com/api/emails \\
   -H "X-API-KEY: $WAYVE_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -62,7 +62,7 @@ const TUTORIALS: Tutorial[] = [
       {
         caption:
           "Priority is 1 (lowest) to 5 (highest); status defaults to 'in_progress'.",
-        code: `curl https://fluxze.com/api/tasks \\
+        code: `curl https://hadalspace.com/api/tasks \\
   -H "X-API-KEY: $WAYVE_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -83,7 +83,7 @@ const TUTORIALS: Tutorial[] = [
     steps: [
       {
         caption: "Times are ISO 8601 UTC. Participants get an invite email.",
-        code: `curl https://fluxze.com/api/scheduler/meetings \\
+        code: `curl https://hadalspace.com/api/scheduler/meetings \\
   -H "X-API-KEY: $WAYVE_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -105,7 +105,7 @@ const TUTORIALS: Tutorial[] = [
       {
         caption:
           "POST /api/webhooks with your endpoint and the events you care about. The response carries the signing secret exactly once.",
-        code: `curl https://fluxze.com/api/webhooks \\
+        code: `curl https://hadalspace.com/api/webhooks \\
   -H "Authorization: Bearer $WAYVE_JWT" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -151,14 +151,14 @@ app.post("/wayve/webhook", express.raw({ type: "*/*" }), (req, res) => {
       {
         caption:
           "First call returns a conversation_id you can pass back to keep context.",
-        code: `curl https://fluxze.com/api/aichat \\
+        code: `curl https://hadalspace.com/api/aichat \\
   -H "X-API-KEY: $WAYVE_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{ "prompt": "Summarise yesterday'\\''s unread emails." }'
 
 # { "reply": "...", "conversation_id": "8f3c..." }
 
-curl https://fluxze.com/api/aichat \\
+curl https://hadalspace.com/api/aichat \\
   -H "X-API-KEY: $WAYVE_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{ "prompt": "Now draft replies for the top three.",
@@ -293,7 +293,7 @@ export default function Developers() {
             </li>
           </ol>
           <pre className="dev-code">
-            {`curl https://fluxze.com/api/me -H "X-API-KEY: wv_sk_..."
+            {`curl https://hadalspace.com/api/me -H "X-API-KEY: wv_sk_..."
 # 200 → identity        401 → bad key
 # 403 → wrong scope     429 → rate-limited (retry with backoff)`}
           </pre>

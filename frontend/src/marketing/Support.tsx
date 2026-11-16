@@ -19,7 +19,7 @@ export default function Support() {
           <div className="marketing-hero-actions">
             <button
               onClick={() =>
-                (window.location.href = "mailto:mahesh@fluxze.com")
+                (window.location.href = "mailto:mahesh@hadalspace.com")
               }
             >
               Email support

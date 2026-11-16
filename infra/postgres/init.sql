@@ -914,7 +914,7 @@ ALTER TABLE meeting_participants ADD COLUMN IF NOT EXISTS email_encrypted TEXT;
 ALTER TABLE meeting_participants ADD COLUMN IF NOT EXISTS email_iv TEXT;
 
 
--- Public "Book a demo" lead form (fluxze.com home → /book-demo). No auth: any
+-- Public "Book a demo" lead form (hadalspace.com home → /book-demo). No auth: any
 -- visitor may submit. Each row is emailed to sales and turned into an .ics
 -- calendar invite. `scheduled_at` is the visitor's chosen slot, stored in UTC.
 CREATE TABLE IF NOT EXISTS demo_requests (

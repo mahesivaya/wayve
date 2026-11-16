@@ -1,7 +1,7 @@
 import Foundation
 
 enum Config {
-    static let productionURL = URL(string: "https://fluxze.com")!
+    static let productionURL = URL(string: "https://hadalspace.com")!
 
     /// The server the app talks to. Always production in a Release build. A
     /// Debug build can be pointed at the local dev stack with the launch

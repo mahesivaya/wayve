@@ -183,7 +183,7 @@ export default function SlackPanel() {
           <li>
             For real-time Slack → Wayve: turn on{" "}
             <strong>Event Subscriptions</strong> with URL{" "}
-            <code>https://fluxze.com/webhooks/slack_events</code> and subscribe
+            <code>https://hadalspace.com/webhooks/slack_events</code> and subscribe
             to <code>message.channels</code> (your admin sets the signing
             secret).
           </li>

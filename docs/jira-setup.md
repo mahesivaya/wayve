@@ -117,7 +117,7 @@ docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.production
    |---|---|
    | **Name** | anything, e.g. `fluxze_jira_sync` |
    | **Status** | **Enabled** |
-   | **URL** | `https://fluxze.com/webhooks/fluxze_webhook?token=<YOUR_WEBHOOK_SECRET>` |
+   | **URL** | `https://hadalspace.com/webhooks/fluxze_webhook?token=<YOUR_WEBHOOK_SECRET>` |
    | **Secret** | **Leave blank** (see note below) |
    | **Events** | Under **Issue**, tick **created**, **updated**, **deleted** |
 
@@ -129,7 +129,7 @@ docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.production
 > the **URL**; the Secret field is ignored. Putting the secret *only* in the
 > Secret field (and not the URL) would fail with `401`.
 >
-> The URL host must be **`fluxze.com`** (the Fluxze server), **not** your
+> The URL host must be **`hadalspace.com`** (the Fluxze server), **not** your
 > `*.atlassian.net` address.
 
 ### 4. Verify it works
@@ -138,7 +138,7 @@ Quick connectivity check (replace the secret):
 
 ```bash
 curl -i -X POST \
-  "https://fluxze.com/webhooks/fluxze_webhook?token=<YOUR_WEBHOOK_SECRET>" \
+  "https://hadalspace.com/webhooks/fluxze_webhook?token=<YOUR_WEBHOOK_SECRET>" \
   -H 'Content-Type: application/json' \
   -d '{"webhookEvent":"jira:issue_updated"}'
 # Expect: HTTP 200  {"ok":true,"ignored":true}
@@ -162,7 +162,7 @@ delivery status, and Fluxze responds `200` with `{"ok":true,"updated":1}`.
 | **Email** | Connect | Your Atlassian account email | `you@example.com` |
 | **API token** | Connect | id.atlassian.com → Security → API tokens | `ATATT3x…` (~190 chars) |
 | **Webhook secret** | Webhook | You generate it (`openssl rand -hex 24`) | any strong random string |
-| **Webhook URL** | Webhook | Fixed Fluxze endpoint + your secret | `https://fluxze.com/webhooks/fluxze_webhook?token=<secret>` |
+| **Webhook URL** | Webhook | Fixed Fluxze endpoint + your secret | `https://hadalspace.com/webhooks/fluxze_webhook?token=<secret>` |
 
 The **webhook secret** lives in exactly two places and they must match:
 `JIRA_WEBHOOK_SECRET` on the server **=** the `?token=` in the Jira webhook URL.

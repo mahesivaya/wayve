@@ -21,7 +21,7 @@ Apple developer account and the AWS account.
 
 ## 1. Two kinds of change
 
-The desktop app is a thin Electron window that loads https://fluxze.com. What
+The desktop app is a thin Electron window that loads https://hadalspace.com. What
 people see in it comes from two places, which ship differently.
 
 | You changed | Lives in | Ships by | People get it |
@@ -77,7 +77,7 @@ Things worth knowing:
   `desktop/package.json` of the running app with `latest-mac.yml`.
 - **Only the app's own pages can install.** Google's sign-in pages load in the
   same window with the same bridge, so `main.cjs` refuses an install request
-  from any page that isn't fluxze.com (or localhost in development).
+  from any page that isn't hadalspace.com (or localhost in development).
 - **The update must be signed by the same Developer ID.** Squirrel.Mac rejects an
   update whose signature doesn't match the running app.
 - **Downloads can be partial.** If the previous version's `.blockmap` is still on
@@ -139,7 +139,7 @@ example to switch on the older-install prompt in section 7).
    It aborts if the images for the commit aren't in ECR yet; wait for CI and run
    it again. `BUILD_ON_HOST=1 ./scripts/deploy.sh` builds on the server instead,
    if CI is unavailable.
-3. Check it: `curl https://fluxze.com/api/health` should return
+3. Check it: `curl https://hadalspace.com/api/health` should return
    `{"status":"ok"}`.
 
 The banner change needs no database migration. If a deploy does, back up and
@@ -364,7 +364,7 @@ Electron 42 and the notification prompt, so nobody ever has 0.2.0.
 | Another, newer version arrives after **Later** | The card comes back |
 | They're on a version from before 0.3.0, and the prompt is on | **Update available** card with download buttons, until they install 0.3.0 |
 | First launch of 0.3.0 or later | macOS asks once: **"Fluxze" Notifications — Allow / Don't Allow** |
-| fluxze.com in a normal browser | Nothing, ever |
+| hadalspace.com in a normal browser | Nothing, ever |
 
 The card is inside the app window, not a macOS notification, so it shows only
 while the app is open. The app checks on launch, every 4 hours, and on
@@ -398,10 +398,10 @@ to update**; it reopens as 9.0.1. Afterwards stop the server and delete
 - The builds are signed but not notarized, which is fine on the Mac that built
   them.
 - `FLUXZE_URL=http://localhost` loads your local stack, so the banner code must
-  be in it. Without `FLUXZE_URL` it loads fluxze.com, which only has the banner
+  be in it. Without `FLUXZE_URL` it loads hadalspace.com, which only has the banner
   once deployed.
 - When it reopens after updating, ShipIt starts it without `FLUXZE_URL`, so it
-  loads fluxze.com.
+  loads hadalspace.com.
 - Don't click in the test window while a script drives it: a click on **Restart
   to update** makes a test look like the app quit by itself.
 

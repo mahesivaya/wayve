@@ -9,7 +9,7 @@ name: AI Fix Ticket
 #
 # Setup (one-time), as repository secrets:
 #   - ANTHROPIC_API_KEY — for the agent.
-#   - WAYVE_BASE_URL    — e.g. https://fluxze.com (to POST the diff back).
+#   - WAYVE_BASE_URL    — e.g. https://hadalspace.com (to POST the diff back).
 #   - WAYVE_API_KEY     — an internal API key mapped to a tickets:manage user.
 #   - This file must live on the default branch for workflow_dispatch to work.
 # The agent self-verifies (fmt/clippy/build/tsc/vitest via the fix-ticket skill);

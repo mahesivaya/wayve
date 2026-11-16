@@ -11,12 +11,29 @@ http {
     # The upload handler buffers the whole file in memory, so keep this bounded.
     client_max_body_size 50m;
 
+    # ---- Two apex hosts, one app ----
+    # hadalspace.com and fluxze.com are both served by the HTTPS server below:
+    # ${NGINX_HOST} is the canonical one, NGINX_HOST_ALIAS the other. API,
+    # WebSocket, OAuth and webhook paths always work on the alias, because
+    # released iOS/desktop builds and customers' webhook settings have the old
+    # host compiled or typed in.
+    #
+    # NGINX_HOST_ALIAS_REDIRECT decides what page loads on the alias do:
+    #   off (default) — the alias serves the app too. Required while desktop
+    #                   builds older than the hadalspace.com allowlist are in
+    #                   use: they open any other host in the system browser.
+    #   on            — page loads 301 to the canonical host.
+    map $host $alias_page_redirect {
+        default        "${NGINX_HOST_ALIAS_REDIRECT}";
+        ${NGINX_HOST}  "off";
+    }
+
     # ---- HTTP (port 80) ----
     # Serves the ACME HTTP-01 challenge for Let's Encrypt and redirects every
     # other request to HTTPS.
     server {
         listen 80;
-        server_name ${NGINX_HOST};
+        server_name ${NGINX_HOST} ${NGINX_HOST_ALIAS};
 
         location /.well-known/acme-challenge/ {
             root /var/www/certbot;
@@ -32,10 +49,14 @@ http {
     server {
         listen 443 ssl;
         http2 on;
-        server_name ${NGINX_HOST};
+        server_name ${NGINX_HOST} ${NGINX_HOST_ALIAS};
 
-        ssl_certificate     /etc/letsencrypt/live/${NGINX_HOST}/fullchain.pem;
-        ssl_certificate_key /etc/letsencrypt/live/${NGINX_HOST}/privkey.pem;
+        # One certificate covers every name served here (both apexes and both
+        # www hosts). NGINX_HOST_CERT_NAME is its certbot --cert-name; it
+        # defaults to ${NGINX_HOST} in compose, and stays pinned to the
+        # original name when the canonical host changes.
+        ssl_certificate     /etc/letsencrypt/live/${NGINX_HOST_CERT_NAME}/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/${NGINX_HOST_CERT_NAME}/privkey.pem;
         ssl_protocols TLSv1.2 TLSv1.3;
         ssl_prefer_server_ciphers on;
         ssl_session_cache shared:SSL:10m;
@@ -217,6 +238,10 @@ http {
         }
 
         location / {
+            if ($alias_page_redirect = "on") {
+                return 301 https://${NGINX_HOST}$request_uri;
+            }
+
             proxy_pass http://frontend:8080/;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -243,18 +268,16 @@ http {
         }
     }
 
-    # ---- www.fluxze.com, hadalspace.com -> canonical ${NGINX_HOST} ----
-    # These hosts serve no app of their own; 301 everything to the
-    # canonical apex host. hadalspace.com (and its www) is a forwarding
-    # alias only — the app, API and OAuth callbacks all stay on
-    # ${NGINX_HOST}. Port 80 also serves the ACME challenge so each name
-    # can be added to the Let's Encrypt cert via `certbot --expand`. The
-    # 443 block reuses the ${NGINX_HOST} cert — valid for a name once that
-    # cert includes it as a SAN (expand step); until then that name presents
-    # a name-mismatch but nginx still starts fine.
+    # ---- www hosts -> canonical ${NGINX_HOST} ----
+    # The www hosts serve no app of their own; 301 everything to the
+    # canonical apex host. Port 80 also serves the ACME challenge so each
+    # name can be added to the Let's Encrypt cert via `certbot --expand`.
+    # The 443 block reuses the shared cert — valid for a name once the cert
+    # includes it as a SAN; until then that name presents a name-mismatch
+    # but nginx still starts fine.
     server {
         listen 80;
-        server_name www.fluxze.com hadalspace.com www.hadalspace.com;
+        server_name www.hadalspace.com www.fluxze.com;
 
         location /.well-known/acme-challenge/ {
             root /var/www/certbot;
@@ -269,10 +292,10 @@ http {
     server {
         listen 443 ssl;
         http2 on;
-        server_name www.fluxze.com hadalspace.com www.hadalspace.com;
+        server_name www.hadalspace.com www.fluxze.com;
 
-        ssl_certificate     /etc/letsencrypt/live/${NGINX_HOST}/fullchain.pem;
-        ssl_certificate_key /etc/letsencrypt/live/${NGINX_HOST}/privkey.pem;
+        ssl_certificate     /etc/letsencrypt/live/${NGINX_HOST_CERT_NAME}/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/${NGINX_HOST_CERT_NAME}/privkey.pem;
         ssl_protocols TLSv1.2 TLSv1.3;
 
         return 301 https://${NGINX_HOST}$request_uri;

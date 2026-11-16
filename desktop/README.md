@@ -1,7 +1,7 @@
 # Fluxze Desktop
 
 A native macOS desktop app for Fluxze. It's a thin [Electron](https://www.electronjs.org/)
-shell that loads **https://fluxze.com** directly — so login, Gmail OAuth,
+shell that loads **https://hadalspace.com** directly — so login, Gmail OAuth,
 cookies, chat E2E, WebSocket calls, and CORS all work exactly as they do in the
 browser. No backend or `frontend/` changes are involved.
 
@@ -10,7 +10,7 @@ browser. No backend or `frontend/` changes are involved.
 ```bash
 cd desktop
 npm install
-npm start          # opens a window on https://fluxze.com
+npm start          # opens a window on https://hadalspace.com
 ```
 
 Point the shell at a local web/dev server instead of production:

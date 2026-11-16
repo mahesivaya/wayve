@@ -5,7 +5,7 @@ name: AI Fix Capture
 # backend POST /api/workspace-tickets/<N>/resolution.
 #
 # Setup (one-time), as repository secrets:
-#   - WAYVE_BASE_URL  e.g. https://fluxze.com
+#   - WAYVE_BASE_URL  e.g. https://hadalspace.com
 #   - WAYVE_API_KEY   an internal API key mapped to a user with tickets:manage
 #     (see routes/api_keys.rs). Sent as the X-API-KEY header.
 
