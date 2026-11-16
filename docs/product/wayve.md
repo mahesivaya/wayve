@@ -545,7 +545,7 @@ docker compose -p rwayve -f infra/docker-compose.yml up -d --build
 ./scripts/seed_rbac_users.sh
 
 # Tail backend logs
-docker logs -f rwayve_backend_dev
+docker logs -f hadal_backend_dev
 ```
 
 URLs:

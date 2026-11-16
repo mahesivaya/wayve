@@ -26,7 +26,7 @@ import { execSync } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 
 const API_BASE = process.env.API_BASE ?? "http://localhost:8080";
-const PG_CONTAINER = process.env.PG_CONTAINER ?? "rwayve_postgres_dev";
+const PG_CONTAINER = process.env.PG_CONTAINER ?? "hadal_postgres_dev";
 const PG_USER = process.env.PG_USER ?? "wayve_user";
 const PG_DB = process.env.PG_DB ?? "wayve_dev";
 
@@ -285,7 +285,7 @@ function flushRateLimits() {
   // register will just 429 with a clearer error).
   try {
     execSync(
-      `docker exec -i rwayve_redis_dev redis-cli --scan --pattern 'rl:*' | xargs -r docker exec -i rwayve_redis_dev redis-cli DEL > /dev/null 2>&1 || true`,
+      `docker exec -i hadal_redis_dev redis-cli --scan --pattern 'rl:*' | xargs -r docker exec -i hadal_redis_dev redis-cli DEL > /dev/null 2>&1 || true`,
       { encoding: "utf8" },
     );
   } catch {

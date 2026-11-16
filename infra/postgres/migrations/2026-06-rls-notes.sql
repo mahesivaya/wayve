@@ -12,7 +12,7 @@
 -- connections. Deny-by-default: a connection with neither GUC set sees no rows.
 --
 -- Idempotent + safe to re-run. Apply by hand to the dev DB:
---   docker exec -i rwayve_postgres_dev psql -U wayve_user -d wayve_dev \
+--   docker exec -i hadal_postgres_dev psql -U wayve_user -d wayve_dev \
 --     < infra/postgres/migrations/2026-06-rls-notes.sql
 -- (NOT applied to prod this cycle — pilot is dev-only.)
 --

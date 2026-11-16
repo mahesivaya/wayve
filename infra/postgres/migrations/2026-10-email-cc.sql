@@ -8,7 +8,7 @@
 --
 -- Idempotent + safe to re-run. The backend also applies this on boot
 -- (startup::ensure_email_schema), so applying by hand is optional. Dev:
---   docker exec -i rwayve_postgres_dev psql -v ON_ERROR_STOP=1 -U wayve_user -d wayve_dev \
+--   docker exec -i hadal_postgres_dev psql -v ON_ERROR_STOP=1 -U wayve_user -d wayve_dev \
 --     < infra/postgres/migrations/2026-10-email-cc.sql
 --
 -- Rollback:

@@ -11,7 +11,7 @@
 -- *enforces* only on the migrated user-facing handlers (defense in depth).
 --
 -- Idempotent. Apply by hand to dev (NOT prod this cycle):
---   docker exec -i rwayve_postgres_dev psql -U wayve_user -d wayve_dev \
+--   docker exec -i hadal_postgres_dev psql -U wayve_user -d wayve_dev \
 --     < infra/postgres/migrations/2026-06-rls-batch2.sql
 -- wayve_app already has SELECT on all tables + USAGE on all sequences (from the
 -- notes migration); here we add write grants + per-table policies.

@@ -38,7 +38,7 @@ if [[ -n "${DATABASE_URL:-}" ]]; then
   echo "Seeding RBAC test users via DATABASE_URL…"
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v seed_password="$SEED_PASSWORD" -f "$SQL_FILE"
 else
-  PGCONTAINER="${PGCONTAINER:-rwayve_postgres_dev}"
+  PGCONTAINER="${PGCONTAINER:-hadal_postgres_dev}"
   PGUSER="${PGUSER:-wayve_user}"
   PGDATABASE="${PGDATABASE:-wayve_dev}"
   echo "Seeding RBAC test users via docker container '$PGCONTAINER' ($PGUSER/$PGDATABASE)…"

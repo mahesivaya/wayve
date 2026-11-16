@@ -61,7 +61,7 @@ Two ground rules:
                           └────┬───────────────────────────┬──────────────┘
                                │                           │
               ┌───────────────▼─────────────┐   ┌─────────▼──────────────┐
-              │  rwayve-backend:dev (Rust)   │   │   rwayve-frontend       │
+              │  hadal-backend:dev (Rust)   │   │   rwayve-frontend       │
               │  ─ Actix Web 4               │   │   (static SPA, Vite     │
               │  ─ 11 feature modules        │   │    build → /usr/share)  │
               │  ─ MimAlloc allocator        │   └─────────────────────────┘
@@ -107,9 +107,9 @@ These are deliberate v1 scaling shortcuts. See §16 for when they bite.
 
 | Role | Spawned components | Container in dev |
 | --- | --- | --- |
-| `api` (default) | HTTP server + webhook dispatcher | `rwayve_backend_dev` |
-| `email_sync_worker` | Just `email::sync::sync_all` loop | `rwayve_email_sync_worker_dev` |
-| `email_body_worker` | Just `email::body_worker::run_body_worker` | `rwayve_email_body_worker_dev` |
+| `api` (default) | HTTP server + webhook dispatcher | `hadal_backend_dev` |
+| `email_sync_worker` | Just `email::sync::sync_all` loop | `hadal_email_sync_worker_dev` |
+| `email_body_worker` | Just `email::body_worker::run_body_worker` | `hadal_email_body_worker_dev` |
 | `all` | API + every worker (dev convenience) | not used in compose |
 
 DB-pool sizing is role-dependent (see `db_max_connections`):

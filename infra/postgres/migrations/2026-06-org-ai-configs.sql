@@ -11,7 +11,7 @@
 -- row-level-secured (owner-gated at the handler). Idempotent — safe to re-run.
 --
 -- Apply by hand (init.sql only runs on a fresh volume):
---   dev:  docker exec -i rwayve_postgres_dev psql -U wayve_user -d wayve_dev \
+--   dev:  docker exec -i hadal_postgres_dev psql -U wayve_user -d wayve_dev \
 --           < infra/postgres/migrations/2026-06-org-ai-configs.sql
 --   prod: back up first, then run the same file against the prod DB.
 -- ============================================================================

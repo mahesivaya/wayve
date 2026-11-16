@@ -16,10 +16,10 @@
 --     AND NOT EXISTS (SELECT 1 FROM channel_members a
 --                     WHERE a.channel_id = c.id AND a.role = 'admin');
 -- Dev:
---   docker exec -i rwayve_postgres_dev psql -U wayve_user -d wayve_dev \
+--   docker exec -i hadal_postgres_dev psql -U wayve_user -d wayve_dev \
 --     < infra/postgres/migrations/2026-09-channel-admin-handoff.sql
 -- Prod:
---   ssh ... 'docker exec -i rwayve_postgres_prod sh -c \
+--   ssh ... 'docker exec -i hadal_postgres_prod sh -c \
 --     "psql -v ON_ERROR_STOP=1 -U \$POSTGRES_USER -d \$POSTGRES_DB"' \
 --     < infra/postgres/migrations/2026-09-channel-admin-handoff.sql
 --

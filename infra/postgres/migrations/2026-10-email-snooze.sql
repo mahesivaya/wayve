@@ -19,7 +19,7 @@
 -- Idempotent + safe to re-run. The backend also creates the table on boot
 -- (startup::ensure_email_schema); the move from the old column is here only.
 -- Dev:
---   docker exec -i rwayve_postgres_dev psql -v ON_ERROR_STOP=1 -U wayve_user -d wayve_dev \
+--   docker exec -i hadal_postgres_dev psql -v ON_ERROR_STOP=1 -U wayve_user -d wayve_dev \
 --     < infra/postgres/migrations/2026-10-email-snooze.sql
 --
 -- Rollback:

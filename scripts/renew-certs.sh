@@ -3,7 +3,7 @@
 #
 # The prod cert (fluxze.com, with www.fluxze.com, hadalspace.com and
 # www.hadalspace.com as SANs) lives in the
-# `rwayve_prod_letsencrypt_certs` Docker volume; nginx (rwayve_nginx_prod)
+# `rwayve_prod_letsencrypt_certs` Docker volume; nginx (hadal_nginx_prod)
 # reads it and serves the ACME HTTP-01 challenge from the
 # `rwayve_prod_certbot_webroot` volume at /.well-known/acme-challenge/.
 #
@@ -19,7 +19,7 @@
 #     certbot/certbot certonly --webroot -w /var/www/certbot \
 #     --cert-name fluxze.com --expand \
 #     -d fluxze.com -d www.fluxze.com -d hadalspace.com -d www.hadalspace.com
-#   docker exec rwayve_nginx_prod nginx -s reload
+#   docker exec hadal_nginx_prod nginx -s reload
 #
 # Cron install (on the prod host, once):
 #   (crontab -l 2>/dev/null; echo "17 3,15 * * * /home/ubuntu/rwayve/scripts/renew-certs.sh >> /home/ubuntu/rwayve/logs/cert-renew.log 2>&1") | crontab -
@@ -27,7 +27,7 @@ set -euo pipefail
 
 CERTS_VOL="${CERTS_VOL:-rwayve_prod_letsencrypt_certs}"
 WEBROOT_VOL="${WEBROOT_VOL:-rwayve_prod_certbot_webroot}"
-NGINX_CONTAINER="${NGINX_CONTAINER:-rwayve_nginx_prod}"
+NGINX_CONTAINER="${NGINX_CONTAINER:-hadal_nginx_prod}"
 
 echo "[$(date -u +%FT%TZ)] certbot renew starting"
 

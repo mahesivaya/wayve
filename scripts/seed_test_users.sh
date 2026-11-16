@@ -44,7 +44,7 @@ run_sql() {
   if [[ -n "${DATABASE_URL:-}" ]]; then
     psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v seed_password="$SEED_PASSWORD" -f "$sql_file"
   else
-    local PGCONTAINER="${PGCONTAINER:-rwayve_postgres_dev}"
+    local PGCONTAINER="${PGCONTAINER:-hadal_postgres_dev}"
     local PGUSER="${PGUSER:-wayve_user}"
     local PGDATABASE="${PGDATABASE:-wayve_dev}"
     docker exec -i "$PGCONTAINER" psql -U "$PGUSER" -d "$PGDATABASE" \
@@ -55,7 +55,7 @@ run_sql() {
 if [[ -n "${DATABASE_URL:-}" ]]; then
   echo "Seeding all test users via DATABASE_URL…"
 else
-  echo "Seeding all test users via docker container '${PGCONTAINER:-rwayve_postgres_dev}'…"
+  echo "Seeding all test users via docker container '${PGCONTAINER:-hadal_postgres_dev}'…"
 fi
 
 for f in "${SQL_FILES[@]}"; do
