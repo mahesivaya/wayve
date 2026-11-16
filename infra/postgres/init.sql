@@ -856,9 +856,12 @@ CREATE TABLE IF NOT EXISTS mailbox_labels (
 
 
 
--- 1. Remove old wrong constraint (if exists)
-ALTER TABLE email_accounts
-ADD CONSTRAINT unique_user_email UNIQUE (user_id, email);
+-- One mailbox row per (user, address). Guarded so re-applying this file is a no-op.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unique_user_email') THEN
+    ALTER TABLE email_accounts ADD CONSTRAINT unique_user_email UNIQUE (user_id, email);
+  END IF;
+END $$;
 
 
 
@@ -892,7 +895,7 @@ ALTER TABLE meetings ADD COLUMN IF NOT EXISTS account_id INTEGER;
 CREATE UNIQUE INDEX IF NOT EXISTS meetings_google_event_uniq
   ON meetings(user_id, google_event_id) WHERE google_event_id IS NOT NULL;
 
-CREATE TABLE meeting_participants (
+CREATE TABLE IF NOT EXISTS meeting_participants (
     id SERIAL PRIMARY KEY,
     meeting_id INT REFERENCES meetings(id) ON DELETE CASCADE,
     email TEXT NOT NULL,
