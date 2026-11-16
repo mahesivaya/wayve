@@ -7,7 +7,7 @@
 #              support@platform.com member@platform.com guest@platform.com
 #   Org Acme : the same locals @acme.com
 #
-# Every account uses the same password ($SEED_PASSWORD, default "Mahesh").
+# Every account uses the same password ($SEED_PASSWORD, required, no default).
 # Idempotent — re-running resets the seeded accounts to a known state.
 # Requires the schema (infra/postgres/init.sql) to already be applied.
 #
@@ -21,7 +21,11 @@
 # ============================================================
 set -euo pipefail
 
-SEED_PASSWORD="${SEED_PASSWORD:-Mahesh}"
+if [[ -z "${SEED_PASSWORD:-}" ]]; then
+  echo "error: set SEED_PASSWORD, e.g. SEED_PASSWORD='<password>' $0" >&2
+  echo "       (no default: a password in a committed script is public)" >&2
+  exit 1
+fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SQL_FILE="$SCRIPT_DIR/../infra/postgres/seed_rbac.sql"
 
@@ -43,6 +47,6 @@ else
 fi
 
 echo
-echo "✅ Done. 18 test users seeded — password for all: ${SEED_PASSWORD}"
+echo "✅ Done. 18 test users seeded"
 echo "   Platform staff : owner@platform.com … guest@platform.com (superadmin@platform.com)"
 echo "   Org \"Acme\"      : owner@acme.com … guest@acme.com (superadmin@acme.com)"

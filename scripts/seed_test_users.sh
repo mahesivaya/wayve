@@ -7,8 +7,8 @@
 #   infra/postgres/seed_rbac.sql     — 18 RBAC users (platform + org "Acme")
 #   infra/postgres/seed_personal.sql —  5 personal users (@personal.com)
 #
-# Every account uses the same password ($SEED_PASSWORD, default "Test@1234"
-# to match test-users.txt). Idempotent — re-running resets all 23 accounts.
+# Every account uses the same password ($SEED_PASSWORD, required, no default).
+# Idempotent — re-running resets all 23 accounts.
 # Requires the schema (infra/postgres/init.sql) to already be applied.
 #
 # Usage:
@@ -21,7 +21,11 @@
 # ============================================================
 set -euo pipefail
 
-SEED_PASSWORD="${SEED_PASSWORD:-Test@1234}"
+if [[ -z "${SEED_PASSWORD:-}" ]]; then
+  echo "error: set SEED_PASSWORD, e.g. SEED_PASSWORD='<password>' $0" >&2
+  echo "       (no default: a password in a committed script is public)" >&2
+  exit 1
+fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SQL_FILES=(
   "$SCRIPT_DIR/../infra/postgres/seed_rbac.sql"
@@ -59,7 +63,7 @@ for f in "${SQL_FILES[@]}"; do
 done
 
 echo
-echo "✅ Done. 23 test users seeded — password for all: ${SEED_PASSWORD}"
+echo "✅ Done. 23 test users seeded"
 echo "   Platform staff : owner@platform.com … guest@platform.com (superadmin@platform.com)"
 echo "   Org \"Acme\"      : owner@acme.com … guest@acme.com (superadmin@acme.com)"
 echo "   Personal       : alice@personal.com bob@ carol@ dave@ erin@personal.com"

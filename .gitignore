@@ -77,3 +77,10 @@ infra/geoip/*.mmdb
 *.cer
 *.p12
 *.certSigningRequest
+
+# iOS / Xcode build output and signing material
+**/DerivedData/
+**/xcuserdata/
+*.xcuserstate
+*.p8
+*.mobileprovision
