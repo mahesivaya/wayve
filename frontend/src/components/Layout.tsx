@@ -519,15 +519,14 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   // Icons always show; collapsing only hides the labels. Narrow screens keep
   // their own (unpersisted) expand state, so a wide-screen "expanded" preference
   // doesn't open a phone with the labels covering the page.
-  // In the browser, hovering the collapsed rail "peeks" it open: full labels,
-  // drawn over the content (see .sidebar.peek) so the page doesn't shift; the
-  // saved collapse preference is untouched, and clicking the toggle while
-  // peeking keeps it open. A short open delay keeps it from flashing open when
-  // the pointer merely crosses the rail. The desktop app opens the rail only
-  // from its toggle.
+  // Hovering the collapsed rail "peeks" it open, in the browser and the desktop
+  // app alike: full labels, drawn over the content (see .sidebar.peek) so the
+  // page doesn't shift; the saved collapse preference is untouched, and
+  // clicking the toggle while peeking keeps it open. A short open delay keeps
+  // it from flashing open when the pointer merely crosses the rail.
   const [railHover, setRailHover] = useState(false);
   const railHoverTimer = useRef<number | undefined>(undefined);
-  const canPeek = !isNarrow && !isDesktopApp();
+  const canPeek = !isNarrow;
   const peeking = railHover && sidebarCollapsed && canPeek;
   const startRailPeek = () => {
     window.clearTimeout(railHoverTimer.current);
@@ -540,6 +539,11 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   useEffect(() => () => window.clearTimeout(railHoverTimer.current), []);
 
   const railCollapsed = isNarrow ? !navOpen : sidebarCollapsed && !peeking;
+  // The desktop app's shrunk sidebar shows no icon rail at all: just a thin
+  // hover strip down the window's left edge (see .sidebar.rail-hidden) that
+  // peeks the full menu open. The browser keeps its 56px icon rail.
+  const railHidden = isDesktopApp() && sidebarCollapsed && !isNarrow && !peeking;
+  const railFootprint = isDesktopApp() ? 0 : 56;
 
   useEffect(() => {
     try {
@@ -2360,14 +2364,17 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           <div className="body">
             <nav
               ref={sidebarRef}
-              className={`sidebar ${showTabs ? "has-brand" : ""} ${isNarrow && navOpen ? "open" : ""} ${railCollapsed ? "collapsed" : ""} ${peeking ? "peek" : ""}`.trim()}
+              className={`sidebar ${showTabs ? "has-brand" : ""} ${isNarrow && navOpen ? "open" : ""} ${railCollapsed ? "collapsed" : ""} ${railHidden ? "rail-hidden" : ""} ${peeking ? "peek" : ""}`
+                .replace(/\s+/g, " ")
+                .trim()}
               style={
                 peeking
                   ? {
                       // Widen to the user's expanded width; the matching
-                      // negative margin keeps the rail's 56px footprint.
+                      // negative margin keeps the shrunk rail's footprint
+                      // (56px in the browser, none in the desktop app).
                       width: `${sidebarWidth}px`,
-                      marginRight: `${56 - sidebarWidth}px`,
+                      marginRight: `${railFootprint - sidebarWidth}px`,
                     }
                   : !sidebarCollapsed && !isNarrow
                     ? { width: `${sidebarWidth}px` }

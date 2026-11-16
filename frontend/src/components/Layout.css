@@ -718,6 +718,25 @@ html.is-titlebar-inset .header .split-menu-btn svg {
   box-shadow: 6px 0 18px rgb(0, 0, 0, 0.18);
 }
 
+/* Desktop app, shrunk: no icon rail. What is left is an invisible 6px strip
+   down the window's left edge, laid over the page (no footprint), whose only
+   job is to catch the pointer and peek the menu open. The pinned macOS
+   title-bar toggle stays visible (see TabBar.css). */
+.sidebar.collapsed.rail-hidden {
+  position: relative;
+  z-index: 200;
+  width: 6px;
+  margin-right: -6px;
+  padding: 0;
+  border-right: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.sidebar.collapsed.rail-hidden > * {
+  visibility: hidden;
+}
+
 .sidebar-section {
   display: flex;
   flex-direction: column;
