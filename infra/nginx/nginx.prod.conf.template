@@ -243,16 +243,18 @@ http {
         }
     }
 
-    # ---- www.fluxze.com -> canonical ${NGINX_HOST} ----
-    # The www host serves no app of its own; 301 everything to the
-    # canonical apex host. Port 80 also serves the ACME challenge so www
+    # ---- www.fluxze.com, hadalspace.com -> canonical ${NGINX_HOST} ----
+    # These hosts serve no app of their own; 301 everything to the
+    # canonical apex host. hadalspace.com (and its www) is a forwarding
+    # alias only — the app, API and OAuth callbacks all stay on
+    # ${NGINX_HOST}. Port 80 also serves the ACME challenge so each name
     # can be added to the Let's Encrypt cert via `certbot --expand`. The
-    # 443 block reuses the ${NGINX_HOST} cert — valid once that cert
-    # includes www.fluxze.com as a SAN (expand step); until then it presents
+    # 443 block reuses the ${NGINX_HOST} cert — valid for a name once that
+    # cert includes it as a SAN (expand step); until then that name presents
     # a name-mismatch but nginx still starts fine.
     server {
         listen 80;
-        server_name www.fluxze.com;
+        server_name www.fluxze.com hadalspace.com www.hadalspace.com;
 
         location /.well-known/acme-challenge/ {
             root /var/www/certbot;
@@ -267,7 +269,7 @@ http {
     server {
         listen 443 ssl;
         http2 on;
-        server_name www.fluxze.com;
+        server_name www.fluxze.com hadalspace.com www.hadalspace.com;
 
         ssl_certificate     /etc/letsencrypt/live/${NGINX_HOST}/fullchain.pem;
         ssl_certificate_key /etc/letsencrypt/live/${NGINX_HOST}/privkey.pem;
