@@ -64,15 +64,18 @@ pub async fn refresh_provider_unread_count(
     Ok(())
 }
 
+/// The headers every metadata fetch asks for. Message-Id / References /
+/// In-Reply-To come along for GitHub routing: they are the only headers that say
+/// whether a notification is about a pull request or an issue (see
+/// `github_pr_label`). Metadata headers are free — same request, no extra round
+/// trip.
+const METADATA_HEADERS: &str = "&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc\
+     &metadataHeaders=Subject&metadataHeaders=Message-Id&metadataHeaders=References\
+     &metadataHeaders=In-Reply-To";
+
 pub async fn fetch_headers_only(token: &str, msg_id: &str) -> Result<EmailHeader> {
-    // Message-Id / References / In-Reply-To come along for GitHub routing: they
-    // are the only headers that say whether a notification is about a pull
-    // request or an issue (see `github_pr_label`). Metadata headers are free —
-    // same request, no extra round trip.
     let url = format!(
-        "{}/gmail/v1/users/me/messages/{}?format=metadata\
-         &metadataHeaders=From&metadataHeaders=To&metadataHeaders=Cc&metadataHeaders=Subject\
-         &metadataHeaders=Message-Id&metadataHeaders=References&metadataHeaders=In-Reply-To",
+        "{}/gmail/v1/users/me/messages/{}?format=metadata{METADATA_HEADERS}",
         crate::external::gmail_api_base(),
         msg_id
     );
@@ -89,14 +92,20 @@ pub async fn fetch_headers_only(token: &str, msg_id: &str) -> Result<EmailHeader
         ));
     }
     let res: Value = resp.json().await?;
+    parse_metadata_message(&res, msg_id)
+}
+
+/// One Gmail message in `format=metadata` shape, from `messages.get` or an entry
+/// of `threads.get`'s `messages`, turned into the row tuple `process_batch` saves.
+fn parse_metadata_message(res: &Value, msg_id: &str) -> Result<EmailHeader> {
     if res.get("error").is_some() || !res["payload"].is_object() {
         return Err(anyhow::anyhow!(
             "gmail metadata fetch for {msg_id} returned no message body"
         ));
     }
 
-    let (sender, receiver, subject) = extract_headers(&res);
-    let gmail_timestamp = extract_gmail_timestamp(&res);
+    let (sender, receiver, subject) = extract_headers(res);
+    let gmail_timestamp = extract_gmail_timestamp(res);
     let mut label_ids: Vec<String> = res["labelIds"]
         .as_array()
         .map(|labels| {
@@ -111,11 +120,11 @@ pub async fn fetch_headers_only(token: &str, msg_id: &str) -> Result<EmailHeader
     // rides this tuple into `emails.labels`, which is indexed and queried with
     // `= ANY(...)`, so routing on it needs no schema change and no new plumbing.
     // `send_internal` sets synthetic INBOX/SENT labels the same way.
-    if let Some(label) = github_pr_label(&res) {
+    if let Some(label) = github_pr_label(res) {
         label_ids.push(label.to_string());
     }
-    let threading = gmail_thread_headers(&res);
-    let cc = extract_cc(&res);
+    let threading = gmail_thread_headers(res);
+    let cc = extract_cc(res);
     Ok((
         msg_id.to_string(),
         sender,
@@ -522,9 +531,11 @@ pub async fn fetch_ids(token: &str, last_sync: Option<i64>) -> Result<Vec<String
     Ok(ids)
 }
 
-pub async fn fetch_recent_ids(token: &str, max_results: usize) -> Result<Vec<String>> {
+/// Ids of the newest `max_results` Inbox conversations (`threads.list`), newest
+/// first.
+pub async fn fetch_inbox_thread_ids(token: &str, max_results: usize) -> Result<Vec<String>> {
     let url = format!(
-        "{}/gmail/v1/users/me/messages?maxResults={}",
+        "{}/gmail/v1/users/me/threads?maxResults={}&labelIds=INBOX",
         crate::external::gmail_api_base(),
         max_results
     );
@@ -534,20 +545,56 @@ pub async fn fetch_recent_ids(token: &str, max_results: usize) -> Result<Vec<Str
         .bearer_auth(token)
         .send()
         .await?
+        .error_for_status()?
         .json()
         .await?;
 
-    let ids = res["messages"]
+    let ids = res["threads"]
         .as_array()
-        .map(|messages| {
-            messages
+        .map(|threads| {
+            threads
                 .iter()
-                .filter_map(|m| m["id"].as_str().map(str::to_string))
+                .filter_map(|t| t["id"].as_str().map(str::to_string))
                 .collect()
         })
         .unwrap_or_default();
 
     Ok(ids)
+}
+
+/// Every message of one Gmail conversation in a single `threads.get` call, in
+/// the same shape `fetch_headers_only` gives one message. A message Gmail sent
+/// back without a payload is skipped, as a failed `fetch_headers_only` would be.
+pub async fn fetch_thread_headers(token: &str, thread_id: &str) -> Result<Vec<EmailHeader>> {
+    let url = format!(
+        "{}/gmail/v1/users/me/threads/{}?format=metadata{METADATA_HEADERS}",
+        crate::external::gmail_api_base(),
+        thread_id
+    );
+
+    let resp = HTTP_CLIENT.get(&url).bearer_auth(token).send().await?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        return Err(anyhow::anyhow!(
+            "gmail thread fetch for {thread_id} failed: HTTP {status}"
+        ));
+    }
+    let res: Value = resp.json().await?;
+
+    let headers = res["messages"]
+        .as_array()
+        .map(|messages| {
+            messages
+                .iter()
+                .filter_map(|m| {
+                    let id = m["id"].as_str()?;
+                    parse_metadata_message(m, id).ok()
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(headers)
 }
 
 /// Most-recent message ids carrying a given label. `includeSpamTrash=true` is
@@ -1035,32 +1082,47 @@ pub async fn sync_account(
     Ok(())
 }
 
+/// First sync right after a Gmail account connects: the newest `max_threads`
+/// Inbox conversations, whole. One `threads.get` per conversation brings every
+/// message in it, so the first screen is full conversations rather than a mix of
+/// stray messages from all of the mailbox. Older mail follows through the
+/// worker's backfill.
 #[instrument(target = "worker", skip(pool, token), fields(account_id))]
 pub async fn sync_account_recent(
     pool: &PgPool,
     account_id: i32,
     token: &str,
-    max_results: usize,
+    max_threads: usize,
 ) -> anyhow::Result<()> {
-    let ids = fetch_recent_ids(token, max_results).await?;
+    let thread_ids = fetch_inbox_thread_ids(token, max_threads).await?;
     debug!(
         target: "worker",
         account_id,
-        count = ids.len(),
-        "fetched recent gmail ids"
+        count = thread_ids.len(),
+        "fetched recent gmail inbox threads"
     );
 
-    let mut tasks = FuturesUnordered::new();
+    // A conversation that fails to load is skipped, as a failed message fetch is
+    // in `process_batch`; the worker's sync picks its mail up later.
+    let headers: Vec<EmailHeader> = futures::stream::iter(thread_ids)
+        .map(|thread_id| async move {
+            match fetch_thread_headers(token, &thread_id).await {
+                Ok(headers) => headers,
+                Err(err) => {
+                    warn!(target: "worker", account_id, thread_id, error = ?err, "gmail thread fetch failed");
+                    Vec::new()
+                }
+            }
+        })
+        .buffer_unordered(MAX_EMAIL_CONCURRENCY)
+        .flat_map(futures::stream::iter)
+        .collect()
+        .await;
 
-    for id in ids {
-        let token = token.to_string();
-        tasks.push(async move { fetch_headers_only(&token, &id).await });
-
-        if tasks.len() >= MAX_EMAIL_CONCURRENCY {
-            process_batch(pool, account_id, &mut tasks).await?;
-        }
-    }
-
+    let mut tasks: FuturesUnordered<_> = headers
+        .into_iter()
+        .map(|header| std::future::ready(Ok(header)))
+        .collect();
     while !tasks.is_empty() {
         process_batch(pool, account_id, &mut tasks).await?;
     }
