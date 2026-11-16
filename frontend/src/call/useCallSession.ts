@@ -236,8 +236,7 @@ export function useCallSession(
   // the callee acquires one here, on Accept.
   const attachLocalMedia = useCallback(
     async (pc: RTCPeerConnection, media: CallMedia) => {
-      const stream =
-        localStreamRef.current ?? (await requestLocalMedia(media));
+      const stream = localStreamRef.current ?? (await requestLocalMedia(media));
       localStreamRef.current = stream;
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
       if (media === "video" && localVideoRef.current) {
@@ -255,7 +254,9 @@ export function useCallSession(
       if (callState.kind !== "idle" || startingRef.current) return;
       // The invite would be dropped, leaving a dead "Calling…" with the mic on.
       if (wsRef.current?.readyState !== WebSocket.OPEN) {
-        setMediaError("Not connected to the call service. Try again in a moment.");
+        setMediaError(
+          "Not connected to the call service. Try again in a moment."
+        );
         return;
       }
       startingRef.current = true;

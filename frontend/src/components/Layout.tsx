@@ -542,7 +542,8 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   // The desktop app's shrunk sidebar shows no icon rail at all: just a thin
   // hover strip down the window's left edge (see .sidebar.rail-hidden) that
   // peeks the full menu open. The browser keeps its 56px icon rail.
-  const railHidden = isDesktopApp() && sidebarCollapsed && !isNarrow && !peeking;
+  const railHidden =
+    isDesktopApp() && sidebarCollapsed && !isNarrow && !peeking;
   const railFootprint = isDesktopApp() ? 0 : 56;
 
   useEffect(() => {
