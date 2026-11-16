@@ -368,109 +368,102 @@ export default function DocumentsBox({ teamId }: { teamId?: number } = {}) {
 
   return (
     <div className="drive-container">
-      {/* Breadcrumb — hidden at the root, where the only crumb would repeat the
-          page heading; kept when there are folder crumbs or manage actions. */}
-      {(path.length > 1 || canManage) && (
-        <div className="drive-breadcrumb">
-          {path.length > 1 &&
-            path.map((crumb, idx) => (
-              <span
-                key={`${crumb.id ?? "root"}-${idx}`}
-                className="drive-crumb"
+      {/* Top bar: the page title / folder path on the left, actions on the
+          right. At the root the single crumb is the "Documents" title; the
+          current (last) crumb is disabled and styled as the heading. */}
+      <div className="drive-breadcrumb">
+        {path.map((crumb, idx) => (
+          <span key={`${crumb.id ?? "root"}-${idx}`} className="drive-crumb">
+            {idx > 0 && <span className="drive-crumb-sep"> / </span>}
+            <button
+              type="button"
+              className="drive-crumb-link"
+              onClick={() => setPath((prev) => prev.slice(0, idx + 1))}
+              disabled={idx === path.length - 1}
+            >
+              {crumb.name}
+            </button>
+          </span>
+        ))}
+        {canManage && (
+          <div className="drive-breadcrumb-actions">
+            {/* Same as Drive's: goes into the folder being viewed. */}
+            {teamId != null && (
+              <label
+                className={`drive-folder-new-btn drive-upload-btn${uploading ? " is-busy" : ""}`}
+                data-tooltip="Upload files to this folder"
               >
-                {idx > 0 && <span className="drive-crumb-sep"> / </span>}
-                <button
-                  type="button"
-                  className="drive-crumb-link"
-                  onClick={() => setPath((prev) => prev.slice(0, idx + 1))}
-                >
-                  {crumb.name}
-                </button>
-              </span>
-            ))}
-          {canManage && (
-            <div className="drive-breadcrumb-actions">
-              {/* Same as Drive's: goes into the folder being viewed. */}
-              {teamId != null && (
-                <label
-                  className={`drive-folder-new-btn drive-upload-btn${uploading ? " is-busy" : ""}`}
-                  data-tooltip="Upload files to this folder"
-                >
-                  {uploading ? "Uploading…" : "⬆ Upload"}
-                  <input
-                    type="file"
-                    multiple
-                    hidden
-                    disabled={uploading}
-                    onChange={(e) => {
-                      void doUpload(Array.from(e.target.files ?? []));
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-              )}
-              {creatingFolder ? (
-                <>
-                  <input
-                    className="drive-folder-input"
-                    value={newFolderName}
-                    autoFocus
-                    placeholder="Folder name"
-                    onChange={(e) => setNewFolderName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") void submitNewFolder();
-                      else if (e.key === "Escape") {
-                        setCreatingFolder(false);
-                        setNewFolderName("");
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="drive-folder-create-btn"
-                    onClick={() => void submitNewFolder()}
-                  >
-                    Create
-                  </button>
-                  <button
-                    type="button"
-                    className="drive-folder-cancel-btn"
-                    onClick={() => {
+                {uploading ? "Uploading…" : "⬆ Upload"}
+                <input
+                  type="file"
+                  multiple
+                  hidden
+                  disabled={uploading}
+                  onChange={(e) => {
+                    void doUpload(Array.from(e.target.files ?? []));
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            )}
+            {creatingFolder ? (
+              <>
+                <input
+                  className="drive-folder-input"
+                  value={newFolderName}
+                  autoFocus
+                  placeholder="Folder name"
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void submitNewFolder();
+                    else if (e.key === "Escape") {
                       setCreatingFolder(false);
                       setNewFolderName("");
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className="drive-folder-new-btn"
-                    onClick={() => setCreatingFile(true)}
-                  >
-                    + New file
-                  </button>
-                  <button
-                    type="button"
-                    className="drive-folder-new-btn"
-                    onClick={() => setCreatingFolder(true)}
-                  >
-                    + New folder
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="drive-folder-create-btn"
+                  onClick={() => void submitNewFolder()}
+                >
+                  Create
+                </button>
+                <button
+                  type="button"
+                  className="drive-folder-cancel-btn"
+                  onClick={() => {
+                    setCreatingFolder(false);
+                    setNewFolderName("");
+                  }}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="drive-folder-new-btn"
+                  onClick={() => setCreatingFile(true)}
+                >
+                  + New file
+                </button>
+                <button
+                  type="button"
+                  className="drive-folder-new-btn"
+                  onClick={() => setCreatingFolder(true)}
+                >
+                  + New folder
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
-      {/* Upload / header */}
+      {/* Upload */}
       <div className="upload-section">
-        <div className="drive-header">
-          <h2>Documents</h2>
-        </div>
         {canManage ? (
           <div
             className="drop-zone"
