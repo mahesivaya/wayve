@@ -92,11 +92,14 @@ export default function Login() {
         // Never overwrite what someone already typed, or the email a link
         // (e.g. the verification screen) brought them here with.
         const linkEmail = params.get("email");
-        if (linkEmail && linkEmail.toLowerCase() !== saved.email.toLowerCase()) return;
+        if (linkEmail && linkEmail.toLowerCase() !== saved.email.toLowerCase())
+          return;
         setEmail((current) => current || saved.email);
         setPassword((current) => current || saved.password);
       })
-      .catch((err: unknown) => logger.warn("reading the saved login failed", err));
+      .catch((err: unknown) =>
+        logger.warn("reading the saved login failed", err)
+      );
     return () => {
       cancelled = true;
     };
@@ -107,7 +110,9 @@ export default function Login() {
   const forgetSavedLogin = () => {
     savedLoginStore
       ?.clear()
-      .catch((err: unknown) => logger.warn("clearing the saved login failed", err));
+      .catch((err: unknown) =>
+        logger.warn("clearing the saved login failed", err)
+      );
     setHasSavedLogin(false);
     setPassword("");
   };
@@ -119,7 +124,9 @@ export default function Login() {
     const done = remember
       ? savedLoginStore.save(loginEmail, loginPassword).then(() => undefined)
       : savedLoginStore.clear();
-    done.catch((err: unknown) => logger.warn("updating the saved login failed", err));
+    done.catch((err: unknown) =>
+      logger.warn("updating the saved login failed", err)
+    );
   };
 
   // Strip the SSO error fragment once displayed, so a refresh doesn't repeat it.

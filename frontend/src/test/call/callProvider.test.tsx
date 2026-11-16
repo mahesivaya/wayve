@@ -223,7 +223,9 @@ describe("the shared call session", () => {
 
 function Caller() {
   const { startCall } = useSharedCall();
-  return <button onClick={() => startCall(2, "peer@x.test", "audio")}>call</button>;
+  return (
+    <button onClick={() => startCall(2, "peer@x.test", "audio")}>call</button>
+  );
 }
 
 describe("starting a call", () => {
