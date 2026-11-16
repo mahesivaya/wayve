@@ -6,6 +6,7 @@
 #[cfg(test)]
 mod tests {
     use crate::test_support::{insert_local_user, random_email, test_pool};
+    use crate::webhooks::dispatcher::claim_due;
     use crate::webhooks::events::EventOwner;
     use crate::webhooks::{Event, emit};
     use hmac::{Hmac, Mac};
@@ -246,6 +247,69 @@ mod tests {
 
         assert_eq!(expected, again, "HMAC must be deterministic");
         assert_eq!(expected.len(), 64, "HMAC-SHA256 hex must be 64 chars");
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn claimed_delivery_is_not_claimed_again_while_in_flight() {
+        // The claim's row lock ends with the statement, so only the lease on
+        // next_attempt_at stops a second dispatcher (another API instance)
+        // from sending the same delivery while the first is still sending it.
+        let pool = test_pool().await;
+        let user_id = insert_local_user(&pool, &random_email(), "pw").await;
+        let endpoint_id = insert_endpoint(
+            &pool,
+            user_id,
+            "https://example.com/lease",
+            &["task.created"],
+            false,
+            None,
+            true,
+        )
+        .await;
+        // Oldest due row in the table, so the claim's ORDER BY picks it first
+        // even if other tests left due rows behind.
+        let delivery_id: i64 = sqlx::query_scalar(
+            "INSERT INTO webhook_deliveries
+               (endpoint_id, event_id, event_type, payload, next_attempt_at)
+             VALUES ($1, 'evt_lease', 'task.created', '{}', NOW() - INTERVAL '100 years')
+             RETURNING id",
+        )
+        .bind(endpoint_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("insert delivery: {e}"));
+
+        let ids = |rows: &[sqlx::postgres::PgRow]| -> Vec<i64> {
+            rows.iter().map(|r| r.get::<i64, _>("id")).collect()
+        };
+        let first = claim_due(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("first claim: {e}"));
+        assert!(
+            ids(&first).contains(&delivery_id),
+            "first dispatcher must claim the due delivery"
+        );
+
+        let second = claim_due(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("second claim: {e}"));
+        assert!(
+            !ids(&second).contains(&delivery_id),
+            "a second dispatcher must not claim a delivery that is still in flight"
+        );
+
+        let (status, attempts, leased): (String, i32, bool) = sqlx::query_as(
+            "SELECT status, attempt_count, next_attempt_at > NOW() + INTERVAL '5 minutes'
+               FROM webhook_deliveries WHERE id = $1",
+        )
+        .bind(delivery_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("select delivery: {e}"));
+        assert_eq!(status, "pending", "claim must not change the status");
+        assert_eq!(attempts, 1, "only one claim may count an attempt");
+        assert!(leased, "claim must push next_attempt_at forward");
     }
 
     #[allow(clippy::too_many_arguments)]

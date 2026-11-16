@@ -27,17 +27,27 @@ enum Fetched {
     Gone,
 }
 
+/// What one Cc backfill batch did.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct CcBatch {
+    /// Messages whose Cc was still unknown when the batch started; 0 means the
+    /// backfill is finished.
+    pub pending: usize,
+    /// How many of them were filled in (the rest wait out a refusal).
+    pub filled: usize,
+}
+
 /// Fills in the Cc of up to `BATCH` of this account's Gmail messages whose Cc
-/// isn't known yet. Returns how many were filled in. Gmail only: Outlook and
+/// isn't known yet. Gmail only: Outlook and
 /// IMAP mail is stored with its Cc as it syncs.
 pub async fn backfill_batch(
     pool: &PgPool,
     account_id: i32,
     provider: &MailProvider,
     access_token: &str,
-) -> anyhow::Result<usize> {
+) -> anyhow::Result<CcBatch> {
     if !matches!(provider, MailProvider::Google) {
-        return Ok(0);
+        return Ok(CcBatch::default());
     }
     let pending: Vec<String> = sqlx::query_scalar(
         "SELECT gmail_id FROM emails \
@@ -48,6 +58,7 @@ pub async fn backfill_batch(
     .bind(BATCH)
     .fetch_all(pool)
     .await?;
+    let pending_count = pending.len();
 
     // After the first refusal (rate limit, expired access) no new request is
     // started; answers already on their way are still stored, and whatever is
@@ -86,7 +97,10 @@ pub async fn backfill_batch(
     if let Some(e) = first_refusal {
         warn!(target: "worker", account_id, filled, error = ?e, "cc backfill paused");
     }
-    Ok(filled)
+    Ok(CcBatch {
+        pending: pending_count,
+        filled,
+    })
 }
 
 async fn fetch_cc(token: &str, gmail_id: &str) -> anyhow::Result<Fetched> {

@@ -436,8 +436,8 @@ CREATE TABLE IF NOT EXISTS org_sso_configs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS idx_org_sso_configs_domain
-    ON org_sso_configs(allowed_domain);
+-- `allowed_domain TEXT NOT NULL UNIQUE` already indexes the domain lookup.
+DROP INDEX IF EXISTS idx_org_sso_configs_domain;
 
 -- Custom-domain ownership for organizations. An org claims a domain
 -- (e.g. acme.com) and proves it controls the DNS by publishing a TXT
@@ -615,6 +615,11 @@ ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS is_shared BOOLEAN NOT NULL D
 -- Human label for the inbox (e.g. "Support", "Sales"). Falls back to the
 -- email address when unset.
 ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS shared_label TEXT;
+-- Per-account history backfills that found nothing left to do, as
+-- {kind: finished-at}. The sync worker skips a finished kind (no provider call,
+-- no scan of the account's mail) and re-checks it a day later. See
+-- email/backfill_state.rs.
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS backfill_done JSONB NOT NULL DEFAULT '{}';
 
 CREATE TABLE IF NOT EXISTS shared_inbox_members (
     account_id INTEGER NOT NULL REFERENCES email_accounts(id) ON DELETE CASCADE,
@@ -856,9 +861,12 @@ CREATE TABLE IF NOT EXISTS mailbox_labels (
 
 
 
--- 1. Remove old wrong constraint (if exists)
-ALTER TABLE email_accounts
-ADD CONSTRAINT unique_user_email UNIQUE (user_id, email);
+-- One mailbox row per (user, address). Guarded so re-applying this file is a no-op.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unique_user_email') THEN
+    ALTER TABLE email_accounts ADD CONSTRAINT unique_user_email UNIQUE (user_id, email);
+  END IF;
+END $$;
 
 
 
@@ -892,7 +900,7 @@ ALTER TABLE meetings ADD COLUMN IF NOT EXISTS account_id INTEGER;
 CREATE UNIQUE INDEX IF NOT EXISTS meetings_google_event_uniq
   ON meetings(user_id, google_event_id) WHERE google_event_id IS NOT NULL;
 
-CREATE TABLE meeting_participants (
+CREATE TABLE IF NOT EXISTS meeting_participants (
     id SERIAL PRIMARY KEY,
     meeting_id INT REFERENCES meetings(id) ON DELETE CASCADE,
     email TEXT NOT NULL,
@@ -1731,6 +1739,14 @@ CREATE TABLE IF NOT EXISTS user_stories (
 
 CREATE INDEX IF NOT EXISTS idx_user_stories_org ON user_stories(organization_id);
 CREATE INDEX IF NOT EXISTS idx_user_stories_user ON user_stories(user_id);
+-- story_number is unique per owner; creates serialize on the owner's advisory
+-- lock (tasks::statuses::lock_owner_sequence) and these back that up. An
+-- existing database with duplicates renumbers them first: see
+-- migrations/2026-11-workspace-number-unique.sql.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_user_stories_org_number
+    ON user_stories(organization_id, story_number) WHERE organization_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_user_stories_user_number
+    ON user_stories(user_id, story_number) WHERE user_id IS NOT NULL;
 
 -- Status-change history for the user-stories burnup trend lines. One row per
 -- status a story enters (create writes the first; each later status change adds
@@ -1821,6 +1837,12 @@ CREATE TABLE IF NOT EXISTS workspace_tickets (
 
 CREATE INDEX IF NOT EXISTS idx_workspace_tickets_org ON workspace_tickets(organization_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_tickets_user ON workspace_tickets(user_id);
+-- ticket_number is unique per owner, as story_number above (same migration).
+-- Mirrored bug tickets have no number and are ignored.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_workspace_tickets_org_number
+    ON workspace_tickets(organization_id, ticket_number) WHERE organization_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_workspace_tickets_user_number
+    ON workspace_tickets(user_id, ticket_number) WHERE user_id IS NOT NULL;
 -- One board work item per reported bug; also lets the mirror INSERT use
 -- ON CONFLICT (support_ticket_id). NULLs (normal tickets) don't collide.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_workspace_tickets_support_ticket
@@ -2106,6 +2128,17 @@ ON messages (receiver_id, sender_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_unread
 ON messages (receiver_id, status);
 
+-- Mark-read (`UPDATE messages SET status = 'read' WHERE receiver_id = $1 AND
+-- sender_id = $2 AND status <> 'read'`, run on every read receipt in
+-- chat/websocket.rs and on every history fetch in chat/direct_messages.rs).
+-- Without this the planner walks idx_messages_reverse over the WHOLE
+-- conversation and heap-checks each row's status; the partial index holds only
+-- unread rows, so the cost is the number of unread messages, not the history
+-- length. The predicate must stay textually equal to the query's for the
+-- planner to use it.
+CREATE INDEX IF NOT EXISTS idx_messages_pair_unread
+ON messages (receiver_id, sender_id) WHERE status <> 'read';
+
 CREATE INDEX IF NOT EXISTS idx_channel_members_user
 ON channel_members (user_id, channel_id);
 
@@ -2144,7 +2177,9 @@ ON email_accounts(user_id);
 
 -- Speed up the per-user storage SUMs in GET /api/profile.
 CREATE INDEX IF NOT EXISTS idx_drive_files_user_id ON drive_files(user_id);
-CREATE INDEX IF NOT EXISTS idx_notes_user_id ON notes(user_id);
+-- notes needs none: idx_notes_user_updated (user_id, updated_at DESC) starts
+-- with user_id, so it serves every user_id lookup.
+DROP INDEX IF EXISTS idx_notes_user_id;
 
 -- ============================================================
 -- 💳 BILLING (Stripe)
@@ -3093,8 +3128,11 @@ CREATE TABLE IF NOT EXISTS email_contacts (
     UNIQUE (user_id, address)
 );
 ALTER TABLE email_contacts ADD COLUMN IF NOT EXISTS photo_url TEXT;
-CREATE INDEX IF NOT EXISTS idx_email_contacts_user_addr
-    ON email_contacts (user_id, address text_pattern_ops);
+-- UNIQUE (user_id, address) already indexes this table. A separate
+-- text_pattern_ops index only helps `LIKE 'prefix%'`; the typeahead
+-- (routes/email.rs search_contacts) uses `ILIKE '%q%'`, which no btree can
+-- serve, so only its user_id column was ever used.
+DROP INDEX IF EXISTS idx_email_contacts_user_addr;
 
 -- Throttle marker for the People API photo sync (see email::people). NULL = never
 -- synced; the sync worker refreshes photos at most every few hours per account.
@@ -3113,3 +3151,38 @@ CREATE POLICY email_contacts_rls ON email_contacts
         current_setting('app.bypass', true) = 'on'
         OR user_id = nullif(current_setting('app.user_id', true), '')::int
     );
+
+-- Lookup indexes for hot paths: case-insensitive username/email login and
+-- search, org and membership joins, top-level channel threads, the attachments
+-- list, Wayve-sent mail lookups, the unthreaded-mail backfill, newest-first
+-- audit/usage reads, and Jira key lookups. (The unread-messages index is
+-- idx_messages_pair_unread above.) Same block as
+-- migrations/2026-11-lookup-indexes.sql.
+CREATE INDEX IF NOT EXISTS users_username_lower_idx   ON users (lower(username)) WHERE username IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_users_email_lower      ON users (lower(email));
+CREATE INDEX IF NOT EXISTS idx_users_organization_id  ON users (organization_id) WHERE organization_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_org_members_user       ON organization_members (user_id);
+CREATE INDEX IF NOT EXISTS idx_channel_msgs_top_id    ON channel_messages (channel_id, id) WHERE parent_message_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_channels_created_by    ON channels (created_by);
+CREATE INDEX IF NOT EXISTS idx_email_att_account      ON email_attachments (account_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_emails_wayve_gmail_id  ON emails (gmail_id) WHERE source = 'wayve';
+CREATE INDEX IF NOT EXISTS idx_emails_unthreaded      ON emails (account_id, created_at DESC) WHERE thread_id IS NULL;
+CREATE INDEX IF NOT EXISTS api_key_audit_created_idx  ON api_key_audit_log (created_at DESC);
+CREATE INDEX IF NOT EXISTS ai_usage_events_created    ON ai_usage_events (created_at);
+CREATE INDEX IF NOT EXISTS idx_tasks_jira_key         ON tasks (jira_issue_key) WHERE jira_issue_key IS NOT NULL;
+
+-- Foreign-key indexes. Postgres doesn't index the referencing side of an FK, so
+-- deleting a parent row (a user, an org, a project, a folder) scans the child
+-- table to cascade or to check NO ACTION. These cover the children that grow
+-- with usage; the remaining unindexed FKs are created_by / updated_by columns
+-- on small config tables. Same block as migrations/2026-11-fk-indexes.sql.
+CREATE INDEX IF NOT EXISTS idx_channel_messages_sender       ON channel_messages (sender_id);
+CREATE INDEX IF NOT EXISTS idx_message_reactions_user        ON message_reactions (user_id);
+CREATE INDEX IF NOT EXISTS idx_api_key_audit_user            ON api_key_audit_log (user_id);
+CREATE INDEX IF NOT EXISTS idx_email_accounts_org            ON email_accounts (organization_id);
+CREATE INDEX IF NOT EXISTS idx_user_stories_project          ON user_stories (project_id);
+CREATE INDEX IF NOT EXISTS idx_user_story_events_story       ON user_story_status_events (user_story_id);
+CREATE INDEX IF NOT EXISTS idx_workspace_tickets_project     ON workspace_tickets (project_id);
+CREATE INDEX IF NOT EXISTS idx_folders_parent                ON folders (parent_folder_id);
+CREATE INDEX IF NOT EXISTS idx_org_document_folders_parent   ON org_document_folders (parent_folder_id);
+CREATE INDEX IF NOT EXISTS idx_org_documents_folder          ON org_documents (folder_id);

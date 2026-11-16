@@ -203,12 +203,25 @@ pub struct ThreadInput<'a> {
 
 /// Record an email's reply information and place it in a conversation. Logs
 /// and swallows errors: threading must never fail the sync that brought the
-/// email in.
-pub async fn assign_best_effort(pool: &PgPool, account_id: i32, input: ThreadInput<'_>) {
+/// email in. Returns whether the email was placed; a sync that gets `false`
+/// calls [`retry_unthreaded`] once for its batch.
+pub async fn assign_best_effort(pool: &PgPool, account_id: i32, input: ThreadInput<'_>) -> bool {
     let email_id = input.email_id;
-    if let Err(e) = assign(pool, account_id, input).await {
-        warn!(target: "worker", account_id, email_id, error = ?e, "email threading failed");
+    match assign(pool, account_id, input).await {
+        Ok(_) => true,
+        Err(e) => {
+            warn!(target: "worker", account_id, email_id, error = ?e, "email threading failed");
+            false
+        }
     }
+}
+
+/// Make sure `backfill_batch` runs on the next tick even if it had finished,
+/// so emails a sync failed to thread are retried rather than waiting out the
+/// finished mark.
+pub async fn retry_unthreaded(pool: &PgPool, account_id: i32) {
+    use crate::email::backfill_state::{Backfill, reopen};
+    reopen(pool, account_id, Backfill::Threading).await;
 }
 
 async fn assign(pool: &PgPool, account_id: i32, input: ThreadInput<'_>) -> sqlx::Result<i32> {
@@ -463,8 +476,7 @@ pub async fn backfill_batch(
         r#"
         SELECT e.id, e.gmail_id
         FROM emails e
-        LEFT JOIN email_thread_meta m ON m.email_id = e.id
-        WHERE e.account_id = $1 AND m.email_id IS NULL AND e.gmail_id IS NOT NULL
+        WHERE e.account_id = $1 AND e.thread_id IS NULL AND e.gmail_id IS NOT NULL
         ORDER BY e.created_at DESC NULLS LAST
         LIMIT $2
         "#,

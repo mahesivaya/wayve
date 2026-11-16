@@ -565,14 +565,16 @@ describe("dragging a header tab into a split", () => {
       delete (window as { fluxzeDesktop?: unknown }).fluxzeDesktop;
     });
 
-    it("keeps the browser sidebar open, with no shrink toggle", () => {
+    it("lets the browser shrink and expand it from the brand toggle", () => {
       const nav = renderShrunk(); // a saved "shrunk" preference
+      expect(nav).toHaveClass("collapsed");
+
+      fireEvent.click(screen.getByRole("button", { name: "Expand sidebar" }));
       expect(nav).not.toHaveClass("collapsed");
-      expect(
-        screen.queryByRole("button", {
-          name: /Collapse sidebar|Expand sidebar/,
-        })
-      ).toBeNull();
+      expect(window.localStorage.getItem("rwayve.sidebar.collapsed")).toBe("0");
+
+      fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
+      expect(nav).toHaveClass("collapsed");
     });
 
     it("lets the desktop app shrink it, without hover peek", () => {

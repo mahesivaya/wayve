@@ -499,6 +499,9 @@ pub async fn upsert_connected_email_account(
           token_expiry = EXCLUDED.token_expiry,
           provider = EXCLUDED.provider,
           is_active = true,
+          -- A reconnect starts the history backfills over: a mark set while
+          -- the old grant was dead (or for another provider) must not stick.
+          backfill_done = '{}',
           refresh_token_iv = COALESCE(EXCLUDED.refresh_token_iv, email_accounts.refresh_token_iv),
           refresh_token_encrypted = COALESCE(
             EXCLUDED.refresh_token_encrypted,

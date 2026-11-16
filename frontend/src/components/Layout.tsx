@@ -512,9 +512,9 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       return false;
     }
   });
-  // The browser keeps the sidebar always open (no shrink toggle there); only
-  // the desktop app can shrink it to the icon rail.
-  const sidebarCollapsed = collapsedPref && isDesktopApp();
+  // Both the browser and the desktop app can shrink the sidebar to the icon
+  // rail, from the toggle at the end of the brand block.
+  const sidebarCollapsed = collapsedPref;
 
   // Icons always show; collapsing only hides the labels. Narrow screens keep
   // their own (unpersisted) expand state, so a wide-screen "expanded" preference
@@ -2225,10 +2225,10 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
               it stays reachable whether the sidebar is a full panel or an icon
               rail. The narrow overlay uses the hamburger below instead; hidden
               while settings takes over (there's no sidebar to toggle). */}
-      {/* Only the desktop app shrinks the sidebar; the browser keeps it open. */}
+      {/* The browser gets the plain button, right-aligned to the end of the
+              brand block (see .header-collapse-btn). */}
       {!isNarrow &&
-        desktop &&
-        (showTabs ? (
+        (desktop && showTabs ? (
           // Desktop title bar (macOS): the toggle, pinned beside the window
           // controls (see .titlebar-nav).
           <div className="titlebar-nav">
