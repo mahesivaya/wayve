@@ -43,14 +43,14 @@ Pick the right rebuild scope:
 Take a snapshot for any schema-affecting deploy:
 
 ```bash
-docker exec rwayve_postgres_prod pg_dump -U rwayve rwayve_prod \
+docker exec hadal_postgres_prod pg_dump -U rwayve rwayve_prod \
   | gzip > /home/ubuntu/backups/pre-deploy-$(date +%Y%m%d-%H%M%S).sql.gz
 ```
 
 Scope to specific tables when the change is local:
 
 ```bash
-docker exec rwayve_postgres_prod pg_dump -U rwayve \
+docker exec hadal_postgres_prod pg_dump -U rwayve \
   -t drive_files -t folders rwayve_prod \
   | gzip > /home/ubuntu/backups/pre-drive-rename-$(date +%Y%m%d-%H%M%S).sql.gz
 ```
@@ -60,7 +60,7 @@ docker exec rwayve_postgres_prod pg_dump -U rwayve \
 ```bash
 # Wait for backend healthy
 for i in $(seq 1 60); do
-  s=$(docker inspect -f '{{.State.Health.Status}}' rwayve_backend_prod 2>/dev/null)
+  s=$(docker inspect -f '{{.State.Health.Status}}' hadal_backend_prod 2>/dev/null)
   [ "$s" = "healthy" ] && echo "READY after ${i}s" && break
   sleep 1
 done
@@ -70,10 +70,10 @@ curl -s -o /dev/null -w "GET /            -> %{http_code}\n" https://rwayve.mahe
 curl -s -o /dev/null -w "GET /api/config -> %{http_code}\n" https://rwayve.maheshg.me/api/config
 
 # Backend logs for errors
-docker logs rwayve_backend_prod --since 2m 2>&1 | grep -iE 'error|warn' | tail -20
+docker logs hadal_backend_prod --since 2m 2>&1 | grep -iE 'error|warn' | tail -20
 
 # DB migration check (if applicable)
-docker exec rwayve_postgres_prod psql -U rwayve rwayve_prod -c '\dt'
+docker exec hadal_postgres_prod psql -U rwayve rwayve_prod -c '\dt'
 ```
 
 ## Rollback
@@ -90,7 +90,7 @@ DB rollback (restore the snapshot you took):
 
 ```bash
 gunzip < /home/ubuntu/backups/pre-deploy-<timestamp>.sql.gz \
-  | docker exec -i rwayve_postgres_prod psql -U rwayve rwayve_prod
+  | docker exec -i hadal_postgres_prod psql -U rwayve rwayve_prod
 ```
 
 ## One-liner from laptop (no SSH session)
@@ -105,10 +105,10 @@ ssh -i ~/.ssh/rwayve-deploy.pem ubuntu@rwayve.maheshg.me '
 
 ## Container names (quick reference)
 
-- `rwayve_backend_prod` — Actix API server
-- `rwayve_email_sync_worker_prod` — Gmail/Outlook sync (30s loop)
-- `rwayve_email_body_worker_prod` — message body fetcher
-- `rwayve_frontend_prod` — Vite-built React bundle, served by nginx inside the container
-- `rwayve_nginx_prod` — public-facing nginx (443 + 80→443 redirect)
-- `rwayve_postgres_prod` — Postgres 15 (volume `rwayve_prod_pgdata`)
-- `rwayve_redis_prod` — Redis 7 (rate limits + monthly quota counters)
+- `hadal_backend_prod` — Actix API server
+- `hadal_email_sync_worker_prod` — Gmail/Outlook sync (30s loop)
+- `hadal_email_body_worker_prod` — message body fetcher
+- `hadal_frontend_prod` — Vite-built React bundle, served by nginx inside the container
+- `hadal_nginx_prod` — public-facing nginx (443 + 80→443 redirect)
+- `hadal_postgres_prod` — Postgres 15 (volume `rwayve_prod_pgdata`)
+- `hadal_redis_prod` — Redis 7 (rate limits + monthly quota counters)

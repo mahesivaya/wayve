@@ -11,7 +11,7 @@ x-backend-env: &backend-env
 services:
   postgres_db:
     image: postgres:15
-    container_name: rwayve_postgres_dev
+    container_name: hadal_postgres_dev
     env_file:
       - ../.env.secrets
     ports:
@@ -28,7 +28,7 @@ services:
 
   redis:
     image: redis:7
-    container_name: rwayve_redis_dev
+    container_name: hadal_redis_dev
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -49,7 +49,7 @@ services:
 
   mailpit:
     image: axllent/mailpit:latest
-    container_name: rwayve_mailpit_dev
+    container_name: hadal_mailpit_dev
     restart: unless-stopped
     ports:
       - "1025:1025"   # SMTP
@@ -68,8 +68,8 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
-    image: rwayve-backend:dev
-    container_name: rwayve_backend_dev
+    image: hadal-backend:dev
+    container_name: hadal_backend_dev
     restart: unless-stopped
     depends_on:
       jaeger:
@@ -109,14 +109,14 @@ services:
     # runs this as its own service in docker-compose.prod.yml.
     # `build:` is declared so `docker compose up` can produce the image on a
     # host that doesn't already have it locally; otherwise compose falls
-    # through to a Docker Hub pull of `rwayve-backend`, which doesn't exist
+    # through to a Docker Hub pull of `hadal-backend`, which doesn't exist
     # there. Compose detects the identical build and reuses cached layers.
     build:
       context: ../backend
       dockerfile: Dockerfile
-    image: rwayve-backend:dev
-    container_name: rwayve_email_sync_worker_dev
-    hostname: rwayve_email_sync_worker_dev
+    image: hadal-backend:dev
+    container_name: hadal_email_sync_worker_dev
+    hostname: hadal_email_sync_worker_dev
     restart: unless-stopped
     depends_on:
       postgres_db:
@@ -141,9 +141,9 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
-    image: rwayve-backend:dev
-    container_name: rwayve_email_body_worker_dev
-    hostname: rwayve_email_body_worker_dev
+    image: hadal-backend:dev
+    container_name: hadal_email_body_worker_dev
+    hostname: hadal_email_body_worker_dev
     restart: unless-stopped
     depends_on:
       postgres_db:
@@ -164,8 +164,8 @@ services:
     build:
       context: ../frontend
       dockerfile: Dockerfile.dev
-    image: rwayve-frontend:dev
-    container_name: rwayve_frontend_dev
+    image: hadal-frontend:dev
+    container_name: hadal_frontend_dev
     restart: unless-stopped
     depends_on:
       - backend
@@ -198,7 +198,7 @@ services:
 
   jaeger:
     image: jaegertracing/all-in-one:1.60
-    container_name: rwayve_jaeger_dev
+    container_name: hadal_jaeger_dev
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     ports:
@@ -217,9 +217,9 @@ services:
     build:
       context: ./nginx
       dockerfile: Dockerfile
-    image: rwayve-nginx:dev
+    image: hadal-nginx:dev
     pull_policy: build
-    container_name: rwayve_nginx_dev
+    container_name: hadal_nginx_dev
     restart: unless-stopped
     depends_on:
       frontend:

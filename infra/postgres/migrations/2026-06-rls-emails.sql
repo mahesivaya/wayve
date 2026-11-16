@@ -14,7 +14,7 @@
 -- Same model as the rest of phase 2: request handlers SET LOCAL ROLE wayve_app
 -- + set app.user_id so the policy engages; workers/admin stay superuser and
 -- bypass. Idempotent. Apply by hand (dev first, then prod with a backup).
---   docker exec -i rwayve_postgres_dev psql -U wayve_user -d wayve_dev \
+--   docker exec -i hadal_postgres_dev psql -U wayve_user -d wayve_dev \
 --     < infra/postgres/migrations/2026-06-rls-emails.sql
 -- Rollback: ALTER TABLE emails NO FORCE / DISABLE ROW LEVEL SECURITY (+ attachments).
 -- ============================================================================

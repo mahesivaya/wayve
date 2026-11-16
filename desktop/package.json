@@ -1,7 +1,7 @@
 {
   "name": "fluxze-desktop",
   "version": "1.0.1",
-  "description": "Fluxze desktop app — native macOS shell around https://fluxze.com",
+  "description": "Fluxze desktop app — native macOS shell around https://hadalspace.com",
   "private": true,
   "author": "Fluxze",
   "main": "main.cjs",

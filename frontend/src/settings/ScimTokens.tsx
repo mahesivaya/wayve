@@ -120,7 +120,7 @@ export default function ScimTokens() {
             Mint a bearer token here, then paste it into your IdP (Okta / Entra
             / Google Workspace / OneLogin). They'll create, update, and
             deprovision users automatically through{" "}
-            <code>https://fluxze.com/scim/v2</code>.
+            <code>https://hadalspace.com/scim/v2</code>.
           </p>
         </div>
       </header>
@@ -225,7 +225,7 @@ export default function ScimTokens() {
         <h2>Connecting your IdP</h2>
         <ul>
           <li>
-            <strong>Base URL:</strong> <code>https://fluxze.com/scim/v2</code>
+            <strong>Base URL:</strong> <code>https://hadalspace.com/scim/v2</code>
           </li>
           <li>
             <strong>Authentication:</strong>{" "}

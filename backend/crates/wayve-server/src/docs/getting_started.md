@@ -79,7 +79,7 @@ its SHA-256 hash is stored.
 ### Verify it works
 
 ```text
-curl https://fluxze.com/api/me -H "X-API-KEY: wv_sk_..."
+curl https://hadalspace.com/api/me -H "X-API-KEY: wv_sk_..."
 
 # 200 → identity        401 → bad key
 # 403 → wrong scope     429 → rate-limited (retry with backoff)

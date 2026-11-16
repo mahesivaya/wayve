@@ -1,6 +1,6 @@
 // Fluxze desktop — thin Electron wrapper around the production web app.
 //
-// The window loads https://fluxze.com/login directly (skipping the marketing
+// The window loads https://hadalspace.com/login directly (skipping the marketing
 // home page), so OAuth redirects, session cookies, WebSockets (chat/call) and
 // the backend CORS allowlist all behave exactly as they do in a browser. No
 // frontend or backend changes are needed — the web /login route already bounces
@@ -24,7 +24,7 @@ const { autoUpdater } = require("electron-updater");
 const path = require("path");
 const savedLogin = require("./savedLogin.cjs");
 
-const APP_URL = process.env.FLUXZE_URL || "https://fluxze.com";
+const APP_URL = process.env.FLUXZE_URL || "https://hadalspace.com";
 // Open straight to the login screen, skipping the marketing home page. The web
 // app's /login guard redirects already-authenticated users to their account
 // home, so returning users land in the app — not stranded on login.
@@ -36,17 +36,22 @@ const isMac = process.platform === "darwin";
 // Packaged builds already get this from build.productName.
 app.name = "Fluxze";
 
+// Hosts the app itself is served from. hadalspace.com is the canonical one;
+// fluxze.com is the previous domain, kept so a session that starts there (an
+// old bookmark, FLUXZE_URL, a link in an older email) still stays in-window.
+const APP_HOSTS = ["hadalspace.com", "fluxze.com"];
+
 // Hosts allowed to navigate inside the window. Everything else (third-party
 // links, mailto:, etc.) opens in the user's default browser. Google hosts are
 // included so the Gmail OAuth round-trip can complete in-window.
 const IN_WINDOW_HOSTS = [
-  "fluxze.com",
+  ...APP_HOSTS,
   "accounts.google.com",
   "oauth2.googleapis.com",
   "content.googleapis.com",
 ];
 
-/** True when `urlString`'s host is fluxze.com, a subdomain, or a Google OAuth host. */
+/** True when `urlString`'s host is an app host, a subdomain of one, or a Google OAuth host. */
 function isInWindowUrl(urlString) {
   let host;
   try {
@@ -76,7 +81,9 @@ function isAppUrl(urlString) {
   if (u.protocol !== "https:" && u.protocol !== "http:") return false;
   const host = u.hostname;
   if (host === "localhost" || host === "127.0.0.1") return true;
-  return host === "fluxze.com" || host.endsWith(".fluxze.com");
+  return APP_HOSTS.some(
+    (appHost) => host === appHost || host.endsWith(`.${appHost}`),
+  );
 }
 
 /**
@@ -273,7 +280,7 @@ function createWindow() {
   mainWindow.loadURL(START_URL);
 }
 
-/** A minimal inline page shown when fluxze.com can't be reached. */
+/** A minimal inline page shown when the app host can't be reached. */
 function offlinePage(detail) {
   const html = `<!doctype html><html><head><meta charset="utf-8">
 <title>Fluxze</title>
@@ -417,7 +424,7 @@ app.whenReady().then(() => {
   app.userAgentFallback = cleanUa;
   session.defaultSession.setUserAgent(cleanUa);
 
-  // Grant camera/mic (calls), notifications and clipboard reads to fluxze.com;
+  // Grant camera/mic (calls), notifications and clipboard reads to the app hosts;
   // deny everything else.
   // On macOS, granting "media" here isn't enough: the OS has its own
   // camera/mic gate, so ask it too. That shows the system "Fluxze would like to

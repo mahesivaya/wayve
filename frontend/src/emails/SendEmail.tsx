@@ -762,7 +762,7 @@ export default function SendEmail({
             </label>
             <small style={{ color: "#6b7280", lineHeight: 1.4 }}>
               {fluxzeOnly
-                ? "Readable only after signing in at fluxze.com. A recipient who isn’t a Fluxze account blocks the send — nothing is emailed to them."
+                ? "Readable only after signing in at hadalspace.com. A recipient who isn’t a Fluxze account blocks the send — nothing is emailed to them."
                 : "Readable only inside Fluxze. Blocks the send if any recipient isn’t a Fluxze account, so content can never reach Gmail or another mail service."}
             </small>
           </div>

@@ -9,7 +9,7 @@ x-backend-env: &backend-env
 services:
   postgres_db:
     image: postgres:15
-    container_name: rwayve_postgres_prod
+    container_name: hadal_postgres_prod
     env_file:
       - ../.env.production
     healthcheck:
@@ -24,7 +24,7 @@ services:
 
   redis:
     image: redis:7
-    container_name: rwayve_redis_prod
+    container_name: hadal_redis_prod
     restart: always
     command:
       [
@@ -45,8 +45,8 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
-    image: ${BACKEND_IMAGE:-rwayve-backend:prod}
-    container_name: rwayve_backend_prod
+    image: ${BACKEND_IMAGE:-hadal-backend:prod}
+    container_name: hadal_backend_prod
     restart: always
     depends_on:
       postgres_db:
@@ -78,15 +78,15 @@ services:
     # Same image as backend (built once); RWAYVE_ROLE selects worker behaviour.
     # `build:` is declared so `docker compose up` can produce the image on a
     # host that doesn't already have it — without this, compose falls through
-    # to a Docker Hub pull of a non-existent `rwayve-backend` repository.
+    # to a Docker Hub pull of a non-existent `hadal-backend` repository.
     # Compose detects the identical build context and reuses cached layers, so
     # no extra compile time. Same applies to email_body_worker below.
     build:
       context: ../backend
       dockerfile: Dockerfile
-    image: ${BACKEND_IMAGE:-rwayve-backend:prod}
-    container_name: rwayve_email_sync_worker_prod
-    hostname: rwayve_email_sync_worker_prod
+    image: ${BACKEND_IMAGE:-hadal-backend:prod}
+    container_name: hadal_email_sync_worker_prod
+    hostname: hadal_email_sync_worker_prod
     restart: always
     depends_on:
       postgres_db:
@@ -108,9 +108,9 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
-    image: ${BACKEND_IMAGE:-rwayve-backend:prod}
-    container_name: rwayve_email_body_worker_prod
-    hostname: rwayve_email_body_worker_prod
+    image: ${BACKEND_IMAGE:-hadal-backend:prod}
+    container_name: hadal_email_body_worker_prod
+    hostname: hadal_email_body_worker_prod
     restart: always
     depends_on:
       postgres_db:
@@ -133,8 +133,8 @@ services:
     build:
       context: ../frontend
       dockerfile: Dockerfile.prod
-    image: ${FRONTEND_IMAGE:-rwayve-frontend:prod}
-    container_name: rwayve_frontend_prod
+    image: ${FRONTEND_IMAGE:-hadal-frontend:prod}
+    container_name: hadal_frontend_prod
     restart: always
 
   nginx:
@@ -147,9 +147,9 @@ services:
     build:
       context: ./nginx
       dockerfile: Dockerfile
-    image: rwayve-nginx:prod
+    image: hadal-nginx:prod
     pull_policy: build
-    container_name: rwayve_nginx_prod
+    container_name: hadal_nginx_prod
     restart: always
     depends_on:
       frontend:
@@ -161,6 +161,12 @@ services:
     environment:
       CSP_CONNECT_SRC: "${CSP_CONNECT_SRC:-https://app.example.com wss://app.example.com}"
       NGINX_HOST: "${NGINX_HOST:-app.example.com}"
+      # Second apex host served alongside NGINX_HOST (empty = none).
+      NGINX_HOST_ALIAS: "${NGINX_HOST_ALIAS:-}"
+      # certbot --cert-name of the cert nginx serves; see nginx.prod.conf.template.
+      NGINX_HOST_CERT_NAME: "${NGINX_HOST_CERT_NAME:-${NGINX_HOST:-app.example.com}}"
+      # "on" 301s page loads on the non-canonical apex host to NGINX_HOST.
+      NGINX_HOST_ALIAS_REDIRECT: "${NGINX_HOST_ALIAS_REDIRECT:-off}"
       NGINX_ENVSUBST_OUTPUT_DIR: /etc/nginx
       NGINX_ENVSUBST_FILTER: "^(CSP_|NGINX_HOST)"
     ports:

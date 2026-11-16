@@ -146,7 +146,7 @@ db-reset:
     {{compose-dev}} up -d postgres_db
 
 db-shell:
-    docker exec -it rwayve_postgres_dev psql -U wayve_user -d wayve_dev
+    docker exec -it hadal_postgres_dev psql -U wayve_user -d wayve_dev
 
 # =========================
 # 🔐 SQLx
@@ -178,7 +178,7 @@ restart-nginx:
 # =========================
 
 logs-backend:
-    docker logs -f rwayve_backend_dev
+    docker logs -f hadal_backend_dev
 
 # =========================
 # 💳 STRIPE / BILLING (dev)

@@ -10,7 +10,7 @@
 -- lives in infra/postgres/init.sql so fresh installs get it automatically; this
 -- file additionally runs the one-time backfill (section 5) + report (section 6).
 --
---   Dev:  docker exec -i rwayve_postgres_dev psql -U wayve_user -d wayve_dev \
+--   Dev:  docker exec -i hadal_postgres_dev psql -U wayve_user -d wayve_dev \
 --           < infra/postgres/migrations/2026-06-org-tagging.sql
 --   Prod: psql "$DATABASE_URL" -f infra/postgres/migrations/2026-06-org-tagging.sql
 --

@@ -75,7 +75,7 @@ pub async fn create_demo_request(
     let when = scheduled_at.to_rfc3339_opts(SecondsFormat::Secs, true);
     let subject = format!("New demo request — {first} {last}");
     let body = format!(
-        "A new demo was booked on fluxze.com.\n\n\
+        "A new demo was booked on hadalspace.com.\n\n\
          Name:        {first} {last}\n\
          Email:       {email}\n\
          Work email:  {work_email}\n\
@@ -147,7 +147,7 @@ fn build_ics(
     let name = format!("{first} {last}");
     let summary = escape_ics(&format!("Fluxze demo with {name}"));
     let description = escape_ics(&format!(
-        "Demo request via fluxze.com\nName: {name}\nEmail: {email}\nWork email: {work_email}"
+        "Demo request via hadalspace.com\nName: {name}\nEmail: {email}\nWork email: {work_email}"
     ));
     let attendee_cn = escape_ics(&name);
 
@@ -158,7 +158,7 @@ fn build_ics(
         "CALSCALE:GREGORIAN".to_string(),
         "METHOD:REQUEST".to_string(),
         "BEGIN:VEVENT".to_string(),
-        format!("UID:demo-{id}@fluxze.com"),
+        format!("UID:demo-{id}@hadalspace.com"),
         format!("DTSTAMP:{stamp}"),
         format!("DTSTART:{dtstart}"),
         format!("DTEND:{dtend}"),
@@ -206,16 +206,16 @@ mod tests {
             "ada@x.com",
             "ada@work.com",
             start,
-            "sales@fluxze.com",
+            "sales@hadalspace.com",
         );
 
         assert!(ics.contains("BEGIN:VEVENT"));
-        assert!(ics.contains("UID:demo-42@fluxze.com"));
+        assert!(ics.contains("UID:demo-42@hadalspace.com"));
         assert!(ics.contains("DTSTART:20260625T143000Z"));
         // 30 minutes later.
         assert!(ics.contains("DTEND:20260625T150000Z"));
         assert!(ics.contains("SUMMARY:Fluxze demo with Ada Lovelace"));
-        assert!(ics.contains("ORGANIZER;CN=Fluxze Sales:mailto:sales@fluxze.com"));
+        assert!(ics.contains("ORGANIZER;CN=Fluxze Sales:mailto:sales@hadalspace.com"));
         assert!(ics.contains("mailto:ada@work.com"));
         assert!(ics.contains("\r\n"));
     }
@@ -233,7 +233,7 @@ mod tests {
             "a@x.com",
             "a@y.com",
             start,
-            "sales@fluxze.com",
+            "sales@hadalspace.com",
         );
         assert!(ics.contains("Ada\\,"));
     }

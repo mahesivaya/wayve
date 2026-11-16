@@ -19,7 +19,7 @@
 -- `app.bypass` escape hatch the policies honour.
 --
 -- Apply by hand (init.sql only runs on a fresh volume). Prod:
---   ssh ... 'docker exec -i rwayve_postgres_prod sh -c \
+--   ssh ... 'docker exec -i hadal_postgres_prod sh -c \
 --     "psql -v ON_ERROR_STOP=1 -U \$POSTGRES_USER -d \$POSTGRES_DB"' \
 --     < infra/postgres/migrations/2026-07-priority-scale-invert.sql
 --

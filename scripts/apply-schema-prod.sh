@@ -33,7 +33,7 @@
 # Overridable via env: PROD_CONTAINER, PROD_USER, PROD_DB, PG_IMAGE, INIT_SQL.
 set -euo pipefail
 
-PROD_CONTAINER="${PROD_CONTAINER:-rwayve_postgres_prod}"
+PROD_CONTAINER="${PROD_CONTAINER:-hadal_postgres_prod}"
 PROD_USER="${PROD_USER:-rwayve}"
 PROD_DB="${PROD_DB:-rwayve_prod}"
 PG_IMAGE="${PG_IMAGE:-postgres:15}"
