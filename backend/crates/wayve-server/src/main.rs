@@ -105,9 +105,11 @@ async fn main() -> std::io::Result<()> {
     let server = HttpServer::new(move || {
         App::new()
             .wrap(TracingLogger::default())
+            // Actix runs the LAST `.wrap()` first, so ActivityLogMiddleware runs
+            // before ApiKeyMiddleware. It resolves the actor from the response's
+            // request, after ApiKeyMiddleware has injected its principal, so the
+            // order between these two doesn't matter.
             .wrap(ApiKeyMiddleware)
-            // Must follow ApiKeyMiddleware so an api-key request's principal is
-            // already injected when the activity stream resolves the actor.
             .wrap(ActivityLogMiddleware)
             .wrap(embed::middleware::EmbedMiddleware)
             .wrap(RateLimitMiddleware)
