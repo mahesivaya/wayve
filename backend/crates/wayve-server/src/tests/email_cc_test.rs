@@ -215,7 +215,7 @@ mod tests {
             std::env::remove_var("GMAIL_API_BASE");
         }
 
-        assert_eq!(n, 4);
+        assert_eq!(n.filled, 4);
         assert_eq!(
             cc_of(&pool, ids[0], user).await.as_deref(),
             Some(""),
@@ -240,7 +240,7 @@ mod tests {
         let outlook = backfill_batch(&pool, acct, &MailProvider::Microsoft, "tok")
             .await
             .unwrap_or_else(|e| panic!("backfill: {e}"));
-        assert_eq!(outlook, 0, "only Gmail mail is backfilled");
+        assert_eq!(outlook.filled, 0, "only Gmail mail is backfilled");
     }
 
     #[actix_web::test]
@@ -280,7 +280,7 @@ mod tests {
             std::env::remove_var("GMAIL_API_BASE");
         }
 
-        assert_eq!(n, 0);
+        assert_eq!(n.filled, 0);
         assert_eq!(
             cc_of(&pool, id, user).await,
             None,

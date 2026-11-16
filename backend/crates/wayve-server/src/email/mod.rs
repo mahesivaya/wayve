@@ -1,5 +1,6 @@
 pub mod account;
 pub mod attachments;
+pub mod backfill_state;
 pub(crate) mod body_handlers;
 pub mod body_worker;
 pub mod cc_backfill;

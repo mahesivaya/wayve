@@ -83,6 +83,8 @@ pub trait MailSync: Send + Sync {
         last_sync: Option<i64>,
     ) -> Result<()>;
 
+    /// Syncs up to `limit` messages older than `before_timestamp`. Returns how
+    /// many the provider listed: 0 means there is no older mail left.
     #[allow(clippy::too_many_arguments)]
     async fn sync_before(
         &self,
@@ -91,7 +93,7 @@ pub trait MailSync: Send + Sync {
         access_token: &str,
         before_timestamp: i64,
         limit: usize,
-    ) -> Result<()>;
+    ) -> Result<usize>;
 }
 
 #[async_trait]
@@ -232,7 +234,7 @@ impl MailSync for GoogleMailClient {
         access_token: &str,
         before_timestamp: i64,
         limit: usize,
-    ) -> Result<()> {
+    ) -> Result<usize> {
         sync_account_before(pool, account_id, access_token, before_timestamp, limit).await
     }
 }
@@ -499,7 +501,7 @@ impl MailSync for OutlookMailClient {
         access_token: &str,
         before_timestamp: i64,
         limit: usize,
-    ) -> Result<()> {
+    ) -> Result<usize> {
         sync_outlook_account_before(pool, account_id, access_token, before_timestamp, limit).await
     }
 }
@@ -847,10 +849,10 @@ impl MailSync for ImapMailClient {
         _access_token: &str,
         _before_timestamp: i64,
         _limit: usize,
-    ) -> Result<()> {
+    ) -> Result<usize> {
         // No historical backfill for IMAP yet; the forward sync pulls the most
         // recent batch each tick.
-        Ok(())
+        Ok(0)
     }
 }
 
@@ -954,7 +956,7 @@ impl MailProvider {
         access_token: &str,
         before_timestamp: i64,
         limit: usize,
-    ) -> Result<()> {
+    ) -> Result<usize> {
         require_client(self)?
             .sync_before(pool, account_id, access_token, before_timestamp, limit)
             .await

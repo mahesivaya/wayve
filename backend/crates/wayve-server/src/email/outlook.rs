@@ -343,6 +343,7 @@ async fn upsert_messages(
     messages: &[OutlookMessage],
 ) -> Result<()> {
     let mut attachment_tasks = FuturesUnordered::new();
+    let mut unthreaded = false;
 
     for m in messages {
         // At-rest encryption into the (body_iv, body_encrypted) pair, as the
@@ -365,7 +366,7 @@ async fn upsert_messages(
             },
         )
         .await?;
-        crate::email::threading::assign_best_effort(
+        unthreaded |= !crate::email::threading::assign_best_effort(
             pool,
             account_id,
             crate::email::threading::ThreadInput {
@@ -407,6 +408,9 @@ async fn upsert_messages(
         }
     }
 
+    if unthreaded {
+        crate::email::threading::retry_unthreaded(pool, account_id).await;
+    }
     Ok(())
 }
 
@@ -634,7 +638,7 @@ pub async fn sync_outlook_account_before(
     access_token: &str,
     before_timestamp: i64,
     limit: usize,
-) -> Result<()> {
+) -> Result<usize> {
     let mut next = Some(first_before_page_url(before_timestamp, limit));
     let mut total = 0usize;
 
@@ -678,7 +682,7 @@ pub async fn sync_outlook_account_before(
     }
 
     debug!(target: "worker", account_id, synced = total, before_timestamp, "older outlook sync done");
-    Ok(())
+    Ok(total)
 }
 
 /// Sends a plain-text message from the connected Outlook mailbox via the Graph
