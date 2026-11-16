@@ -577,18 +577,37 @@ describe("dragging a header tab into a split", () => {
       expect(nav).toHaveClass("collapsed");
     });
 
-    it("lets the desktop app shrink it, without hover peek", () => {
+    it.each([
+      ["the browser", false],
+      ["the desktop app", true],
+    ])("peeks the shrunk rail open on hover in %s", (_name, desktop) => {
       vi.useFakeTimers();
-      (window as { fluxzeDesktop?: unknown }).fluxzeDesktop = {
-        isDesktop: true,
-      };
+      if (desktop) {
+        (window as { fluxzeDesktop?: unknown }).fluxzeDesktop = {
+          isDesktop: true,
+        };
+      }
       const nav = renderShrunk();
+      expect(nav).toHaveClass("collapsed");
+      // Shrunk, the desktop app hides the icon rail entirely (leaving a hover
+      // strip at the window's edge); the browser keeps its icons.
+      const hasRailHidden = () => nav.classList.contains("rail-hidden");
+      expect(hasRailHidden()).toBe(desktop);
+
       fireEvent.mouseEnter(nav);
       act(() => {
         vi.advanceTimersByTime(200);
       });
+      expect(nav).toHaveClass("peek");
+      expect(nav).not.toHaveClass("collapsed");
+      expect(hasRailHidden()).toBe(false);
+
+      fireEvent.mouseLeave(nav);
       expect(nav).toHaveClass("collapsed");
       expect(nav).not.toHaveClass("peek");
+      expect(hasRailHidden()).toBe(desktop);
+      // Peeking never changes the saved choice.
+      expect(window.localStorage.getItem("rwayve.sidebar.collapsed")).toBe("1");
     });
   });
 });

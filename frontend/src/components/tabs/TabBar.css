@@ -470,6 +470,24 @@ html.is-titlebar-inset.is-fullscreen
   .app-tabbar[data-strip="main"] {
   padding-left: 50px;
 }
+/* The desktop app's shrunk sidebar has no rail (.rail-hidden) and its hover
+   peek has no footprint either, so the strip already starts at the window's
+   left edge: keep the room for the window controls, drop the 56px pull-back.
+   The pinned toggle is the one thing in the hidden rail that still shows. */
+html.is-titlebar-inset
+  .body:has(> .sidebar.rail-hidden, > .sidebar.peek)
+  .app-tabbar[data-strip="main"] {
+  margin-left: 0;
+  padding-left: 128px;
+}
+html.is-titlebar-inset.is-fullscreen
+  .body:has(> .sidebar.rail-hidden, > .sidebar.peek)
+  .app-tabbar[data-strip="main"] {
+  padding-left: 50px;
+}
+html.is-titlebar-inset .sidebar.rail-hidden .titlebar-nav {
+  visibility: visible;
+}
 
 /* Under a tab strip the page card hangs straight off it: flush at the top and
    sides, no top border or top corners. The strip's bottom line is the card's
@@ -529,7 +547,7 @@ html.is-titlebar-inset.is-fullscreen
   background: var(--sidebar-hover);
 }
 
-/* Hover-peeked rail (browser): just the ☰ toggle at the top-left, no logo. */
+/* Hover-peeked rail: just the ☰ toggle at the top-left, no logo. */
 .sidebar.peek .sidebar-brand .logo {
   display: none;
 }
