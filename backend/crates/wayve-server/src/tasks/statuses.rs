@@ -92,6 +92,36 @@ impl StatusOwner {
     }
 }
 
+/// Advisory-lock classes for the per-owner number sequences that
+/// `lock_owner_sequence` serializes. Distinct from every other class in use
+/// (e.g. email threading's "th").
+pub const STORY_NUMBER_LOCK: i32 = 0x7573; // "us"
+pub const TICKET_NUMBER_LOCK: i32 = 0x7774; // "wt"
+
+/// Holds `owner`'s lock on the `class` number sequence until `tx` ends, so a
+/// `MAX(number) + 1` insert that follows sees every earlier create for this
+/// owner and two concurrent creates can't take the same number. It has to be
+/// its own statement before the insert: under READ COMMITTED a statement's
+/// snapshot is taken when it starts, so a lock taken inside the insert itself
+/// would still read the stale MAX. Org and user ids share the key space by
+/// sign (both are positive serials).
+pub async fn lock_owner_sequence(
+    tx: &mut sqlx::PgConnection,
+    class: i32,
+    owner: StatusOwner,
+) -> sqlx::Result<()> {
+    let key = match owner {
+        StatusOwner::Organization(id) => id,
+        StatusOwner::User(id) => -id,
+    };
+    sqlx::query("SELECT pg_advisory_xact_lock($1, $2)")
+        .bind(class)
+        .bind(key)
+        .execute(tx)
+        .await?;
+    Ok(())
+}
+
 /// Org members share one set; everyone else (personal, platform, and the
 /// degenerate org-with-no-id case) gets a per-user set.
 pub fn owner_for(scope: Scope, organization_id: Option<i32>, user_id: i32) -> StatusOwner {

@@ -1731,6 +1731,14 @@ CREATE TABLE IF NOT EXISTS user_stories (
 
 CREATE INDEX IF NOT EXISTS idx_user_stories_org ON user_stories(organization_id);
 CREATE INDEX IF NOT EXISTS idx_user_stories_user ON user_stories(user_id);
+-- story_number is unique per owner; creates serialize on the owner's advisory
+-- lock (tasks::statuses::lock_owner_sequence) and these back that up. An
+-- existing database with duplicates renumbers them first: see
+-- migrations/2026-11-workspace-number-unique.sql.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_user_stories_org_number
+    ON user_stories(organization_id, story_number) WHERE organization_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_user_stories_user_number
+    ON user_stories(user_id, story_number) WHERE user_id IS NOT NULL;
 
 -- Status-change history for the user-stories burnup trend lines. One row per
 -- status a story enters (create writes the first; each later status change adds
@@ -1821,6 +1829,12 @@ CREATE TABLE IF NOT EXISTS workspace_tickets (
 
 CREATE INDEX IF NOT EXISTS idx_workspace_tickets_org ON workspace_tickets(organization_id);
 CREATE INDEX IF NOT EXISTS idx_workspace_tickets_user ON workspace_tickets(user_id);
+-- ticket_number is unique per owner, as story_number above (same migration).
+-- Mirrored bug tickets have no number and are ignored.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_workspace_tickets_org_number
+    ON workspace_tickets(organization_id, ticket_number) WHERE organization_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_workspace_tickets_user_number
+    ON workspace_tickets(user_id, ticket_number) WHERE user_id IS NOT NULL;
 -- One board work item per reported bug; also lets the mirror INSERT use
 -- ON CONFLICT (support_ticket_id). NULLs (normal tickets) don't collide.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_workspace_tickets_support_ticket
