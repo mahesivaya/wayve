@@ -454,13 +454,17 @@ const BACKFILL_BATCH: usize = 100;
 
 /// Pulls the next batch of older mail, anchoring the window at the oldest email
 /// in the local DB. Stops when the provider returns no rows, or when the account
-/// has no emails yet and the forward sync is doing the initial pull.
+/// has no emails yet and the forward sync is doing the initial pull. Gmail walks
+/// whole conversations instead (`backfill_gmail_threads`).
 async fn backfill_older(
     pool: &PgPool,
     account_id: i32,
     provider: &crate::email::provider::MailProvider,
     access_token: &str,
 ) -> Result<()> {
+    if *provider == crate::email::provider::MailProvider::Google {
+        return backfill_gmail_threads(pool, account_id, access_token).await;
+    }
     let oldest: Option<NaiveDateTime> =
         sqlx::query_scalar("SELECT MIN(created_at) FROM emails WHERE account_id = $1")
             .bind(account_id)
@@ -482,6 +486,182 @@ async fn backfill_older(
             BACKFILL_BATCH,
         )
         .await
+}
+
+/// One Gmail backfill step. `messages.list` walks all mail strictly newest to
+/// oldest from `email_accounts.backfill_before`; each listed message not stored
+/// yet has its whole conversation loaded with one `threads.get`, so a thread's
+/// messages arrive together rather than one call each. The cursor then moves to
+/// the oldest listed message. It is its own column because those conversations
+/// carry messages far older than the walk has reached, so the oldest stored
+/// email would skip everything in between.
+///
+/// The cursor seeds from the oldest stored email for accounts that predate it,
+/// and stays put if any listed message could not be stored, so the next tick
+/// retries the batch instead of skipping mail.
+pub(crate) async fn backfill_gmail_threads(
+    pool: &PgPool,
+    account_id: i32,
+    token: &str,
+) -> Result<()> {
+    let cursor: Option<i64> = sqlx::query_scalar(
+        "SELECT COALESCE(backfill_before, \
+           (SELECT EXTRACT(EPOCH FROM MIN(created_at))::BIGINT FROM emails WHERE account_id = $1)) \
+         FROM email_accounts WHERE id = $1",
+    )
+    .bind(account_id)
+    .fetch_optional(pool)
+    .await?
+    .flatten();
+    let Some(before) = cursor else {
+        return Ok(());
+    };
+
+    let listed = fetch_message_refs_before(token, before, BACKFILL_BATCH).await?;
+    if listed.is_empty() {
+        return Ok(());
+    }
+    let listed_ids: Vec<String> = listed.iter().map(|(id, _)| id.clone()).collect();
+
+    let stored = stored_gmail_ids(pool, account_id, &listed_ids).await?;
+    let mut thread_ids: Vec<String> = Vec::new();
+    for (id, thread_id) in &listed {
+        if !stored.contains(id) && !thread_ids.contains(thread_id) {
+            thread_ids.push(thread_id.clone());
+        }
+    }
+    debug!(
+        target: "worker",
+        account_id,
+        listed = listed.len(),
+        threads = thread_ids.len(),
+        before,
+        "gmail thread backfill batch"
+    );
+    let headers = fetch_threads_headers(token, account_id, thread_ids).await;
+    save_headers(pool, account_id, headers).await?;
+
+    // A conversation that failed to load leaves its listed messages behind; load
+    // those one by one so a single bad thread can't hold the walk back.
+    let stored = stored_gmail_ids(pool, account_id, &listed_ids).await?;
+    let missing: Vec<String> = listed_ids
+        .iter()
+        .filter(|id| !stored.contains(*id))
+        .cloned()
+        .collect();
+    if !missing.is_empty() {
+        sync_ids(pool, account_id, token, missing).await?;
+        let stored = stored_gmail_ids(pool, account_id, &listed_ids).await?;
+        let still_missing = listed_ids.iter().filter(|id| !stored.contains(*id)).count();
+        if still_missing > 0 {
+            return Err(anyhow::anyhow!(
+                "gmail backfill: {still_missing} listed messages not stored; retrying next tick"
+            ));
+        }
+    }
+
+    sqlx::query(
+        "UPDATE email_accounts SET backfill_before = \
+           (SELECT EXTRACT(EPOCH FROM MIN(created_at))::BIGINT FROM emails \
+             WHERE account_id = $1 AND gmail_id = ANY($2)) \
+         WHERE id = $1",
+    )
+    .bind(account_id)
+    .bind(&listed_ids)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Which of `gmail_ids` this account already has stored.
+async fn stored_gmail_ids(
+    pool: &PgPool,
+    account_id: i32,
+    gmail_ids: &[String],
+) -> Result<std::collections::HashSet<String>> {
+    let rows: Vec<String> = sqlx::query_scalar(
+        "SELECT gmail_id FROM emails WHERE account_id = $1 AND gmail_id = ANY($2)",
+    )
+    .bind(account_id)
+    .bind(gmail_ids)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().collect())
+}
+
+/// `(message id, thread id)` of up to `max_results` messages older than
+/// `before_timestamp`, newest first. Spam and trash are included, as in
+/// `fetch_ids_before`, so those folders fill too.
+async fn fetch_message_refs_before(
+    token: &str,
+    before_timestamp: i64,
+    max_results: usize,
+) -> Result<Vec<(String, String)>> {
+    let url = format!(
+        "{}/gmail/v1/users/me/messages?maxResults={}&q=before:{}&includeSpamTrash=true",
+        crate::external::gmail_api_base(),
+        max_results,
+        before_timestamp
+    );
+    let res: Value = HTTP_CLIENT
+        .get(&url)
+        .bearer_auth(token)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    Ok(res["messages"]
+        .as_array()
+        .map(|messages| {
+            messages
+                .iter()
+                .filter_map(|m| {
+                    Some((
+                        m["id"].as_str()?.to_string(),
+                        m["threadId"].as_str()?.to_string(),
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
+/// Every message of each conversation in `thread_ids`, up to
+/// `MAX_EMAIL_CONCURRENCY` `threads.get` calls at a time. A conversation that
+/// fails to load is logged and left out.
+async fn fetch_threads_headers(
+    token: &str,
+    account_id: i32,
+    thread_ids: Vec<String>,
+) -> Vec<EmailHeader> {
+    futures::stream::iter(thread_ids)
+        .map(|thread_id| async move {
+            match fetch_thread_headers(token, &thread_id).await {
+                Ok(headers) => headers,
+                Err(err) => {
+                    warn!(target: "worker", account_id, thread_id, error = ?err, "gmail thread fetch failed");
+                    Vec::new()
+                }
+            }
+        })
+        .buffer_unordered(MAX_EMAIL_CONCURRENCY)
+        .flat_map(futures::stream::iter)
+        .collect()
+        .await
+}
+
+/// Stores already-fetched headers through `process_batch`, `BATCH_SIZE` at a
+/// time.
+async fn save_headers(pool: &PgPool, account_id: i32, headers: Vec<EmailHeader>) -> Result<()> {
+    let mut tasks: FuturesUnordered<_> = headers
+        .into_iter()
+        .map(|header| std::future::ready(Ok(header)))
+        .collect();
+    while !tasks.is_empty() {
+        process_batch(pool, account_id, &mut tasks).await?;
+    }
+    Ok(())
 }
 
 pub async fn fetch_ids(token: &str, last_sync: Option<i64>) -> Result<Vec<String>> {
@@ -1102,30 +1282,24 @@ pub async fn sync_account_recent(
         "fetched recent gmail inbox threads"
     );
 
-    // A conversation that fails to load is skipped, as a failed message fetch is
-    // in `process_batch`; the worker's sync picks its mail up later.
-    let headers: Vec<EmailHeader> = futures::stream::iter(thread_ids)
-        .map(|thread_id| async move {
-            match fetch_thread_headers(token, &thread_id).await {
-                Ok(headers) => headers,
-                Err(err) => {
-                    warn!(target: "worker", account_id, thread_id, error = ?err, "gmail thread fetch failed");
-                    Vec::new()
-                }
-            }
-        })
-        .buffer_unordered(MAX_EMAIL_CONCURRENCY)
-        .flat_map(futures::stream::iter)
-        .collect()
-        .await;
+    // These conversations can reach far back, so pin the backfill cursor before
+    // storing them: now for a new account, the oldest stored email for a
+    // reconnect that predates the cursor. Otherwise the backfill would start from
+    // the oldest message here and never fetch the mail in between.
+    sqlx::query(
+        "UPDATE email_accounts SET backfill_before = COALESCE(backfill_before, \
+           (SELECT EXTRACT(EPOCH FROM MIN(created_at))::BIGINT FROM emails WHERE account_id = $1), \
+           EXTRACT(EPOCH FROM NOW())::BIGINT) \
+         WHERE id = $1",
+    )
+    .bind(account_id)
+    .execute(pool)
+    .await?;
 
-    let mut tasks: FuturesUnordered<_> = headers
-        .into_iter()
-        .map(|header| std::future::ready(Ok(header)))
-        .collect();
-    while !tasks.is_empty() {
-        process_batch(pool, account_id, &mut tasks).await?;
-    }
+    // A conversation that fails to load is skipped; the backfill walk lists its
+    // messages again later.
+    let headers = fetch_threads_headers(token, account_id, thread_ids).await;
+    save_headers(pool, account_id, headers).await?;
 
     sqlx::query("UPDATE email_accounts SET last_sync = $1 WHERE id = $2")
         .bind(chrono::Utc::now().timestamp())
