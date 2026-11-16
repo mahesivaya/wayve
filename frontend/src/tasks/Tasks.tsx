@@ -35,7 +35,8 @@ import {
 } from "../api/taskStatuses";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
-import { taskShareText } from "./taskShareLink";
+import { taskShareText, taskShareUrl } from "./taskShareLink";
+import { copyText } from "../utils/clipboard";
 import { useGlobalSearch } from "../search/SearchContext";
 import Modal from "../components/Modal";
 import Avatar from "../components/Avatar";
@@ -1257,8 +1258,16 @@ export default function Tasks({
     beginEdit(task, "modal");
   };
 
+  // Boards with a detail page (stories, tickets) copy that page's full URL so
+  // it can be shared anywhere. Plain tasks keep the `#42 Task name` snippet,
+  // which chat links back to the Tasks board. copyText also works in the
+  // desktop app, where Electron refuses navigator.clipboard.writeText.
   const copyTaskLink = (task: Task) => {
-    void navigator.clipboard?.writeText(taskShareText(task)).then(() => {
+    const text = config.detailPath
+      ? taskShareUrl(config.detailPath(task.id))
+      : taskShareText(task);
+    void copyText(text).then((ok) => {
+      if (!ok) return;
       setCopiedTaskId(task.id);
       window.setTimeout(
         () => setCopiedTaskId((id) => (id === task.id ? null : id)),
