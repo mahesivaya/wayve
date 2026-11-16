@@ -158,7 +158,10 @@ pub async fn create_user_story(
     let assignee = data.assignee.as_deref().unwrap_or("").trim();
 
     // story_number is the next per-owner sequence value, computed inline off the
-    // same owner binds so one statement assigns it.
+    // same owner binds. The owner's sequence lock, taken first, keeps concurrent
+    // creates from reading the same MAX.
+    let mut tx = pool.begin().await?;
+    statuses::lock_owner_sequence(&mut tx, statuses::STORY_NUMBER_LOCK, owner).await?;
     let row = sqlx::query(&format!(
         "INSERT INTO user_stories
              (organization_id, user_id, name, description, priority, status,
@@ -179,8 +182,9 @@ pub async fn create_user_story(
     .bind(assignee)
     .bind(data.assignee_id)
     .bind(data.project_id)
-    .fetch_one(pool.get_ref())
+    .fetch_one(&mut *tx)
     .await?;
+    tx.commit().await?;
 
     let story = story_from_row(row);
     // First history event: the status the story is born in.

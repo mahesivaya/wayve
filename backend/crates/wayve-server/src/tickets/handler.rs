@@ -1464,7 +1464,10 @@ pub async fn create_ticket(
     let badge_kind = normalize_badge_kind(data.badge_kind.as_deref());
 
     // ticket_number is the next per-owner sequence value, computed inline off the
-    // same owner binds so one statement assigns it.
+    // same owner binds. The owner's sequence lock, taken first, keeps concurrent
+    // creates from reading the same MAX.
+    let mut tx = pool.begin().await?;
+    statuses::lock_owner_sequence(&mut tx, statuses::TICKET_NUMBER_LOCK, owner).await?;
     let row = sqlx::query(&format!(
         "INSERT INTO workspace_tickets
              (organization_id, user_id, name, description, priority, status,
@@ -1486,8 +1489,9 @@ pub async fn create_ticket(
     .bind(data.assignee_id)
     .bind(data.project_id)
     .bind(badge_kind.as_deref())
-    .fetch_one(pool.get_ref())
+    .fetch_one(&mut *tx)
     .await?;
+    tx.commit().await?;
 
     let ticket = ticket_from_row(row);
     crate::audit::record_action(
