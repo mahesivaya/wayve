@@ -82,10 +82,13 @@ fn parse_opened_pull_request(body: &[u8]) -> Option<OpenedPull> {
     })
 }
 
-/// The recipient is configurable via `GITHUB_PR_NOTIFY_EMAIL`. Best-effort: a send
-/// failure is logged, never propagated.
+/// The recipient is `GITHUB_PR_NOTIFY_EMAIL`; unset, nothing is sent. Best-effort:
+/// a send failure is logged, never propagated.
 async fn notify_pull_request_opened(pr: &OpenedPull) {
-    let to = crate::config::github_pr_notify_email();
+    let Some(to) = crate::config::github_pr_notify_email() else {
+        info!(target: "github", pr = pr.number, "GITHUB_PR_NOTIFY_EMAIL unset; PR-opened email skipped");
+        return;
+    };
     let app_link = format!(
         "{}/github",
         crate::config::frontend_url().trim_end_matches('/')
