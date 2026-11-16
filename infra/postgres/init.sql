@@ -583,6 +583,11 @@ ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS gmail_history_id BIGINT;
 -- up to. Separate from gmail_history_id, which a watch renewal overwrites.
 ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS label_history_id BIGINT;
 ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS watch_expires_at TIMESTAMPTZ;
+-- How far back (Unix seconds) the Gmail backfill has walked all mail, newest to
+-- oldest. Its own cursor because whole-conversation fetches store messages far
+-- older than the walk has reached, so MIN(emails.created_at) would skip ahead.
+-- NULL until the first backfill or first sync seeds it.
+ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS backfill_before BIGINT;
 
 -- OAuth tokens encrypted at rest (AES-256-GCM via wayve_security::encryption,
 -- base64 nonce + base64 ciphertext), matching github_accounts / figma_accounts.

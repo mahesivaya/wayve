@@ -6,10 +6,12 @@ use crate::email::utils::{AttachmentMeta, extract_attachments, extract_body};
 use wayve_security::encryption::{decrypt, encrypt, encrypt_to_pubkey};
 
 use serde_json::Value;
+use std::collections::HashMap;
 use tokio::time::{Duration, sleep};
 use tracing::{Instrument, debug, error, info, instrument};
 
-type FetchTask = std::pin::Pin<Box<dyn std::future::Future<Output = Result<FetchedBody>> + Send>>;
+type FetchTask =
+    std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<FetchedBody>>> + Send>>;
 
 struct FetchedBody {
     id: i32,
@@ -141,13 +143,14 @@ pub(crate) async fn process_account(
     // rows that were wrongly marked checked.
     let rows = sqlx::query(
         r#"
-        SELECT id, gmail_id
-        FROM emails
-        WHERE account_id = $1
-          AND (body_encrypted = ''
-            OR body_encrypted IS NULL
-            OR attachments_checked = false)
-        ORDER BY id DESC
+        SELECT e.id, e.gmail_id, m.provider_thread_id
+        FROM emails e
+        LEFT JOIN email_thread_meta m ON m.email_id = e.id
+        WHERE e.account_id = $1
+          AND (e.body_encrypted = ''
+            OR e.body_encrypted IS NULL
+            OR e.attachments_checked = false)
+        ORDER BY e.id DESC
         LIMIT $2
         "#,
     )
@@ -160,68 +163,217 @@ pub(crate) async fn process_account(
         return Ok(0);
     }
 
-    let mut tasks: FuturesUnordered<_> = FuturesUnordered::new();
-    let mut iter = rows.into_iter();
+    let jobs = group_into_jobs(rows.iter().map(|row| PendingBody {
+        id: row.get("id"),
+        gmail_id: row.get("gmail_id"),
+        thread_id: row.get("provider_thread_id"),
+    }));
+
+    let mut tasks: FuturesUnordered<FetchTask> = FuturesUnordered::new();
+    let mut iter = jobs.into_iter();
     let mut count = 0;
 
     fn spawn_fetch(
         tasks: &mut FuturesUnordered<FetchTask>,
         token: String,
         account_id: i32,
-        id: i32,
-        gmail_id: String,
+        job: BodyJob,
     ) {
         tasks.push(Box::pin(async move {
-            fetch_one(&token, account_id, id, &gmail_id).await
+            match job {
+                BodyJob::Message(pending) => {
+                    let fetched =
+                        fetch_one(&token, account_id, pending.id, &pending.gmail_id).await?;
+                    Ok(vec![fetched])
+                }
+                BodyJob::Thread { thread_id, pending } => {
+                    Ok(fetch_thread_bodies(&token, account_id, &thread_id, pending).await)
+                }
+            }
         }));
     }
 
     // Cap in-flight requests at BODY_CONCURRENCY to stay inside Gmail's rate
-    // limit; each completion below refills one slot.
-    for row in iter.by_ref().take(BODY_CONCURRENCY) {
-        let id: i32 = row.get("id");
-        let gmail_id: String = row.get("gmail_id");
-        spawn_fetch(&mut tasks, token.clone(), account_id, id, gmail_id);
+    // limit; each completion below refills one slot. A conversation is one slot,
+    // since it is one Gmail call.
+    for job in iter.by_ref().take(BODY_CONCURRENCY) {
+        spawn_fetch(&mut tasks, token.clone(), account_id, job);
     }
 
     while let Some(res) = tasks.next().await {
         match res {
-            Ok(fetched) => {
-                if let Err(e) =
-                    update_body(pool, fetched.account_id, fetched.id, &fetched.body).await
-                {
-                    println!("body_worker update {} failed: {:?}", fetched.id, e);
-                } else {
-                    save_email_attachments(
-                        pool,
-                        fetched.id,
-                        fetched.account_id,
-                        &fetched.gmail_id,
-                        &fetched.attachments,
-                    )
-                    .await;
-                    // Mark checked only after the save returns. If it swallowed
-                    // an error the flag stays false and the next tick retries.
-                    if let Err(e) = mark_attachments_checked(pool, fetched.id).await {
-                        println!(
-                            "body_worker mark_attachments_checked {} failed: {:?}",
-                            fetched.id, e
-                        );
+            Ok(bodies) => {
+                for fetched in bodies {
+                    if store_fetched(pool, &fetched).await {
+                        count += 1;
                     }
-                    count += 1;
                 }
             }
             Err(e) => println!("body_worker fetch failed: {:?}", e),
         }
 
-        if let Some(row) = iter.next() {
-            let id: i32 = row.get("id");
-            let gmail_id: String = row.get("gmail_id");
-            spawn_fetch(&mut tasks, token.clone(), account_id, id, gmail_id);
+        if let Some(job) = iter.next() {
+            spawn_fetch(&mut tasks, token.clone(), account_id, job);
         }
     }
 
     Ok(count)
+}
+
+/// Saves one fetched body and its attachments. `true` when the body was stored.
+async fn store_fetched(pool: &PgPool, fetched: &FetchedBody) -> bool {
+    if let Err(e) = update_body(pool, fetched.account_id, fetched.id, &fetched.body).await {
+        println!("body_worker update {} failed: {:?}", fetched.id, e);
+        return false;
+    }
+    save_email_attachments(
+        pool,
+        fetched.id,
+        fetched.account_id,
+        &fetched.gmail_id,
+        &fetched.attachments,
+    )
+    .await;
+    // Mark checked only after the save returns. If it swallowed an error the
+    // flag stays false and the next tick retries.
+    if let Err(e) = mark_attachments_checked(pool, fetched.id).await {
+        println!(
+            "body_worker mark_attachments_checked {} failed: {:?}",
+            fetched.id, e
+        );
+    }
+    true
+}
+
+/// An email whose body (or attachment check) is still pending.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct PendingBody {
+    pub id: i32,
+    pub gmail_id: String,
+    /// Gmail's `threadId`, from `email_thread_meta`; `None` for rows threaded
+    /// before it was recorded.
+    pub thread_id: Option<String>,
+}
+
+/// One Gmail call's worth of body work.
+#[derive(Debug, PartialEq)]
+pub(crate) enum BodyJob {
+    /// `messages.get?format=full` for a single email.
+    Message(PendingBody),
+    /// `threads.get?format=full` for a conversation with several pending emails.
+    Thread {
+        thread_id: String,
+        pending: Vec<PendingBody>,
+    },
+}
+
+/// Groups pending emails so each conversation with two or more of them is one
+/// `threads.get`, in the order its newest pending email came. A lone email stays
+/// a `messages.get`: a thread call costs Gmail twice the quota of a message call
+/// and would also download the conversation's other, already-stored bodies.
+pub(crate) fn group_into_jobs(rows: impl IntoIterator<Item = PendingBody>) -> Vec<BodyJob> {
+    // Each conversation keeps the place of its first (newest) pending email.
+    let mut slots: Vec<Result<String, PendingBody>> = Vec::new();
+    let mut by_thread: HashMap<String, Vec<PendingBody>> = HashMap::new();
+    for row in rows {
+        match row.thread_id.clone() {
+            Some(thread_id) => {
+                let group = by_thread.entry(thread_id.clone()).or_default();
+                if group.is_empty() {
+                    slots.push(Ok(thread_id));
+                }
+                group.push(row);
+            }
+            None => slots.push(Err(row)),
+        }
+    }
+
+    slots
+        .into_iter()
+        .filter_map(|slot| match slot {
+            Err(row) => Some(BodyJob::Message(row)),
+            Ok(thread_id) => {
+                let mut pending = by_thread.remove(&thread_id)?;
+                if pending.len() == 1 {
+                    pending.pop().map(BodyJob::Message)
+                } else {
+                    Some(BodyJob::Thread { thread_id, pending })
+                }
+            }
+        })
+        .collect()
+}
+
+/// The bodies of `pending` from one `threads.get?format=full`. A pending email
+/// the conversation didn't bring back, or every one of them if the call failed,
+/// falls back to its own `messages.get`, so a bad thread never strands a body.
+async fn fetch_thread_bodies(
+    token: &str,
+    account_id: i32,
+    thread_id: &str,
+    pending: Vec<PendingBody>,
+) -> Vec<FetchedBody> {
+    let mut fetched = Vec::new();
+    let mut remaining = pending;
+    match fetch_thread_full(token, thread_id).await {
+        Ok(messages) => {
+            remaining.retain(|row| {
+                let found = messages
+                    .iter()
+                    .find(|m| m["id"].as_str() == Some(row.gmail_id.as_str()));
+                match found {
+                    Some(message) => {
+                        fetched.push(fetched_body(message, account_id, row.id, &row.gmail_id));
+                        false
+                    }
+                    None => true,
+                }
+            });
+        }
+        Err(e) => {
+            tracing::warn!(target: "worker", account_id, thread_id, error = ?e, "body_worker thread fetch failed; fetching messages one by one");
+        }
+    }
+    for row in remaining {
+        match fetch_one(token, account_id, row.id, &row.gmail_id).await {
+            Ok(body) => fetched.push(body),
+            Err(e) => println!("body_worker fetch failed: {:?}", e),
+        }
+    }
+    fetched
+}
+
+/// Every message of one Gmail conversation in `format=full`.
+async fn fetch_thread_full(token: &str, thread_id: &str) -> Result<Vec<Value>> {
+    let url = format!(
+        "{}/gmail/v1/users/me/threads/{}?format=full",
+        crate::external::gmail_api_base(),
+        thread_id
+    );
+    let res: Value = HTTP_CLIENT
+        .get(&url)
+        .bearer_auth(token)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    Ok(res["messages"].as_array().cloned().unwrap_or_default())
+}
+
+/// A `format=full` Gmail message (from `messages.get` or a thread) as the body
+/// and attachment list to store.
+fn fetched_body(res: &Value, account_id: i32, id: i32, gmail_id: &str) -> FetchedBody {
+    let body = extract_body(&res["payload"])
+        .unwrap_or_else(|| res["snippet"].as_str().unwrap_or("").to_string());
+    let attachments = extract_attachments(&res["payload"]);
+    FetchedBody {
+        id,
+        account_id,
+        gmail_id: gmail_id.to_string(),
+        body,
+        attachments,
+    }
 }
 
 #[instrument(target = "worker", skip(token, gmail_id), fields(account_id, email_id = id))]
@@ -240,17 +392,7 @@ async fn fetch_one(token: &str, account_id: i32, id: i32, gmail_id: &str) -> Res
         .json()
         .await?;
 
-    let body = extract_body(&res["payload"])
-        .unwrap_or_else(|| res["snippet"].as_str().unwrap_or("").to_string());
-    let attachments = extract_attachments(&res["payload"]);
-
-    Ok(FetchedBody {
-        id,
-        account_id,
-        gmail_id: gmail_id.to_string(),
-        body,
-        attachments,
-    })
+    Ok(fetched_body(&res, account_id, id, gmail_id))
 }
 
 #[instrument(target = "db", skip(pool, body), fields(email_id = id))]

@@ -510,7 +510,7 @@ pub async fn oauth_callback(
         let pool_clone = pool.clone();
         let token_clone = access_token.to_string();
         actix_web::rt::spawn(async move {
-            match sync_account_recent(pool_clone.get_ref(), account_id, &token_clone, 51).await {
+            match sync_account_recent(pool_clone.get_ref(), account_id, &token_clone, 50).await {
                 Ok(_) => info!(target: "gmail", user_id, account_id, "recent email sync primed"),
                 Err(e) => {
                     warn!(target: "gmail", user_id, account_id, error = ?e, "recent email sync failed")
