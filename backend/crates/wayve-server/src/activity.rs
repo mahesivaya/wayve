@@ -64,6 +64,10 @@ impl ActivityRow {
 /// Queue one activity row. Never blocks and never touches the DB. It's a
 /// no-op when the writer isn't running (worker-only roles, unit tests).
 pub fn enqueue(row: ActivityRow) {
+    #[cfg(test)]
+    {
+        test_capture::push(&row);
+    }
     let Some(tx) = QUEUE.get() else {
         return;
     };
@@ -142,6 +146,33 @@ async fn insert_batch(pool: &PgPool, rows: &[ActivityRow]) -> sqlx::Result<()> {
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// Test-only record of what `enqueue` received on this thread, so middleware
+/// tests can check which actor a request was logged as without a DB writer.
+/// Actix test runtimes are single-threaded, so a thread-local is per-test.
+#[cfg(test)]
+pub mod test_capture {
+    use std::cell::RefCell;
+
+    /// `(actor_user_id, kind, path)` of one queued row.
+    pub type Captured = (i32, &'static str, Option<String>);
+
+    thread_local! {
+        static ROWS: RefCell<Vec<Captured>> = const { RefCell::new(Vec::new()) };
+    }
+
+    pub(super) fn push(row: &super::ActivityRow) {
+        ROWS.with(|r| {
+            r.borrow_mut()
+                .push((row.actor_user_id, row.kind, row.path.clone()))
+        });
+    }
+
+    /// Return and clear every row queued on this thread.
+    pub fn take() -> Vec<Captured> {
+        ROWS.with(|r| std::mem::take(&mut *r.borrow_mut()))
+    }
 }
 
 #[cfg(test)]
