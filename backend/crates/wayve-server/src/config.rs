@@ -83,14 +83,15 @@ fn var_or(key: &str, default: &str) -> String {
     var_opt(key).unwrap_or_else(|| default.to_string())
 }
 
-/// Recipient and calendar organizer for "Book a demo" notifications.
-pub fn demo_notify_email() -> String {
-    var_or("DEMO_NOTIFY_EMAIL", "maheshiv199@gmail.com")
+/// Recipient and calendar organizer for "Book a demo" notifications. `None`
+/// when unset: no address is built in, so none is published with the source.
+pub fn demo_notify_email() -> Option<String> {
+    var_opt("DEMO_NOTIFY_EMAIL")
 }
 
-/// Recipient for "new pull request opened" notifications.
-pub fn github_pr_notify_email() -> String {
-    var_or("GITHUB_PR_NOTIFY_EMAIL", "maheshiv199@gmail.com")
+/// Recipient for "new pull request opened" notifications. `None` when unset.
+pub fn github_pr_notify_email() -> Option<String> {
+    var_opt("GITHUB_PR_NOTIFY_EMAIL")
 }
 
 pub fn app_environment() -> String {

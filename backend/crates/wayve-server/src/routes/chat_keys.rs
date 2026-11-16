@@ -14,10 +14,6 @@ use wayve_security::encryption::provision_org_owner_keypair;
 use wayve_security::password::verify_password;
 use wayve_security::rbac::{self, Permission, Role, Scope};
 
-// Must match the password scripts/seed_rbac_users.sh seeds with. The caller can
-// override it per request for a different shared password.
-const DEFAULT_SEED_PASSWORD: &str = "Mahesh";
-
 #[derive(Deserialize)]
 pub struct ProvisionInput {
     pub password: Option<String>,
@@ -49,13 +45,18 @@ pub async fn provision_chat_keys(
         );
     }
 
-    let password = body
+    // The shared password the accounts were seeded with (SEED_PASSWORD). No
+    // default: one written in the source would be public.
+    let Some(password) = body
         .password
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .unwrap_or(DEFAULT_SEED_PASSWORD)
-        .to_string();
+        .map(str::to_string)
+    else {
+        return Ok(HttpResponse::BadRequest()
+            .json(serde_json::json!({ "message": "password is required" })));
+    };
 
     // OAuth-only accounts have no local password to verify against, so they are
     // excluded here.

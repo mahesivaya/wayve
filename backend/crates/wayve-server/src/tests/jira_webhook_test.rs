@@ -10,7 +10,7 @@ mod tests {
     use sqlx::{PgPool, Row};
 
     const SECRET: &str = "hYjLCAQ5coA8ifKMZUHA";
-    const SITE: &str = "https://maheshiv199.atlassian.net";
+    const SITE: &str = "https://example.atlassian.net";
 
     fn updated_payload() -> serde_json::Value {
         serde_json::json!({

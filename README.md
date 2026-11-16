@@ -113,8 +113,8 @@ Key backend secrets: `DATABASE_URL`, `FRONTEND_URL` (single-origin CORS allowlis
 ## Seeding test users
 
 ```bash
-scripts/seed_rbac_users.sh          # one user per RBAC role, in both scopes
-# password defaults to "Mahesh"; override with SEED_PASSWORD=...
+SEED_PASSWORD='<password>' scripts/seed_rbac_users.sh   # one user per RBAC role, in both scopes
+# SEED_PASSWORD is required; there is no default
 ```
 
 ## Testing & CI

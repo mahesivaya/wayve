@@ -6,7 +6,7 @@
 # Postgres container by default. Idempotent — re-running resets
 # each account to a known state.
 #
-# Accounts created (password is $SEED_PASSWORD, default "Mahesh"):
+# Accounts created (password is $SEED_PASSWORD, required, no default):
 #
 #   Personal      → alice@personal.test, bob@personal.test,
 #                   carol@personal.test
@@ -32,7 +32,11 @@
 # ============================================================
 set -euo pipefail
 
-SEED_PASSWORD="${SEED_PASSWORD:-Mahesh}"
+if [[ -z "${SEED_PASSWORD:-}" ]]; then
+  echo "error: set SEED_PASSWORD, e.g. SEED_PASSWORD='<password>' $0" >&2
+  echo "       (no default: a password in a committed script is public)" >&2
+  exit 1
+fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SQL_FILE="$SCRIPT_DIR/../infra/postgres/seed_users.sql"
 
@@ -54,7 +58,7 @@ else
 fi
 
 echo
-echo "✅ Done. Password for every account: ${SEED_PASSWORD}"
+echo "✅ Done."
 echo
 echo "   Personal      : alice@personal.test, bob@personal.test, carol@personal.test"
 echo "                   → first UI login generates a 24-word mnemonic"

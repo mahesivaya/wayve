@@ -7,7 +7,7 @@
 use crate::email::sender::send_mail_with_ics;
 use crate::prelude::*;
 use chrono::{DateTime, Duration, SecondsFormat, Utc};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 /// Default length of the booked slot.
 const DEMO_DURATION_MINUTES: i64 = 30;
@@ -61,8 +61,16 @@ pub async fn create_demo_request(
 
     // Email sales with an .ics so the slot drops onto their calendar. Best
     // effort: a send failure is logged, the stored lead still succeeds. The
-    // recipient (and calendar organizer) is configurable via DEMO_NOTIFY_EMAIL.
-    let notify = crate::config::demo_notify_email();
+    // recipient (and calendar organizer) is DEMO_NOTIFY_EMAIL; unset, the lead
+    // is stored but nobody is emailed.
+    let Some(notify) = crate::config::demo_notify_email() else {
+        warn!(target: "demo", demo_request_id = id, "DEMO_NOTIFY_EMAIL unset; demo request not emailed");
+        return Ok(HttpResponse::Ok().json(serde_json::json!({
+            "id": id,
+            "scheduled_at": scheduled_at.to_rfc3339(),
+            "emailed": false,
+        })));
+    };
     let ics = build_ics(id, first, last, &email, &work_email, scheduled_at, &notify);
     let when = scheduled_at.to_rfc3339_opts(SecondsFormat::Secs, true);
     let subject = format!("New demo request — {first} {last}");
