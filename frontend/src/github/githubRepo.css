@@ -1291,17 +1291,6 @@
   line-height: 1.4;
 }
 
-.github-commit code {
-  flex: 0 0 auto;
-  border: 1px solid var(--color-border);
-  border-radius: 5px;
-  background: var(--color-surface-tint);
-  color: var(--color-text-muted);
-  padding: 3px 8px;
-  font-family: var(--mono);
-  font-size: var(--text-sm);
-}
-
 /* Commit rows: roomier than the shared list row, so each reads as a block. */
 .github-commit-node > .github-commit {
   min-height: 64px;
@@ -1311,9 +1300,7 @@
 
 /* ── Inline commit-diff view ──
    Each commit row is now a button that toggles an inline diff panel
-   showing the patch for every changed file. The github.com link stays
-   as a tiny outbound icon on the right so users can still open the
-   full PR view if they want. */
+   showing the patch for every changed file. */
 .github-commit-node {
   border-bottom: 1px solid var(--color-border);
 }
@@ -1566,31 +1553,6 @@
   color: inherit;
   font: inherit;
   cursor: pointer;
-}
-
-.github-commit-open {
-  flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  color: var(--color-text-muted);
-  background: var(--color-surface);
-  text-decoration: none;
-  font-size: var(--text-sm);
-  transition:
-    background 0.12s ease,
-    color 0.12s ease,
-    border-color 0.12s ease;
-}
-
-.github-commit-open:hover {
-  color: var(--color-primary-action);
-  border-color: var(--color-primary-action);
-  background: var(--color-surface-hover);
 }
 
 .github-commit-stat {

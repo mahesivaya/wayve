@@ -2244,19 +2244,7 @@ export function GitHubRepoViewer({
                             )}
                           </small>
                         </span>
-                        <code>{commit.sha.slice(0, 7)}</code>
                       </button>
-                      <a
-                        className="github-commit-open"
-                        href={commit.html_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        data-tooltip="Open on GitHub"
-                        aria-label="Open on GitHub"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        ↗
-                      </a>
                     </div>
 
                     {isOpen && (
@@ -3224,6 +3212,7 @@ export function GitHubRepoViewer({
                                                   rel="noreferrer"
                                                   aria-label={`Open ${job.name} on GitHub`}
                                                   data-tooltip="Open on GitHub"
+                                                  data-tooltip-align="right"
                                                   onClick={(event) =>
                                                     event.stopPropagation()
                                                   }
