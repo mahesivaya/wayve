@@ -1,6 +1,5 @@
-// A basic personal user's Upgrade button sits at the end of the tab strip. Once
-// the page is split that strip ends mid-screen, so the button moves to the
-// sidebar, above the account row.
+// A basic personal user's Upgrade button sits at the bottom of the sidebar,
+// above the account row, whether or not the page is split.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -66,22 +65,21 @@ describe("the Upgrade button's place", () => {
     window.localStorage.clear();
   });
 
-  it("is at the end of the tab strip while the page is unsplit", () => {
+  it("is at the bottom of the sidebar while the page is unsplit", () => {
     const { container } = renderLayout();
     expect(container.querySelector(".split-pane.right")).toBeNull();
     expect(screen.getAllByRole("button", { name: "Upgrade" })).toHaveLength(1);
-    expect(upgrade().closest(".sidebar-section-bottom")).toBeNull();
-    expect(upgrade().classList.contains("sidebar-upgrade-btn")).toBe(false);
+    expect(upgrade().closest(".sidebar-section-bottom")).toBeTruthy();
   });
 
-  it("moves to the bottom of the sidebar once the page is split", () => {
+  it("stays at the bottom of the sidebar once the page is split", () => {
     window.localStorage.setItem(
       "rwayve.layout.split",
       JSON.stringify({ rightView: "tasks", splitTarget: "left" })
     );
     const { container } = renderLayout();
     expect(container.querySelector(".split-pane.right")).toBeTruthy();
-    // One button only: it left the tab strip rather than being duplicated.
+    // One button only: none is left behind in the tab strip.
     expect(screen.getAllByRole("button", { name: "Upgrade" })).toHaveLength(1);
     expect(upgrade().closest(".sidebar-section-bottom")).toBeTruthy();
   });

@@ -1876,7 +1876,7 @@ html.is-titlebar-inset .header .split-menu-btn svg {
   border-color: var(--color-border-muted);
 }
 
-/* Upgrade in the sidebar (split view): a full-width row above the account. */
+/* Upgrade in the sidebar: a full-width row above the account. */
 .sidebar-upgrade-btn {
   display: block;
   width: 100%;

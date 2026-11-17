@@ -2072,14 +2072,14 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
 
   // The desktop shell surfaces Upgrade on the Settings page instead.
   const showUpgrade = !desktop && isBasicPersonalUser;
-  // Once the page is split, the left pane's tab strip ends mid-screen, which
-  // strands Upgrade between the two panes. It moves to the sidebar, above the
-  // account row, whenever the main menu is showing there (not the icon rail or
-  // a settings/platform takeover, which have no account row).
+  // Upgrade sits in the sidebar, above the account row, whenever the main menu
+  // is showing there, split or not: at the end of the tab strip it ended up
+  // stranded mid-screen once the page was split. It falls back to the tab
+  // strip (or the phone header) for the icon rail and the settings/platform
+  // takeovers, which have no account row.
   const upgradeInSidebar =
     showUpgrade &&
     showTabs &&
-    splitOpen &&
     !sidebarCollapsed &&
     !settingsTakeover &&
     !platformTakeover;
