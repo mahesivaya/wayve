@@ -124,6 +124,23 @@ describe("Code Repo pull requests", () => {
     ).toBe(true);
   });
 
+  it("marks each row with GitHub's state icon", async () => {
+    renderViewer();
+    const open = (await screen.findByText("Old but still open")).closest(
+      ".github-pr-node"
+    );
+    expect(
+      open?.querySelector(".github-pr-state-icon.is-open svg")
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Closed/ }));
+    const merged = (await screen.findByText("Recently merged")).closest(
+      ".github-pr-node"
+    );
+    expect(
+      merged?.querySelector(".github-pr-state-icon.is-merged svg")
+    ).toBeTruthy();
+  });
+
   it("shows each tab's true total as a badge, like GitHub", async () => {
     renderViewer();
     // Open: one PR. Closed: 175, from the Link header's last page, not the one

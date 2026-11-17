@@ -1421,6 +1421,38 @@
   color: var(--color-danger-strong);
 }
 
+/* The state sign at the start of a row, in GitHub's own colours. Fixed rather
+   than theme tokens, so a state still reads in a greyscale or custom palette
+   (like the diff +/- colours). */
+.github-pr-state-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-self: flex-start;
+  margin-top: 2px;
+  --pr-open: #1a7f37;
+  --pr-draft: #6e7781;
+  --pr-merged: #8250df;
+  --pr-closed: #cf222e;
+}
+:root[data-theme="dark"] .github-pr-state-icon {
+  --pr-open: #3fb950;
+  --pr-draft: #8b949e;
+  --pr-merged: #a371f7;
+  --pr-closed: #f85149;
+}
+.github-pr-state-icon.is-open {
+  color: var(--pr-open);
+}
+.github-pr-state-icon.is-draft {
+  color: var(--pr-draft);
+}
+.github-pr-state-icon.is-merged {
+  color: var(--pr-merged);
+}
+.github-pr-state-icon.is-closed {
+  color: var(--pr-closed);
+}
+
 /* List row title/meta is a button that opens the in-app detail view. */
 .github-pr-open-btn {
   background: none;

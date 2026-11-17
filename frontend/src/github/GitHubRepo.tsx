@@ -45,7 +45,10 @@ import {
   CopyIcon,
   EditCommentIcon,
   GitBranchIcon,
+  PullRequestClosedIcon,
+  PullRequestDraftIcon,
   PullRequestIcon,
+  PullRequestMergedIcon,
   RepoIcon,
   SettingsIcon,
   WorkflowRunsIcon,
@@ -207,6 +210,30 @@ function pullStatus(d: { state: string; draft?: boolean; merged?: boolean }): {
   if (d.state === "closed") return { label: "Closed", cls: "is-closed" };
   if (d.draft) return { label: "Draft", cls: "is-draft" };
   return { label: "Open", cls: "is-open" };
+}
+
+// The state sign at the start of a pull request row, as on GitHub: green open,
+// grey draft, purple merged, red closed.
+function PullStateIcon({ cls, label }: { cls: string; label: string }) {
+  const Icon =
+    cls === "is-merged"
+      ? PullRequestMergedIcon
+      : cls === "is-closed"
+        ? PullRequestClosedIcon
+        : cls === "is-draft"
+          ? PullRequestDraftIcon
+          : PullRequestIcon;
+  return (
+    // The row's only statement of its state, so it's labelled.
+    <span
+      className={`github-pr-state-icon ${cls}`}
+      role="img"
+      aria-label={label}
+      title={label}
+    >
+      <Icon size={16} aria-hidden="true" />
+    </span>
+  );
 }
 
 function reviewBadge(state: string): { label: string; cls: string } {
@@ -2478,6 +2505,7 @@ export function GitHubRepoViewer({
                     });
                     return (
                       <div key={pr.number} className="github-pr-node">
+                        <PullStateIcon cls={status.cls} label={status.label} />
                         <button
                           type="button"
                           className="github-pr-main github-pr-open-btn"
@@ -2492,17 +2520,6 @@ export function GitHubRepoViewer({
                             {formatDate(pr.created_at)}
                           </small>
                         </button>
-                        <span className={`github-pr-status ${status.cls}`}>
-                          {status.label}
-                        </span>
-                        <a
-                          className="github-pr-link"
-                          href={pr.html_url}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Open on GitHub →
-                        </a>
                       </div>
                     );
                   })
