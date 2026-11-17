@@ -3,7 +3,9 @@
      auto margins below would otherwise shrink the page to its content width
      instead of filling up to max-width. */
   width: 100%;
-  max-width: 960px;
+  /* Wide enough for the AI-fix code changes under the form to show whole lines
+     of a diff; the form itself stays at a readable width (below). */
+  max-width: 1400px;
   box-sizing: border-box;
   margin: 0 auto;
   padding: 24px 20px 48px;
@@ -68,6 +70,9 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  /* The page is wider than this for the code changes; a name and description
+     stretched across it would be hard to read. */
+  max-width: 920px;
 }
 .ticket-detail-form label {
   display: flex;

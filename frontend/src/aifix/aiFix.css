@@ -81,10 +81,18 @@
   font-size: 12.5px;
   line-height: 1.5;
   tab-size: 2;
+  /* Themed, thin scrollbar: the browser's default one is a bright strip
+     against a dark code surface. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-muted) transparent;
 }
+/* Long lines wrap instead of running off the side, so a change reads in full
+   even in the narrow edit drawer, with no sideways scrolling. Indentation is
+   kept (pre-wrap). */
 .aifix-diff code {
   display: block;
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .aifix-line {
   display: block;
@@ -106,13 +114,16 @@
 .aifix-line.is-meta {
   color: var(--color-text-muted);
 }
-@media (prefers-color-scheme: dark) {
-  .aifix-line.is-add {
-    color: #4ade80;
-  }
-  .aifix-line.is-del {
-    color: #fca5a5;
-  }
+/* The app's own dark theme, not the OS setting: someone on a light OS with
+   the app in dark mode was getting dark red and green on a dark surface. */
+:root[data-theme="dark"] .aifix-line.is-add {
+  color: #4ade80;
+}
+:root[data-theme="dark"] .aifix-line.is-del {
+  color: #fca5a5;
+}
+:root[data-theme="dark"] .aifix-line.is-hunk {
+  color: #93c5fd;
 }
 
 /* Changed-file list: each row expands into a textarea holding that file's full

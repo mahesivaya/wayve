@@ -2376,6 +2376,13 @@ button.task-related-pill {
   animation: task-drawer-in 0.16s ease-out;
 }
 
+/* With an AI-fix code change to review, the drawer opens wide enough to read
+   whole lines of a diff, whatever narrower width was dragged for plain items.
+   It can still be dragged wider, and never outgrows the board. */
+.task-drawer:has(.aifix-diff) {
+  min-width: min(1200px, 100%);
+}
+
 /* Drag handle straddling the drawer's left edge. Sits outside the flex flow so
    it doesn't take a row of its own, and is wider than the 1px border it covers
    so it can actually be grabbed. */
