@@ -6,6 +6,7 @@ import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import { getAuthToken } from "../auth/token";
 import RepoAccessPanel from "./RepoAccessPanel";
+import ReadmeView from "./ReadmeView";
 import ResizeHandle from "../components/ResizeHandle";
 import { useResizableWidth } from "../components/useResizableWidth";
 import PrMergeBox from "./PrMergeBox";
@@ -862,8 +863,8 @@ export function GitHubRepoViewer({
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
   const [selectedFile, setSelectedFile] = useState<ContentItem | null>(null);
   const [fileText, setFileText] = useState("");
-  // README for the Description tab, fetched per branch and rendered as raw
-  // text: there is no markdown renderer wired up.
+  // README for the Description tab, fetched per branch and formatted by
+  // ReadmeView.
   const [readme, setReadme] = useState("");
   const [readmeLoading, setReadmeLoading] = useState(false);
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
@@ -2104,10 +2105,18 @@ export function GitHubRepoViewer({
                 </div>
                 {readmeLoading ? (
                   <div className="github-empty">Loading README…</div>
+                ) : readme ? (
+                  <ReadmeView
+                    markdown={readme}
+                    linkBase={
+                      repo?.html_url
+                        ? `${repo.html_url}/blob/${encodeURIComponent(branch)}/`
+                        : undefined
+                    }
+                    imageBase={`https://raw.githubusercontent.com/${owner}/${repoName}/${encodeURIComponent(branch)}/`}
+                  />
                 ) : (
-                  <pre className="github-description-readme">
-                    {readme || "No README found."}
-                  </pre>
+                  <div className="github-empty">No README found.</div>
                 )}
               </section>
             </main>

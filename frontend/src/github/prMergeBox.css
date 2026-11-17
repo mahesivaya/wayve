@@ -128,7 +128,7 @@
 }
 .pr-checks-icon.is-comment {
   background: var(--color-primary, #5b5bd6);
-  font-size: 13px;
+  font-size: var(--text-md);
   line-height: 1;
 }
 .pr-checks-text {
