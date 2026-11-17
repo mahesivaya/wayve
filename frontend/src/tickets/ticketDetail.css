@@ -98,6 +98,14 @@
 .ticket-detail-row label {
   flex: 1 1 160px;
 }
+/* A native select ignores the inherited line-height while a text input honours
+   it, so the two came out at different heights side by side. Pin one height. */
+.ticket-detail-row input,
+.ticket-detail-row select {
+  box-sizing: border-box;
+  height: 38px;
+  line-height: 1.2;
+}
 
 .ticket-detail-actions {
   display: flex;
