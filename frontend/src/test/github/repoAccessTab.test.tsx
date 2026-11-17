@@ -1,6 +1,7 @@
-// Code Repo › the per-repo Access tab is for admins only: an organization or
-// platform owner, super admin or admin. A personal account is "owner" of its
-// own workspace but must not see it, nor may lower roles.
+// Code Repo › the per-repo Settings tab (repository access) is for admins
+// only: an organization or platform owner, super admin or admin. A personal
+// account is "owner" of its own workspace but must not see it, nor may lower
+// roles.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -53,10 +54,10 @@ async function accessTabShown(user: Record<string, unknown>) {
   );
   // The section list is up once Commits shows.
   await screen.findByText("Commits");
-  return screen.queryByText("Access") !== null;
+  return screen.queryByText("Settings") !== null;
 }
 
-describe("repo Access tab", () => {
+describe("repo Settings tab", () => {
   beforeEach(() => {
     fetchMock.mockClear();
     vi.stubGlobal("fetch", fetchMock);
