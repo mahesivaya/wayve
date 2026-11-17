@@ -302,24 +302,15 @@
   color: var(--text-muted, var(--color-text-muted));
 }
 
-@media (prefers-color-scheme: dark) {
-  .pb-page {
-    --text-color: var(--color-border);
-    --text-muted: var(--color-input-border-strong);
-    --panel-bg: var(--color-text-ink);
-    --panel-border: var(--color-text-secondary);
-    --panel-subtle: var(--color-text-primary);
-  }
-  .pb-banner {
-    background: var(--color-dark-red-chip-bg);
-    color: var(--color-danger-border);
-    border-color: var(--color-dark-red-chip-border);
-  }
-  .pb-banner.success {
-    background: var(--color-dark-green-chip-bg);
-    color: var(--color-success-border);
-    border-color: var(--color-success);
-  }
+html[data-theme="dark"] .pb-banner {
+  background: var(--color-dark-red-chip-bg);
+  color: var(--color-danger-border);
+  border-color: var(--color-dark-red-chip-border);
+}
+html[data-theme="dark"] .pb-banner.success {
+  background: var(--color-dark-green-chip-bg);
+  color: var(--color-success-border);
+  border-color: var(--color-success);
 }
 
 html[data-theme="dark"] .pb-page {
