@@ -27,6 +27,7 @@ import {
 import {
   addMinutesToTime,
   formatDateLocal,
+  formatGridHour,
   formatHour,
   fromTime,
   nowTimeStr,
@@ -804,7 +805,7 @@ export default function Scheduler() {
                     className="time-row"
                     onClick={() => openCreate(dayDate, timeLabel)}
                   >
-                    <div className="time-label">{timeLabel}</div>
+                    <div className="time-label">{formatGridHour(mins)}</div>
 
                     <div className="time-events">
                       {slotEvents.map((e) =>
@@ -886,12 +887,7 @@ export default function Scheduler() {
 
                 return (
                   <div key={slot} className="week-row">
-                    <div className="time-label">
-                      {Math.floor(mins / 60)
-                        .toString()
-                        .padStart(2, "0")}
-                      :{(mins % 60).toString().padStart(2, "0")}
-                    </div>
+                    <div className="time-label">{formatGridHour(mins)}</div>
 
                     {[...Array(7)].map((_, i) => {
                       const d = weekDays[i];
@@ -1014,8 +1010,7 @@ export default function Scheduler() {
                                   }}
                                 >
                                   <span className="event-time">
-                                    {Math.floor(e.start / 60)}:
-                                    {(e.start % 60).toString().padStart(2, "0")}
+                                    {formatHour(e.start)}
                                   </span>
                                   <span className="event-title">{e.title}</span>
                                 </div>

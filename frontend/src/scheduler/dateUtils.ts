@@ -93,3 +93,20 @@ export function formatHour(mins: number) {
     ...hourOptions(),
   });
 }
+
+// Whether times display on a 12-hour clock: the Settings > Appearance choice,
+// or the browser's locale when that is left on "system".
+export function uses12HourClock(): boolean {
+  const cycle = new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    ...hourOptions(),
+  }).resolvedOptions().hourCycle;
+  return cycle === "h12" || cycle === "h11";
+}
+
+// The label beside a calendar row: "9 AM" / "1:30 PM" on a 12-hour clock,
+// "09:00" / "13:30" on a 24-hour one (a bare "13" reads as a number, not a
+// time).
+export function formatGridHour(mins: number): string {
+  return uses12HourClock() ? formatHour(mins) : toTime(mins);
+}
