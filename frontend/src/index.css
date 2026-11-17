@@ -139,6 +139,9 @@
   --color-canvas: var(--color-surface-soft);
   --color-pane: var(--color-surface-hover);
   --color-resizer-hover: #9fb4cd;
+  /* The line between split panes: a step darker than --color-border in light
+     mode, where the hairline was hard to see against the page. */
+  --color-split-line: #c5ccd6;
   --color-overlay-soft: rgba(255, 255, 255, 0.55);
   --color-overlay-strong: rgba(255, 255, 255, 0.65);
   --color-overlay-border: rgba(255, 255, 255, 0.7);
@@ -597,6 +600,7 @@
   --color-canvas: #0a1730;
   --color-pane: #0f1f3d;
   --color-resizer-hover: #2c4a78;
+  --color-split-line: #24385f;
   --color-overlay-soft: rgba(20, 23, 31, 0.55);
   --color-overlay-strong: rgba(20, 23, 31, 0.65);
   --color-overlay-border: rgba(255, 255, 255, 0.08);

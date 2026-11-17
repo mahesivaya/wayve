@@ -1434,7 +1434,7 @@ html.is-titlebar-inset .header .split-menu-btn svg {
    When a .split-resize-handle sits between two panes, the handle owns the
    1px visual border instead — so the rule above doesn't double-up. */
 .split-pane + .split-pane {
-  border-left: 1px solid var(--color-border);
+  border-left: 1px solid var(--color-split-line);
 }
 
 .split-pane + .split-resize-handle + .split-pane {
@@ -1473,6 +1473,11 @@ html.is-titlebar-inset .header .split-menu-btn svg {
   transition:
     background 0.12s ease,
     width 0.12s ease;
+}
+
+/* Between split panes the line is a step darker than other resize handles. */
+.split-resize-handle::after {
+  background: var(--color-split-line);
 }
 
 /* Centered grip pill — currently never shown (opacity 0, at rest and on
