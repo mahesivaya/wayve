@@ -490,6 +490,39 @@ describe("useEmailInbox with conversations", () => {
     ]);
   });
 
+  it("an older email that syncs in late is listed by its time, not on top", async () => {
+    const mail = (id: number, created_at: string): EmailItem => ({
+      id,
+      account_id: 7,
+      subject: `Mail ${id}`,
+      sender: "Bob <bob@x.com>",
+      created_at,
+      is_read: true,
+    });
+    const morning = mail(40, "2026-10-08T09:00:00Z");
+    const evening = mail(86, "2026-10-08T19:17:00Z");
+    getEmails.mockResolvedValueOnce({
+      emails: [evening, morning],
+      hasMore: false,
+    });
+    const { result } = renderHook(() => useEmailInbox(1, ""));
+    await waitFor(() => expect(result.current.emails).toHaveLength(2));
+
+    // An afternoon email reaches the server after the evening one was listed.
+    const afternoon = mail(91, "2026-10-08T16:00:00Z");
+    getEmails.mockResolvedValueOnce({
+      emails: [evening, afternoon, morning],
+      hasMore: false,
+    });
+    act(() => {
+      result.current.setRefreshTick((t) => t + 1);
+    });
+
+    await waitFor(() =>
+      expect(result.current.emails.map((e) => e.id)).toEqual([86, 91, 40])
+    );
+  });
+
   it("a new reply moves the conversation to the top instead of listing it twice", async () => {
     const other: EmailItem = {
       id: 30,
