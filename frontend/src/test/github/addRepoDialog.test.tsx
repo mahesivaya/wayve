@@ -1,5 +1,7 @@
-// Code Repo's "+ Add": clone by URL or import from GitHub, without leaving for
-// Settings. Only those the server lets add repositories get it.
+// Adding repositories in Code Repo: clone by URL or import from GitHub,
+// without leaving for Settings. There is no "+ Add" in the menu; the form shows
+// on the empty page (no repositories yet), and a personal account returning
+// from connecting GitHub gets it as a dialog to pick what to import.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -74,9 +76,14 @@ const renderPage = () =>
     </MemoryRouter>
   );
 
-const openDialog = async () => {
-  await userEvent.click(await screen.findByRole("button", { name: "+ Add" }));
-  return within(await screen.findByRole("dialog"));
+// Back from connecting GitHub with repositories already added, the add dialog
+// opens on its import tab; `tab` switches it first.
+const openDialog = async (tab?: "Clone URL") => {
+  window.location.hash = "#connected=true";
+  renderPage();
+  const dialog = within(await screen.findByRole("dialog"));
+  if (tab) await userEvent.click(dialog.getByRole("tab", { name: tab }));
+  return dialog;
 };
 
 beforeEach(() => {
@@ -111,8 +118,7 @@ afterEach(() => {
 describe("cloning by URL", () => {
   it("adds the pasted clone command and switches to the new repository", async () => {
     createdOnServer(project(8, "acme", "web"));
-    renderPage();
-    const dialog = await openDialog();
+    const dialog = await openDialog("Clone URL");
 
     await userEvent.type(
       dialog.getByLabelText("Repository URL"),
@@ -133,8 +139,7 @@ describe("cloning by URL", () => {
   });
 
   it("refuses a repository that's already added", async () => {
-    renderPage();
-    const dialog = await openDialog();
+    const dialog = await openDialog("Clone URL");
 
     await userEvent.type(
       dialog.getByLabelText("Repository URL"),
@@ -150,8 +155,7 @@ describe("cloning by URL", () => {
 
   it("stays open with the server's reason when it can't be added", async () => {
     createProject.mockRejectedValue(new Error("Repository not found"));
-    renderPage();
-    const dialog = await openDialog();
+    const dialog = await openDialog("Clone URL");
 
     await userEvent.type(dialog.getByLabelText("Repository URL"), "acme/gone");
     await userEvent.click(
@@ -171,13 +175,8 @@ describe("importing from GitHub", () => {
       repos: [ghRepo("acme/api"), ghRepo("me/secret", true)],
     });
     createdOnServer(project(9, "me", "secret"));
-    renderPage();
     const dialog = await openDialog();
-    expect(listImportableRepos).not.toHaveBeenCalled();
 
-    await userEvent.click(
-      dialog.getByRole("tab", { name: "Import from GitHub" })
-    );
     const added = (await dialog.findByText("acme/api")).closest("li");
     expect(within(added as HTMLElement).getByText("Added")).toBeTruthy();
     const row = dialog.getByText(/me\/secret/).closest("li");
@@ -198,15 +197,15 @@ describe("importing from GitHub", () => {
   it("prompts to connect GitHub when a personal account hasn't", async () => {
     listImportableRepos.mockResolvedValue({ connected: false, repos: [] });
     getGithubConnection.mockResolvedValue({ connected: false });
+    listProjects.mockResolvedValue([]);
     renderPage();
-    const dialog = await openDialog();
 
     await userEvent.click(
-      dialog.getByRole("tab", { name: "Import from GitHub" })
+      await screen.findByRole("tab", { name: "Import from GitHub" })
     );
 
     expect(
-      await dialog.findByRole("button", { name: "Connect GitHub" })
+      await screen.findByRole("button", { name: "Connect GitHub" })
     ).toBeTruthy();
   });
 
@@ -244,11 +243,7 @@ describe("importing from GitHub", () => {
 
   it("can disconnect GitHub", async () => {
     disconnectGithub.mockResolvedValue(undefined);
-    renderPage();
     const dialog = await openDialog();
-    await userEvent.click(
-      dialog.getByRole("tab", { name: "Import from GitHub" })
-    );
 
     await userEvent.click(
       await dialog.findByRole("button", { name: "Disconnect" })
@@ -284,20 +279,25 @@ describe("with no repositories yet", () => {
 describe("who gets to add", () => {
   it("lets an organization owner, limited to public repositories", async () => {
     mockUser = orgUser("owner");
+    listProjects.mockResolvedValue([]);
     renderPage();
-    const dialog = await openDialog();
     expect(
-      dialog.getByText(/Organization repositories must be public/)
+      await screen.findByText(/Organization repositories must be public/)
     ).toBeTruthy();
     expect(
-      dialog.getByRole("tab", { name: "Import from GitHub" })
+      screen.getByRole("tab", { name: "Import from GitHub" })
     ).toBeTruthy();
   });
 
-  it("doesn't offer it to an organization member", async () => {
-    mockUser = orgUser("member");
+  it.each([
+    ["a personal account", personal],
+    ["an organization owner", orgUser("owner")],
+    ["an organization member", orgUser("member")],
+  ])("has no + Add in the menu for %s", async (_who, who) => {
+    mockUser = who;
     renderPage();
     await screen.findByRole("button", { name: /^Select a repository/ });
     expect(screen.queryByRole("button", { name: "+ Add" })).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

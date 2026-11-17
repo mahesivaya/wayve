@@ -5,7 +5,8 @@ import { fittingTabs, splitTabs } from "./sectionTabs";
 export type NavSection<Id extends string> = {
   id: Id;
   label: string;
-  icon: string;
+  // An emoji, or an icon component for sections with a recognised mark.
+  icon: ReactNode;
   count?: ReactNode;
 };
 

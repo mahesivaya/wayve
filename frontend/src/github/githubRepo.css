@@ -276,10 +276,15 @@
   color: var(--color-text-muted);
 }
 
-/* Just the two fields, so they take little room above the sections. */
-.github-branch-card,
-.github-repo-switch {
+/* Repository and branch pickers, one card above the sections. The repository
+   switcher sits inside it without padding of its own. */
+.github-branch-card {
   padding: 6px;
+  gap: 6px;
+}
+
+.github-branch-card > .github-repo-switch {
+  padding: 0;
 }
 
 /* Custom branch dropdown trigger (replaces the native select). */
@@ -396,6 +401,7 @@
   width: 22px;
   display: inline-flex;
   justify-content: center;
+  align-items: center;
   font-size: var(--text-lg);
   line-height: 1;
 }
@@ -611,11 +617,6 @@
   .github-sidebar .github-repo-switch > .github-sidebar-branch {
     flex: 1 1 100px;
     min-width: 0;
-  }
-  .github-sidebar .github-repo-switch-add {
-    flex: 0 0 auto;
-    width: auto;
-    padding: 6px 10px;
   }
   .github-sidebar .github-repo-switch-conn {
     flex: 1 0 100%;
@@ -2651,19 +2652,12 @@
   }
 }
 
-/* Personal repo selector: a card at the top of the viewer's left rail (above
-   the Branch block) — a dropdown of the user's repos + an Add button below it. */
+/* Repo selector: the top of the viewer's repository-and-branch card — a
+   dropdown of the user's repos. */
 .github-repo-switch {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.github-repo-switch-add {
-  align-self: stretch;
-  width: 100%;
-  text-align: center;
-  padding: 7px 16px;
 }
 
 /* GitHub account controls inside the repo switcher (import more / disconnect). */

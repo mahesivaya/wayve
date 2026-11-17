@@ -43,6 +43,7 @@ import {
   CopyIcon,
   EditCommentIcon,
   GitBranchIcon,
+  PullRequestIcon,
   RepoIcon,
 } from "../icons";
 import { useDiffPrefs } from "./diffPrefs";
@@ -2012,8 +2013,9 @@ export function GitHubRepoViewer({
           aria-label="GitHub sections"
           style={{ "--github-sidebar-w": `${sidebarWidth}px` } as CSSProperties}
         >
-          {repoSwitcher}
+          {/* Repository and branch share one card. */}
           <div className="github-sidebar-card github-branch-card">
+            {repoSwitcher}
             <SidebarPicker
               label="Branch"
               listLabel="Branches"
@@ -2049,7 +2051,7 @@ export function GitHubRepoViewer({
               {
                 id: "pulls",
                 label: "Pull Requests",
-                icon: "🔀",
+                icon: <PullRequestIcon size={16} />,
                 // Open PRs, as GitHub counts them, not every PR ever.
                 count:
                   pullCounts.open ??
@@ -3640,7 +3642,7 @@ function PersonalRepoManager() {
 
   // Injected into the viewer's left rail via the repoSwitcher prop.
   const switcher = (
-    <div className="github-sidebar-card github-repo-switch">
+    <div className="github-repo-switch">
       <SidebarPicker
         label="Select a repository"
         listLabel="Repositories"
@@ -3652,13 +3654,6 @@ function PersonalRepoManager() {
         }))}
         onChange={setSelectedId}
       />
-      <button
-        type="button"
-        className="github-add-repo-btn github-repo-switch-add"
-        onClick={() => setAddTab("clone")}
-      >
-        + Add
-      </button>
     </div>
   );
 
@@ -3699,6 +3694,7 @@ function PersonalRepoManager() {
         projectId={selectedId}
         repoSwitcher={switcher}
       />
+      {/* Opened on the way back from connecting GitHub, to pick what to import. */}
       <Modal
         isOpen={addTab !== null}
         onClose={() => setAddTab(null)}
@@ -3725,7 +3721,6 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
   useEffect(() => {
     if (selectedId !== null) rememberOpenRepo(user?.id, selectedId);
   }, [selectedId, user?.id]);
-  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     void listProjects()
@@ -3739,7 +3734,6 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
   const showAdded = (created: Project[]) => {
     setProjects((prev) => [...created, ...(prev ?? [])]);
     setSelectedId(created[0].id);
-    setAdding(false);
   };
 
   if (projects === null) {
@@ -3784,7 +3778,7 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
   if (selectedId == null) return null;
 
   const switcher = (
-    <div className="github-sidebar-card github-repo-switch">
+    <div className="github-repo-switch">
       <SidebarPicker
         label="Select a repository"
         listLabel="Repositories"
@@ -3796,38 +3790,16 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
         }))}
         onChange={setSelectedId}
       />
-      {canLink && (
-        <button
-          type="button"
-          className="github-add-repo-btn github-repo-switch-add"
-          onClick={() => setAdding(true)}
-        >
-          + Add
-        </button>
-      )}
     </div>
   );
 
   return (
-    <>
-      <GitHubRepoProject
-        key={selectedId}
-        projectId={selectedId}
-        repoSwitcher={switcher}
-        canLink={canLink}
-      />
-      <Modal
-        isOpen={adding}
-        onClose={() => setAdding(false)}
-        title="Add a repository"
-      >
-        <AddRepoTabs
-          projects={projects}
-          isPersonal={false}
-          onAdded={showAdded}
-        />
-      </Modal>
-    </>
+    <GitHubRepoProject
+      key={selectedId}
+      projectId={selectedId}
+      repoSwitcher={switcher}
+      canLink={canLink}
+    />
   );
 }
 
@@ -3933,7 +3905,7 @@ function PlatformRepoManager() {
   // Selecting a repo remounts the viewer, which is keyed by owner/repo below.
   const switcher =
     hasRepos || canConnect ? (
-      <div className="github-sidebar-card github-repo-switch">
+      <div className="github-repo-switch">
         {hasRepos && (
           // Shows just the repo name (not owner/repo); the value keeps the full
           // name so the lookup still resolves owner + repo. The current/default
