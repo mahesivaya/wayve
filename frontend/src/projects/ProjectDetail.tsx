@@ -1,11 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import {
-  getRecentCommits,
-  getVisibleProjects,
-  type GithubCommit,
-  type GithubRepo,
-} from "../api/github";
+import { getVisibleProjects, type GithubRepo } from "../api/github";
 import {
   getRepoAccess,
   getRepoSummary,
@@ -14,46 +9,12 @@ import {
 } from "../api/repoAccess";
 import Avatar from "../components/Avatar";
 import { getApiBase } from "../config/env";
-import { CommitDiffBody, ChevronIcon } from "../github/commitDiff";
-import { useCommitDiffs } from "../github/commitDiffData";
 import "./projects.css";
 
-// Relative "time ago" for the commit rows (e.g. "3 days ago"),
-// falling back to "" for missing/unparseable timestamps.
-const timeAgo = (iso: string | null | undefined): string => {
-  if (!iso) return "";
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
-  const secs = Math.round((Date.now() - then) / 1000);
-  const units: Array<[number, Intl.RelativeTimeFormatUnit]> = [
-    [60, "second"],
-    [60, "minute"],
-    [24, "hour"],
-    [7, "day"],
-    [4.34524, "week"],
-    [12, "month"],
-    [Number.POSITIVE_INFINITY, "year"],
-  ];
-  let value = -secs;
-  let unit: Intl.RelativeTimeFormatUnit = "second";
-  for (const [size, u] of units) {
-    unit = u;
-    if (Math.abs(value) < size) break;
-    value = Math.round(value / size);
-  }
-  return new Intl.RelativeTimeFormat(undefined, { numeric: "auto" }).format(
-    value,
-    unit
-  );
-};
-
-// Project detail page. A "project" in wayve is a linked GitHub repository, so
-// this shows the repo's real metadata (visibility, owner, branch, languages,
-// last activity) in a two-column overview — replacing the old behavior of
-// jumping straight into the Code Repo viewer. The repo is passed via router
-// state from the Projects grid for an instant render, and re-resolved from
-// /projects/visible on a cold/direct load. Richer project-management fields
-// (status, priority, milestones, …) are a planned follow-up.
+// Project detail page, for a project's linked GitHub repository: its name and
+// summary, the people with access, and a link into the Code Repo viewer. The
+// repo is passed via router state for an instant render, and re-resolved from
+// /projects/visible on a cold/direct load.
 export default function ProjectDetail() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -67,7 +28,6 @@ export default function ProjectDetail() {
   // null = still resolving; false = resolved (found or gave up).
   const [resolving, setResolving] = useState(!preset);
   const [notFound, setNotFound] = useState(false);
-  const [commits, setCommits] = useState<GithubCommit[] | null>(null);
   // Users with access to this project (Wayve members + GitHub collaborators).
   // null = still loading; [] = none / not readable.
   const [members, setMembers] = useState<RepoAccessRow[] | null>(null);
@@ -81,9 +41,6 @@ export default function ProjectDetail() {
   const [summaryDraft, setSummaryDraft] = useState("");
   const [savingSummary, setSavingSummary] = useState(false);
   const [summaryError, setSummaryError] = useState("");
-  // Clicking a Recent activity row expands that commit's diff inline, reusing
-  // the Code Repo viewer's renderer instead of opening github.com.
-  const diffs = useCommitDiffs(owner, repoName);
 
   // Resolve the repo when we didn't get it via navigation state (direct URL
   // load / refresh). Fall back to a synthesized stub so the page still renders
@@ -126,9 +83,6 @@ export default function ProjectDetail() {
   useEffect(() => {
     if (!owner || !repoName) return;
     let cancelled = false;
-    getRecentCommits(owner, repoName, 5)
-      .then((list) => !cancelled && setCommits(Array.isArray(list) ? list : []))
-      .catch(() => !cancelled && setCommits([]));
     getRepoAccess(owner, repoName)
       .then((data) => {
         if (cancelled) return;
@@ -205,6 +159,15 @@ export default function ProjectDetail() {
       </div>
     );
   }
+
+  // The repository's real address, as GitHub reports it for the org's or
+  // platform's connected account; built from the names only when the live
+  // list couldn't be read.
+  const repoUrl =
+    repo.html_url ||
+    `https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(
+      repoName
+    )}`;
 
   return (
     <div className="projects-page u-page-shell project-detail-page">
@@ -329,60 +292,15 @@ export default function ProjectDetail() {
         </section>
 
         <section className="project-detail-section">
-          <h2 className="project-detail-section-title">Recent activity</h2>
-          {commits === null ? (
-            <p className="project-detail-muted">Loading activity…</p>
-          ) : commits.length === 0 ? (
-            <p className="project-detail-muted">No recent commits.</p>
-          ) : (
-            <ul className="project-detail-activity">
-              {commits.map((c) => {
-                const msg = c.commit.message.split("\n")[0];
-                const who =
-                  c.author?.login || c.commit.author?.name || "unknown";
-                const isOpen = diffs.expandedShas.has(c.sha);
-                return (
-                  <li key={c.sha} className="project-detail-activity-item">
-                    <button
-                      type="button"
-                      className="project-detail-activity-toggle"
-                      onClick={() => diffs.toggle(c.sha)}
-                      aria-expanded={isOpen}
-                    >
-                      <span
-                        className={`github-tree-toggle ${isOpen ? "open" : ""}`}
-                        aria-hidden="true"
-                      >
-                        <ChevronIcon />
-                      </span>
-                      <span className="project-detail-activity-text">
-                        <span
-                          className="project-detail-activity-msg"
-                          data-tooltip={msg}
-                        >
-                          {msg}
-                        </span>
-                        <span className="project-detail-activity-meta">
-                          {who}
-                          {c.commit.author?.date
-                            ? ` · ${timeAgo(c.commit.author.date)}`
-                            : ""}
-                        </span>
-                      </span>
-                      <code className="project-detail-activity-sha">
-                        {c.sha.slice(0, 7)}
-                      </code>
-                    </button>
-                    {isOpen && (
-                      <div className="project-detail-activity-diff github-commit-diff">
-                        <CommitDiffBody sha={c.sha} diffs={diffs} />
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <h2 className="project-detail-section-title">Code repo</h2>
+          <a
+            className="project-detail-repo-link"
+            href={repoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {repoUrl}
+          </a>
         </section>
       </main>
     </div>

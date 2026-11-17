@@ -5,6 +5,8 @@ export type GithubRepo = {
   full_name: string;
   name: string;
   owner: { login: string };
+  // The repository's page on GitHub, as GitHub reports it.
+  html_url?: string;
   description: string | null;
   private: boolean;
   default_branch: string;
