@@ -63,6 +63,12 @@ const parseEnvelope = (content: string): ChatEnvelope | null => {
   }
 };
 
+// Shown in place of text this device can't decrypt. Exported so previews (the
+// app-wide message popups) can tell a placeholder from real text.
+export const E2E_UNAVAILABLE_TEXT =
+  "[encrypted message unavailable on this device]";
+export const E2E_BEFORE_SETUP_TEXT = "[sent before you set up encryption]";
+
 export const isEncryptedChatContent = (content: string) =>
   Boolean(parseEnvelope(content));
 
@@ -190,11 +196,11 @@ export async function decryptChatContent(
   const encryptedKey = envelope.keys[String(currentUserId)];
 
   if (!privateKey) {
-    return "[encrypted message unavailable on this device]";
+    return E2E_UNAVAILABLE_TEXT;
   }
   // The sender skipped this user because they had no published key yet.
   if (!encryptedKey) {
-    return "[sent before you set up encryption]";
+    return E2E_BEFORE_SETUP_TEXT;
   }
 
   try {
@@ -205,7 +211,7 @@ export async function decryptChatContent(
       privateKey
     );
   } catch {
-    return "[encrypted message unavailable on this device]";
+    return E2E_UNAVAILABLE_TEXT;
   }
 }
 

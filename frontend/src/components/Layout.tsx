@@ -21,6 +21,7 @@ import SearchProvider from "../search/SearchProvider";
 import ProfileMenu from "./ProfileMenu";
 import NotificationPrompt from "./NotificationPrompt";
 import ReminderPopups from "./ReminderPopups";
+import ChatPopups from "./ChatPopups";
 import NotificationBell from "./NotificationBell";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import { useEmailsUnreadCount } from "../emails/useEmailsUnreadCount";
@@ -2346,7 +2347,12 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   return (
     <SplitControlContext.Provider value={splitControl}>
       <div className="app">
-        <ReminderPopups />
+        {/* One bottom-right stack, so message cards sit above meeting
+            reminders instead of overlapping them. */}
+        <div className="corner-popups">
+          <ChatPopups />
+          <ReminderPopups />
+        </div>
         <NotificationPrompt />
         <SearchProvider>
           {/* Wide screens drop the header row entirely (Cursor-style): the
