@@ -1,11 +1,13 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { fmtDateTime } from "../utils/datetime";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import { getAuthToken } from "../auth/token";
 import RepoAccessPanel from "./RepoAccessPanel";
+import ResizeHandle from "../components/ResizeHandle";
+import { useResizableWidth } from "../components/useResizableWidth";
 import PrMergeBox from "./PrMergeBox";
 import PrDescription from "./PrDescription";
 import { useMergeabilityRecheck } from "./useMergeabilityRecheck";
@@ -830,6 +832,14 @@ export function GitHubRepoViewer({
   const canManageAccess =
     user?.scope !== "personal" &&
     (isOwner || hasPermission(user, "members:manage"));
+  // The left menu's width, dragged from the handle beside it and remembered.
+  const { width: sidebarWidth, startResize: startSidebarResize } =
+    useResizableWidth({
+      storageKey: "rwayve.githubSidebar.width",
+      defaultWidth: 260,
+      min: 180,
+      max: 480,
+    });
   const fullName = `${owner}/${repoName}`;
   // Where this repo was left on an earlier visit this session.
   const [restoredView] = useState(() => readRepoView(user?.id, fullName));
@@ -1997,7 +2007,11 @@ export function GitHubRepoViewer({
             (1) Branch picker, (2) Section nav. Mirrors the Emails-page
             sidebar pattern (account list + folder list) so the page
             feels at home with the rest of the app's chrome. */}
-        <aside className="github-sidebar" aria-label="GitHub sections">
+        <aside
+          className="github-sidebar"
+          aria-label="GitHub sections"
+          style={{ "--github-sidebar-w": `${sidebarWidth}px` } as CSSProperties}
+        >
           {repoSwitcher}
           <div className="github-sidebar-card github-branch-card">
             <SidebarPicker
@@ -2053,6 +2067,11 @@ export function GitHubRepoViewer({
             ]}
           />
         </aside>
+        <ResizeHandle
+          onPointerDown={startSidebarResize}
+          className="github-sidebar-resize"
+          ariaLabel="Resize menu"
+        />
 
         {/* Right pane — only the active section is rendered. */}
         <div className="github-content" ref={contentRef}>

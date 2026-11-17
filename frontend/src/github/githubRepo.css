@@ -243,7 +243,8 @@
    border/background. */
 .github-sidebar {
   flex: 0 0 auto;
-  width: 200px;
+  /* Set from the drag handle beside it (useResizableWidth). */
+  width: var(--github-sidebar-w, 260px);
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -595,6 +596,10 @@
   .github-sidebar {
     width: 100%;
     position: static;
+  }
+  /* Stacked above the content, the menu has no width to drag. */
+  .github-sidebar-resize {
+    display: none;
   }
   /* Repository, branch and the tabs each get a row. Prefixed to beat these
      fields' own rules, further down the file. */
