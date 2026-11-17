@@ -68,7 +68,6 @@ export default function MarketingShell({
           {isPlatform && (
             <button onClick={() => navigate("/docs")}>Docs</button>
           )}
-          <button onClick={() => navigate("/support")}>Support</button>
         </nav>
 
         <div className="public-home-actions">
@@ -122,7 +121,6 @@ export default function MarketingShell({
             {isPlatform && (
               <button onClick={() => goMobile("/docs")}>Docs</button>
             )}
-            <button onClick={() => goMobile("/support")}>Support</button>
             {user ? (
               <>
                 <button onClick={() => goMobile("/home")}>Home</button>

@@ -67,7 +67,6 @@ export default function Home() {
 
           <nav className="public-home-links" aria-label="Main navigation">
             <button onClick={() => navigate("/pricing")}>Pricing</button>
-            <button onClick={() => navigate("/support")}>Support</button>
           </nav>
 
           <div className="public-home-actions">
@@ -103,7 +102,6 @@ export default function Home() {
           {mobileMenuOpen && (
             <div className="public-home-mobile-menu" ref={mobileMenuRef}>
               <button onClick={() => goMobile("/pricing")}>Pricing</button>
-              <button onClick={() => goMobile("/support")}>Support</button>
               <button onClick={() => goMobile("/login")}>Login</button>
               <button
                 className="home-register-btn"
