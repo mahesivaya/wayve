@@ -2512,9 +2512,9 @@
 }
 
 /* ============================================================
- * Stark, edge-tight layout
+ * Edge-tight layout
  * ------------------------------------------------------------
- * Minimal padding around the page and square ("stark") edges on
+ * Minimal padding around the page and softly rounded edges on
  * every block. Kept as one trailing override block so the spacing
  * / corner styling is easy to tune or revert in one place.
  * ============================================================ */
@@ -2529,20 +2529,24 @@
   gap: 4px;
 }
 
+/* Blocks get a gentle curve; the controls inside them a slightly tighter one. */
 .github-browser,
 .github-preview,
 .github-panel,
 .github-sidebar-card,
-.github-branch-trigger,
-.github-sidebar-link,
 .github-banner,
 .github-stats,
 .github-commit-file,
-.github-commit-fulldiff-btn,
 .github-flow-inline,
-.github-flow-job,
+.github-flow-job {
+  border-radius: 8px;
+}
+
+.github-branch-trigger,
+.github-sidebar-link,
+.github-commit-fulldiff-btn,
 .github-actions-load-more button {
-  border-radius: 0;
+  border-radius: 6px;
 }
 
 /* Empty / loading states for the per-project viewer (no repo linked yet). */
