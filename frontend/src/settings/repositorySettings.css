@@ -70,7 +70,7 @@
   padding: 0;
   border: none;
   background: none;
-  color: var(--color-accent, #2563eb);
+  color: var(--color-primary);
   font: inherit;
   text-decoration: underline;
   cursor: pointer;

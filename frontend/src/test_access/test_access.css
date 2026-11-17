@@ -36,7 +36,7 @@
 
 .test-access-section code {
   font-family: monospace;
-  background: var(--color-surface-muted, #f3f4f6);
+  background: var(--color-surface-hover);
   padding: 1px 6px;
   border-radius: 4px;
 }
@@ -54,7 +54,7 @@
 }
 
 .test-access-locked {
-  background: var(--color-surface-muted, #f9fafb);
+  background: var(--color-surface-hover);
 }
 
 .test-access-unlocked {

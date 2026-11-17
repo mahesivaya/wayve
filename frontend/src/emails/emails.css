@@ -802,7 +802,7 @@
 }
 .account-shared-chip {
   background: var(--color-accent-indigo-pale);
-  color: var(--color-accent-indigo-darker);
+  color: var(--color-primary);
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -861,9 +861,9 @@
   padding: 6px 8px;
   border-radius: 7px;
   border: 1px solid var(--color-surface-tint-steel);
-  background: white;
+  background: var(--color-surface);
   font-size: 13px;
-  color: var(--color-accent-indigo-darkest);
+  color: var(--color-text-primary);
   text-transform: none;
   letter-spacing: 0;
 }
@@ -874,7 +874,7 @@
 }
 .inbox-workflow-pill {
   background: var(--color-accent-indigo-pale);
-  color: var(--color-accent-indigo-darker);
+  color: var(--color-primary);
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 12.5px;
@@ -896,7 +896,7 @@
   letter-spacing: 0;
 }
 .inbox-workflow-unassign {
-  background: white;
+  background: var(--color-surface);
   color: var(--color-text-slate-deep);
   border: 1px solid var(--color-surface-tint-steel);
 }

@@ -91,7 +91,7 @@
 .us-summary-nav-btn:hover {
   color: var(--color-text-primary);
   border-color: var(--color-primary-action);
-  background: var(--color-surface-muted, transparent);
+  background: var(--color-surface-hover);
 }
 
 .us-summary-nav-btn:focus-visible {

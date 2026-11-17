@@ -2,7 +2,7 @@
   max-width: 1100px;
   margin: 28px auto;
   padding: 0 24px 64px;
-  color: var(--color-accent-indigo-darkest);
+  color: var(--color-text-primary);
   /* Own vertical scroll — the page host (.split-pane-body) clips overflow. */
   min-height: 0;
   overflow-y: auto;
@@ -10,7 +10,7 @@
 
 .shared-inboxes-header h1 {
   margin: 0 0 6px;
-  color: var(--color-accent-indigo-darker);
+  color: var(--color-text-primary);
 }
 .shared-inboxes-header p {
   margin: 0 0 20px;
@@ -49,7 +49,7 @@
 .shared-inboxes-detail h2 {
   font-size: 15px;
   margin: 0 0 10px;
-  color: var(--color-accent-indigo-darker);
+  color: var(--color-text-primary);
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
@@ -88,7 +88,7 @@
   min-width: 0;
 }
 .shared-inbox-label strong {
-  color: var(--color-accent-indigo-darkest);
+  color: var(--color-text-primary);
 }
 .shared-inbox-email {
   font-size: 12px;
@@ -129,7 +129,7 @@
   flex-direction: column;
   gap: 4px;
   font-size: 13.5px;
-  color: var(--color-accent-indigo-darkest);
+  color: var(--color-text-primary);
 }
 .shared-inboxes-share-form label > span {
   font-weight: 600;
@@ -142,7 +142,7 @@
   border-radius: 7px;
   padding: 8px 10px;
   background: var(--color-surface-near-white);
-  color: var(--color-accent-indigo-darkest);
+  color: var(--color-text-primary);
   font-size: 13.5px;
 }
 .shared-inboxes-share-form button,
@@ -195,7 +195,7 @@
 }
 .shared-inbox-member-tags .tag {
   background: var(--color-accent-indigo-pale);
-  color: var(--color-accent-indigo-darker);
+  color: var(--color-primary);
   font-size: 11.5px;
   padding: 2px 8px;
   border-radius: 999px;

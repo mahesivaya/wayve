@@ -614,8 +614,8 @@
   padding: 10px 12px;
   font-size: var(--text-sm);
   background: var(--color-warning-soft, #fff7ed);
-  color: var(--color-warning-strong, #92400e);
-  border: 1px solid var(--color-warning-border, #fed7aa);
+  color: var(--color-warning);
+  border: 1px solid var(--color-warning-soft-amber);
   border-radius: var(--radius-sm);
 }
 
