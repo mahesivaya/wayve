@@ -1949,22 +1949,124 @@ body.is-col-resizing {
    Threshold is 900px, above the ~868px the widest template needs (7 columns
    + six 16px gaps), so the columns drop just BEFORE they stop fitting. */
 @container (max-width: 900px) {
+  /* `--task-cols-narrow` holds only the shown columns that keep a track here
+     (title, type, priority, status, actions); every other column is marked
+     .task-col--wide and drops out. */
   .task-thead,
   .task-trow {
-    grid-template-columns: minmax(0, 1fr) 56px 150px auto;
+    grid-template-columns: var(--task-cols-narrow);
   }
-  /* Boards with the Type column keep it on narrow screens (created/assignee
-     still drop out). */
-  .task-thead--type,
-  .task-trow--type {
-    grid-template-columns: minmax(0, 1fr) auto 56px 150px auto;
-  }
-  .task-th--assignee,
-  .task-tcell--assignee,
-  .task-th--created,
-  .task-tcell--created {
+  .task-col--wide {
     display: none;
   }
+}
+
+/* ── Columns menu: pick which list-table columns are shown ─────────── */
+.tasks-columns-popover {
+  width: 280px;
+}
+
+.tasks-columns-search {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+}
+
+.tasks-columns-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.tasks-columns-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 4px;
+  border-radius: var(--radius-sm, 6px);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.tasks-columns-item:hover {
+  background: var(--color-surface-hover, rgb(15, 23, 42, 0.05));
+}
+
+.tasks-columns-item input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-primary-action);
+}
+
+.tasks-columns-empty,
+.tasks-columns-count {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+/* ── Optional table cells ─────────────────────────────────────────── */
+.task-tcell--description,
+.task-tcell--updated,
+.task-tcell--key {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.task-tcell--person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.task-project-select {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.task-related-pill {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 2px 8px;
+  border: none;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs, 12px);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.task-related-pill {
+  cursor: pointer;
+}
+
+.task-related-pill--duplicate {
+  background: rgb(220, 38, 38, 0.12);
+  color: rgb(185, 28, 28);
+}
+
+.task-related-pill--similar {
+  background: rgb(37, 99, 235, 0.12);
+  color: rgb(29, 78, 216);
 }
 
 .task-completed-section {

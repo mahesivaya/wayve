@@ -91,6 +91,105 @@ const formatCreatedDate = (value: string | null | undefined): string => {
   });
 };
 
+// The list table's columns, in display order. `narrow` is the track a column
+// keeps when the board pane is too narrow for every column (see the container
+// query in tasks.css); a column without one drops out there. `locked` columns
+// can't be hidden from the Columns menu.
+export type TableColumnKey =
+  | "created"
+  | "key"
+  | "title"
+  | "type"
+  | "project"
+  | "assignee"
+  | "assigned_by"
+  | "priority"
+  | "status"
+  | "related"
+  | "updated"
+  | "description";
+
+type TableColumn = {
+  key: TableColumnKey;
+  label: string;
+  width: string;
+  narrow?: string;
+  locked?: boolean;
+  defaultOn: boolean;
+};
+
+const TABLE_COLUMNS: TableColumn[] = [
+  { key: "created", label: "Created", width: "124px", defaultOn: true },
+  { key: "key", label: "Key", width: "96px", defaultOn: false },
+  {
+    key: "title",
+    label: "Summary",
+    width: "minmax(0, 1fr)",
+    narrow: "minmax(0, 1fr)",
+    locked: true,
+    defaultOn: true,
+  },
+  {
+    key: "type",
+    label: "Type",
+    width: "112px",
+    narrow: "auto",
+    defaultOn: true,
+  },
+  { key: "project", label: "Project", width: "160px", defaultOn: false },
+  { key: "assignee", label: "Assignee", width: "176px", defaultOn: true },
+  {
+    key: "assigned_by",
+    label: "Assigned by",
+    width: "176px",
+    defaultOn: false,
+  },
+  {
+    key: "priority",
+    label: "Priority",
+    width: "64px",
+    narrow: "56px",
+    defaultOn: true,
+  },
+  {
+    key: "status",
+    label: "Status",
+    width: "168px",
+    narrow: "150px",
+    defaultOn: true,
+  },
+  { key: "related", label: "Related", width: "150px", defaultOn: false },
+  { key: "updated", label: "Updated", width: "124px", defaultOn: false },
+  {
+    key: "description",
+    label: "Description",
+    width: "240px",
+    defaultOn: false,
+  },
+];
+
+const DEFAULT_SHOWN_COLUMNS: TableColumnKey[] = TABLE_COLUMNS.filter(
+  (c) => c.defaultOn
+).map((c) => c.key);
+
+// The board's saved column choice, or the defaults. Anything unknown (a
+// hand-edited value or a column a later build removed) is dropped.
+const loadShownColumns = (storageKey: string): TableColumnKey[] => {
+  try {
+    const saved = window.localStorage.getItem(`wayve.${storageKey}.cols`);
+    const parsed = saved ? (JSON.parse(saved) as unknown) : null;
+    if (!Array.isArray(parsed)) return DEFAULT_SHOWN_COLUMNS;
+    const known = new Set<string>(TABLE_COLUMNS.map((c) => c.key));
+    return parsed.filter(
+      (k): k is TableColumnKey => typeof k === "string" && known.has(k)
+    );
+  } catch {
+    return DEFAULT_SHOWN_COLUMNS;
+  }
+};
+
+type SortKey = "created" | "updated" | "assignee" | "priority" | "status";
+
 const normalizePriority = (value: unknown): TaskPriority => {
   const n = Number(value);
   if (n === 1 || n === 2 || n === 3 || n === 4 || n === 5) return n;
@@ -844,11 +943,17 @@ export default function Tasks({
   const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
   // Table-view (☰) column sort. `null` keeps the default order (priority, then
   // oldest first). Clicking a sortable header sets the key and toggles asc/desc.
-  const [sortKey, setSortKey] = useState<
-    "created" | "assignee" | "priority" | "status" | null
-  >(null);
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const toggleSort = (key: "created" | "assignee" | "priority" | "status") => {
+  // Which optional list-table columns are shown, persisted per board. Locked
+  // columns are always shown whatever this holds.
+  const [shownCols, setShownCols] = useState<TableColumnKey[]>(() =>
+    loadShownColumns(config.storageKey)
+  );
+  const [colsOpen, setColsOpen] = useState(false);
+  const [colsQuery, setColsQuery] = useState("");
+  const colsRef = useRef<HTMLDivElement>(null);
+  const toggleSort = (key: SortKey) => {
     if (sortKey !== key) {
       setSortKey(key);
       // P1-first is the most useful priority order; ascending gets it, since a
@@ -881,6 +986,40 @@ export default function Tasks({
       document.removeEventListener("keydown", onKey);
     };
   }, [filtersOpen]);
+
+  // Close the Columns menu on outside click or Escape.
+  useEffect(() => {
+    if (!colsOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (
+        colsRef.current &&
+        e.target instanceof Node &&
+        !colsRef.current.contains(e.target)
+      ) {
+        setColsOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setColsOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [colsOpen]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        `wayve.${config.storageKey}.cols`,
+        JSON.stringify(shownCols)
+      );
+    } catch {
+      // Storage unavailable: the choice just lasts for this visit.
+    }
+  }, [shownCols, config.storageKey]);
 
   useEffect(() => {
     window.localStorage.setItem(`wayve.${config.storageKey}.view`, view);
@@ -1483,6 +1622,15 @@ export default function Tasks({
     );
   };
 
+  const changeProject = async (task: Task, nextProject: number | null) => {
+    if ((task.project_id ?? null) === nextProject) return;
+    await patchTask(
+      task,
+      { project_id: nextProject },
+      "Failed to update project"
+    );
+  };
+
   // The card badge key is the project name's first three letters plus the
   // per-user task number ("wayve" + 12 → "way12"), falling back to "#12" when
   // the task has no resolvable project.
@@ -1696,17 +1844,52 @@ export default function Tasks({
   // is why it is the one column that reads as truncated until you widen it.
   const col = (key: string, fallback: string) =>
     colWidths[key] ? `${colWidths[key]}px` : fallback;
+  // Columns this board can show at all: Type and Related are ticket fields, and
+  // the people columns are a team feature.
+  const columnAvailable = (key: TableColumnKey): boolean => {
+    switch (key) {
+      case "type":
+        return showType;
+      case "related":
+        return config.storageKey === "tickets";
+      case "assignee":
+      case "assigned_by":
+        return showAssignee;
+      default:
+        return true;
+    }
+  };
+  const availableCols = TABLE_COLUMNS.filter((c) => columnAvailable(c.key));
+  const visibleCols = availableCols.filter(
+    (c) => c.locked || shownCols.includes(c.key)
+  );
+  const showKeyColumn = visibleCols.some((c) => c.key === "key");
   const tableCols = [
-    col("created", "124px"),
-    col("title", "minmax(0, 1fr)"),
-    showType ? col("type", "112px") : null,
-    showAssignee ? col("assignee", "176px") : null,
-    col("priority", "64px"),
-    col("status", "168px"),
+    ...visibleCols.map((c) => col(c.key, c.width)),
     "88px", // actions — a fixed Edit button, nothing to reveal
-  ]
-    .filter(Boolean)
-    .join(" ");
+  ].join(" ");
+  // The narrow-pane template: only the columns that keep a track there.
+  const tableColsNarrow = [
+    ...visibleCols.filter((c) => c.narrow).map((c) => c.narrow),
+    "auto",
+  ].join(" ");
+  const tableStyle = {
+    "--task-cols": tableCols,
+    "--task-cols-narrow": tableColsNarrow,
+  } as React.CSSProperties;
+  const wideOnly = (key: TableColumnKey) =>
+    TABLE_COLUMNS.find((c) => c.key === key)?.narrow ? "" : " task-col--wide";
+  const toggleColumn = (key: TableColumnKey) =>
+    setShownCols((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  const pickableCols = availableCols.filter((c) => !c.locked);
+  const colsMatching = pickableCols.filter((c) =>
+    c.label.toLowerCase().includes(colsQuery.trim().toLowerCase())
+  );
+  const shownPickable = pickableCols.filter((c) =>
+    shownCols.includes(c.key)
+  ).length;
 
   // Until a grip is dragged the table keeps its original layout exactly: tracks
   // sized to the container, no horizontal scroll.
@@ -1764,10 +1947,14 @@ export default function Tasks({
 
   // Wraps a header cell so it can carry a resize grip. The wrapper becomes the
   // grid child; the original cell keeps its own classes and styling.
-  const headCell = (key: string, node: React.ReactNode, center = false) => (
+  const headCell = (
+    key: TableColumnKey,
+    node: React.ReactNode,
+    center = false
+  ) => (
     <div
       key={key}
-      className={`task-th-wrap${center ? " task-th-wrap--center" : ""}`}
+      className={`task-th-wrap${center ? " task-th-wrap--center" : ""}${wideOnly(key)}`}
     >
       {node}
       <span
@@ -1785,19 +1972,44 @@ export default function Tasks({
   // The team member behind a task's assignee email, for the Assignee column.
   // Falls back to the raw stored value (silhouette avatar) when it isn't a
   // known member, and null when unassigned.
-  const assigneeInfo = (
-    task: Task
+  const personInfo = (
+    rawEmail: string | null | undefined,
+    knownId: number | null
   ): { name: string; userId: number | null } | null => {
-    const email = (task.assignee ?? "").trim();
+    const email = (rawEmail ?? "").trim();
     if (!email) return null;
     const match = assignableUsers.find(
       (u) => u.email.toLowerCase() === email.toLowerCase()
     );
     return {
       name: match?.username || email,
-      userId: match?.user_id ?? task.assignee_id ?? null,
+      userId: match?.user_id ?? knownId,
     };
   };
+  const assigneeInfo = (task: Task) =>
+    personInfo(task.assignee, task.assignee_id ?? null);
+
+  // Avatar + name for a person column, or a muted placeholder.
+  const personCell = (
+    who: { name: string; userId: number | null } | null,
+    empty: string
+  ) =>
+    who ? (
+      <>
+        <Avatar
+          name={who.name}
+          src={
+            who.userId
+              ? `${getApiBase()}/api/users/${who.userId}/avatar`
+              : undefined
+          }
+          size={22}
+        />
+        <span className="task-trow-assignee-name">{who.name}</span>
+      </>
+    ) : (
+      <span className="task-trow-muted">{empty}</span>
+    );
 
   // Applies the active column sort to a table row list. A stable base order is
   // assumed (the caller passes the already-sorted active/completed lists), so an
@@ -1809,6 +2021,8 @@ export default function Tasks({
       switch (sortKey) {
         case "created":
           return new Date(t.created_at ?? 0).getTime();
+        case "updated":
+          return new Date(t.updated_at ?? 0).getTime();
         case "priority":
           return t.priority;
         case "assignee":
@@ -1828,16 +2042,12 @@ export default function Tasks({
 
   // Direction glyph for a header: a faint up/down when inactive, a solid arrow
   // for the active column.
-  const sortArrow = (key: "created" | "assignee" | "priority" | "status") => {
+  const sortArrow = (key: SortKey) => {
     if (sortKey !== key) return "↕";
     return sortDir === "asc" ? "↑" : "↓";
   };
 
-  const sortHeader = (
-    key: "created" | "assignee" | "priority" | "status",
-    label: string,
-    extra = ""
-  ) => (
+  const sortHeader = (key: SortKey, label: string, extra = "") => (
     <button
       type="button"
       className={`task-th task-th--sort${extra ? ` ${extra}` : ""}${
@@ -1859,79 +2069,139 @@ export default function Tasks({
     </button>
   );
 
+  // The header cell for one column.
+  const headFor = (key: TableColumnKey): React.ReactNode => {
+    switch (key) {
+      case "created":
+        return headCell(
+          key,
+          sortHeader("created", "Created", "task-th--created")
+        );
+      case "updated":
+        return headCell(key, sortHeader("updated", "Updated"));
+      case "title":
+        return headCell(
+          key,
+          <div className="task-th task-th--title">{config.labels.singular}</div>
+        );
+      case "assignee":
+        return headCell(
+          key,
+          sortHeader("assignee", "Assignee", "task-th--assignee")
+        );
+      case "priority":
+        return headCell(
+          key,
+          sortHeader("priority", "Priority", "task-th--center"),
+          true
+        );
+      case "status":
+        return headCell(key, sortHeader("status", "Status"));
+      default: {
+        const label = TABLE_COLUMNS.find((c) => c.key === key)?.label ?? key;
+        return headCell(
+          key,
+          <div className={`task-th task-th--${key}`}>{label}</div>
+        );
+      }
+    }
+  };
+
   // The table's column headers, reused above the active and completed rows.
   const tableHead = (
-    <div
-      className={`task-thead${showType ? " task-thead--type" : ""}`}
-      role="row"
-    >
-      {headCell(
-        "created",
-        sortHeader("created", "Created", "task-th--created")
-      )}
-      {headCell(
-        "title",
-        <div className="task-th task-th--title">{config.labels.singular}</div>
-      )}
-      {showType &&
-        headCell("type", <div className="task-th task-th--type">Type</div>)}
-      {showAssignee &&
-        headCell(
-          "assignee",
-          sortHeader("assignee", "Assignee", "task-th--assignee")
-        )}
-      {headCell(
-        "priority",
-        sortHeader("priority", "Priority", "task-th--center"),
-        true
-      )}
-      {headCell("status", sortHeader("status", "Status"))}
+    <div className="task-thead" role="row">
+      {visibleCols.map((c) => headFor(c.key))}
       <div className="task-th task-th--actions" />
     </div>
   );
 
-  // One table row. `completed` dims the row and strikes the title, mirroring the
-  // completed-card treatment.
-  const renderRow = (task: Task, completed: boolean) => {
-    const who = showAssignee ? assigneeInfo(task) : null;
-    const st = lookupStatus(task.status);
-    return (
-      <div
-        key={task.id}
-        className={`task-trow${completed ? " task-trow--completed" : ""}${
-          showType ? " task-trow--type" : ""
-        }`}
-        role="row"
+  // "Duplicate of way4" / "Similar to way4": the related ticket opens on click
+  // when it's on this board, else the label shows its id.
+  const relatedCell = (task: Task) => {
+    if (task.related_to == null || !task.relation_kind) {
+      return <span className="task-trow-muted">—</span>;
+    }
+    const target = tasks.find((t) => t.id === task.related_to);
+    const verb =
+      task.relation_kind === "duplicate" ? "Duplicate of" : "Similar to";
+    const label = (target && taskKey(target)) || `#${task.related_to}`;
+    return target ? (
+      <button
+        type="button"
+        className={`task-related-pill task-related-pill--${task.relation_kind}`}
+        onClick={() => openDetail(target)}
+        data-tooltip={target.name}
       >
-        <div className="task-tcell task-tcell--created">
-          {formatCreatedDate(task.created_at) || "—"}
-        </div>
+        {verb} {label}
+      </button>
+    ) : (
+      <span
+        className={`task-related-pill task-related-pill--${task.relation_kind}`}
+      >
+        {verb} {label}
+      </span>
+    );
+  };
 
-        <div className="task-tcell task-tcell--title">
-          <TaskKeyBadge
-            value={taskKey(task)}
-            tooltip={config.labels.numberBadgeTooltip}
-          />
-          <button
-            type="button"
-            className="task-card-title-link task-trow-title"
-            onClick={() => openDetail(task)}
-            data-tooltip={`Open ${config.labels.lowerSingular} details`}
-          >
-            {task.name}
-          </button>
-          {!showType && <TaskBadge kind={task.badge_kind} />}
-          <JiraBadge task={task} />
-          <GitlabBadge task={task} />
-          <CopyLinkButton
-            copied={copiedTaskId === task.id}
-            onCopy={() => copyTaskLink(task)}
-            label={task.name}
-          />
-        </div>
-
-        {showType && (
-          <div className="task-tcell task-tcell--type">
+  // One body cell. `st` is the row's resolved status.
+  const cellFor = (
+    key: TableColumnKey,
+    task: Task,
+    st: ReturnType<typeof lookupStatus>
+  ): React.ReactNode => {
+    const cls = `task-tcell task-tcell--${key}${wideOnly(key)}`;
+    switch (key) {
+      case "created":
+        return (
+          <div key={key} className={cls}>
+            {formatCreatedDate(task.created_at) || "—"}
+          </div>
+        );
+      case "updated":
+        return (
+          <div key={key} className={cls}>
+            {formatCreatedDate(task.updated_at) || "—"}
+          </div>
+        );
+      case "key":
+        return (
+          <div key={key} className={cls}>
+            <TaskKeyBadge
+              value={taskKey(task)}
+              tooltip={config.labels.numberBadgeTooltip}
+            />
+          </div>
+        );
+      case "title":
+        return (
+          <div key={key} className={cls}>
+            {!showKeyColumn && (
+              <TaskKeyBadge
+                value={taskKey(task)}
+                tooltip={config.labels.numberBadgeTooltip}
+              />
+            )}
+            <button
+              type="button"
+              className="task-card-title-link task-trow-title"
+              onClick={() => openDetail(task)}
+              data-tooltip={`Open ${config.labels.lowerSingular} details`}
+            >
+              {task.name}
+            </button>
+            {!showType && <TaskBadge kind={task.badge_kind} />}
+            <JiraBadge task={task} />
+            <GitlabBadge task={task} />
+            <CopyLinkButton
+              copied={copiedTaskId === task.id}
+              onCopy={() => copyTaskLink(task)}
+              label={task.name}
+            />
+          </div>
+        );
+      case "type":
+        return (
+          <div key={key} className={cls}>
             <select
               className={`ticket-kind-select ticket-kind-${
                 task.badge_kind ?? "unset"
@@ -1949,51 +2219,97 @@ export default function Tasks({
               ))}
             </select>
           </div>
-        )}
-
-        {showAssignee && (
-          <div className="task-tcell task-tcell--assignee">
-            {who ? (
-              <>
-                <Avatar
-                  name={who.name}
-                  src={
-                    who.userId
-                      ? `${getApiBase()}/api/users/${who.userId}/avatar`
-                      : undefined
-                  }
-                  size={22}
-                />
-                <span className="task-trow-assignee-name">{who.name}</span>
-              </>
-            ) : (
-              <span className="task-trow-muted">Unassigned</span>
-            )}
+        );
+      case "project":
+        return (
+          <div key={key} className={cls}>
+            <select
+              className="task-project-select"
+              value={task.project_id ?? ""}
+              onChange={(event) =>
+                void changeProject(
+                  task,
+                  event.target.value ? Number(event.target.value) : null
+                )
+              }
+              aria-label={`Project of ${task.name}`}
+            >
+              <option value="">— No project</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
           </div>
-        )}
+        );
+      case "assignee":
+        return (
+          <div key={key} className={cls}>
+            {personCell(assigneeInfo(task), "Unassigned")}
+          </div>
+        );
+      case "assigned_by":
+        return (
+          <div key={key} className={`${cls} task-tcell--person`}>
+            {personCell(personInfo(task.assigned_by, null), "—")}
+          </div>
+        );
+      case "priority":
+        return (
+          <div key={key} className={cls}>
+            {priorityPicker(task)}
+          </div>
+        );
+      case "status":
+        return (
+          <div key={key} className={cls}>
+            <TaskStatusIcon category={st.category} color={st.color} />
+            <select
+              className="task-status-select"
+              style={statusSelectStyle(st)}
+              value={task.status}
+              onChange={(event) =>
+                void changeStatus(task, event.target.value as TaskStatus)
+              }
+              aria-label={`Status of ${task.name}`}
+            >
+              {statusRows.map((row) => (
+                <option key={row.id} value={row.slug}>
+                  {row.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        );
+      case "related":
+        return (
+          <div key={key} className={cls}>
+            {relatedCell(task)}
+          </div>
+        );
+      case "description": {
+        const text = (task.description ?? "").trim();
+        return (
+          <div key={key} className={cls} title={text || undefined}>
+            {text || <span className="task-trow-muted">—</span>}
+          </div>
+        );
+      }
+    }
+  };
 
-        <div className="task-tcell task-tcell--priority">
-          {priorityPicker(task)}
-        </div>
-
-        <div className="task-tcell task-tcell--status">
-          <TaskStatusIcon category={st.category} color={st.color} />
-          <select
-            className="task-status-select"
-            style={statusSelectStyle(st)}
-            value={task.status}
-            onChange={(event) =>
-              void changeStatus(task, event.target.value as TaskStatus)
-            }
-            aria-label={`Status of ${task.name}`}
-          >
-            {statusRows.map((row) => (
-              <option key={row.id} value={row.slug}>
-                {row.name}
-              </option>
-            ))}
-          </select>
-        </div>
+  // One table row. `completed` dims the row and strikes the title, mirroring the
+  // completed-card treatment.
+  const renderRow = (task: Task, completed: boolean) => {
+    const st = lookupStatus(task.status);
+    return (
+      <div
+        key={task.id}
+        className={`task-trow${completed ? " task-trow--completed" : ""}`}
+        role="row"
+      >
+        {visibleCols.map((c) => cellFor(c.key, task, st))}
 
         <div className="task-tcell task-tcell--actions">
           <button
@@ -2286,6 +2602,69 @@ export default function Tasks({
                     </div>
                   )}
                 </div>
+                {mode === "tasks" && useTable && (
+                  <div className="tasks-filters tasks-columns" ref={colsRef}>
+                    <button
+                      type="button"
+                      className="tasks-status-filter tasks-filters-btn tasks-columns-btn"
+                      onClick={() => setColsOpen((open) => !open)}
+                      aria-haspopup="dialog"
+                      aria-expanded={colsOpen}
+                      aria-label="Choose columns"
+                      data-tooltip="Choose columns"
+                    >
+                      <span aria-hidden="true">▥</span>
+                      <span>Columns</span>
+                    </button>
+                    {colsOpen && (
+                      <div
+                        className="tasks-filters-popover tasks-columns-popover"
+                        role="dialog"
+                        aria-label="Columns"
+                      >
+                        <input
+                          type="search"
+                          className="tasks-columns-search"
+                          placeholder="Search columns"
+                          value={colsQuery}
+                          onChange={(e) => setColsQuery(e.target.value)}
+                          aria-label="Search columns"
+                          autoFocus
+                        />
+                        <div className="tasks-columns-list">
+                          {colsMatching.length === 0 ? (
+                            <span className="tasks-columns-empty">
+                              No matching columns
+                            </span>
+                          ) : (
+                            colsMatching.map((c) => (
+                              <label key={c.key} className="tasks-columns-item">
+                                <input
+                                  type="checkbox"
+                                  checked={shownCols.includes(c.key)}
+                                  onChange={() => toggleColumn(c.key)}
+                                />
+                                <span>{c.label}</span>
+                              </label>
+                            ))
+                          )}
+                        </div>
+                        <div className="tasks-filters-footer">
+                          <button
+                            type="button"
+                            className="tasks-filters-clear"
+                            onClick={() => setShownCols(DEFAULT_SHOWN_COLUMNS)}
+                          >
+                            Reset to default
+                          </button>
+                          <span className="tasks-columns-count">
+                            {shownPickable} of {pickableCols.length}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div
                   className="view-toggle"
                   role="group"
@@ -2930,7 +3309,7 @@ export default function Tasks({
               (listPlaceholder ?? (
                 <div
                   className={`task-table${hasCustomCols ? " task-table--resized" : ""}`}
-                  style={{ "--task-cols": tableCols } as React.CSSProperties}
+                  style={tableStyle}
                   role="table"
                 >
                   {tableHead}
@@ -3048,7 +3427,7 @@ export default function Tasks({
                 {useTable ? (
                   <div
                     className={`task-table${hasCustomCols ? " task-table--resized" : ""}`}
-                    style={{ "--task-cols": tableCols } as React.CSSProperties}
+                    style={tableStyle}
                     role="table"
                   >
                     {tableHead}
