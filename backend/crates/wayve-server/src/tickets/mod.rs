@@ -13,9 +13,13 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(attachments::delete_attachment)
         .service(handler::count_open_tickets)
         .service(handler::find_related_tickets)
+        // Static path first, so it is never read as a ticket id.
+        .service(handler::claim_local_ai_fix)
         .service(handler::ai_fix_ticket)
+        .service(handler::cancel_ai_fix)
         .service(handler::get_ai_fix_state)
         .service(handler::record_ai_fix_diff)
+        .service(handler::record_ai_fix_progress)
         .service(handler::edit_ai_fix)
         .service(handler::commit_ai_fix)
         .service(handler::push_ai_fix)

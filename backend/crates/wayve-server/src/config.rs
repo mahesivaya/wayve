@@ -303,6 +303,23 @@ pub fn github_repo() -> Option<(String, String)> {
     (!owner.is_empty() && !repo.is_empty()).then(|| (owner.to_string(), repo.to_string()))
 }
 
+/// Whether "Fix with AI" hands its jobs to a runner on the developer's own
+/// machine (`AI_FIX_RUNNER=local`) instead of dispatching the GitHub Actions
+/// workflow. Meant for localhost only: the runner (`scripts/ai_fix_local_runner.py`)
+/// claims queued jobs, runs Claude Code and the checks there, and opens the PR.
+pub fn ai_fix_runner_local() -> bool {
+    var_opt("AI_FIX_RUNNER").is_some_and(|v| v.trim().eq_ignore_ascii_case("local"))
+}
+
+/// The shared secret the local AI-fix runner presents (`AI_FIX_RUNNER_TOKEN`).
+/// Only honoured in local runner mode, and only when at least 16 characters, so
+/// an empty or throwaway value never opens the runner endpoints.
+pub fn ai_fix_runner_token() -> Option<String> {
+    var_opt("AI_FIX_RUNNER_TOKEN")
+        .map(|v| v.trim().to_string())
+        .filter(|v| v.len() >= 16)
+}
+
 pub fn gemini_model() -> String {
     var_or("GEMINI_MODEL", "gemini-2.0-flash")
 }
