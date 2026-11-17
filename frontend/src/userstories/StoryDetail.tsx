@@ -257,6 +257,7 @@ export default function StoryDetail() {
             itemId={story.id}
             api={storyAiFix}
             canFix={priority >= AI_FIX_MIN_PRIORITY}
+            minPriority={AI_FIX_MIN_PRIORITY}
             kind="story"
           />
         </>

@@ -2737,6 +2737,7 @@ export default function Tasks({
                   itemId={editingId}
                   api={config.api.aiFixPanel}
                   canFix={priority >= (config.features.aiFixMinPriority ?? 4)}
+                  minPriority={config.features.aiFixMinPriority ?? 4}
                   kind={config.labels.lowerSingular}
                   onChanged={() => void loadTasks()}
                 />

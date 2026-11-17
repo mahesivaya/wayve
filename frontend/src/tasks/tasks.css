@@ -904,6 +904,18 @@
   margin-top: 4px;
   padding-top: 12px;
   border-top: 1px solid var(--color-border-generic-light);
+  flex-wrap: wrap;
+}
+
+/* The AI-fix panel is rendered inside the footer but is a section of its own
+   (heading, diff, commit steps). Give it a full row under the attach / save
+   line; as a plain flex item it squeezed in beside the save button. */
+.task-compose-footer > .aifix {
+  flex: 0 0 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  margin-top: 4px;
+  padding-top: 12px;
 }
 
 .task-compose-attach {

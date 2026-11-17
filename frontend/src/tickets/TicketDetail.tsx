@@ -250,6 +250,7 @@ export default function TicketDetail() {
             itemId={ticket.id}
             api={ticketAiFix}
             canFix={priority >= AI_FIX_MIN_PRIORITY}
+            minPriority={AI_FIX_MIN_PRIORITY}
             kind="ticket"
           />
         </>
