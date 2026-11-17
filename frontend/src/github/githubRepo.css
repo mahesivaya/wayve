@@ -965,7 +965,7 @@
   background: none;
   border: none;
   padding: 0;
-  color: var(--color-accent, #2563eb);
+  color: var(--color-primary);
   font: inherit;
   cursor: pointer;
   text-decoration: underline;
@@ -1532,8 +1532,8 @@
 
 .github-commit-status.status-modified,
 .github-commit-status.status-renamed {
-  background: var(--diff-edit-soft, #fff8c5);
-  color: var(--diff-edit-strong, #9a6700);
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
 }
 
 /* Patch body — monospace, line-by-line. Each line is rendered as a
@@ -2597,9 +2597,9 @@
 }
 
 .github-add-repo-btn {
-  border: 1px solid var(--color-accent, var(--color-border));
-  background: var(--color-accent, var(--color-surface));
-  color: var(--color-on-accent, var(--color-text-primary));
+  border: 1px solid var(--color-primary-border);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
   border-radius: 6px;
   padding: 9px 14px;
   font-size: var(--text-md);
@@ -2671,8 +2671,8 @@
 /* Inline preview of an opened workflow .yml inside the Workflows panel (which,
    unlike Files, has no side-by-side split). */
 .github-workflow.active {
-  border-color: var(--color-accent, var(--color-border));
-  background: var(--color-accent-soft, var(--color-surface-soft));
+  border-color: var(--color-primary-border);
+  background: var(--color-primary-soft);
 }
 
 .github-workflow-preview {
@@ -3239,7 +3239,7 @@
   );
   color: inherit;
   border-radius: 2px;
-  outline: 1px solid var(--diff-edit-strong, #9a6700);
+  outline: 1px solid var(--color-warning);
 }
 
 /* Diff settings gear and its menu. */

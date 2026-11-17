@@ -20,18 +20,18 @@
   flex: 1 1 220px;
   min-width: 200px;
   padding: 0.5rem 0.65rem;
-  border: 1px solid var(--border-color, #d1d5db);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: var(--input-bg, #fff);
+  background: var(--color-surface);
   color: inherit;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .slack-btn {
   padding: 0.45rem 0.8rem;
-  border: 1px solid var(--border-color, #d1d5db);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: var(--surface-2, #f3f4f6);
+  background: var(--color-surface-tint);
   color: inherit;
   cursor: pointer;
   font-size: 0.85rem;
@@ -71,12 +71,12 @@
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.35rem 0.5rem;
-  border: 1px solid var(--border-color, #e5e7eb);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
 }
 
 .slack-muted {
-  color: var(--text-muted, #6b7280);
+  color: var(--color-text-muted);
   font-size: 0.85rem;
   margin: 0;
 }
@@ -94,10 +94,10 @@
 }
 
 .slack-guide {
-  border: 1px solid var(--border-color, #e5e7eb);
+  border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 0.5rem 0.75rem;
-  background: var(--surface-2, #f9fafb);
+  background: var(--color-surface-tint);
 }
 
 .slack-guide > summary {
@@ -122,7 +122,7 @@
 }
 
 .slack-guide code {
-  background: var(--surface-3, #eef2f7);
+  background: var(--color-surface-hover);
   border-radius: 4px;
   padding: 0 0.25rem;
   font-size: 0.8em;

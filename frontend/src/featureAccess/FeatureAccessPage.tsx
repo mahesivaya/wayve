@@ -190,22 +190,26 @@ export default function FeatureAccessPage() {
                         </td>
                       ))}
                       <td className="feature-access-actions-col">
-                        <button
-                          type="button"
-                          className="feature-access-reset"
-                          onClick={() => resetToDefault(f.key, f.default_roles)}
-                          data-tooltip="Reset to the default roles"
-                        >
-                          Reset
-                        </button>
-                        <button
-                          type="button"
-                          className="feature-access-save"
-                          disabled={!dirty[f.key] || savingKey === f.key}
-                          onClick={() => save(f.key)}
-                        >
-                          {savingKey === f.key ? "Saving…" : "Save"}
-                        </button>
+                        <div className="feature-access-actions">
+                          <button
+                            type="button"
+                            className="feature-access-reset"
+                            onClick={() =>
+                              resetToDefault(f.key, f.default_roles)
+                            }
+                            data-tooltip="Reset to the default roles"
+                          >
+                            Reset
+                          </button>
+                          <button
+                            type="button"
+                            className="feature-access-save"
+                            disabled={!dirty[f.key] || savingKey === f.key}
+                            onClick={() => save(f.key)}
+                          >
+                            {savingKey === f.key ? "Saving…" : "Save"}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

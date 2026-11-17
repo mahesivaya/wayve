@@ -824,8 +824,12 @@ export function GitHubRepoViewer({
   // hidden from everyone else.
   const { user } = useAuth();
   const isOwner = user?.effective_role === "owner";
-  // The per-repo Access panel is for a scope owner or anyone with members:manage.
-  const canManageAccess = isOwner || hasPermission(user, "members:manage");
+  // The per-repo Access panel is for admins only: an organization or platform
+  // owner, or a role holding members:manage (super admin, admin). A personal
+  // account is "owner" of its own workspace, so the scope check keeps it out.
+  const canManageAccess =
+    user?.scope !== "personal" &&
+    (isOwner || hasPermission(user, "members:manage"));
   const fullName = `${owner}/${repoName}`;
   // Where this repo was left on an earlier visit this session.
   const [restoredView] = useState(() => readRepoView(user?.id, fullName));

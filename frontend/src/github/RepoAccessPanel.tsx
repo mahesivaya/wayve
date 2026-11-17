@@ -214,7 +214,7 @@ export default function RepoAccessPanel({
             onChange={(e) => setAddLevel(e.target.value as Level)}
           >
             <option value="read">Read</option>
-            <option value="write">Write</option>
+            <option value="write">Read &amp; Write</option>
           </select>
           <button
             type="button"
@@ -274,7 +274,7 @@ export default function RepoAccessPanel({
                       aria-label="Change level"
                     >
                       <option value="read">Read</option>
-                      <option value="write">Write</option>
+                      <option value="write">Read &amp; Write</option>
                     </select>
                     <button
                       type="button"

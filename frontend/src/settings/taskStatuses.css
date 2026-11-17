@@ -41,7 +41,7 @@
   border-radius: 8px;
   font-size: 13px;
   background: var(--color-danger-soft, rgb(254, 226, 226));
-  color: var(--color-danger-deep, rgb(153, 27, 27));
+  color: var(--color-danger-strong);
   border: 1px solid var(--color-danger-border, rgb(252, 165, 165));
 }
 
@@ -245,7 +245,7 @@
 }
 
 .ts-btn--danger {
-  color: var(--color-danger-deep, rgb(153, 27, 27));
+  color: var(--color-danger-strong);
 }
 
 .ts-btn--danger:hover:not(:disabled) {

@@ -75,7 +75,7 @@
   padding: 1px 8px 1px 6px;
   border-radius: var(--radius-pill, 999px);
   font-weight: 600;
-  color: var(--color-success-strong, #15803d);
+  color: var(--color-success);
   background: var(--color-success-soft, #dcfce7);
   border: 1px solid var(--color-success-border, #86efac);
 }

@@ -313,7 +313,7 @@
 }
 
 .audit-activity.registered {
-  background: var(--color-accent-purple-soft);
+  background: color-mix(in srgb, var(--color-accent-purple) 16%, transparent);
   color: var(--color-accent-purple);
 }
 
@@ -351,7 +351,7 @@
 .audit-activity.email_restored,
 .audit-activity.email_snoozed,
 .audit-activity.email_unsnoozed {
-  background: var(--color-accent-purple-soft);
+  background: color-mix(in srgb, var(--color-accent-purple) 16%, transparent);
   color: var(--color-accent-purple);
 }
 
@@ -363,7 +363,7 @@
 
 /* Chat activity badges. */
 .audit-activity.channel_created {
-  background: var(--color-accent-purple-soft);
+  background: color-mix(in srgb, var(--color-accent-purple) 16%, transparent);
   color: var(--color-accent-purple);
 }
 
@@ -463,7 +463,7 @@
 
 /* Calendar activity badges. */
 .audit-activity.meeting_created {
-  background: var(--color-accent-purple-soft);
+  background: color-mix(in srgb, var(--color-accent-purple) 16%, transparent);
   color: var(--color-accent-purple);
 }
 

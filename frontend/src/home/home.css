@@ -1729,7 +1729,7 @@
   background: linear-gradient(
     135deg,
     var(--color-surface-dark-card-strong),
-    var(--color-accent-purple-soft)
+    color-mix(in srgb, var(--color-accent-purple) 16%, transparent)
   );
   border-color: var(--color-accent-purple);
   color: var(--color-accent-purple);

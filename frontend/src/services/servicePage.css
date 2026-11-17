@@ -1,7 +1,7 @@
 .service-page {
   min-height: 100vh;
   background: var(--color-surface-cool-pale);
-  color: var(--color-accent-indigo-darkest);
+  color: var(--color-text-primary);
 }
 
 .service-page-nav {

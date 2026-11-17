@@ -313,7 +313,7 @@
 }
 
 .docs-rendered tbody tr:nth-child(even) {
-  background: var(--color-surface-tint-pale, #fafafa);
+  background: var(--color-surface-tint);
 }
 
 .docs-rendered tbody tr:hover {

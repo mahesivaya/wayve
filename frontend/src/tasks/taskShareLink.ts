@@ -8,6 +8,18 @@ export function taskShareText(
   return `#${num} ${task.name}`;
 }
 
+/**
+ * Absolute URL of an item's own detail page, e.g.
+ * "https://fluxze.com/user-stories/17", for boards that have one (stories,
+ * tickets). Anyone with access can open it directly from chat, email or Slack.
+ */
+export function taskShareUrl(
+  detailPath: string,
+  origin: string = window.location.origin
+): string {
+  return `${origin.replace(/\/$/, "")}${detailPath}`;
+}
+
 /** In-app route that opens a task from a `#<n> …` reference in chat. */
 export function taskRefPath(ref: number): string {
   return `/tasks?ref=${ref}`;

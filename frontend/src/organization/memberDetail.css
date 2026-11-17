@@ -97,7 +97,7 @@
   height: 84px;
   border-radius: 50%;
   object-fit: cover;
-  background: var(--color-surface-muted);
+  background: var(--color-surface-hover);
   margin-bottom: 6px;
 }
 
@@ -282,7 +282,7 @@
   font-size: var(--text-xs);
   padding: 2px 10px;
   border-radius: var(--radius-pill, 999px);
-  background: var(--color-surface-muted);
+  background: var(--color-surface-hover);
   color: var(--color-text-secondary);
   text-transform: capitalize;
   border: 1px solid var(--color-border);
@@ -347,7 +347,7 @@
   cursor: pointer;
 }
 .md-edit-btn:hover {
-  background: var(--color-surface-muted);
+  background: var(--color-surface-hover);
 }
 
 .md-chip-list {
@@ -377,7 +377,7 @@
   font-size: var(--text-sm);
 }
 .md-repo-row:hover {
-  background: var(--color-surface-muted);
+  background: var(--color-surface-hover);
 }
 
 .md-repo-name {
@@ -396,7 +396,7 @@
   padding: 1px 8px;
   border-radius: 999px;
   color: var(--color-text-muted);
-  background: var(--color-surface-muted);
+  background: var(--color-surface-hover);
 }
 .md-repo-vis.is-private {
   color: var(--color-danger, #b54708);

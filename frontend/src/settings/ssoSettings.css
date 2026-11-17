@@ -5,7 +5,7 @@
   margin: 24px 0;
   padding: 0 32px 40px;
   box-sizing: border-box;
-  color: var(--color-accent-indigo-darkest);
+  color: var(--color-text-primary);
   /* #root sets text-align: center — reset so the form reads left-aligned. */
   text-align: left;
   /* Own vertical scroll — the page host (.split-pane-body) clips overflow. */
@@ -17,7 +17,7 @@
   margin: 0 0 8px;
   font-size: 22px;
   line-height: 1.2;
-  color: var(--color-accent-indigo-darker);
+  color: var(--color-text-primary);
 }
 
 .sso-settings-header p {
@@ -130,7 +130,7 @@
 
 .sso-form label > span {
   font-weight: 600;
-  color: var(--color-accent-indigo-darkest);
+  color: var(--color-text-primary);
 }
 
 .sso-form input[type="text"],
@@ -141,7 +141,7 @@
   border: 1px solid var(--color-surface-tint-steel);
   background: var(--color-surface-near-white);
   font-size: 14px;
-  color: var(--color-accent-indigo-darkest);
+  color: var(--color-text-primary);
 }
 
 .sso-form input:focus {
