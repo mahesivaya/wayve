@@ -147,7 +147,7 @@ describe("list-view Columns menu", () => {
     expect(within(table).queryByRole("button", { name: /delete/i })).toBeNull();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Edit Fix the login redirect" })
+      screen.getByRole("button", { name: "Fix the login redirect" })
     );
     expect(await screen.findByRole("button", { name: "Delete" })).toBeTruthy();
   });

@@ -600,11 +600,6 @@
   color: var(--color-text-primary);
 }
 
-.task-board-card-actions {
-  display: flex;
-  gap: 6px;
-}
-
 /* Keyed to the terminal *category*, not the "done" slug, so a renamed or
    additional completion status (and Canceled) keeps the treatment. */
 .task-board-col--terminal .task-board-card-title {
@@ -1888,6 +1883,34 @@ body.is-col-resizing {
   gap: 8px;
 }
 
+/* The assignee dropdown reads as the plain name until hovered or focused, so
+   the column stays as quiet as it was when it was text. */
+.task-assignee-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  padding: 3px 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 6px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.task-assignee-select.is-unassigned {
+  color: var(--color-text-muted);
+}
+
+.task-assignee-select:hover,
+.task-assignee-select:focus-visible {
+  border-color: var(--color-input-border);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
 .task-trow-assignee-name {
   min-width: 0;
   overflow: hidden;
@@ -1920,11 +1943,6 @@ body.is-col-resizing {
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-.task-tcell--actions {
-  justify-content: flex-end;
-  gap: 6px;
 }
 
 /* The copy-link button is quiet until the row is hovered/focused, so the

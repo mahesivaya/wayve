@@ -51,7 +51,7 @@ const renderTasks = () =>
 // Open the edit modal for the seeded task and hand back its Save button.
 const openEditor = async () => {
   await screen.findByText("June task");
-  fireEvent.click(screen.getByRole("button", { name: "Edit June task" }));
+  fireEvent.click(screen.getByRole("button", { name: "June task" }));
   return (await screen.findByRole("button", {
     name: "Save changes",
   })) as HTMLButtonElement;

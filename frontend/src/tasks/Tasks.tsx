@@ -1622,6 +1622,17 @@ export default function Tasks({
     );
   };
 
+  // Assign from the list: `email` is a member's address, or "" to unassign.
+  const changeAssignee = async (task: Task, email: string) => {
+    if ((task.assignee ?? "") === email) return;
+    const member = assignableUsers.find((u) => u.email === email);
+    await patchTask(
+      task,
+      { assignee: email, assignee_id: member?.user_id ?? null },
+      "Failed to update assignee"
+    );
+  };
+
   const changeProject = async (task: Task, nextProject: number | null) => {
     if ((task.project_id ?? null) === nextProject) return;
     await patchTask(
@@ -1864,15 +1875,14 @@ export default function Tasks({
     (c) => c.locked || shownCols.includes(c.key)
   );
   const showKeyColumn = visibleCols.some((c) => c.key === "key");
-  const tableCols = [
-    ...visibleCols.map((c) => col(c.key, c.width)),
-    "88px", // actions — a fixed Edit button, nothing to reveal
-  ].join(" ");
+  // No actions column: an item opens from its name, and Delete lives in the
+  // editor it opens.
+  const tableCols = visibleCols.map((c) => col(c.key, c.width)).join(" ");
   // The narrow-pane template: only the columns that keep a track there.
-  const tableColsNarrow = [
-    ...visibleCols.filter((c) => c.narrow).map((c) => c.narrow),
-    "auto",
-  ].join(" ");
+  const tableColsNarrow = visibleCols
+    .filter((c) => c.narrow)
+    .map((c) => c.narrow)
+    .join(" ");
   const tableStyle = {
     "--task-cols": tableCols,
     "--task-cols-narrow": tableColsNarrow,
@@ -2011,6 +2021,56 @@ export default function Tasks({
       <span className="task-trow-muted">{empty}</span>
     );
 
+  // The Assignee cell: the current person's avatar beside a dropdown of every
+  // member who can be assigned, so the assignee changes from the list like
+  // status and priority do. Someone assigned by a typed address who isn't a
+  // member stays listed, so opening the menu never drops them. Without a
+  // member list (it failed to load) the cell is read-only, as before.
+  const assigneePicker = (task: Task) => {
+    const who = assigneeInfo(task);
+    if (assignableUsers.length === 0) return personCell(who, "Unassigned");
+    const current = (task.assignee ?? "").trim();
+    const isMember = assignableUsers.some(
+      (u) => u.email.toLowerCase() === current.toLowerCase()
+    );
+    return (
+      <>
+        {who && (
+          <Avatar
+            name={who.name}
+            src={
+              who.userId
+                ? `${getApiBase()}/api/users/${who.userId}/avatar`
+                : undefined
+            }
+            size={22}
+          />
+        )}
+        <select
+          className={`task-assignee-select${current ? "" : " is-unassigned"}`}
+          value={
+            isMember
+              ? (assignableUsers.find(
+                  (u) => u.email.toLowerCase() === current.toLowerCase()
+                )?.email ?? current)
+              : current
+          }
+          onChange={(event) => void changeAssignee(task, event.target.value)}
+          aria-label={`Assignee of ${task.name}`}
+          data-tooltip="Change assignee"
+        >
+          <option value="">Unassigned</option>
+          {current && !isMember && <option value={current}>{current}</option>}
+          {assignableUsers.map((u) => (
+            <option key={u.user_id} value={u.email}>
+              {u.username || u.email}
+            </option>
+          ))}
+        </select>
+      </>
+    );
+  };
+
   // Applies the active column sort to a table row list. A stable base order is
   // assumed (the caller passes the already-sorted active/completed lists), so an
   // equal comparison preserves it.
@@ -2111,7 +2171,6 @@ export default function Tasks({
   const tableHead = (
     <div className="task-thead" role="row">
       {visibleCols.map((c) => headFor(c.key))}
-      <div className="task-th task-th--actions" />
     </div>
   );
 
@@ -2246,7 +2305,7 @@ export default function Tasks({
       case "assignee":
         return (
           <div key={key} className={cls}>
-            {personCell(assigneeInfo(task), "Unassigned")}
+            {assigneePicker(task)}
           </div>
         );
       case "assigned_by":
@@ -2310,17 +2369,6 @@ export default function Tasks({
         role="row"
       >
         {visibleCols.map((c) => cellFor(c.key, task, st))}
-
-        <div className="task-tcell task-tcell--actions">
-          <button
-            type="button"
-            className="task-edit-btn"
-            onClick={() => openEditor(task)}
-            aria-label={`Edit ${task.name}`}
-          >
-            Edit
-          </button>
-        </div>
       </div>
     );
   };
@@ -3120,7 +3168,10 @@ export default function Tasks({
                     <span>Create more</span>
                   </label>
                 )}
-                {isEditing && editingTask && (
+                {/* Boards with a full page (stories, tickets) delete from
+                    there; this form is the only place to delete a plain
+                    task. */}
+                {isEditing && editingTask && !config.detailPath && (
                   <button
                     type="button"
                     className="task-delete-btn"
@@ -3284,16 +3335,6 @@ export default function Tasks({
                                 Created {formatCreatedAt(task.created_at)}
                               </span>
                             )}
-                            <div className="task-board-card-actions">
-                              <button
-                                type="button"
-                                className="task-edit-btn"
-                                onClick={() => openEditor(task)}
-                                aria-label={`Edit ${task.name}`}
-                              >
-                                Edit
-                              </button>
-                            </div>
                           </article>
                         ))
                       )}
@@ -3371,14 +3412,6 @@ export default function Tasks({
                         )}
                         {(!inSplitPane || expanded) && (
                           <div className="task-card-actions">
-                            <button
-                              type="button"
-                              className="task-edit-btn"
-                              onClick={() => openEditor(task)}
-                              aria-label={`Edit ${task.name}`}
-                            >
-                              Edit
-                            </button>
                             <span className="task-status-control">
                               <TaskStatusIcon
                                 category={lookupStatus(task.status).category}
@@ -3473,16 +3506,6 @@ export default function Tasks({
                               Created {formatCreatedAt(task.created_at)}
                             </span>
                           )}
-                        </div>
-                        <div className="task-card-actions">
-                          <button
-                            type="button"
-                            className="task-edit-btn"
-                            onClick={() => openEditor(task)}
-                            aria-label={`Edit ${task.name}`}
-                          >
-                            Edit
-                          </button>
                         </div>
                       </article>
                     ))}
