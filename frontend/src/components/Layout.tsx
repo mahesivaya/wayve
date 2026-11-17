@@ -2258,11 +2258,6 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       visible: canViewIntegrations(user),
     },
     {
-      path: "/appearance",
-      label: "Appearance",
-      icon: <CanvasIcon size={18} />,
-    },
-    {
       path: "/settings/shortcuts",
       label: "Shortcuts",
       icon: <ShortcutsIcon size={18} />,
@@ -2288,6 +2283,11 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       path: "/settings/notifications",
       label: "Notifications",
       icon: <BellIcon size={18} />,
+    },
+    {
+      path: "/appearance",
+      label: "Appearance",
+      icon: <CanvasIcon size={18} />,
     },
   ];
   // Settings › Administration. Teams and Projects are for owners, super
@@ -2343,38 +2343,16 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
               )}
             </Fragment>
           ))}
-        {/* Log out sits right under Developers, as the menu's last row. */}
-        <button
-          type="button"
-          className="sidebar-link sidebar-link--button"
-          title="Log out"
-          onClick={() => logout()}
-        >
-          <span className="sidebar-icon" aria-hidden="true">
-            <LogOut size={18} />
-          </span>
-          <span className="sidebar-label">Log out</span>
-        </button>
       </div>
       {[
-        {
-          label: "Personal",
-          icon: <PersonIcon size={16} />,
-          links: personalLinks,
-        },
-        {
-          label: "Administration",
-          icon: <OrganizationIcon size={16} />,
-          links: administrationLinks,
-        },
+        { label: "Personal", links: personalLinks },
+        { label: "Administration", links: administrationLinks },
       ]
         .filter((group) => group.links.length > 0)
         .map((group) => (
           <div className="sidebar-section" key={group.label}>
+            {/* Plain text headings: only the links under them carry icons. */}
             <div className="sidebar-section-label">
-              <span className="sidebar-section-icon" aria-hidden="true">
-                {group.icon}
-              </span>
               <span>{group.label}</span>
             </div>
             {group.links.map((l) => (
@@ -2389,6 +2367,20 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
             ))}
           </div>
         ))}
+      <div className="sidebar-section">
+        {/* Log out is the menu's last row, below every group. */}
+        <button
+          type="button"
+          className="sidebar-link sidebar-link--button"
+          title="Log out"
+          onClick={() => logout()}
+        >
+          <span className="sidebar-icon" aria-hidden="true">
+            <LogOut size={18} />
+          </span>
+          <span className="sidebar-label">Log out</span>
+        </button>
+      </div>
     </>
   );
 
