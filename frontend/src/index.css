@@ -18,14 +18,12 @@
   --color-on-primary: #ffffff;
   --color-surface-soft: #f1f5f9;
   --color-surface-hover: #e9edf3;
-  /* The one color for the menu, header and footer. --color-chrome-surface follows
-     the app theme, including custom themes. Public pages have their own theme
-     switch, so they pick the fixed light or dark value themselves. */
-  --color-chrome-surface: color-mix(
-    in oklab,
-    var(--color-surface-soft) 88%,
-    black
-  );
+  /* The one color for the menu, header and footer. The default light theme
+     uses a plain light grey beside a white page. Dark mode and custom themes
+     derive it from their own --color-surface-soft (see the rule after :root).
+     Public pages have their own theme switch, so they pick the fixed light or
+     dark value themselves. */
+  --color-chrome-surface: #f0f0f0;
   --color-chrome-light: color-mix(in oklab, #f1f5f9 88%, black);
   --color-chrome-dark: color-mix(in oklab, #0a1730 50%, black);
   --color-text-black: black;
@@ -136,7 +134,8 @@
   --color-surface-deep: #0f172a;
   --color-surface-deepest: #0b1220;
   --color-surface-deep-navy: #0d1b2a;
-  --color-canvas: var(--color-surface-soft);
+  /* The page behind everything: white in the default light theme. */
+  --color-canvas: #ffffff;
   --color-pane: var(--color-surface-hover);
   --color-resizer-hover: #9fb4cd;
   /* The line between split panes: a step darker than --color-border in light
@@ -475,6 +474,17 @@
    localStorage `wayve-theme`).
    The OS `prefers-color-scheme` preference is intentionally ignored.
    ============================================================ */
+
+/* Dark mode, and any custom theme (which writes --color-surface-soft inline on
+   :root), tint the menu, header and footer from their own soft surface. */
+:root[data-theme="dark"],
+:root[style*="--color-surface-soft"] {
+  --color-chrome-surface: color-mix(
+    in oklab,
+    var(--color-surface-soft) 88%,
+    black
+  );
+}
 
 :root[data-theme="dark"] {
   --text: #cbd5e1;
