@@ -756,8 +756,8 @@ export type TasksConfig = {
     downloadAttachment?: (attachment: TaskAttachment) => Promise<void>;
   };
   features: {
-    // Attachments hit `/api/tasks/{id}/attachments`, which is task-only, so the
-    // stories board disables them (there is no story-attachment endpoint).
+    // File attachments on the create/edit form. Each board points the four
+    // attachment calls in `api` at its own endpoints (tasks, tickets, stories).
     attachments: boolean;
     // Shows a per-status count strip above the board (total + each status). On
     // for the shared workspace boards (Tickets, User Stories).

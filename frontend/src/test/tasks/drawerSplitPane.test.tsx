@@ -19,6 +19,10 @@ vi.mock("../../api/userStories", () => ({
   createUserStoryApi: vi.fn(),
   updateUserStoryApi: vi.fn(),
   deleteUserStoryApi: vi.fn(),
+  listStoryAttachments: vi.fn().mockResolvedValue([]),
+  uploadStoryAttachments: vi.fn(),
+  deleteStoryAttachment: vi.fn(),
+  downloadStoryAttachment: vi.fn(),
 }));
 
 vi.mock("../../api/tasks", () => ({

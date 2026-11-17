@@ -1,5 +1,7 @@
 import { apiFetch, apiFetchJson } from "./client";
-import type { Task, SaveTaskPayload } from "./tasks";
+import type { Task, SaveTaskPayload, TaskAttachment } from "./tasks";
+import { getApiBase } from "../config/env";
+import { getAuthToken } from "../auth/token";
 import { announceChange } from "../utils/crossTabEvents";
 
 // Workspace user stories reuse the Task record shape (task_number carries the
@@ -42,6 +44,66 @@ export const updateUserStoryApi = async (
 export const deleteUserStoryApi = async (id: number) => {
   await apiFetch(`/api/user-stories/${id}`, { method: "DELETE" });
   emitUserStoriesChanged();
+};
+
+// Story attachments. Story-scoped mirror of the task and ticket attachment APIs
+// (see api/tasks.ts, api/tickets.ts). The backend serializes rows with `task_id`
+// set to the story id, so they satisfy the shared `TaskAttachment` type.
+export const listStoryAttachments = async (storyId: number) =>
+  apiFetchJson<TaskAttachment[]>(`/api/user-stories/${storyId}/attachments`);
+
+// Raw fetch (not apiFetch) so the browser sets the multipart boundary.
+export const uploadStoryAttachments = async (
+  storyId: number,
+  files: File[]
+): Promise<TaskAttachment[]> => {
+  if (files.length === 0) return [];
+  const formData = new FormData();
+  files.forEach((file) => formData.append("files", file));
+
+  const token = getAuthToken();
+  const res = await fetch(
+    `${getApiBase()}/api/user-stories/${storyId}/attachments`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: formData,
+    }
+  );
+  if (!res.ok) {
+    let message = "Attachment upload failed";
+    try {
+      const data = await res.clone().json();
+      message = data?.message || data?.error || message;
+    } catch {
+      const text = await res.text();
+      if (text.trim()) message = text.trim();
+    }
+    throw new Error(message);
+  }
+  return res.json() as Promise<TaskAttachment[]>;
+};
+
+export const deleteStoryAttachment = async (id: number) => {
+  await apiFetch(`/api/story-attachments/${id}`, { method: "DELETE" });
+};
+
+export const downloadStoryAttachment = async (
+  attachment: TaskAttachment
+): Promise<void> => {
+  const res = await apiFetch(
+    `/api/story-attachments/${attachment.id}/download`
+  );
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = attachment.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 };
 
 // Per-day, per-status story counts over [from, to] (both "YYYY-MM-DD").

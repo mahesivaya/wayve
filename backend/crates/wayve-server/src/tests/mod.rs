@@ -84,6 +84,7 @@ mod signup_verification_test;
 mod slack_test;
 mod slack_webhook_test;
 mod storage_s3_test;
+mod story_attachments_test;
 mod task_statuses_test;
 mod task_suggest_test;
 mod webhooks_test;

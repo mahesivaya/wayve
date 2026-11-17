@@ -1863,6 +1863,22 @@ CREATE TABLE IF NOT EXISTS ticket_attachments (
     created_at TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket ON ticket_attachments(ticket_id);
+
+-- Attachments for user stories, the same shape as ticket_attachments. A story
+-- is shared by its owner (an organization's backlog, or a personal or platform
+-- account's own), so access is by the story's owner, not the uploader.
+CREATE TABLE IF NOT EXISTS story_attachments (
+    id BIGSERIAL PRIMARY KEY,
+    story_id INTEGER NOT NULL REFERENCES user_stories(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    name TEXT NOT NULL,
+    file_type TEXT,
+    file_path TEXT NOT NULL,
+    file_iv TEXT,
+    size BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_story_attachments_story ON story_attachments(story_id);
 -- Backfill the user-set type column onto pre-existing boards. The CREATE above
 -- names its inline CHECK `workspace_tickets_badge_kind_check`, so adding it under
 -- the same name here leaves a migrated board identical to a fresh one.
