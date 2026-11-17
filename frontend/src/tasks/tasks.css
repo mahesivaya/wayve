@@ -613,12 +613,19 @@
 }
 
 /* ── Compact (Linear-style) task compose form ──
-   A borderless title + description over a row of property pills,
-   with attach / create-more / submit in a slim footer. */
+   An outlined title + description over a row of property pills,
+   with attach / create-more / submit in a slim footer. Outlines are mixed
+   from the text colour so they stay visible in every theme; the border
+   tokens nearly vanish against a dark surface. */
 .task-compose {
+  --task-compose-outline: color-mix(
+    in oklab,
+    var(--color-text-primary) 30%,
+    transparent
+  );
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   text-align: left;
   font-size: var(--text-md);
 }
@@ -656,8 +663,9 @@
 .task-compose-title {
   width: 100%;
   box-sizing: border-box;
-  padding: 2px 0;
-  border: none;
+  padding: 8px 10px;
+  border: 1px solid var(--task-compose-outline);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text-primary);
   font: inherit;
@@ -669,9 +677,11 @@
   width: 100%;
   box-sizing: border-box;
   min-height: 96px;
-  padding: 0;
-  border: none;
+  padding: 8px 10px;
+  border: 1px solid var(--task-compose-outline);
+  border-radius: var(--radius-sm);
   background: transparent;
+  line-height: 1.5;
   resize: vertical;
   color: var(--color-text-primary);
   font: inherit;
@@ -681,6 +691,9 @@
 .task-compose-title:focus,
 .task-compose-desc:focus {
   outline: none;
+  border-color: var(--color-primary-action);
+  box-shadow: 0 0 0 3px
+    color-mix(in oklab, var(--color-primary-action) 30%, transparent);
 }
 
 .task-compose-title::placeholder,
@@ -700,7 +713,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border: 1px solid var(--color-input-border);
+  border: 1px solid var(--task-compose-outline, var(--color-input-border));
   border-radius: 999px;
   background: var(--color-surface);
   color: var(--color-text-primary);
@@ -901,10 +914,10 @@
   height: 32px;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--color-input-border);
+  border: 1px solid var(--task-compose-outline);
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   cursor: pointer;
 }
 
@@ -925,11 +938,25 @@
   margin-left: auto;
 }
 
-/* Submit stays UA-styled, but its disabled state (an editor nothing has been
-   changed in) needs saying explicitly — the browser's own gray-out barely
-   registers against the themed surfaces this modal sits on. */
+/* A filled primary button. Its disabled state (an editor nothing has been
+   changed in) keeps the fill at reduced strength, so the button still reads as
+   a button — the browser's own gray-out all but disappears on a dark surface. */
+.task-compose-footer-right button[type="submit"] {
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-action);
+  color: #fff;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.task-compose-footer-right button[type="submit"]:hover:not(:disabled) {
+  background: var(--color-primary-action-hover);
+}
 .task-compose-footer-right button[type="submit"]:disabled {
-  opacity: 0.5;
+  opacity: 0.55;
   cursor: default;
 }
 
