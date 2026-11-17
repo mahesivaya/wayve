@@ -89,4 +89,5 @@ mod task_statuses_test;
 mod task_suggest_test;
 mod webhooks_test;
 mod workspace_number_test;
+mod workspace_reviewer_test;
 mod workspace_test;

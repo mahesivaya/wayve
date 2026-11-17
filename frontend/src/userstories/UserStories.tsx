@@ -34,6 +34,7 @@ const USER_STORIES_CONFIG: TasksConfig = {
   features: {
     attachments: true,
     statusSummary: true,
+    reviewer: true,
     figmaLinks: false,
     // Every priority may be auto-fixed (1 = no floor), same as tickets.
     aiFixMinPriority: 1,

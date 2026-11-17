@@ -44,6 +44,11 @@ export type Task = {
   // board renders a "Duplicate of #N" / "Similar to #N" pill.
   related_to?: number | null;
   relation_kind?: "duplicate" | "similar" | null;
+  // The person asked to review the work (user stories and tickets only),
+  // stored like `assignee`: an address ("" when nobody is set) plus, for a
+  // member, their user id. Absent on tasks.
+  reviewer?: string | null;
+  reviewer_id?: number | null;
 };
 
 export type SaveTaskPayload = {
@@ -60,6 +65,10 @@ export type SaveTaskPayload = {
   // The ticket "Type" (bug/feature/other, …). Only the Tickets board sends it;
   // Tasks and User Stories leave it undefined and the backend ignores it.
   badge_kind?: string | null;
+  // Reviewer, on the stories and tickets boards. Leaving `reviewer` out keeps
+  // the stored one; sending it (even "") sets both fields.
+  reviewer?: string;
+  reviewer_id?: number | null;
 };
 
 export const getTasks = async () => apiFetchJson<Task[]>("/api/tasks");

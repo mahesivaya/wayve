@@ -567,6 +567,13 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             created_at TIMESTAMP DEFAULT NOW()
         )",
         "CREATE INDEX IF NOT EXISTS idx_story_attachments_story ON story_attachments(story_id)",
+        // Reviewer on the stories and tickets boards, stored like `assignee`.
+        "ALTER TABLE user_stories ADD COLUMN IF NOT EXISTS reviewer TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE user_stories ADD COLUMN IF NOT EXISTS reviewer_id INTEGER \
+            REFERENCES users(id) ON DELETE SET NULL",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS reviewer TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS reviewer_id INTEGER \
+            REFERENCES users(id) ON DELETE SET NULL",
         // One IdP config row per org; allowed_domain routes alice@acme.com to Acme's
         // IdP. The sso_states row binds PKCE and nonce to the in-flight code so a
         // stolen `code` alone can't be exchanged.

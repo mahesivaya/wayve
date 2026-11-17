@@ -1879,6 +1879,15 @@ CREATE TABLE IF NOT EXISTS story_attachments (
     created_at TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_story_attachments_story ON story_attachments(story_id);
+
+-- Reviewer on the stories and tickets boards, stored like `assignee`: an
+-- address ('' when nobody is set) plus, for a member, their user id.
+ALTER TABLE user_stories ADD COLUMN IF NOT EXISTS reviewer TEXT NOT NULL DEFAULT '';
+ALTER TABLE user_stories
+    ADD COLUMN IF NOT EXISTS reviewer_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS reviewer TEXT NOT NULL DEFAULT '';
+ALTER TABLE workspace_tickets
+    ADD COLUMN IF NOT EXISTS reviewer_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
 -- Backfill the user-set type column onto pre-existing boards. The CREATE above
 -- names its inline CHECK `workspace_tickets_badge_kind_check`, so adding it under
 -- the same name here leaves a migrated board identical to a fresh one.

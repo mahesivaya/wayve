@@ -26,10 +26,12 @@ fn task_from_row(row: sqlx::postgres::PgRow) -> Task {
         jira_base: row.try_get("jira_base").ok().flatten(),
         gitlab_issue_iid: row.try_get("gitlab_issue_iid").ok().flatten(),
         gitlab_web_url: row.try_get("gitlab_web_url").ok().flatten(),
-        // Tasks never carry a support badge or AI relationship label.
+        // Tasks never carry a support badge, AI relationship label or reviewer.
         badge_kind: None,
         related_to: None,
         relation_kind: None,
+        reviewer: None,
+        reviewer_id: None,
     }
 }
 
