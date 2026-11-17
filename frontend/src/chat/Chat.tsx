@@ -1185,12 +1185,10 @@ export default function Chat() {
         presence={presence}
       />
 
-      <div
-        className="chat-sidebar-resizer"
+      <ResizeHandle
         onPointerDown={startSidebarDrag}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize chat sidebar"
+        className="chat-sidebar-resizer"
+        ariaLabel="Resize chat sidebar"
       />
 
       <section className="chat-area">
