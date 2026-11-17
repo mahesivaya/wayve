@@ -13,6 +13,7 @@ import {
 import { logger } from "../utils/logger";
 import type { EmailFolder } from "./types";
 import { buildLabelTree, labelFolder, type LabelNode } from "./labelTree";
+import { EMAILS_SYNCED_EVENT } from "./useEmailLiveRefresh";
 
 // Gmail-style folder menu for the email sidebar: the main folders, a "More"
 // section, and the mailboxes' own labels as a collapsible tree, each with a
@@ -185,10 +186,13 @@ export default function MailFolderNav({
     const poll = window.setInterval(() => void refresh(), REFRESH_MS);
     const onFocus = () => void refresh();
     window.addEventListener("focus", onFocus);
+    // The server just synced a mailbox on a provider push.
+    window.addEventListener(EMAILS_SYNCED_EVENT, onFocus);
     return () => {
       window.clearTimeout(first);
       window.clearInterval(poll);
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener(EMAILS_SYNCED_EVENT, onFocus);
     };
   }, [refresh, activeFolder]);
 

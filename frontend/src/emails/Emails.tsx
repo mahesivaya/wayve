@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import "./emails.css";
 import "./pager.css";
@@ -21,6 +21,7 @@ import {
   wakeEmailSync,
 } from "../api/email";
 import { useAuth } from "../auth/useAuth";
+import { useEmailLiveRefresh } from "./useEmailLiveRefresh";
 import { useGlobalSearch } from "../search/SearchContext";
 import { useInSplitPane } from "../components/SplitPaneContext";
 import {
@@ -685,21 +686,29 @@ export default function Emails() {
     }
   }, [fetchAccounts, setRefreshTick]);
 
+  // One refresh of the accounts and the first page of the list.
+  const refreshMail = useCallback(() => {
+    void fetchAccounts();
+    setRefreshTick((t) => t + 1);
+  }, [fetchAccounts, setRefreshTick]);
+
+  // A mailbox the server just synced on a provider push: refresh now.
+  useEmailLiveRefresh(user?.id, refreshMail);
+
   // Steady 60s poll so mail synced by the backend worker appears without a manual
   // reload. Paused while the tab is hidden so it doesn't burn network or OAuth
   // quota in the background.
   useEffect(() => {
     const POLL_MS = 60_000;
+    // Returning to the tab fires both `visibilitychange` and `focus`; one
+    // refresh covers them.
+    const RETURN_GAP_MS = 2_000;
     let timer: number | null = null;
-
-    const tick = () => {
-      void fetchAccounts();
-      setRefreshTick((t) => t + 1);
-    };
+    let lastReturn = 0;
 
     const start = () => {
       if (timer !== null) return;
-      timer = window.setInterval(tick, POLL_MS);
+      timer = window.setInterval(refreshMail, POLL_MS);
     };
     const stop = () => {
       if (timer === null) return;
@@ -707,16 +716,30 @@ export default function Emails() {
       timer = null;
     };
 
+    // The user is back: wake the sync first so the refresh pulls anything
+    // that changed while they were away.
+    const onReturn = () => {
+      const now = Date.now();
+      if (now - lastReturn < RETURN_GAP_MS) return;
+      lastReturn = now;
+      void wakeEmailSync();
+      refreshMail();
+    };
+
     const onVisibility = () => {
       if (document.hidden) {
         stop();
       } else {
-        // Wake first so the next fetchAccounts pulls anything synced while the tab
-        // was hidden.
-        void wakeEmailSync();
-        tick();
+        onReturn();
         start();
       }
+    };
+    // The tab never goes hidden when the user was in another window (reading
+    // the same mailbox in Gmail, say), so refresh on window focus too, as the
+    // folder badges do. Otherwise the badge and the rows disagree until the
+    // next poll.
+    const onFocus = () => {
+      if (!document.hidden) onReturn();
     };
 
     if (!document.hidden) {
@@ -726,12 +749,14 @@ export default function Emails() {
       start();
     }
     document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onFocus);
 
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
       stop();
     };
-  }, [fetchAccounts, setRefreshTick]);
+  }, [refreshMail]);
 
   const addAccount = async () => {
     const url = await getGmailConnectUrl();

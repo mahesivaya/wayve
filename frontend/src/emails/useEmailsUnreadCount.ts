@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getEmailsUnreadCount } from "../api/email";
+import { EMAILS_SYNCED_EVENT } from "./useEmailLiveRefresh";
 
 // Fired by `markEmailRead` and the bulk mark-read path so mounted badges
 // refresh immediately instead of waiting for the next 60s poll.
@@ -35,12 +36,15 @@ export function useEmailsUnreadCount(enabled: boolean = true): number {
 
     const onChanged = () => refresh();
     window.addEventListener(EMAILS_UNREAD_CHANGED_EVENT, onChanged);
+    // The server just synced a mailbox on a provider push.
+    window.addEventListener(EMAILS_SYNCED_EVENT, onChanged);
 
     return () => {
       cancelled = true;
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener(EMAILS_UNREAD_CHANGED_EVENT, onChanged);
+      window.removeEventListener(EMAILS_SYNCED_EVENT, onChanged);
     };
   }, [enabled]);
 
