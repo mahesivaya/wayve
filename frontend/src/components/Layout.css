@@ -2118,3 +2118,12 @@ html.is-titlebar-inset .header .split-menu-btn svg {
 
 /* OS prefers-color-scheme blocks were removed — dark mode is now
    explicit-only via [data-theme="dark"]. */
+
+/* A sidebar row that is not a link (a project with no page to open). */
+.sidebar-link--static {
+  cursor: default;
+  color: var(--color-text-muted);
+}
+.sidebar-link--static:hover {
+  background: transparent;
+}

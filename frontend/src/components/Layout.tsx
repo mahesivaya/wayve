@@ -75,8 +75,14 @@ import {
   isSingleInstance,
   type PaneArrangement,
 } from "./paneLayout";
-import { listTeams, createTeam, type Team } from "../api/workspace";
-import { getVisibleProjects, type GithubRepo } from "../api/github";
+import {
+  listTeams,
+  createTeam,
+  listProjects,
+  createProject,
+  type Team,
+  type Project,
+} from "../api/workspace";
 import { getFeatureAccess } from "../api/featureAccess";
 import { isDesktopApp } from "../utils/desktop";
 import "./Layout.css";
@@ -458,17 +464,15 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     };
   }, [userId, userOrganizationId]);
 
-  // The Projects section lists the repositories of the Projects page. That list
-  // comes from GitHub, so it loads when the section is first opened, not with
-  // every page. Keyed on the account, so a different one never shows the last
-  // one's projects.
+  // The Projects section lists the projects created in the workspace, not the
+  // GitHub repository list. It loads when the section is first opened. Keyed
+  // on the account, so a different one never shows the last one's projects.
   const projectsKey = `${userId ?? ""}:${userOrganizationId ?? ""}`;
   const [projectsLoad, setProjectsLoad] = useState<{
     key: string;
-    repos: GithubRepo[];
+    rows: Project[];
   } | null>(null);
-  const projects =
-    projectsLoad?.key === projectsKey ? projectsLoad.repos : null;
+  const projects = projectsLoad?.key === projectsKey ? projectsLoad.rows : null;
   // Organization and platform accounts only, never personal ones; and the same
   // non-guest audience as the Code Repo these projects come from.
   const showProjects =
@@ -478,11 +482,11 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   useEffect(() => {
     if (!projectsOpen || userId == null || projects !== null) return;
     let cancelled = false;
-    void getVisibleProjects()
-      .then((data) => (Array.isArray(data?.repos) ? data.repos : []))
-      .catch(() => [] as GithubRepo[])
-      .then((repos) => {
-        if (!cancelled) setProjectsLoad({ key: projectsKey, repos });
+    void listProjects()
+      .then((data) => (Array.isArray(data) ? data : []))
+      .catch(() => [] as Project[])
+      .then((rows) => {
+        if (!cancelled) setProjectsLoad({ key: projectsKey, rows });
       });
     return () => {
       cancelled = true;
@@ -524,6 +528,31 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       cancelled = true;
     };
   }, [userScope, userRole]);
+
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [projectCreateDraft, setProjectCreateDraft] = useState("");
+  const submitNewProject = () => {
+    const name = projectCreateDraft.trim();
+    setCreatingProject(false);
+    setProjectCreateDraft("");
+    if (!name) return;
+    createProject(name)
+      .then((created) => {
+        // Only into a list that has loaded; one still loading will include it.
+        setProjectsLoad((prev) =>
+          prev?.key === projectsKey
+            ? {
+                key: prev.key,
+                rows: [
+                  created,
+                  ...prev.rows.filter((p) => p.id !== created.id),
+                ],
+              }
+            : prev
+        );
+      })
+      .catch(() => {});
+  };
 
   const submitNewTeam = () => {
     const name = teamCreateDraft.trim();
@@ -1963,27 +1992,71 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       label: "Projects",
       icon: <ProjectsTileIcon size={16} />,
       visible: showProjects,
+      // Creating a project is org-owner-only (platform accounts cannot); the
+      // backend enforces it regardless.
+      onAdd:
+        isOrgOwner && !railCollapsed
+          ? () => {
+              sections.setOpen("projects", true);
+              setProjectCreateDraft("");
+              setCreatingProject(true);
+            }
+          : undefined,
       body: (
         <div className="sidebar-subitems">
+          {creatingProject && (
+            <input
+              className="sidebar-project-edit"
+              value={projectCreateDraft}
+              autoFocus
+              placeholder="New project…"
+              aria-label="New project name"
+              onChange={(e) => setProjectCreateDraft(e.target.value)}
+              onBlur={submitNewProject}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitNewProject();
+                else if (e.key === "Escape") {
+                  setCreatingProject(false);
+                  setProjectCreateDraft("");
+                }
+              }}
+            />
+          )}
           {projects === null && (
             <div className="sidebar-empty-hint">Loading…</div>
           )}
-          {projects?.map((repo) => {
+          {projects?.map((project) => {
+            // A project opens its page through its linked repository; one
+            // with no repository linked has no page yet, so it is a plain row.
+            if (!project.github_owner || !project.github_repo) {
+              return (
+                <div
+                  key={project.id}
+                  className="sidebar-link sidebar-link--static"
+                  title={`${project.name} (no repository linked)`}
+                >
+                  <span className="sidebar-icon" aria-hidden="true">
+                    <ProjectsTileIcon size={16} />
+                  </span>
+                  <span className="sidebar-label">{project.name}</span>
+                </div>
+              );
+            }
             const path = `/projects/${encodeURIComponent(
-              repo.owner.login
-            )}/${encodeURIComponent(repo.name)}`;
+              project.github_owner
+            )}/${encodeURIComponent(project.github_repo)}`;
             return (
-              <Fragment key={repo.full_name}>
+              <Fragment key={project.id}>
                 {renderSidebarLink(
                   path,
-                  repo.name,
+                  project.name,
                   <ProjectsTileIcon size={16} />,
                   location.pathname === path
                 )}
               </Fragment>
             );
           })}
-          {projects?.length === 0 && (
+          {!creatingProject && projects?.length === 0 && (
             <div className="sidebar-empty-hint">No projects yet</div>
           )}
         </div>

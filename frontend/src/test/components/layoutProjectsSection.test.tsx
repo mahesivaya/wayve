@@ -1,5 +1,5 @@
-// The sidebar's Projects section, below Teams: it lists the Projects page's
-// repositories, loaded when the section is first opened.
+// The sidebar's Projects section, below Teams: it lists the workspace's own
+// projects (not the GitHub repository list), loaded when first opened.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -36,8 +36,13 @@ const createTeam = vi.fn();
 const listTeams = vi.hoisted(() => vi.fn());
 vi.mock("../../api/workspace", () => ({
   listTeams,
+  listProjects,
+  createProject,
   createTeam: (input: { name: string }) => createTeam(input),
 }));
+const listProjects = vi.hoisted(() => vi.fn());
+const createProject = vi.hoisted(() => vi.fn());
+// The GitHub repository list must never feed the section.
 const getVisibleProjects = vi.hoisted(() => vi.fn());
 vi.mock("../../api/github", () => ({ getVisibleProjects }));
 vi.mock("../../emails/useEmailsUnreadCount", () => ({
@@ -67,14 +72,6 @@ function CurrentPath() {
   return <div data-testid="path">{useLocation().pathname}</div>;
 }
 
-const repo = (name: string) => ({
-  name,
-  full_name: `acme/${name}`,
-  owner: { login: "acme" },
-  private: true,
-  description: null,
-});
-
 function renderLayout() {
   render(
     <MemoryRouter initialEntries={["/home"]}>
@@ -94,15 +91,18 @@ describe("Layout Projects section", () => {
     session.scope = "organization";
     listTeams.mockReset();
     listTeams.mockResolvedValue([]);
+    listProjects.mockReset();
+    listProjects.mockResolvedValue([]);
+    createProject.mockReset();
     getVisibleProjects.mockReset();
-    getVisibleProjects.mockResolvedValue({ unrestricted: true, repos: [] });
   });
 
   it("sits below Teams and loads its projects only once opened", async () => {
-    getVisibleProjects.mockResolvedValue({
-      unrestricted: true,
-      repos: [repo("api"), repo("web")],
-    });
+    listProjects.mockResolvedValue([
+      { id: 1, name: "API", github_owner: "acme", github_repo: "api" },
+      { id: 2, name: "Website", github_owner: "acme", github_repo: "web" },
+      { id: 3, name: "Roadmap", github_owner: null, github_repo: null },
+    ]);
     const user = userEvent.setup();
     renderLayout();
 
@@ -113,17 +113,21 @@ describe("Layout Projects section", () => {
     ).toBeTruthy();
     // Collapsed to start with: nothing is fetched until it is opened.
     expect(projects.getAttribute("aria-expanded")).toBe("false");
-    expect(getVisibleProjects).not.toHaveBeenCalled();
+    expect(listProjects).not.toHaveBeenCalled();
 
     await user.click(projects);
-    expect(await screen.findByRole("link", { name: "api" })).toBeTruthy();
-    await user.click(screen.getByRole("link", { name: "web" }));
+    expect(await screen.findByRole("link", { name: "API" })).toBeTruthy();
+    // A project with no repository linked is listed, but is not a link.
+    expect(screen.getByText("Roadmap")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Roadmap" })).toBeNull();
+    await user.click(screen.getByRole("link", { name: "Website" }));
     expect(screen.getByTestId("path").textContent).toBe("/projects/acme/web");
 
     // Closing and reopening reuses the loaded list.
     await user.click(projects);
     await user.click(projects);
-    expect(getVisibleProjects).toHaveBeenCalledTimes(1);
+    expect(listProjects).toHaveBeenCalledTimes(1);
+    expect(getVisibleProjects).not.toHaveBeenCalled();
   });
 
   it("shows for platform accounts but never for personal ones", () => {
@@ -132,16 +136,36 @@ describe("Layout Projects section", () => {
     expect(screen.getByRole("button", { name: "Projects" })).toBeTruthy();
     cleanup();
 
-    getVisibleProjects.mockClear();
+    listProjects.mockClear();
     session.scope = "personal";
     renderLayout();
     expect(screen.queryByRole("button", { name: "Projects" })).toBeNull();
     // Not even fetched, though the section was left open above.
-    expect(getVisibleProjects).not.toHaveBeenCalled();
+    expect(listProjects).not.toHaveBeenCalled();
+  });
+
+  it("creates a project from the + button and lists it", async () => {
+    createProject.mockResolvedValue({
+      id: 9,
+      name: "Launch",
+      github_owner: null,
+      github_repo: null,
+    });
+    const user = userEvent.setup();
+    renderLayout();
+
+    await user.click(screen.getByRole("button", { name: "New Projects" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "New project name" }),
+      "Launch{Enter}"
+    );
+
+    expect(createProject).toHaveBeenCalledWith("Launch");
+    expect(await screen.findByText("Launch")).toBeTruthy();
+    expect(screen.queryByText("No projects yet")).toBeNull();
   });
 
   it("says so when there are no projects", async () => {
-    getVisibleProjects.mockResolvedValue({ unrestricted: true, repos: [] });
     const user = userEvent.setup();
     renderLayout();
 
