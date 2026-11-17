@@ -85,6 +85,7 @@ import {
 } from "../api/workspace";
 import { getFeatureAccess } from "../api/featureAccess";
 import { isWorkspaceAdmin } from "../auth/workspaceAdmin";
+import ConnectedIntegrationLinks from "../integrations/ConnectedIntegrationLinks";
 import { isDesktopApp } from "../utils/desktop";
 import "./Layout.css";
 import {
@@ -113,7 +114,6 @@ import {
   PlatformIcon,
   OrganizationIcon,
   MembersIcon,
-  SettingsIcon,
   BellIcon,
   PersonIcon,
   IntegrationsIcon,
@@ -1612,9 +1612,13 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       className={`sidebar-link ${isActive ? "active" : ""}`.trim()}
       onClick={() => setNavOpen(false)}
     >
-      <span className="sidebar-icon" aria-hidden="true">
-        {icon}
-      </span>
+      {/* A link with no icon has no icon slot either, so its label starts at
+          the left edge, in line with the group headings. */}
+      {icon != null && (
+        <span className="sidebar-icon" aria-hidden="true">
+          {icon}
+        </span>
+      )}
       <span className="sidebar-label">{label}</span>
     </Link>
   );
@@ -2250,13 +2254,10 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     ? "/settings/repositories"
     : location.pathname;
   const settingsLinks: SidebarLinkDef[] = [
-    { path: "/settings", label: "General", icon: <SettingsIcon size={18} /> },
-    {
-      path: "/integrations",
-      label: "Integrations",
-      icon: <IntegrationsIcon size={18} />,
-      visible: canViewIntegrations(user),
-    },
+    // General carries no icon, by request: its label sits at the left edge,
+    // in line with the group headings, with Shortcuts, Repositories and
+    // Developers under it.
+    { path: "/settings", label: "General", icon: null },
     {
       path: "/settings/shortcuts",
       label: "Shortcuts",
@@ -2276,6 +2277,22 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       visible: user?.account_type !== "personal",
     },
   ];
+  // Settings › Integrations: the full page first, then (rendered after it) the
+  // services this account has connected.
+  const integrationLinks: SidebarLinkDef[] = canViewIntegrations(user)
+    ? [
+        {
+          path: "/integrations",
+          label: "All integrations",
+          icon: <IntegrationsIcon size={18} />,
+          // Lit only for the page as a whole; a connected service's own row
+          // is lit when its panel is the one open.
+          active:
+            location.pathname === "/integrations" &&
+            !new URLSearchParams(location.search).has("service"),
+        },
+      ]
+    : [];
   // Settings › Personal: the signed-in person's own profile and notifications.
   const personalLinks: SidebarLinkDef[] = [
     { path: "/profile", label: "My Profile", icon: <PersonIcon size={18} /> },
@@ -2345,8 +2362,15 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           ))}
       </div>
       {[
-        { label: "Personal", links: personalLinks },
-        { label: "Administration", links: administrationLinks },
+        {
+          label: "Integrations",
+          links: integrationLinks,
+          after: (
+            <ConnectedIntegrationLinks onNavigate={() => setNavOpen(false)} />
+          ),
+        },
+        { label: "Personal", links: personalLinks, after: null },
+        { label: "Administration", links: administrationLinks, after: null },
       ]
         .filter((group) => group.links.length > 0)
         .map((group) => (
@@ -2361,10 +2385,11 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
                   l.path,
                   l.label,
                   l.icon,
-                  settingsPath === l.path
+                  l.active ?? settingsPath === l.path
                 )}
               </Fragment>
             ))}
+            {group.after}
           </div>
         ))}
       <div className="sidebar-section">

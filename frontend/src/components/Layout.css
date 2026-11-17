@@ -2127,3 +2127,14 @@ html.is-titlebar-inset .header .split-menu-btn svg {
 .sidebar-link--static:hover {
   background: transparent;
 }
+
+/* A brand mark in the sidebar: sized like the other menu icons. The marks are
+   drawn for a white tile, so a near-black one (GitHub's) takes the text colour
+   here and stays visible on a dark menu. */
+.sidebar-icon--brand svg {
+  width: 18px;
+  height: 18px;
+}
+.sidebar-icon--brand svg [fill="#181717"] {
+  fill: currentColor;
+}
