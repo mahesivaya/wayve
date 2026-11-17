@@ -1019,12 +1019,35 @@ export function GitHubRepoViewer({
     return "description";
   });
 
-  // Each listed commit's +/- line counts, loaded with the page rather than on
-  // opening the commit.
+  // Each listed commit's +/- line counts, loaded without opening the commit.
+  // One request per commit, so only for the rows on screen (or about to be):
+  // the rest load as they are scrolled into view. Without IntersectionObserver
+  // the whole page of commits loads at once, as it used to.
   useEffect(() => {
-    if (activeSection === "commits" && commits.length > 0) {
+    if (activeSection !== "commits" || commits.length === 0) return;
+    if (typeof IntersectionObserver === "undefined") {
       prefetchCommits(commits.map((commit) => commit.sha));
+      return;
     }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const shas: string[] = [];
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const sha = (entry.target as HTMLElement).dataset.commitSha;
+          if (sha) shas.push(sha);
+          observer.unobserve(entry.target);
+        }
+        if (shas.length > 0) prefetchCommits(shas);
+      },
+      // Start a little before a row scrolls in, so its counts are usually
+      // there by the time it is read.
+      { rootMargin: "300px 0px" }
+    );
+    (contentRef.current ?? document)
+      .querySelectorAll<HTMLElement>(".github-commit-node[data-commit-sha]")
+      .forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
   }, [activeSection, commits, prefetchCommits]);
 
   useEffect(() => {
@@ -2244,7 +2267,11 @@ export function GitHubRepoViewer({
                 const detail = diffs.detailBySha[commit.sha];
                 const codeQuery = codeQueryBySha[commit.sha] ?? "";
                 return (
-                  <div key={commit.sha} className="github-commit-node">
+                  <div
+                    key={commit.sha}
+                    className="github-commit-node"
+                    data-commit-sha={commit.sha}
+                  >
                     <div className={`github-commit ${isOpen ? "is-open" : ""}`}>
                       <button
                         type="button"
