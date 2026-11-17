@@ -1914,8 +1914,10 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
             <AccessRequestsIcon size={16} /> Requests
           </Link>
           {/* The organization's sprint chart; platform staff have their own
-              Analytics under Platform. A plain page, not a split-pane app. */}
-          {user.scope === "organization" && (
+              Analytics under Platform. A plain page, not a split-pane app.
+              Owners find it below Feature Access in the Organization group;
+              everyone else has no such group, so it stays here for them. */}
+          {user.scope === "organization" && !isOrgOwner && (
             <Link
               to="/organization/analytics"
               title="Analytics"
@@ -2102,12 +2104,6 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           visible: canAccessPlatformSupport,
         },
         {
-          path: "/platform/analytics",
-          label: "Analytics",
-          icon: <AnalyticsIcon size={16} />,
-          visible: canAccessPlatformAnalytics,
-        },
-        {
           path: "/platform/secrets",
           label: "Secrets",
           icon: <SecretsIcon size={16} />,
@@ -2118,6 +2114,12 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           label: "Feature Access",
           icon: <ApiKeysIcon size={16} />,
           visible: isPlatformOwner,
+        },
+        {
+          path: "/platform/analytics",
+          label: "Analytics",
+          icon: <AnalyticsIcon size={16} />,
+          visible: canAccessPlatformAnalytics,
         },
       ],
     },
@@ -2154,6 +2156,11 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           path: "/organization/access",
           label: "Feature Access",
           icon: <ApiKeysIcon size={16} />,
+        },
+        {
+          path: "/organization/analytics",
+          label: "Analytics",
+          icon: <AnalyticsIcon size={16} />,
         },
       ],
     },
