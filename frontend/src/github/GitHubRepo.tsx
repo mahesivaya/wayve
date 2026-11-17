@@ -1019,12 +1019,35 @@ export function GitHubRepoViewer({
     return "description";
   });
 
-  // Each listed commit's +/- line counts, loaded with the page rather than on
-  // opening the commit.
+  // Each listed commit's +/- line counts, loaded without opening the commit.
+  // One request per commit, so only for the rows on screen (or about to be):
+  // the rest load as they are scrolled into view. Without IntersectionObserver
+  // the whole page of commits loads at once, as it used to.
   useEffect(() => {
-    if (activeSection === "commits" && commits.length > 0) {
+    if (activeSection !== "commits" || commits.length === 0) return;
+    if (typeof IntersectionObserver === "undefined") {
       prefetchCommits(commits.map((commit) => commit.sha));
+      return;
     }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const shas: string[] = [];
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const sha = (entry.target as HTMLElement).dataset.commitSha;
+          if (sha) shas.push(sha);
+          observer.unobserve(entry.target);
+        }
+        if (shas.length > 0) prefetchCommits(shas);
+      },
+      // Start a little before a row scrolls in, so its counts are usually
+      // there by the time it is read.
+      { rootMargin: "300px 0px" }
+    );
+    (contentRef.current ?? document)
+      .querySelectorAll<HTMLElement>(".github-commit-node[data-commit-sha]")
+      .forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
   }, [activeSection, commits, prefetchCommits]);
 
   useEffect(() => {
@@ -1049,19 +1072,31 @@ export function GitHubRepoViewer({
     try {
       // Only the repo fetch is fatal. Branches are best-effort: an empty repo
       // legitimately has none, so failing there must not blank the view.
+      // The branch list pages in the background (a repo with hundreds of
+      // branches takes several requests in a row): the files, README and
+      // commits only need the branch *name*, so they don't wait for it.
+      const branchesLoading = fetchBranches(API_BASE);
       const repoData = await githubJson<Repo>(API_BASE);
-      const branchData = await fetchBranches(API_BASE);
-      setBranches(branchData);
-      // Set together, once the branches are known: everything loads per branch,
-      // so starting on the default and then switching would load it all twice.
-      // A remembered branch may have been deleted since.
+      // Set together with the repo: everything loads per branch, so starting on
+      // the default and then switching would load it all twice.
       const remembered = restoredView?.branch;
-      setBranch(
-        remembered && branchData.some((b) => b.name === remembered)
-          ? remembered
-          : repoData.default_branch
-      );
+      setBranch(remembered || repoData.default_branch);
       setRepo(repoData);
+      void branchesLoading.then((branchData) => {
+        setBranches(branchData);
+        // A remembered branch may have been deleted since. Only then is the
+        // view moved (and reloaded) to the default branch, and only if the user
+        // hasn't picked another branch in the meantime.
+        if (
+          remembered &&
+          branchData.length > 0 &&
+          !branchData.some((b) => b.name === remembered)
+        ) {
+          setBranch((current) =>
+            current === remembered ? repoData.default_branch : current
+          );
+        }
+      });
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : "GitHub data failed to load";
@@ -1805,22 +1840,32 @@ export function GitHubRepoViewer({
     // Reset to the PR list rather than a stale detail when the repo or branch
     // changes. The PRs themselves load in their own effect below.
     setSelectedPull(null);
-    // The Actions list is branch-agnostic, so it only refreshes on the initial
-    // repo load. Run-detail caches stay valid because run ids are global.
-    setRunsPage(1);
-    setRunsTotal(0);
-    setExpandedRunIds(new Set());
-    setExpandedJobIds(new Set());
-    void loadRuns(1, false);
-  }, [
-    branch,
-    loadCommits,
-    loadCommitsTotal,
-    loadReadme,
-    loadRuns,
-    repo,
-    restoredView,
-  ]);
+  }, [branch, loadCommits, loadCommitsTotal, loadReadme, repo, restoredView]);
+
+  // The Actions list is the page's largest response, so it loads when the
+  // Actions section is first opened rather than with the page. It is
+  // branch-agnostic and this viewer remounts per repo, so once is enough;
+  // run-detail caches stay valid because run ids are global. Until then the
+  // sidebar count comes from a one-row request for GitHub's total.
+  const runsLoaded = useRef(false);
+  const runsCounted = useRef(false);
+  useEffect(() => {
+    if (!repo || runsLoaded.current) return;
+    if (activeSection === "actions") {
+      runsLoaded.current = true;
+      void loadRuns(1, false);
+      return;
+    }
+    if (runsCounted.current) return;
+    runsCounted.current = true;
+    githubJson<RunsResponse>(`${API_BASE}/actions/runs?per_page=1`)
+      .then((data) => {
+        if (!runsLoaded.current) setRunsTotal(data.total_count ?? 0);
+      })
+      .catch(() => {
+        // Best-effort: the count just stays empty until Actions is opened.
+      });
+  }, [API_BASE, activeSection, loadRuns, repo]);
 
   // PRs aren't branch-filtered, so unlike the block above these don't reload
   // on a branch change: the list follows the repo and the Open/Closed tab
@@ -2222,7 +2267,11 @@ export function GitHubRepoViewer({
                 const detail = diffs.detailBySha[commit.sha];
                 const codeQuery = codeQueryBySha[commit.sha] ?? "";
                 return (
-                  <div key={commit.sha} className="github-commit-node">
+                  <div
+                    key={commit.sha}
+                    className="github-commit-node"
+                    data-commit-sha={commit.sha}
+                  >
                     <div className={`github-commit ${isOpen ? "is-open" : ""}`}>
                       <button
                         type="button"
