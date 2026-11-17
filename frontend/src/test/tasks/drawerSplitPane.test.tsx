@@ -1,7 +1,7 @@
 // The User Stories edit drawer covers the whole window on a full page, but stays
 // inside the board in a split pane so the other panes remain usable.
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 vi.mock("../../api/userStories", () => ({
@@ -19,6 +19,10 @@ vi.mock("../../api/userStories", () => ({
   createUserStoryApi: vi.fn(),
   updateUserStoryApi: vi.fn(),
   deleteUserStoryApi: vi.fn(),
+  listStoryAttachments: vi.fn().mockResolvedValue([]),
+  uploadStoryAttachments: vi.fn(),
+  deleteStoryAttachment: vi.fn(),
+  downloadStoryAttachment: vi.fn(),
 }));
 
 vi.mock("../../api/tasks", () => ({
@@ -76,6 +80,15 @@ describe("User Stories edit drawer", () => {
     expect(
       document.querySelector(".task-drawer-overlay--contained")
     ).toBeNull();
+  });
+
+  it("has no Delete button: a story is deleted from its full page", async () => {
+    const drawer = await openDrawer(false);
+    expect(within(drawer).queryByRole("button", { name: "Delete" })).toBeNull();
+    // The way to the full page is still there.
+    expect(
+      within(drawer).getByRole("button", { name: /full page|expand/i })
+    ).toBeTruthy();
   });
 
   it("ignores Escape from another pane when contained", async () => {

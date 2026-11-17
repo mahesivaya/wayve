@@ -4,13 +4,17 @@ import {
   createUserStoryApi,
   updateUserStoryApi,
   deleteUserStoryApi,
+  listStoryAttachments,
+  uploadStoryAttachments,
+  deleteStoryAttachment,
+  downloadStoryAttachment,
 } from "../api/userStories";
 import { storyAiFix } from "../api/aiFix";
 
 // The Workspace "User Stories" board is the Tasks board with an org-shared data
 // source and story-flavoured labels. Statuses, projects and assignable users are
-// the same endpoints as Tasks (see api/userStories.ts); attachments are disabled
-// because they are task-only server-side.
+// the same endpoints as Tasks (see api/userStories.ts); attachments have their
+// own story-scoped endpoints.
 const USER_STORIES_CONFIG: TasksConfig = {
   api: {
     list: getUserStories,
@@ -18,14 +22,19 @@ const USER_STORIES_CONFIG: TasksConfig = {
     update: updateUserStoryApi,
     remove: deleteUserStoryApi,
     aiFixPanel: storyAiFix,
+    listAttachments: listStoryAttachments,
+    uploadAttachments: uploadStoryAttachments,
+    deleteAttachment: deleteStoryAttachment,
+    downloadAttachment: downloadStoryAttachment,
   },
-  // Attachments are task-only server-side. The Design (Figma) section is off
-  // here by choice — stories carry the narrative, and the design lives on the
-  // ticket that implements it; the story_figma_links table and its endpoints
-  // stay, so turning this back on restores any links already attached.
+  // The Design (Figma) section is off here by choice — stories carry the
+  // narrative, and the design lives on the ticket that implements it; the
+  // story_figma_links table and its endpoints stay, so turning this back on
+  // restores any links already attached.
   features: {
-    attachments: false,
+    attachments: true,
     statusSummary: true,
+    reviewer: true,
     figmaLinks: false,
     // Every priority may be auto-fixed (1 = no floor), same as tickets.
     aiFixMinPriority: 1,

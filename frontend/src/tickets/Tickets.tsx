@@ -31,6 +31,7 @@ const TICKETS_CONFIG: TasksConfig = {
   features: {
     attachments: true,
     statusSummary: true,
+    reviewer: true,
     // Every priority may be auto-fixed (1 = no floor).
     aiFixMinPriority: 1,
     // Design (Figma) section is off on both boards now — file attachments cover

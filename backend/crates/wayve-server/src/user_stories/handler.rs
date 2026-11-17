@@ -77,6 +77,9 @@ fn story_from_row(row: sqlx::postgres::PgRow) -> Task {
         badge_kind: None,
         related_to: None,
         relation_kind: None,
+        // Always Some for a story ("" = nobody), so the board gets the field.
+        reviewer: Some(row.try_get("reviewer").unwrap_or_default()),
+        reviewer_id: row.try_get("reviewer_id").ok().flatten(),
     }
 }
 
@@ -112,7 +115,7 @@ async fn resolve_status(
 }
 
 const SELECT_COLS: &str = "id, story_number, name, description, priority, status, assigned_by, \
-     assignee, assignee_id, project_id, created_at, updated_at";
+     assignee, assignee_id, reviewer, reviewer_id, project_id, created_at, updated_at";
 
 #[get("/user-stories")]
 #[instrument(target = "http", skip(req, pool))]
@@ -156,6 +159,7 @@ pub async fn create_user_story(
     let status = resolve_status(pool.get_ref(), owner, data.status.as_deref()).await?;
     let assigned_by = data.assigned_by.as_deref().unwrap_or("").trim();
     let assignee = data.assignee.as_deref().unwrap_or("").trim();
+    let reviewer = data.reviewer.as_deref().unwrap_or("").trim();
 
     // story_number is the next per-owner sequence value, computed inline off the
     // same owner binds. The owner's sequence lock, taken first, keeps concurrent
@@ -165,8 +169,9 @@ pub async fn create_user_story(
     let row = sqlx::query(&format!(
         "INSERT INTO user_stories
              (organization_id, user_id, name, description, priority, status,
-              assigned_by, assignee, assignee_id, project_id, story_number)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+              assigned_by, assignee, assignee_id, project_id, reviewer, reviewer_id,
+              story_number)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
                  COALESCE((SELECT MAX(story_number) FROM user_stories
                             WHERE ($1::INTEGER IS NOT NULL AND organization_id = $1)
                                OR ($2::INTEGER IS NOT NULL AND user_id = $2)), 0) + 1)
@@ -182,6 +187,8 @@ pub async fn create_user_story(
     .bind(assignee)
     .bind(data.assignee_id)
     .bind(data.project_id)
+    .bind(reviewer)
+    .bind(data.reviewer_id)
     .fetch_one(&mut *tx)
     .await?;
     tx.commit().await?;
@@ -232,6 +239,8 @@ pub async fn update_user_story(
     let status = resolve_status(pool.get_ref(), owner, data.status.as_deref()).await?;
     let assigned_by = data.assigned_by.as_deref().unwrap_or("").trim();
     let assignee = data.assignee.as_deref().unwrap_or("").trim();
+    // None (field left out) keeps the stored reviewer; Some, even "", sets it.
+    let reviewer = data.reviewer.as_deref().map(str::trim);
 
     // Read the current status before the write so we only record a history event
     // when it actually changes. Owner-scoped, so it also confirms the row exists.
@@ -253,6 +262,8 @@ pub async fn update_user_story(
         "UPDATE user_stories
             SET name = $1, description = $2, priority = $3, status = $4,
                 assigned_by = $5, assignee = $6, assignee_id = $7, project_id = $8,
+                reviewer = COALESCE($12, reviewer),
+                reviewer_id = CASE WHEN $12::TEXT IS NULL THEN reviewer_id ELSE $13 END,
                 updated_at = NOW()
           WHERE id = $9
             AND (($10::INTEGER IS NOT NULL AND organization_id = $10)
@@ -270,6 +281,8 @@ pub async fn update_user_story(
     .bind(id)
     .bind(org_id)
     .bind(uid)
+    .bind(reviewer)
+    .bind(data.reviewer_id)
     .fetch_optional(pool.get_ref())
     .await?
     .ok_or(AppError::NotFound("user story"))?;

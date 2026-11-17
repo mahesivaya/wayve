@@ -110,6 +110,9 @@ fn ticket_from_row(row: sqlx::postgres::PgRow) -> Task {
         badge_kind: row.try_get("badge_kind").ok().flatten(),
         related_to: row.try_get("related_to").ok().flatten(),
         relation_kind: row.try_get("relation_kind").ok().flatten(),
+        // Always Some for a ticket ("" = nobody), so the board gets the field.
+        reviewer: Some(row.try_get("reviewer").unwrap_or_default()),
+        reviewer_id: row.try_get("reviewer_id").ok().flatten(),
     }
 }
 
@@ -157,7 +160,8 @@ async fn resolve_status(
 }
 
 const SELECT_COLS: &str = "id, ticket_number, name, description, priority, status, assigned_by, \
-     assignee, assignee_id, project_id, related_to, relation_kind, created_at, updated_at";
+     assignee, assignee_id, reviewer, reviewer_id, project_id, related_to, relation_kind, \
+     created_at, updated_at";
 
 #[get("/workspace-tickets")]
 #[instrument(target = "http", skip(req, pool))]
@@ -1460,6 +1464,7 @@ pub async fn create_ticket(
     let status = resolve_status(pool.get_ref(), owner, data.status.as_deref()).await?;
     let assigned_by = data.assigned_by.as_deref().unwrap_or("").trim();
     let assignee = data.assignee.as_deref().unwrap_or("").trim();
+    let reviewer = data.reviewer.as_deref().unwrap_or("").trim();
     let badge_kind = normalize_badge_kind(data.badge_kind.as_deref());
 
     // ticket_number is the next per-owner sequence value, computed inline off the
@@ -1470,8 +1475,9 @@ pub async fn create_ticket(
     let row = sqlx::query(&format!(
         "INSERT INTO workspace_tickets
              (organization_id, user_id, name, description, priority, status,
-              assigned_by, assignee, assignee_id, project_id, badge_kind, ticket_number)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
+              assigned_by, assignee, assignee_id, project_id, badge_kind, reviewer,
+              reviewer_id, ticket_number)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
                  COALESCE((SELECT MAX(ticket_number) FROM workspace_tickets
                             WHERE ($1::INTEGER IS NOT NULL AND organization_id = $1)
                                OR ($2::INTEGER IS NOT NULL AND user_id = $2)), 0) + 1)
@@ -1488,6 +1494,8 @@ pub async fn create_ticket(
     .bind(data.assignee_id)
     .bind(data.project_id)
     .bind(badge_kind.as_deref())
+    .bind(reviewer)
+    .bind(data.reviewer_id)
     .fetch_one(&mut *tx)
     .await?;
     tx.commit().await?;
@@ -1545,6 +1553,8 @@ pub async fn update_ticket(
     let status = resolve_status(pool.get_ref(), owner, data.status.as_deref()).await?;
     let assigned_by = data.assigned_by.as_deref().unwrap_or("").trim();
     let assignee = data.assignee.as_deref().unwrap_or("").trim();
+    // None (field left out) keeps the stored reviewer; Some, even "", sets it.
+    let reviewer = data.reviewer.as_deref().map(str::trim);
     let badge_kind = normalize_badge_kind(data.badge_kind.as_deref());
     let manage_bugs = can_manage_bug_tickets(&req, pool.get_ref(), user_id).await;
 
@@ -1556,7 +1566,10 @@ pub async fn update_ticket(
         "UPDATE workspace_tickets
             SET name = $1, description = $2, priority = $3, status = $4,
                 assigned_by = $5, assignee = $6, assignee_id = $7, project_id = $8,
-                badge_kind = $13, updated_at = NOW()
+                badge_kind = $13,
+                reviewer = COALESCE($14, reviewer),
+                reviewer_id = CASE WHEN $14::TEXT IS NULL THEN reviewer_id ELSE $15 END,
+                updated_at = NOW()
           WHERE id = $9
             AND ((($10::INTEGER IS NOT NULL AND organization_id = $10)
                OR ($11::INTEGER IS NOT NULL AND user_id = $11))
@@ -1580,6 +1593,8 @@ pub async fn update_ticket(
     .bind(uid)
     .bind(manage_bugs)
     .bind(badge_kind.as_deref())
+    .bind(reviewer)
+    .bind(data.reviewer_id)
     .fetch_optional(pool.get_ref())
     .await?
     .ok_or(AppError::NotFound("workspace ticket"))?;

@@ -40,6 +40,15 @@ pub struct Task {
     pub related_to: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub relation_kind: Option<String>,
+    /// The person asked to review the work, stored like `assignee`: an address
+    /// (empty when nobody is set) plus, for a member, their user id. User
+    /// stories and tickets only; None on tasks, which have no reviewer.
+    #[sqlx(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reviewer: Option<String>,
+    #[sqlx(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reviewer_id: Option<i32>,
 }
 
 #[derive(Deserialize)]
@@ -56,4 +65,10 @@ pub struct TaskInput {
     /// (`bug`/`feature`/`other`, …). Ignored by the tasks and user-stories
     /// handlers, which never store it.
     pub badge_kind: Option<String>,
+    /// Reviewer for the user-stories and tickets boards; ignored by tasks.
+    /// Leaving `reviewer` out of an update keeps the stored reviewer, so a
+    /// client that doesn't send the field can't wipe it with an unrelated edit.
+    /// Sending it, even as "", sets both `reviewer` and `reviewer_id`.
+    pub reviewer: Option<String>,
+    pub reviewer_id: Option<i32>,
 }

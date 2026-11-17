@@ -553,6 +553,27 @@ pub async fn ensure_email_schema(pool: &PgPool) {
             created_at TIMESTAMP DEFAULT NOW()
         )",
         "CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket ON ticket_attachments(ticket_id)",
+        // Attachments for user stories (access by the story's owner). New table,
+        // so create it here for existing deployments.
+        "CREATE TABLE IF NOT EXISTS story_attachments (
+            id BIGSERIAL PRIMARY KEY,
+            story_id INTEGER NOT NULL REFERENCES user_stories(id) ON DELETE CASCADE,
+            user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            name TEXT NOT NULL,
+            file_type TEXT,
+            file_path TEXT NOT NULL,
+            file_iv TEXT,
+            size BIGINT NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT NOW()
+        )",
+        "CREATE INDEX IF NOT EXISTS idx_story_attachments_story ON story_attachments(story_id)",
+        // Reviewer on the stories and tickets boards, stored like `assignee`.
+        "ALTER TABLE user_stories ADD COLUMN IF NOT EXISTS reviewer TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE user_stories ADD COLUMN IF NOT EXISTS reviewer_id INTEGER \
+            REFERENCES users(id) ON DELETE SET NULL",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS reviewer TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS reviewer_id INTEGER \
+            REFERENCES users(id) ON DELETE SET NULL",
         // One IdP config row per org; allowed_domain routes alice@acme.com to Acme's
         // IdP. The sso_states row binds PKCE and nonce to the in-flight code so a
         // stolen `code` alone can't be exchanged.

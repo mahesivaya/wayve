@@ -70,7 +70,7 @@ describe("Tasks form", () => {
   it("opens the edit form inside the board", async () => {
     renderTasks();
     await screen.findByText("June task");
-    fireEvent.click(screen.getByRole("button", { name: "Edit June task" }));
+    fireEvent.click(screen.getByRole("button", { name: "June task" }));
     await screen.findByRole("button", { name: "Save changes" });
     expectContained("Edit Task");
   });

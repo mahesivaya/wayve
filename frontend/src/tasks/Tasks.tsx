@@ -102,6 +102,7 @@ export type TableColumnKey =
   | "type"
   | "project"
   | "assignee"
+  | "reviewer"
   | "assigned_by"
   | "priority"
   | "status"
@@ -138,6 +139,7 @@ const TABLE_COLUMNS: TableColumn[] = [
   },
   { key: "project", label: "Project", width: "160px", defaultOn: false },
   { key: "assignee", label: "Assignee", width: "176px", defaultOn: true },
+  { key: "reviewer", label: "Reviewer", width: "176px", defaultOn: true },
   {
     key: "assigned_by",
     label: "Assigned by",
@@ -172,23 +174,44 @@ const DEFAULT_SHOWN_COLUMNS: TableColumnKey[] = TABLE_COLUMNS.filter(
   (c) => c.defaultOn
 ).map((c) => c.key);
 
+const ALL_COLUMN_KEYS: TableColumnKey[] = TABLE_COLUMNS.map((c) => c.key);
+
+// Columns added after column choices started being saved. A choice saved
+// before `colsKnown` existed is taken to predate exactly these.
+const COLUMNS_ADDED_LATER: TableColumnKey[] = ["reviewer"];
+
+const readKeyList = (storageKey: string): string[] | null => {
+  const saved = window.localStorage.getItem(storageKey);
+  const parsed = saved ? (JSON.parse(saved) as unknown) : null;
+  return Array.isArray(parsed)
+    ? parsed.filter((k): k is string => typeof k === "string")
+    : null;
+};
+
 // The board's saved column choice, or the defaults. Anything unknown (a
-// hand-edited value or a column a later build removed) is dropped.
+// hand-edited value or a column a later build removed) is dropped. A saved
+// choice only speaks for the columns that existed when it was made
+// (`colsKnown`): a default-on column added since then is shown, rather than
+// staying hidden for everyone who had already opened the board.
 const loadShownColumns = (storageKey: string): TableColumnKey[] => {
   try {
-    const saved = window.localStorage.getItem(`wayve.${storageKey}.cols`);
-    const parsed = saved ? (JSON.parse(saved) as unknown) : null;
-    if (!Array.isArray(parsed)) return DEFAULT_SHOWN_COLUMNS;
-    const known = new Set<string>(TABLE_COLUMNS.map((c) => c.key));
-    return parsed.filter(
-      (k): k is TableColumnKey => typeof k === "string" && known.has(k)
+    const shown = readKeyList(`wayve.${storageKey}.cols`);
+    if (!shown) return DEFAULT_SHOWN_COLUMNS;
+    const known =
+      readKeyList(`wayve.${storageKey}.colsKnown`) ??
+      ALL_COLUMN_KEYS.filter((k) => !COLUMNS_ADDED_LATER.includes(k));
+    return ALL_COLUMN_KEYS.filter(
+      (k) =>
+        shown.includes(k) ||
+        (!known.includes(k) && DEFAULT_SHOWN_COLUMNS.includes(k))
     );
   } catch {
     return DEFAULT_SHOWN_COLUMNS;
   }
 };
 
-type SortKey = "created" | "updated" | "assignee" | "priority" | "status";
+type SortKey =
+  "created" | "updated" | "assignee" | "reviewer" | "priority" | "status";
 
 const normalizePriority = (value: unknown): TaskPriority => {
   const n = Number(value);
@@ -234,6 +257,8 @@ type ComposeFields = {
   assignedBy: string;
   assignee: string;
   assigneeId: number | null;
+  reviewer: string;
+  reviewerId: number | null;
   projectId: number | null;
   badgeKind: string;
   pendingAttachments: number;
@@ -301,13 +326,16 @@ function AssigneeMenu({
   selectedEmail,
   onSelect,
   onClose,
+  role = "assignee",
   children,
 }: {
   users: AssignableUser[];
   selectedEmail: string;
-  /** `null` selects "No assignee". */
+  /** `null` selects "No assignee" (or "No reviewer"). */
   onSelect: (user: AssignableUser | null) => void;
   onClose: () => void;
+  /** Who is being picked; only changes the menu's wording. */
+  role?: "assignee" | "reviewer";
   children?: React.ReactNode;
 }) {
   const [query, setQuery] = useState("");
@@ -325,7 +353,7 @@ function AssigneeMenu({
     <div
       className="task-assignee-pop"
       role="dialog"
-      aria-label="Choose assignee"
+      aria-label={`Choose ${role}`}
     >
       {users.length > 6 && (
         <input
@@ -365,7 +393,7 @@ function AssigneeMenu({
               <circle cx="8" cy="5.5" r="2.8" />
               <path d="M2.5 14c.8-2.8 3-4.2 5.5-4.2s4.7 1.4 5.5 4.2" />
             </svg>
-            <span className="task-assignee-row-name">No assignee</span>
+            <span className="task-assignee-row-name">{`No ${role}`}</span>
             {selected === "" && (
               <span className="task-assignee-check" aria-hidden="true">
                 ✓
@@ -756,8 +784,8 @@ export type TasksConfig = {
     downloadAttachment?: (attachment: TaskAttachment) => Promise<void>;
   };
   features: {
-    // Attachments hit `/api/tasks/{id}/attachments`, which is task-only, so the
-    // stories board disables them (there is no story-attachment endpoint).
+    // File attachments on the create/edit form. Each board points the four
+    // attachment calls in `api` at its own endpoints (tasks, tickets, stories).
     attachments: boolean;
     // Shows a per-status count strip above the board (total + each status). On
     // for the shared workspace boards (Tickets, User Stories).
@@ -771,6 +799,9 @@ export type TasksConfig = {
     // Shows a dedicated "Type" column (Bug/Feature/… badge) in the list-view
     // table instead of rendering the badge inline after the name. Tickets only.
     typeColumn?: boolean;
+    // The board's items have a Reviewer (shown as a list column, and sent with
+    // every save). Stories and tickets; plain tasks have no reviewer.
+    reviewer?: boolean;
     // Shows the "Design" section in the editor, for attaching Figma files.
     // On for the workspace boards; personal Tasks leave it off.
     figmaLinks?: boolean;
@@ -1016,6 +1047,11 @@ export default function Tasks({
         `wayve.${config.storageKey}.cols`,
         JSON.stringify(shownCols)
       );
+      // Which columns this choice was made against (see loadShownColumns).
+      window.localStorage.setItem(
+        `wayve.${config.storageKey}.colsKnown`,
+        JSON.stringify(ALL_COLUMN_KEYS)
+      );
     } catch {
       // Storage unavailable: the choice just lasts for this visit.
     }
@@ -1048,6 +1084,12 @@ export default function Tasks({
   // `assigneeId` is set only when a real member is picked, not for a hand-typed
   // email.
   const [assigneeId, setAssigneeId] = useState<number | null>(null);
+  // The form's Reviewer, on boards that have one (stories, tickets). Same
+  // shape as the assignee: a member's address plus their id.
+  const [reviewer, setReviewer] = useState("");
+  const [reviewerId, setReviewerId] = useState<number | null>(null);
+  const [reviewerPickerOpen, setReviewerPickerOpen] = useState(false);
+  const reviewerPickerRef = useRef<HTMLDivElement | null>(null);
   const [projectId, setProjectId] = useState<number | null>(null);
   // The edit modal's Type field, only used on the Tickets board (one of
   // TYPE_OPTIONS; "" = no type). Bug-derived tickets keep their support category
@@ -1095,6 +1137,20 @@ export default function Tasks({
     return () => document.removeEventListener("mousedown", onDocPointer);
   }, [assigneePickerOpen]);
 
+  useEffect(() => {
+    if (!reviewerPickerOpen) return;
+    const onDocPointer = (event: MouseEvent) => {
+      if (
+        reviewerPickerRef.current &&
+        !reviewerPickerRef.current.contains(event.target as Node)
+      ) {
+        setReviewerPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocPointer);
+    return () => document.removeEventListener("mousedown", onDocPointer);
+  }, [reviewerPickerOpen]);
+
   const isEditing = editingId !== null;
   // The open item, for the form's Delete button (rows no longer carry one).
   const editingTask = isEditing
@@ -1116,6 +1172,8 @@ export default function Tasks({
       assignedBy,
       assignee,
       assigneeId,
+      reviewer,
+      reviewerId,
       projectId,
       badgeKind,
       pendingAttachments: pendingAttachments.length,
@@ -1126,6 +1184,10 @@ export default function Tasks({
   const assigneeUser =
     assignableUsers.find(
       (u) => u.email.toLowerCase() === assignee.trim().toLowerCase()
+    ) ?? null;
+  const reviewerUser =
+    assignableUsers.find(
+      (u) => u.email.toLowerCase() === reviewer.trim().toLowerCase()
     ) ?? null;
 
   // The org's configured statuses, in board order. Everything status-shaped on
@@ -1329,6 +1391,8 @@ export default function Tasks({
     setAssignedBy(isPersonal ? "" : (user?.email ?? ""));
     setAssignee("");
     setAssigneeId(null);
+    setReviewer("");
+    setReviewerId(null);
     setProjectId(null);
     setBadgeKind("");
     clearSuggestions();
@@ -1375,6 +1439,8 @@ export default function Tasks({
       assignedBy: task.assigned_by ?? "",
       assignee: task.assignee ?? "",
       assigneeId: task.assignee_id ?? null,
+      reviewer: task.reviewer ?? "",
+      reviewerId: task.reviewer_id ?? null,
       projectId: task.project_id ?? null,
       badgeKind: task.badge_kind ?? "",
       pendingAttachments: 0,
@@ -1388,6 +1454,8 @@ export default function Tasks({
     setAssignedBy(loaded.assignedBy);
     setAssignee(loaded.assignee);
     setAssigneeId(loaded.assigneeId);
+    setReviewer(loaded.reviewer);
+    setReviewerId(loaded.reviewerId);
     setProjectId(loaded.projectId);
     setBadgeKind(loaded.badgeKind);
     setError("");
@@ -1541,6 +1609,12 @@ export default function Tasks({
     assignee_id: task.assignee_id ?? null,
     project_id: task.project_id ?? null,
     ...(showType ? { badge_kind: task.badge_kind ?? null } : {}),
+    ...(config.features.reviewer
+      ? {
+          reviewer: task.reviewer ?? "",
+          reviewer_id: task.reviewer_id ?? null,
+        }
+      : {}),
     ...overrides,
   });
 
@@ -1619,6 +1693,24 @@ export default function Tasks({
       task,
       { badge_kind: nextKind || null },
       "Failed to update type"
+    );
+  };
+
+  // Assign from the list: `email` is a member's address, or "" to unassign.
+  const changePerson = async (
+    task: Task,
+    field: "assignee" | "reviewer",
+    email: string
+  ) => {
+    if ((task[field] ?? "") === email) return;
+    const member = assignableUsers.find((u) => u.email === email);
+    const userId = member?.user_id ?? null;
+    await patchTask(
+      task,
+      field === "assignee"
+        ? { assignee: email, assignee_id: userId }
+        : { reviewer: email, reviewer_id: userId },
+      `Failed to update ${field}`
     );
   };
 
@@ -1749,6 +1841,9 @@ export default function Tasks({
           assignee_id: assigneeId,
           project_id: projectId,
           badge_kind: showType ? badgeKind || null : undefined,
+          ...(config.features.reviewer
+            ? { reviewer: reviewer.trim(), reviewer_id: reviewerId }
+            : {}),
         });
         targetTaskId = updated.id;
         setTasks((prev) =>
@@ -1775,6 +1870,9 @@ export default function Tasks({
           assignee_id: assigneeId,
           project_id: projectId,
           badge_kind: showType ? badgeKind || null : undefined,
+          ...(config.features.reviewer
+            ? { reviewer: reviewer.trim(), reviewer_id: reviewerId }
+            : {}),
         });
         targetTaskId = created.id;
         setTasks((prev) =>
@@ -1855,6 +1953,8 @@ export default function Tasks({
       case "assignee":
       case "assigned_by":
         return showAssignee;
+      case "reviewer":
+        return showAssignee && !!config.features.reviewer;
       default:
         return true;
     }
@@ -1864,15 +1964,14 @@ export default function Tasks({
     (c) => c.locked || shownCols.includes(c.key)
   );
   const showKeyColumn = visibleCols.some((c) => c.key === "key");
-  const tableCols = [
-    ...visibleCols.map((c) => col(c.key, c.width)),
-    "88px", // actions — a fixed Edit button, nothing to reveal
-  ].join(" ");
+  // No actions column: an item opens from its name, and Delete lives in the
+  // editor it opens.
+  const tableCols = visibleCols.map((c) => col(c.key, c.width)).join(" ");
   // The narrow-pane template: only the columns that keep a track there.
-  const tableColsNarrow = [
-    ...visibleCols.filter((c) => c.narrow).map((c) => c.narrow),
-    "auto",
-  ].join(" ");
+  const tableColsNarrow = visibleCols
+    .filter((c) => c.narrow)
+    .map((c) => c.narrow)
+    .join(" ");
   const tableStyle = {
     "--task-cols": tableCols,
     "--task-cols-narrow": tableColsNarrow,
@@ -2011,6 +2110,63 @@ export default function Tasks({
       <span className="task-trow-muted">{empty}</span>
     );
 
+  // The Assignee and Reviewer cells: the current person's avatar beside a
+  // dropdown of every member who can be picked, so either changes from the
+  // list like status and priority do. Someone set by a typed address who isn't
+  // a member stays listed, so opening the menu never drops them. Without a
+  // member list (it failed to load) the cell is read-only.
+  const personPicker = (task: Task, field: "assignee" | "reviewer") => {
+    const label = field === "assignee" ? "Assignee" : "Reviewer";
+    const empty = field === "assignee" ? "Unassigned" : "No reviewer";
+    const who =
+      field === "assignee"
+        ? assigneeInfo(task)
+        : personInfo(task.reviewer, task.reviewer_id ?? null);
+    if (assignableUsers.length === 0) return personCell(who, empty);
+    const current = (task[field] ?? "").trim();
+    const isMember = assignableUsers.some(
+      (u) => u.email.toLowerCase() === current.toLowerCase()
+    );
+    return (
+      <>
+        {who && (
+          <Avatar
+            name={who.name}
+            src={
+              who.userId
+                ? `${getApiBase()}/api/users/${who.userId}/avatar`
+                : undefined
+            }
+            size={22}
+          />
+        )}
+        <select
+          className={`task-assignee-select${current ? "" : " is-unassigned"}`}
+          value={
+            isMember
+              ? (assignableUsers.find(
+                  (u) => u.email.toLowerCase() === current.toLowerCase()
+                )?.email ?? current)
+              : current
+          }
+          onChange={(event) =>
+            void changePerson(task, field, event.target.value)
+          }
+          aria-label={`${label} of ${task.name}`}
+          data-tooltip={`Change ${label.toLowerCase()}`}
+        >
+          <option value="">{empty}</option>
+          {current && !isMember && <option value={current}>{current}</option>}
+          {assignableUsers.map((u) => (
+            <option key={u.user_id} value={u.email}>
+              {u.username || u.email}
+            </option>
+          ))}
+        </select>
+      </>
+    );
+  };
+
   // Applies the active column sort to a table row list. A stable base order is
   // assumed (the caller passes the already-sorted active/completed lists), so an
   // equal comparison preserves it.
@@ -2027,6 +2183,10 @@ export default function Tasks({
           return t.priority;
         case "assignee":
           return (assigneeInfo(t)?.name ?? "").toLowerCase();
+        case "reviewer":
+          return (
+            personInfo(t.reviewer, t.reviewer_id ?? null)?.name ?? ""
+          ).toLowerCase();
         case "status":
           return lookupStatus(t.status).name.toLowerCase();
       }
@@ -2089,6 +2249,8 @@ export default function Tasks({
           key,
           sortHeader("assignee", "Assignee", "task-th--assignee")
         );
+      case "reviewer":
+        return headCell(key, sortHeader("reviewer", "Reviewer"));
       case "priority":
         return headCell(
           key,
@@ -2111,7 +2273,6 @@ export default function Tasks({
   const tableHead = (
     <div className="task-thead" role="row">
       {visibleCols.map((c) => headFor(c.key))}
-      <div className="task-th task-th--actions" />
     </div>
   );
 
@@ -2246,7 +2407,13 @@ export default function Tasks({
       case "assignee":
         return (
           <div key={key} className={cls}>
-            {personCell(assigneeInfo(task), "Unassigned")}
+            {personPicker(task, "assignee")}
+          </div>
+        );
+      case "reviewer":
+        return (
+          <div key={key} className={`${cls} task-tcell--person`}>
+            {personPicker(task, "reviewer")}
           </div>
         );
       case "assigned_by":
@@ -2310,17 +2477,6 @@ export default function Tasks({
         role="row"
       >
         {visibleCols.map((c) => cellFor(c.key, task, st))}
-
-        <div className="task-tcell task-tcell--actions">
-          <button
-            type="button"
-            className="task-edit-btn"
-            onClick={() => openEditor(task)}
-            aria-label={`Edit ${task.name}`}
-          >
-            Edit
-          </button>
-        </div>
       </div>
     );
   };
@@ -2995,6 +3151,55 @@ export default function Tasks({
                   )}
                 </div>
               )}
+
+              {/* Reviewer, on the boards that have one. A team feature like
+                    assignment, so personal accounts don't see it. */}
+              {!isPersonal && config.features.reviewer && (
+                <div className="task-pill-wrap" ref={reviewerPickerRef}>
+                  <button
+                    type="button"
+                    className="task-pill task-pill--button"
+                    onClick={() => setReviewerPickerOpen((open) => !open)}
+                    aria-expanded={reviewerPickerOpen}
+                    aria-haspopup="dialog"
+                    data-tooltip="Reviewer"
+                  >
+                    {reviewerUser ? (
+                      <Avatar
+                        name={reviewerUser.username || reviewerUser.email}
+                        src={`${getApiBase()}/api/users/${reviewerUser.user_id}/avatar`}
+                        size={16}
+                      />
+                    ) : (
+                      <svg
+                        className="task-pill-icon task-pill-icon--stroke"
+                        viewBox="0 0 16 16"
+                        aria-hidden="true"
+                      >
+                        <path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z" />
+                        <circle cx="8" cy="8" r="2" />
+                      </svg>
+                    )}
+                    <span className="task-pill-text">
+                      {reviewerUser?.username || reviewer.trim() || "Reviewer"}
+                    </span>
+                  </button>
+
+                  {reviewerPickerOpen && (
+                    <AssigneeMenu
+                      role="reviewer"
+                      users={assignableUsers}
+                      selectedEmail={reviewer}
+                      onClose={() => setReviewerPickerOpen(false)}
+                      onSelect={(picked) => {
+                        setReviewer(picked ? picked.email : "");
+                        setReviewerId(picked ? picked.user_id : null);
+                        setReviewerPickerOpen(false);
+                      }}
+                    />
+                  )}
+                </div>
+              )}
             </div>
 
             {config.features.attachments && isEditing && attachmentsLoading && (
@@ -3120,7 +3325,10 @@ export default function Tasks({
                     <span>Create more</span>
                   </label>
                 )}
-                {isEditing && editingTask && (
+                {/* Boards with a full page (stories, tickets) delete from
+                    there; this form is the only place to delete a plain
+                    task. */}
+                {isEditing && editingTask && !config.detailPath && (
                   <button
                     type="button"
                     className="task-delete-btn"
@@ -3284,16 +3492,6 @@ export default function Tasks({
                                 Created {formatCreatedAt(task.created_at)}
                               </span>
                             )}
-                            <div className="task-board-card-actions">
-                              <button
-                                type="button"
-                                className="task-edit-btn"
-                                onClick={() => openEditor(task)}
-                                aria-label={`Edit ${task.name}`}
-                              >
-                                Edit
-                              </button>
-                            </div>
                           </article>
                         ))
                       )}
@@ -3371,14 +3569,6 @@ export default function Tasks({
                         )}
                         {(!inSplitPane || expanded) && (
                           <div className="task-card-actions">
-                            <button
-                              type="button"
-                              className="task-edit-btn"
-                              onClick={() => openEditor(task)}
-                              aria-label={`Edit ${task.name}`}
-                            >
-                              Edit
-                            </button>
                             <span className="task-status-control">
                               <TaskStatusIcon
                                 category={lookupStatus(task.status).category}
@@ -3473,16 +3663,6 @@ export default function Tasks({
                               Created {formatCreatedAt(task.created_at)}
                             </span>
                           )}
-                        </div>
-                        <div className="task-card-actions">
-                          <button
-                            type="button"
-                            className="task-edit-btn"
-                            onClick={() => openEditor(task)}
-                            aria-label={`Edit ${task.name}`}
-                          >
-                            Edit
-                          </button>
                         </div>
                       </article>
                     ))}

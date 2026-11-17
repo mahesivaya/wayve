@@ -1,5 +1,5 @@
-// Rows don't carry a Delete button: deleting happens from the item's edit form
-// (Tasks) or its detail page (stories, tickets).
+// Rows carry no Edit or Delete button: an item opens from its name, and
+// deleting happens from the editor that opens.
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -66,9 +66,11 @@ describe("row delete", () => {
     await screen.findByText("Fix the login redirect");
     const table = document.querySelector(".task-table") as HTMLElement;
     expect(within(table).queryByRole("button", { name: /delete/i })).toBeNull();
+    // No Edit button either: the item opens from its name.
+    expect(within(table).queryByRole("button", { name: /^edit/i })).toBeNull();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Edit Fix the login redirect" })
+      screen.getByRole("button", { name: "Fix the login redirect" })
     );
     vi.spyOn(window, "confirm").mockReturnValue(true);
     fireEvent.click(await screen.findByRole("button", { name: "Delete" }));

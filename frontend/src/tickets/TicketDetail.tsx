@@ -32,6 +32,7 @@ export default function TicketDetail() {
   const [priority, setPriority] = useState<TaskPriority>(3);
   const [status, setStatus] = useState("");
   const [assignee, setAssignee] = useState("");
+  const [reviewer, setReviewer] = useState("");
 
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
@@ -54,6 +55,7 @@ export default function TicketDetail() {
       setPriority((found.priority as TaskPriority) ?? 3);
       setStatus(found.status);
       setAssignee(found.assignee ?? "");
+      setReviewer(found.reviewer ?? "");
     } catch (err) {
       setLoadError(
         err instanceof Error ? err.message : "Failed to load ticket."
@@ -85,6 +87,12 @@ export default function TicketDetail() {
         assignee,
         assignee_id: ticket.assignee_id ?? null,
         project_id: ticket.project_id ?? null,
+        reviewer,
+        // A retyped address no longer points at the member it was linked to.
+        reviewer_id:
+          reviewer === (ticket.reviewer ?? "")
+            ? (ticket.reviewer_id ?? null)
+            : null,
       });
       setTicket(updated);
       setStatusMsg("Saved.");
@@ -106,7 +114,8 @@ export default function TicketDetail() {
       description !== ticket.description ||
       priority !== ((ticket.priority as TaskPriority) ?? 3) ||
       status !== ticket.status ||
-      assignee !== (ticket.assignee ?? ""));
+      assignee !== (ticket.assignee ?? "") ||
+      reviewer !== (ticket.reviewer ?? ""));
 
   useTabTitle(
     ticket
@@ -214,6 +223,14 @@ export default function TicketDetail() {
                   value={assignee}
                   onChange={(e) => setAssignee(e.target.value)}
                   placeholder="Unassigned"
+                />
+              </label>
+              <label>
+                <span>Reviewer</span>
+                <input
+                  value={reviewer}
+                  onChange={(e) => setReviewer(e.target.value)}
+                  placeholder="No reviewer"
                 />
               </label>
             </div>

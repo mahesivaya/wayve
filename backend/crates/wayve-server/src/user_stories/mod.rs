@@ -1,9 +1,14 @@
+pub mod attachments;
 pub mod handler;
 
 use actix_web::web;
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
-    cfg.service(handler::list_user_stories)
+    cfg.service(attachments::upload_attachments)
+        .service(attachments::list_attachments)
+        .service(attachments::download_attachment)
+        .service(attachments::delete_attachment)
+        .service(handler::list_user_stories)
         .service(handler::user_story_status_history)
         .service(handler::user_story_status_timeline)
         .service(handler::create_user_story)
