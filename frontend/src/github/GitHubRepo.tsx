@@ -918,7 +918,7 @@ export function GitHubRepoViewer({
     restoredView?.collapsedFiles
   );
   // Stable reference used by the PR loader's dependency array.
-  const { collapseFiles } = diffs;
+  const { collapseFiles, prefetch: prefetchCommits } = diffs;
   const [commitCommentsBySha, setCommitCommentsBySha] = useState<
     Record<string, IssueComment[]>
   >({});
@@ -991,6 +991,14 @@ export function GitHubRepoViewer({
     }
     return "description";
   });
+
+  // Each listed commit's +/- line counts, loaded with the page rather than on
+  // opening the commit.
+  useEffect(() => {
+    if (activeSection === "commits" && commits.length > 0) {
+      prefetchCommits(commits.map((commit) => commit.sha));
+    }
+  }, [activeSection, commits, prefetchCommits]);
 
   useEffect(() => {
     try {

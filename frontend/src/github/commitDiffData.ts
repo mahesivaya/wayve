@@ -105,11 +105,15 @@ export type CommitDiffs = {
   collapsedFiles: Set<string>;
   toggle: (sha: string) => void;
   reload: (sha: string) => void;
+  prefetch: (shas: string[]) => void;
   toggleFile: (key: string) => void;
   collapseFiles: (keys: string[]) => void;
   loadFullDiff: (sha: string) => void;
   loadFileLines: (ref: string, path: string) => Promise<string[]>;
 };
+
+// Commit details fetched at once when prefetching a list's line counts.
+const PREFETCH_CONCURRENCY = 4;
 
 // `initialExpanded` reopens commits from an earlier visit, whose diffs the
 // self-heal effect below fetches, and `initialCollapsed` folds their files again.
@@ -219,6 +223,39 @@ export function useCommitDiffs(
     [loadCommitDetail]
   );
 
+  // Loads the detail of commits nobody has opened yet, so a list can show each
+  // one's +/- line counts without a click. A few at a time, quietly: no
+  // spinner, and a failure just leaves that row without counts (opening it
+  // still loads and reports as usual). The cache is the same one opening reads.
+  const prefetched = useRef(new Set<string>());
+  const prefetch = useCallback(
+    (shas: string[]) => {
+      const queue = shas.filter((sha) => !prefetched.current.has(sha));
+      for (const sha of queue) prefetched.current.add(sha);
+      let next = 0;
+      const worker = async () => {
+        while (next < queue.length) {
+          const sha = queue[next++];
+          try {
+            const data = await githubJson<CommitDetail>(
+              `${API_BASE}/commits/${encodeURIComponent(sha)}`
+            );
+            setDetailBySha((current) =>
+              current[sha] ? current : { ...current, [sha]: data }
+            );
+          } catch {
+            // Let a later list load try this one again.
+            prefetched.current.delete(sha);
+          }
+        }
+      };
+      for (let i = 0; i < Math.min(PREFETCH_CONCURRENCY, queue.length); i++) {
+        void worker();
+      }
+    },
+    [API_BASE]
+  );
+
   // Self-heal: a commit that is expanded with no detail, no error, and no fetch
   // in flight got there without the click path (the commit list reloaded and
   // cleared the cache, or state reset), so fetch its diff automatically.
@@ -307,6 +344,7 @@ export function useCommitDiffs(
     collapsedFiles,
     toggle,
     reload,
+    prefetch,
     toggleFile,
     collapseFiles,
     loadFullDiff,
