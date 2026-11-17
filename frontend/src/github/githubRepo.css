@@ -109,6 +109,33 @@
   color: var(--syntax-tag);
 }
 
+/* Classes the wider language set adds (Ruby, PHP, nginx, ini, diff, ...),
+   mapped onto the same palette. */
+.hljs-title,
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+  color: var(--syntax-function);
+}
+
+.hljs-variable,
+.hljs-template-variable,
+.hljs-link {
+  color: var(--syntax-tag);
+}
+
+.hljs-doctag,
+.hljs-deletion {
+  color: var(--syntax-keyword);
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 700;
+}
+
 .github-page *,
 .github-page *::before,
 .github-page *::after {

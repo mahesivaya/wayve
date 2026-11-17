@@ -17,7 +17,20 @@ describe("languageFor", () => {
     expect(languageFor("infra/Dockerfile.dev")).toBe("dockerfile");
   });
 
-  it("leaves unknown files plain", () => {
+  it("knows the config files and languages repos are full of", () => {
+    expect(languageFor("infra/nginx/nginx.conf")).toBe("nginx");
+    expect(languageFor("infra/justfile")).toBe("makefile");
+    expect(languageFor(".env.example")).toBe("properties");
+    expect(languageFor(".gitignore")).toBe("bash");
+    expect(languageFor("Cargo.lock")).toBe("ini");
+    expect(languageFor("ios/App.swift")).toBe("swift");
+    expect(languageFor("app/models/user.rb")).toBe("ruby");
+    expect(languageFor("index.php")).toBe("php");
+    expect(languageFor("Main.kt")).toBe("kotlin");
+    expect(languageFor("Program.cs")).toBe("csharp");
+  });
+
+  it("has no grammar for unknown names", () => {
     expect(languageFor("notes.xyz")).toBeNull();
     expect(languageFor("LICENSE")).toBeNull();
   });
@@ -38,9 +51,29 @@ describe("tokenizeLines", () => {
     expect(tokens?.[2][0].className).toContain("hljs-keyword");
   });
 
-  it("stays plain without a grammar or for a huge file", () => {
-    expect(tokenizeLines(["a"], null)).toBeNull();
+  it("stays plain for prose, plain text or a huge file", () => {
+    expect(tokenizeLines(["Copyright the authors."], null)).toBeNull();
+    expect(tokenizeLines(["const a = 1;"], "plaintext")?.flat()).toEqual([
+      { text: "const a = 1;", className: undefined },
+    ]);
     expect(tokenizeLines(["a".repeat(200_001)], "rust")).toBeNull();
+  });
+
+  it("guesses the language of a file it doesn't recognise", () => {
+    const tokens = tokenizeLines(
+      [
+        "#!/usr/bin/env python3",
+        "import os",
+        "",
+        "def main():",
+        '    """Entry point."""',
+        "    return os.getcwd()",
+      ],
+      null
+    );
+    expect(tokens?.flat().some((t) => t.className?.includes("hljs"))).toBe(
+      true
+    );
   });
 });
 

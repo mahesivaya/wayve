@@ -1,47 +1,45 @@
-import { createLowlight } from "lowlight";
-import bash from "highlight.js/lib/languages/bash";
-import c from "highlight.js/lib/languages/c";
-import cpp from "highlight.js/lib/languages/cpp";
-import css from "highlight.js/lib/languages/css";
+import { common, createLowlight } from "lowlight";
 import dockerfile from "highlight.js/lib/languages/dockerfile";
-import go from "highlight.js/lib/languages/go";
-import ini from "highlight.js/lib/languages/ini";
-import java from "highlight.js/lib/languages/java";
-import javascript from "highlight.js/lib/languages/javascript";
-import json from "highlight.js/lib/languages/json";
-import makefile from "highlight.js/lib/languages/makefile";
-import markdown from "highlight.js/lib/languages/markdown";
-import python from "highlight.js/lib/languages/python";
-import rust from "highlight.js/lib/languages/rust";
-import scss from "highlight.js/lib/languages/scss";
-import sql from "highlight.js/lib/languages/sql";
-import typescript from "highlight.js/lib/languages/typescript";
-import xml from "highlight.js/lib/languages/xml";
-import yaml from "highlight.js/lib/languages/yaml";
+import nginx from "highlight.js/lib/languages/nginx";
+import properties from "highlight.js/lib/languages/properties";
+import protobuf from "highlight.js/lib/languages/protobuf";
 
+// lowlight's common set (about 37 languages: the web, systems and scripting
+// staples, Swift, Kotlin, Ruby, PHP, C#, ...) plus a few config formats repos
+// are full of.
 const lowlight = createLowlight({
-  bash,
-  c,
-  cpp,
-  css,
+  ...common,
   dockerfile,
-  go,
-  ini,
-  java,
-  javascript,
-  json,
-  makefile,
-  markdown,
-  python,
-  rust,
-  scss,
-  sql,
-  typescript,
-  xml,
-  yaml,
+  nginx,
+  properties,
+  protobuf,
 });
 
 const LANGUAGE_BY_EXTENSION: Record<string, string> = {
+  cfg: "ini",
+  conf: "ini",
+  cs: "csharp",
+  diff: "diff",
+  env: "properties",
+  gql: "graphql",
+  graphql: "graphql",
+  kt: "kotlin",
+  kts: "kotlin",
+  less: "less",
+  lock: "ini",
+  lua: "lua",
+  m: "objectivec",
+  patch: "diff",
+  php: "php",
+  pl: "perl",
+  properties: "properties",
+  proto: "protobuf",
+  r: "r",
+  rb: "ruby",
+  svelte: "xml",
+  swift: "swift",
+  txt: "plaintext",
+  vue: "xml",
   bash: "bash",
   c: "c",
   cc: "cpp",
@@ -77,19 +75,26 @@ const LANGUAGE_BY_EXTENSION: Record<string, string> = {
 };
 
 const LANGUAGE_BY_NAME: Record<string, string> = {
+  ".dockerignore": "bash",
+  ".gitattributes": "bash",
+  ".gitignore": "bash",
   dockerfile: "dockerfile",
+  gemfile: "ruby",
+  justfile: "makefile",
   makefile: "makefile",
+  rakefile: "ruby",
 };
 
-// Null for anything without a grammar here, which then shows as plain text.
+// Null for a file type with no grammar here; tokenizeLines then guesses.
 export function languageFor(path: string): string | null {
   const name = path.slice(path.lastIndexOf("/") + 1).toLowerCase();
   const dot = name.lastIndexOf(".");
-  return (
-    LANGUAGE_BY_NAME[name] ??
-    LANGUAGE_BY_EXTENSION[name.slice(dot + 1)] ??
-    (name.startsWith("dockerfile.") ? "dockerfile" : null)
-  );
+  if (LANGUAGE_BY_NAME[name]) return LANGUAGE_BY_NAME[name];
+  // .env, .env.local, .env.example: KEY=value lines.
+  if (name === ".env" || name.startsWith(".env.")) return "properties";
+  if (name.startsWith("dockerfile.")) return "dockerfile";
+  if (name.includes("nginx") && name.endsWith(".conf")) return "nginx";
+  return dot > 0 ? (LANGUAGE_BY_EXTENSION[name.slice(dot + 1)] ?? null) : null;
 }
 
 export type CodeToken = { text: string; className?: string };
@@ -103,17 +108,35 @@ type HastNode = {
 
 // Past this a file stays plain, so a generated bundle can't freeze the tab.
 const MAX_HIGHLIGHT_CHARS = 200_000;
+// Guessing tries every grammar, so it's kept to smaller files, and a guess is
+// used only when the code clearly reads as that language.
+const MAX_AUTO_CHARS = 50_000;
+const MIN_AUTO_RELEVANCE = 8;
+
+type HighlightTree = { children: unknown[]; data?: { relevance?: number } };
+
+function highlight(
+  code: string,
+  language: string | null
+): HighlightTree | null {
+  if (language) return lowlight.highlight(language, code) as HighlightTree;
+  if (code.length > MAX_AUTO_CHARS) return null;
+  const guess = lowlight.highlightAuto(code) as HighlightTree;
+  return (guess.data?.relevance ?? 0) >= MIN_AUTO_RELEVANCE ? guess : null;
+}
 
 // Colours a run of consecutive lines, one token list per line. They go through
 // together so a block comment or multi-line string keeps its colour on every
-// line. Null when there's no grammar or the code is too large.
+// line. With no known language the grammar is guessed. Null when nothing fits
+// or the code is too large.
 export function tokenizeLines(
   lines: string[],
   language: string | null
 ): CodeToken[][] | null {
-  if (!language) return null;
   const code = lines.join("\n");
   if (code.length > MAX_HIGHLIGHT_CHARS) return null;
+  const tree = highlight(code, language);
+  if (!tree) return null;
 
   const out: CodeToken[][] = [[]];
   const walk = (nodes: HastNode[], inherited?: string) => {
@@ -131,6 +154,6 @@ export function tokenizeLines(
       }
     }
   };
-  walk(lowlight.highlight(language, code).children as HastNode[]);
+  walk(tree.children as HastNode[]);
   return out;
 }
