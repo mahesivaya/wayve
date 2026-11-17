@@ -7,6 +7,7 @@ import { hasPermission } from "../auth/permissions";
 import { getAuthToken } from "../auth/token";
 import RepoAccessPanel from "./RepoAccessPanel";
 import ReadmeView from "./ReadmeView";
+import { FileTypeIcon } from "./FileTypeIcon";
 import ResizeHandle from "../components/ResizeHandle";
 import { useResizableWidth } from "../components/useResizableWidth";
 import PrMergeBox from "./PrMergeBox";
@@ -580,36 +581,6 @@ function SearchIcon() {
       <path
         fill="currentColor"
         d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z"
-      />
-    </svg>
-  );
-}
-
-function FileIcon() {
-  return (
-    <svg
-      className="github-icon github-icon-file"
-      viewBox="0 0 16 16"
-      width="16"
-      height="16"
-      aria-hidden="true"
-    >
-      <path
-        fill="currentColor"
-        d="M3.75 1.5h6.69l3.06 3.06v9.69a.75.75 0 0 1-.75.75H3.75a.75.75 0 0 1-.75-.75V2.25a.75.75 0 0 1 .75-.75Z"
-        opacity="0.18"
-      />
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1"
-        d="M3.75 1.5h6.69l3.06 3.06v9.69a.75.75 0 0 1-.75.75H3.75a.75.75 0 0 1-.75-.75V2.25a.75.75 0 0 1 .75-.75Z"
-      />
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1"
-        d="M10.5 1.75v3h3"
       />
     </svg>
   );
@@ -2191,7 +2162,12 @@ export function GitHubRepoViewer({
                           }}
                         >
                           <span className="github-file-kind" aria-hidden="true">
-                            {isDirectory ? <FolderIcon /> : <FileIcon />}
+                            {isDirectory ? (
+                              <FolderIcon />
+                            ) : (
+                              // The same per-type sign as the commit file list.
+                              <FileTypeIcon path={item.path} />
+                            )}
                           </span>
                           <span className="github-file-name">{item.name}</span>
                           <span className="github-file-size">

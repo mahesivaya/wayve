@@ -889,14 +889,10 @@
   justify-content: center;
 }
 
-/* Folder icon — warm accent. Files use the muted slate so the
-   directory column reads as a clear visual anchor when scanning. */
+/* Folder icon — warm accent. Files carry their type's colour (FileTypeIcon),
+   so folders still read as a clear anchor when scanning. */
 .github-icon-folder {
   color: var(--color-warning-deep, #c2880c);
-}
-
-.github-icon-file {
-  color: var(--color-text-muted);
 }
 
 .github-file-name {
@@ -1672,6 +1668,11 @@
   display: inline-flex;
   flex: 0 0 auto;
   margin-right: -4px;
+}
+
+/* In the file browser the sign sits in its own fixed-width slot. */
+.github-file-kind .github-file-type {
+  margin-right: 0;
 }
 
 .github-commit-file-dir {
