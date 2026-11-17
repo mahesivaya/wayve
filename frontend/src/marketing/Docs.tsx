@@ -3,59 +3,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { DocFull, DocSummary, getDoc, listDocs } from "../api/docs";
 import DocsShell from "../docs/DocsShell";
 import { BRAND_NAME } from "../config/brand";
+import { loadMarked } from "../utils/markdown";
 import "./docs.css";
-
-// marked v12 — self-hosted in frontend/public/marked.min.js to avoid a CDN
-// allowance in the production CSP. Loaded once on first mount.
-const MARKED_SCRIPT = "/marked.min.js";
-
-type MarkedFn = (md: string) => string;
-
-interface MarkedGlobal {
-  parse: MarkedFn;
-}
-
-function getMarkedFromWindow(): MarkedGlobal | undefined {
-  return (window as unknown as { marked?: MarkedGlobal }).marked;
-}
-
-async function loadMarked(): Promise<MarkedFn> {
-  const already = getMarkedFromWindow();
-  if (already) return (md: string) => already.parse(md);
-  await new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(
-      `script[src="${MARKED_SCRIPT}"]`
-    );
-    if (existing) {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener(
-        "error",
-        () => reject(new Error("marked load failed")),
-        {
-          once: true,
-        }
-      );
-      return;
-    }
-    const tag = document.createElement("script");
-    tag.src = MARKED_SCRIPT;
-    tag.async = true;
-    tag.addEventListener("load", () => resolve(), { once: true });
-    tag.addEventListener(
-      "error",
-      () => reject(new Error("marked load failed")),
-      {
-        once: true,
-      }
-    );
-    document.body.appendChild(tag);
-  });
-  const loaded = getMarkedFromWindow();
-  if (!loaded) {
-    throw new Error("marked bundle loaded but global missing");
-  }
-  return (md: string) => loaded.parse(md);
-}
 
 // Defense in depth only: the content is trusted (baked into the backend binary)
 // and marked is well-behaved, but strip anything that could execute script.

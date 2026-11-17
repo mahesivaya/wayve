@@ -198,8 +198,7 @@
 .github-toolbar label,
 .github-panel-head span,
 .github-file-size,
-.github-run small,
-.github-workflow small {
+.github-run small {
   display: block;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
@@ -221,7 +220,7 @@
 /* =============================
    🧭 SECTION LAYOUT — left rail + right content
    The GitHub page is now divided into a permanent left sidebar that
-   switches between Files / Workflows / Commits / Actions, and a right
+   switches between Files / Commits / Pull Requests / Actions, and a right
    content area that renders only the active section. Mirrors the
    main-app shell so the page feels at home in the same chrome.
 ============================== */
@@ -243,7 +242,8 @@
    border/background. */
 .github-sidebar {
   flex: 0 0 auto;
-  width: 200px;
+  /* Set from the drag handle beside it (useResizableWidth). */
+  width: var(--github-sidebar-w, 260px);
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -275,10 +275,15 @@
   color: var(--color-text-muted);
 }
 
-/* Just the two fields, so they take little room above the sections. */
-.github-branch-card,
-.github-repo-switch {
+/* Repository and branch pickers, one card above the sections. The repository
+   switcher sits inside it without padding of its own. */
+.github-branch-card {
   padding: 6px;
+  gap: 12px;
+}
+
+.github-branch-card > .github-repo-switch {
+  padding: 0;
 }
 
 /* Custom branch dropdown trigger (replaces the native select). */
@@ -364,17 +369,24 @@
   background: var(--color-surface-hover);
 }
 
+/* The section list: rows close together. */
+.github-section-nav {
+  gap: 2px;
+}
+
 .github-sidebar-link {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  /* Compact rows, spaced like the Emails folder list. */
+  padding: 5px 10px;
+  line-height: 1.4;
   border: none;
   border-radius: 6px;
   background: transparent;
   color: var(--color-text-primary);
+  font: inherit;
   font-size: var(--text-md);
-  font-weight: 600;
   text-align: left;
   cursor: pointer;
   transition:
@@ -382,19 +394,22 @@
     color 0.15s;
 }
 
+/* Matches the Emails folder list: a faint hover, and the open section tinted
+   with the accent and set in bold. */
 .github-sidebar-link:hover {
-  background: var(--color-surface-hover);
+  background: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
 }
 
 .github-sidebar-link.active {
-  background: var(--color-primary-action);
-  color: var(--color-surface);
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  font-weight: 700;
 }
 
 .github-sidebar-icon {
   width: 22px;
   display: inline-flex;
   justify-content: center;
+  align-items: center;
   font-size: var(--text-lg);
   line-height: 1;
 }
@@ -411,15 +426,15 @@
   font-weight: 700;
   color: var(--color-text-muted);
   background: var(--color-surface-hover);
-  padding: 2px 7px;
+  padding: 1px 7px;
   border-radius: 999px;
+  line-height: 1.5;
   min-width: 22px;
   text-align: center;
 }
 
 .github-sidebar-link.active .github-sidebar-count {
-  color: var(--color-primary-action);
-  background: var(--color-surface);
+  color: var(--color-text-primary);
 }
 
 .github-content {
@@ -439,7 +454,7 @@
   min-height: 0;
 }
 
-/* Workflows / Commits / Actions each render one top-level panel as the
+/* Commits / Pull Requests / Actions each render one top-level panel as the
    content child — fill the remaining height and scroll inside the panel so
    the whole view fits within the page (no outer scroll). */
 .github-content > .github-panel {
@@ -596,6 +611,10 @@
     width: 100%;
     position: static;
   }
+  /* Stacked above the content, the menu has no width to drag. */
+  .github-sidebar-resize {
+    display: none;
+  }
   /* Repository, branch and the tabs each get a row. Prefixed to beat these
      fields' own rules, further down the file. */
   .github-sidebar .github-repo-switch {
@@ -607,11 +626,6 @@
     flex: 1 1 100px;
     min-width: 0;
   }
-  .github-sidebar .github-repo-switch-add {
-    flex: 0 0 auto;
-    width: auto;
-    padding: 6px 10px;
-  }
   .github-sidebar .github-repo-switch-conn {
     flex: 1 0 100%;
   }
@@ -620,6 +634,7 @@
     flex-direction: row;
     flex-wrap: nowrap;
     align-items: center;
+    gap: 4px;
     padding: 4px 8px 0;
   }
   .github-section-nav .github-sidebar-link {
@@ -1033,6 +1048,144 @@
   tab-size: 2;
 }
 
+/* The formatted README. Fonts, sizes and colors all come from the theme, so it
+   reads like the app's other documents and follows the appearance settings
+   (font, text size, light / dark). */
+.github-readme-rendered {
+  padding: 16px 20px 24px;
+  color: var(--color-text-primary);
+  font-family: var(--sans);
+  font-size: var(--text-lg);
+  line-height: 1.6;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.github-readme-rendered > :first-child {
+  margin-top: 0;
+}
+
+.github-readme-rendered h1,
+.github-readme-rendered h2,
+.github-readme-rendered h3,
+.github-readme-rendered h4,
+.github-readme-rendered h5,
+.github-readme-rendered h6 {
+  margin: 1.4em 0 0.5em;
+  font-family: var(--heading, var(--sans));
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--color-text-primary);
+}
+
+.github-readme-rendered h1 {
+  font-size: calc(24px * var(--text-scale, 1));
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.github-readme-rendered h2 {
+  font-size: calc(20px * var(--text-scale, 1));
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.github-readme-rendered h3 {
+  font-size: var(--text-3xl);
+}
+
+.github-readme-rendered h4,
+.github-readme-rendered h5,
+.github-readme-rendered h6 {
+  font-size: var(--text-2xl);
+}
+
+.github-readme-rendered p,
+.github-readme-rendered ul,
+.github-readme-rendered ol,
+.github-readme-rendered blockquote,
+.github-readme-rendered pre,
+.github-readme-rendered table {
+  margin: 0 0 1em;
+}
+
+.github-readme-rendered ul,
+.github-readme-rendered ol {
+  padding-left: 1.6em;
+}
+
+.github-readme-rendered li + li {
+  margin-top: 0.25em;
+}
+
+.github-readme-rendered a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.github-readme-rendered a:hover {
+  text-decoration: underline;
+}
+
+.github-readme-rendered code {
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  background: var(--color-surface-hover);
+  font-family: var(--mono);
+  font-size: 0.9em;
+}
+
+.github-readme-rendered pre {
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface-tint);
+  overflow-x: auto;
+  line-height: 1.5;
+}
+
+.github-readme-rendered pre code {
+  padding: 0;
+  background: none;
+  font-size: var(--text-md);
+  white-space: pre;
+}
+
+.github-readme-rendered blockquote {
+  padding: 0 1em;
+  border-left: 3px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.github-readme-rendered table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.github-readme-rendered th,
+.github-readme-rendered td {
+  padding: 6px 12px;
+  border: 1px solid var(--color-border);
+}
+
+.github-readme-rendered th {
+  background: var(--color-surface-tint);
+  font-weight: 600;
+}
+
+.github-readme-rendered hr {
+  margin: 1.5em 0;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.github-readme-rendered img {
+  max-width: 100%;
+  height: auto;
+}
+
 /* More specific than `.github-panel-head span` (which forces display:block)
    so the chip stays inline alongside the repo name. */
 .github-panel-head .github-visibility-chip {
@@ -1055,7 +1208,6 @@
   margin-top: 14px;
 }
 
-.github-workflow,
 .github-run,
 .github-commit {
   width: 100%;
@@ -1076,7 +1228,6 @@
   font-size: var(--text-sm);
 }
 
-.github-workflow:hover,
 .github-run:hover,
 .github-commit:hover {
   background: var(--color-surface-hover);
@@ -2512,9 +2663,9 @@
 }
 
 /* ============================================================
- * Stark, edge-tight layout
+ * Edge-tight layout
  * ------------------------------------------------------------
- * Minimal padding around the page and square ("stark") edges on
+ * Minimal padding around the page and softly rounded edges on
  * every block. Kept as one trailing override block so the spacing
  * / corner styling is easy to tune or revert in one place.
  * ============================================================ */
@@ -2529,20 +2680,24 @@
   gap: 4px;
 }
 
+/* Blocks get a gentle curve; the controls inside them a slightly tighter one. */
 .github-browser,
 .github-preview,
 .github-panel,
 .github-sidebar-card,
-.github-branch-trigger,
-.github-sidebar-link,
 .github-banner,
 .github-stats,
 .github-commit-file,
-.github-commit-fulldiff-btn,
 .github-flow-inline,
-.github-flow-job,
+.github-flow-job {
+  border-radius: 8px;
+}
+
+.github-branch-trigger,
+.github-sidebar-link,
+.github-commit-fulldiff-btn,
 .github-actions-load-more button {
-  border-radius: 0;
+  border-radius: 6px;
 }
 
 /* Empty / loading states for the per-project viewer (no repo linked yet). */
@@ -2642,19 +2797,12 @@
   }
 }
 
-/* Personal repo selector: a card at the top of the viewer's left rail (above
-   the Branch block) — a dropdown of the user's repos + an Add button below it. */
+/* Repo selector: the top of the viewer's repository-and-branch card — a
+   dropdown of the user's repos. */
 .github-repo-switch {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.github-repo-switch-add {
-  align-self: stretch;
-  width: 100%;
-  text-align: center;
-  padding: 7px 16px;
 }
 
 /* GitHub account controls inside the repo switcher (import more / disconnect). */
@@ -2666,33 +2814,6 @@
   padding-top: 8px;
   border-top: 1px solid var(--color-border);
   font-size: var(--text-xs);
-}
-
-/* Inline preview of an opened workflow .yml inside the Workflows panel (which,
-   unlike Files, has no side-by-side split). */
-.github-workflow.active {
-  border-color: var(--color-primary-border);
-  background: var(--color-primary-soft);
-}
-
-.github-workflow-preview {
-  margin-top: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface);
-  overflow: hidden;
-}
-
-.github-workflow-preview pre {
-  margin: 0;
-  padding: 12px 14px;
-  overflow: auto;
-  max-height: 60vh;
-  white-space: pre;
-  font-family: var(--font-mono, ui-monospace, Menlo, Consolas, monospace);
-  font-size: var(--text-md);
-  line-height: 1.5;
-  color: var(--color-text-primary);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -2750,7 +2871,7 @@
   color: var(--color-text-muted);
 }
 .github-pr-byline-ref {
-  font-family: var(--font-mono, ui-monospace, Menlo, Consolas, monospace);
+  font-family: var(--mono);
   font-size: 0.92em;
   color: var(--color-text-secondary);
   text-decoration: none;
@@ -2765,7 +2886,7 @@
   gap: 6px;
 }
 .github-pr-branches code {
-  font-family: var(--font-mono, ui-monospace, Menlo, Consolas, monospace);
+  font-family: var(--mono);
   font-size: 0.92em;
   background: var(--color-surface-tint, var(--color-surface-hover));
   border-radius: 5px;
@@ -2841,7 +2962,7 @@
   text-align: left;
 }
 .github-pr-code {
-  font-family: var(--font-mono, ui-monospace, Menlo, Consolas, monospace);
+  font-family: var(--mono);
   font-size: 0.88em;
   padding: 1px 5px;
   border-radius: 5px;

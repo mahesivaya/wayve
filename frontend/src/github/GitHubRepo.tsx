@@ -1,11 +1,14 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { fmtDateTime } from "../utils/datetime";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import { getAuthToken } from "../auth/token";
 import RepoAccessPanel from "./RepoAccessPanel";
+import ReadmeView from "./ReadmeView";
+import ResizeHandle from "../components/ResizeHandle";
+import { useResizableWidth } from "../components/useResizableWidth";
 import PrMergeBox from "./PrMergeBox";
 import PrDescription from "./PrDescription";
 import { useMergeabilityRecheck } from "./useMergeabilityRecheck";
@@ -41,7 +44,10 @@ import {
   CopyIcon,
   EditCommentIcon,
   GitBranchIcon,
+  PullRequestIcon,
   RepoIcon,
+  SettingsIcon,
+  WorkflowRunsIcon,
 } from "../icons";
 import { useDiffPrefs } from "./diffPrefs";
 import {
@@ -830,6 +836,14 @@ export function GitHubRepoViewer({
   const canManageAccess =
     user?.scope !== "personal" &&
     (isOwner || hasPermission(user, "members:manage"));
+  // The left menu's width, dragged from the handle beside it and remembered.
+  const { width: sidebarWidth, startResize: startSidebarResize } =
+    useResizableWidth({
+      storageKey: "rwayve.githubSidebar.width",
+      defaultWidth: 260,
+      min: 180,
+      max: 480,
+    });
   const fullName = `${owner}/${repoName}`;
   // Where this repo was left on an earlier visit this session.
   const [restoredView] = useState(() => readRepoView(user?.id, fullName));
@@ -849,8 +863,8 @@ export function GitHubRepoViewer({
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
   const [selectedFile, setSelectedFile] = useState<ContentItem | null>(null);
   const [fileText, setFileText] = useState("");
-  // README for the Description tab, fetched per branch and rendered as raw
-  // text: there is no markdown renderer wired up.
+  // README for the Description tab, fetched per branch and formatted by
+  // ReadmeView.
   const [readme, setReadme] = useState("");
   const [readmeLoading, setReadmeLoading] = useState(false);
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
@@ -951,7 +965,6 @@ export function GitHubRepoViewer({
   const [loadingCommentShas, setLoadingCommentShas] = useState<Set<string>>(
     new Set()
   );
-  const [workflows, setWorkflows] = useState<ContentItem[]>([]);
   // Keyed by workflow display name (workflow_run.name).
   const [expandedWorkflows, setExpandedWorkflows] = useState<Set<string>>(
     new Set()
@@ -989,19 +1002,12 @@ export function GitHubRepoViewer({
     created_at: string;
   };
   type Section =
-    | "description"
-    | "files"
-    | "workflows"
-    | "commits"
-    | "pulls"
-    | "actions"
-    | "access";
+    "description" | "files" | "commits" | "pulls" | "actions" | "access";
   const [activeSection, setActiveSection] = useState<Section>(() => {
     try {
       const raw = localStorage.getItem("rwayve.github.section");
       if (
         raw === "files" ||
-        raw === "workflows" ||
         raw === "commits" ||
         raw === "pulls" ||
         raw === "actions" ||
@@ -1136,22 +1142,6 @@ export function GitHubRepoViewer({
           next.delete(nextPath);
           return next;
         });
-      }
-    },
-    [API_BASE]
-  );
-
-  const loadWorkflows = useCallback(
-    async (nextBranch: string) => {
-      try {
-        const data = await githubJson<ContentItem | ContentItem[]>(
-          `${API_BASE}/contents/.github/workflows?ref=${encodeURIComponent(nextBranch)}`
-        );
-        setWorkflows(
-          isContentList(data) ? data.filter((item) => item.type === "file") : []
-        );
-      } catch {
-        setWorkflows([]);
       }
     },
     [API_BASE]
@@ -1799,7 +1789,6 @@ export function GitHubRepoViewer({
   useEffect(() => {
     if (!repo) return;
     void loadReadme(branch);
-    void loadWorkflows(branch);
     // Back on the page of commits it was left on, the first time through.
     void loadCommits(
       branch,
@@ -1823,7 +1812,6 @@ export function GitHubRepoViewer({
     loadCommitsTotal,
     loadReadme,
     loadRuns,
-    loadWorkflows,
     repo,
     restoredView,
   ]);
@@ -1997,9 +1985,14 @@ export function GitHubRepoViewer({
             (1) Branch picker, (2) Section nav. Mirrors the Emails-page
             sidebar pattern (account list + folder list) so the page
             feels at home with the rest of the app's chrome. */}
-        <aside className="github-sidebar" aria-label="GitHub sections">
-          {repoSwitcher}
+        <aside
+          className="github-sidebar"
+          aria-label="GitHub sections"
+          style={{ "--github-sidebar-w": `${sidebarWidth}px` } as CSSProperties}
+        >
+          {/* Repository and branch share one card. */}
           <div className="github-sidebar-card github-branch-card">
+            {repoSwitcher}
             <SidebarPicker
               label="Branch"
               listLabel="Branches"
@@ -2021,12 +2014,6 @@ export function GitHubRepoViewer({
               { id: "description", label: "Description", icon: "📖" },
               { id: "files", label: "Files", icon: "📁" },
               {
-                id: "workflows",
-                label: "Workflows",
-                icon: "⚙️",
-                count: workflows.length,
-              },
-              {
                 id: "commits",
                 label: "Commits",
                 icon: "📝",
@@ -2035,7 +2022,7 @@ export function GitHubRepoViewer({
               {
                 id: "pulls",
                 label: "Pull Requests",
-                icon: "🔀",
+                icon: <PullRequestIcon size={16} />,
                 // Open PRs, as GitHub counts them, not every PR ever.
                 count:
                   pullCounts.open ??
@@ -2044,15 +2031,28 @@ export function GitHubRepoViewer({
               {
                 id: "actions",
                 label: "Actions",
-                icon: "▶",
+                icon: <WorkflowRunsIcon size={16} />,
                 count: runsTotal || runs.length,
               },
               ...(canManageAccess
-                ? [{ id: "access" as const, label: "Access", icon: "👥" }]
+                ? [
+                    {
+                      // Holds repository access; the id stays "access" so a
+                      // remembered open section still resolves.
+                      id: "access" as const,
+                      label: "Settings",
+                      icon: <SettingsIcon size={16} />,
+                    },
+                  ]
                 : []),
             ]}
           />
         </aside>
+        <ResizeHandle
+          onPointerDown={startSidebarResize}
+          className="github-sidebar-resize"
+          ariaLabel="Resize menu"
+        />
 
         {/* Right pane — only the active section is rendered. */}
         <div className="github-content" ref={contentRef}>
@@ -2105,10 +2105,18 @@ export function GitHubRepoViewer({
                 </div>
                 {readmeLoading ? (
                   <div className="github-empty">Loading README…</div>
+                ) : readme ? (
+                  <ReadmeView
+                    markdown={readme}
+                    linkBase={
+                      repo?.html_url
+                        ? `${repo.html_url}/blob/${encodeURIComponent(branch)}/`
+                        : undefined
+                    }
+                    imageBase={`https://raw.githubusercontent.com/${owner}/${repoName}/${encodeURIComponent(branch)}/`}
+                  />
                 ) : (
-                  <pre className="github-description-readme">
-                    {readme || "No README found."}
-                  </pre>
+                  <div className="github-empty">No README found.</div>
                 )}
               </section>
             </main>
@@ -2202,67 +2210,6 @@ export function GitHubRepoViewer({
                 )}
               </section>
             </main>
-          )}
-
-          {activeSection === "workflows" && (
-            <div className="github-panel">
-              <div className="github-panel-head">
-                <h2>Workflows</h2>
-                <span>{workflows.length}</span>
-              </div>
-              {workflows.map((workflow) => (
-                <button
-                  key={workflow.path}
-                  type="button"
-                  className={`github-workflow ${
-                    selectedFile?.path === workflow.path ? "active" : ""
-                  }`}
-                  onClick={() => void openFile(workflow)}
-                >
-                  <span>{workflow.name}</span>
-                  <small>{formatSize(workflow.size)}</small>
-                </button>
-              ))}
-              {workflows.length === 0 && (
-                <div className="github-empty">No workflows found.</div>
-              )}
-
-              {/* Preview the opened workflow file inline (the Workflows panel
-                  has no split pane of its own, unlike Files). Guarded to a
-                  workflow path so a file opened in the Files tab doesn't leak
-                  in here. */}
-              {selectedFile &&
-                workflows.some((w) => w.path === selectedFile.path) && (
-                  <section
-                    className="github-preview github-workflow-preview"
-                    aria-label="Workflow preview"
-                  >
-                    <div className="github-panel-head">
-                      <h2>{selectedFile.name}</h2>
-                      <span className="github-panel-head-trail">
-                        <span>{formatSize(selectedFile.size)}</span>
-                        <button
-                          type="button"
-                          className="github-preview-close"
-                          onClick={() => {
-                            setSelectedFile(null);
-                            setFileText("");
-                          }}
-                          aria-label="Close workflow preview"
-                          data-tooltip="Close preview"
-                        >
-                          ✕
-                        </button>
-                      </span>
-                    </div>
-                    {fileLoading ? (
-                      <div className="github-empty">Loading file...</div>
-                    ) : (
-                      <CodeFile path={selectedFile.path} text={fileText} />
-                    )}
-                  </section>
-                )}
-            </div>
           )}
 
           {activeSection === "commits" && (
@@ -3621,7 +3568,7 @@ function PersonalRepoManager() {
 
   // Injected into the viewer's left rail via the repoSwitcher prop.
   const switcher = (
-    <div className="github-sidebar-card github-repo-switch">
+    <div className="github-repo-switch">
       <SidebarPicker
         label="Select a repository"
         listLabel="Repositories"
@@ -3633,13 +3580,6 @@ function PersonalRepoManager() {
         }))}
         onChange={setSelectedId}
       />
-      <button
-        type="button"
-        className="github-add-repo-btn github-repo-switch-add"
-        onClick={() => setAddTab("clone")}
-      >
-        + Add
-      </button>
     </div>
   );
 
@@ -3680,6 +3620,7 @@ function PersonalRepoManager() {
         projectId={selectedId}
         repoSwitcher={switcher}
       />
+      {/* Opened on the way back from connecting GitHub, to pick what to import. */}
       <Modal
         isOpen={addTab !== null}
         onClose={() => setAddTab(null)}
@@ -3706,7 +3647,6 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
   useEffect(() => {
     if (selectedId !== null) rememberOpenRepo(user?.id, selectedId);
   }, [selectedId, user?.id]);
-  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     void listProjects()
@@ -3720,7 +3660,6 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
   const showAdded = (created: Project[]) => {
     setProjects((prev) => [...created, ...(prev ?? [])]);
     setSelectedId(created[0].id);
-    setAdding(false);
   };
 
   if (projects === null) {
@@ -3765,7 +3704,7 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
   if (selectedId == null) return null;
 
   const switcher = (
-    <div className="github-sidebar-card github-repo-switch">
+    <div className="github-repo-switch">
       <SidebarPicker
         label="Select a repository"
         listLabel="Repositories"
@@ -3777,38 +3716,16 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
         }))}
         onChange={setSelectedId}
       />
-      {canLink && (
-        <button
-          type="button"
-          className="github-add-repo-btn github-repo-switch-add"
-          onClick={() => setAdding(true)}
-        >
-          + Add
-        </button>
-      )}
     </div>
   );
 
   return (
-    <>
-      <GitHubRepoProject
-        key={selectedId}
-        projectId={selectedId}
-        repoSwitcher={switcher}
-        canLink={canLink}
-      />
-      <Modal
-        isOpen={adding}
-        onClose={() => setAdding(false)}
-        title="Add a repository"
-      >
-        <AddRepoTabs
-          projects={projects}
-          isPersonal={false}
-          onAdded={showAdded}
-        />
-      </Modal>
-    </>
+    <GitHubRepoProject
+      key={selectedId}
+      projectId={selectedId}
+      repoSwitcher={switcher}
+      canLink={canLink}
+    />
   );
 }
 
@@ -3914,7 +3831,7 @@ function PlatformRepoManager() {
   // Selecting a repo remounts the viewer, which is keyed by owner/repo below.
   const switcher =
     hasRepos || canConnect ? (
-      <div className="github-sidebar-card github-repo-switch">
+      <div className="github-repo-switch">
         {hasRepos && (
           // Shows just the repo name (not owner/repo); the value keeps the full
           // name so the lookup still resolves owner + repo. The current/default
