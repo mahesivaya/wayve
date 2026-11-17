@@ -2070,10 +2070,22 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   // swaps the sidebar's menu for the settings menu (see settingsNav below).
   const showTabs = !isNarrow;
 
+  // The desktop shell surfaces Upgrade on the Settings page instead.
+  const showUpgrade = !desktop && isBasicPersonalUser;
+  // Once the page is split, the left pane's tab strip ends mid-screen, which
+  // strands Upgrade between the two panes. It moves to the sidebar, above the
+  // account row, whenever the main menu is showing there (not the icon rail or
+  // a settings/platform takeover, which have no account row).
+  const upgradeInSidebar =
+    showUpgrade &&
+    showTabs &&
+    splitOpen &&
+    !sidebarCollapsed &&
+    !settingsTakeover &&
+    !platformTakeover;
   const headerActions = (
     <>
-      {/* The desktop shell surfaces Upgrade on the Settings page instead. */}
-      {!desktop && isBasicPersonalUser && (
+      {showUpgrade && !upgradeInSidebar && (
         <button
           type="button"
           className="header-upgrade-btn"
@@ -2482,6 +2494,15 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
               Profile and Integrations back; Appearance is a card on the
               General settings page there instead. */}
                   <div className="sidebar-section sidebar-section-bottom">
+                    {upgradeInSidebar && (
+                      <button
+                        type="button"
+                        className="header-upgrade-btn sidebar-upgrade-btn"
+                        onClick={goToUpgrade}
+                      >
+                        Upgrade
+                      </button>
+                    )}
                     <ProfileMenu
                       placement="sidebar"
                       minimal={!isNarrow}

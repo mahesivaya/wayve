@@ -1876,6 +1876,15 @@ html.is-titlebar-inset .header .split-menu-btn svg {
   border-color: var(--color-border-muted);
 }
 
+/* Upgrade in the sidebar (split view): a full-width row above the account. */
+.sidebar-upgrade-btn {
+  display: block;
+  width: 100%;
+  min-height: 32px;
+  margin-bottom: 8px;
+  font-size: var(--text-sm);
+}
+
 /* Bug-report shortcut in the header — sits just before the Upgrade
    button so the monetization CTA still has the right-edge emphasis.
    Renders the multi-color amber warning glyph at a fixed size; we do
