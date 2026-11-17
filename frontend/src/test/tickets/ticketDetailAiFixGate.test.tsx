@@ -1,7 +1,6 @@
-// "Fix with AI" is offered only on the low-stakes end of the priority scale —
-// P4 (Low) and P5 (Lowest). On the 1-highest scale that means the button shows
-// for the *larger* numbers. The backend enforces the same gate, so this only
-// covers what the editor puts in front of the user.
+// "Fix with AI" is offered at every priority. It used to be limited to P4 (Low)
+// and P5 (Lowest); the floor is now 1. The backend enforces the same gate, so
+// this only covers what the editor puts in front of the user.
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -76,13 +75,10 @@ const aiFixButton = () => screen.queryByRole("button", { name: /Fix with AI/ });
 describe("TicketDetail — Fix with AI priority gate", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it.each([4, 5])("offers the AI fix on P%i", async (priority) => {
+  it.each([1, 2, 3, 4, 5])("offers the AI fix on P%i", async (priority) => {
     await renderAt(priority);
-    expect(aiFixButton()).not.toBeNull();
-  });
-
-  it.each([1, 2, 3])("hides the AI fix on P%i", async (priority) => {
-    await renderAt(priority);
-    expect(aiFixButton()).toBeNull();
+    const button = aiFixButton();
+    expect(button).not.toBeNull();
+    expect((button as HTMLButtonElement).disabled).toBe(false);
   });
 });

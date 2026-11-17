@@ -10,9 +10,9 @@ import "./ticketDetail.css";
 
 const PRIORITIES: TaskPriority[] = [1, 2, 3, 4, 5];
 
-// The AI fixer is limited to the low-stakes end of the scale — P4 (Low) and
-// P5 (Lowest). The backend enforces the same gate.
-const AI_FIX_MIN_PRIORITY = 4;
+// Every priority may use the AI fixer (1 = no floor). The backend enforces
+// the same gate.
+const AI_FIX_MIN_PRIORITY = 1;
 
 // Full-page editable view of a single ticket — the Tickets board routes here
 // (config.detailPath) instead of opening the edit modal. Reuses the same ticket

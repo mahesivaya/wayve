@@ -666,8 +666,8 @@ export type TasksConfig = {
     // Shows the "Find related" (AI duplicate/similar) toolbar button. Tickets only.
     findRelated?: boolean;
     // Lowest priority *number* eligible for an AI fix. P1 is Highest, so this
-    // is a floor: 4 lets P4 (Low) and P5 (Lowest) through, 5 only P5. Defaults
-    // to 4. The backend enforces the real gate.
+    // is a floor: 4 lets P4 (Low) and P5 (Lowest) through, 5 only P5, 1 lets
+    // everything through. Defaults to 1. The backend enforces the real gate.
     aiFixMinPriority?: number;
     // Shows a dedicated "Type" column (Bug/Feature/… badge) in the list-view
     // table instead of rendering the badge inline after the name. Tickets only.
@@ -2767,8 +2767,8 @@ export default function Tasks({
                 <AiFixPanel
                   itemId={editingId}
                   api={config.api.aiFixPanel}
-                  canFix={priority >= (config.features.aiFixMinPriority ?? 4)}
-                  minPriority={config.features.aiFixMinPriority ?? 4}
+                  canFix={priority >= (config.features.aiFixMinPriority ?? 1)}
+                  minPriority={config.features.aiFixMinPriority ?? 1}
                   kind={config.labels.lowerSingular}
                   onChanged={() => void loadTasks()}
                 />

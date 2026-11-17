@@ -27,9 +27,8 @@ const USER_STORIES_CONFIG: TasksConfig = {
     attachments: false,
     statusSummary: true,
     figmaLinks: false,
-    // Stories open up to the AI fixer only at P5 (Lowest) — the least risky
-    // end of the backlog. Tickets start one step higher, at P4.
-    aiFixMinPriority: 5,
+    // Every priority may be auto-fixed (1 = no floor), same as tickets.
+    aiFixMinPriority: 1,
   },
   storageKey: "userstories",
   // Name click opens the story in a right-side drawer; Edit opens the full page.

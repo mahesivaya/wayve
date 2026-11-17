@@ -262,8 +262,8 @@ pub struct AiFixTarget {
     /// Label for `AppError::NotFound`.
     pub not_found: &'static str,
     /// Lowest priority *number* eligible for an automated fix. P1 is Highest, so
-    /// a larger number is a lower priority: tickets open up at P4 (Low), stories
-    /// only at P5 (Lowest).
+    /// a larger number is a lower priority. Both targets sit at 1 — every
+    /// priority qualifies — and the field stays as the knob to narrow it again.
     pub min_priority: i16,
     /// Whether this table records resolutions that `recall` can mine for a
     /// worked example. Only tickets carry `resolution_summary`.
@@ -281,7 +281,7 @@ pub const TICKET_TARGET: AiFixTarget = AiFixTarget {
     scope: VISIBLE_SCOPE,
     kind: "ticket",
     not_found: "workspace ticket",
-    min_priority: 4,
+    min_priority: 1,
     has_recall: true,
     resource_type: "workspace_ticket",
     audit_requested: "workspace_ticket_ai_fix_requested",
@@ -293,7 +293,7 @@ pub const STORY_TARGET: AiFixTarget = AiFixTarget {
     scope: STORY_VISIBLE_SCOPE,
     kind: "story",
     not_found: "user story",
-    min_priority: 5,
+    min_priority: 1,
     has_recall: false,
     resource_type: "user_story",
     audit_requested: "user_story_ai_fix_requested",
@@ -478,10 +478,9 @@ async fn dispatch_ai_fix(
     let description: String = row.get("description");
     let priority: i16 = row.get("priority");
 
-    // The AI fixer is limited to the low-stakes end of the scale. P1 is Highest,
-    // so eligibility is a *floor* on the number: tickets from P4 (Low) down,
-    // stories only at P5 (Lowest). The UI hides the button above that; this is
-    // the authoritative gate.
+    // Eligibility is a *floor* on the priority number (P1 is Highest). Both
+    // targets currently allow every priority, so this never fires; it is the
+    // authoritative gate if a target's `min_priority` is raised again.
     if priority < target.min_priority {
         return Err(AppError::bad_request(format!(
             "AI fix is available only for P{}+ {}s",
