@@ -106,14 +106,6 @@
 
 /* Dark mode: the light-green pill would glare, so tint the surface instead and
    let the text carry the colour. */
-@media (prefers-color-scheme: dark) {
-  .integration-tile-status--enabled {
-    color: var(--color-success, #4ade80);
-    background: rgb(22 163 74 / 18%);
-    border-color: rgb(22 163 74 / 45%);
-  }
-}
-
 :root[data-theme="dark"] .integration-tile-status--enabled {
   color: var(--color-success, #4ade80);
   background: rgb(22 163 74 / 18%);

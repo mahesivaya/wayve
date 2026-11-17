@@ -29,7 +29,9 @@ vi.mock("../../api/email", () => ({
   deleteAccount: vi.fn(),
 }));
 vi.mock("../../api/billing", () => ({
-  getSubscription: vi.fn().mockResolvedValue(null),
+  getSubscription: vi
+    .fn()
+    .mockResolvedValue({ owner_type: "personal", subscription: null }),
   listInvoices: vi.fn().mockResolvedValue([]),
 }));
 vi.mock("../../api/profile", () => ({

@@ -235,13 +235,11 @@
 .ticket-aifix-line.is-meta {
   color: var(--color-text-muted);
 }
-@media (prefers-color-scheme: dark) {
-  .ticket-aifix-line.is-add {
-    color: #4ade80;
-  }
-  .ticket-aifix-line.is-del {
-    color: #fca5a5;
-  }
+:root[data-theme="dark"] .ticket-aifix-line.is-add {
+  color: #4ade80;
+}
+:root[data-theme="dark"] .ticket-aifix-line.is-del {
+  color: #fca5a5;
 }
 .ticket-aifix-steps {
   display: flex;
