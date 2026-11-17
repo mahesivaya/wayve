@@ -7,8 +7,11 @@ import {
   setRepoSummary,
   type RepoAccessRow,
 } from "../api/repoAccess";
+import { hasPermission } from "../auth/permissions";
+import { useAuth } from "../auth/useAuth";
 import Avatar from "../components/Avatar";
 import { getApiBase } from "../config/env";
+import RepoAccessPanel from "../github/RepoAccessPanel";
 import "./projects.css";
 
 // Project detail page, for a project's linked GitHub repository: its name and
@@ -17,6 +20,11 @@ import "./projects.css";
 // /projects/visible on a cold/direct load.
 export default function ProjectDetail() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  // Owners and admins (members:manage, which follows admin mode) get the
+  // access panel, where they add and remove the project's members. Everyone
+  // else gets the read-only list. The backend enforces the same permission.
+  const canManageMembers = hasPermission(user, "members:manage");
   const location = useLocation();
   const { owner = "", repo: repoName = "" } = useParams<{
     owner: string;
@@ -83,17 +91,20 @@ export default function ProjectDetail() {
   useEffect(() => {
     if (!owner || !repoName) return;
     let cancelled = false;
-    getRepoAccess(owner, repoName)
-      .then((data) => {
-        if (cancelled) return;
-        setMembers(Array.isArray(data?.rows) ? data.rows : []);
-        setMembersReadable(data?.github_readable ?? true);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setMembers([]);
-        setMembersReadable(false);
-      });
+    // The access panel loads the members itself.
+    if (!canManageMembers) {
+      getRepoAccess(owner, repoName)
+        .then((data) => {
+          if (cancelled) return;
+          setMembers(Array.isArray(data?.rows) ? data.rows : []);
+          setMembersReadable(data?.github_readable ?? true);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setMembers([]);
+          setMembersReadable(false);
+        });
+    }
     getRepoSummary(owner, repoName)
       .then((data) => {
         if (cancelled) return;
@@ -104,7 +115,7 @@ export default function ProjectDetail() {
     return () => {
       cancelled = true;
     };
-  }, [owner, repoName]);
+  }, [owner, repoName, canManageMembers]);
 
   // The blurb we display: the Wayve summary if set, else the repo's own GitHub
   // description. Editing seeds from whichever is shown.
@@ -233,63 +244,70 @@ export default function ProjectDetail() {
           </div>
         )}
 
-        <section className="project-detail-section">
-          <h2 className="project-detail-section-title">
-            Members
-            {members && members.length > 0 && (
-              <span className="project-detail-count">{members.length}</span>
-            )}
-          </h2>
-          {members === null ? (
-            <p className="project-detail-muted">Loading members…</p>
-          ) : members.length === 0 ? (
-            <p className="project-detail-muted">
-              {membersReadable
-                ? "No one has access yet."
-                : "Member list unavailable for this repo."}
-            </p>
-          ) : (
-            <ul className="project-detail-members">
-              {members.map((m, i) => {
-                const displayName = m.email || m.github_login || "Unknown user";
-                return (
-                  <li
-                    key={`${m.user_id ?? m.github_login ?? i}`}
-                    className="project-detail-member"
-                  >
-                    <Avatar
-                      name={displayName}
-                      src={
-                        m.user_id != null
-                          ? `${getApiBase()}/api/users/${m.user_id}/avatar`
-                          : null
-                      }
-                      size={32}
-                    />
-                    <span className="project-detail-member-text">
-                      <span className="project-detail-member-name">
-                        {displayName}
-                      </span>
-                      <span className="project-detail-member-meta">
-                        {m.github_login && <span>@{m.github_login}</span>}
-                        {!m.is_member && (
-                          <span className="project-detail-member-tag">
-                            GitHub only
-                          </span>
-                        )}
-                      </span>
-                    </span>
-                    <span
-                      className={`project-detail-member-level level-${m.level}`}
+        {canManageMembers ? (
+          <section className="project-detail-section">
+            <RepoAccessPanel owner={owner} repo={repoName} />
+          </section>
+        ) : (
+          <section className="project-detail-section">
+            <h2 className="project-detail-section-title">
+              Members
+              {members && members.length > 0 && (
+                <span className="project-detail-count">{members.length}</span>
+              )}
+            </h2>
+            {members === null ? (
+              <p className="project-detail-muted">Loading members…</p>
+            ) : members.length === 0 ? (
+              <p className="project-detail-muted">
+                {membersReadable
+                  ? "No one has access yet."
+                  : "Member list unavailable for this repo."}
+              </p>
+            ) : (
+              <ul className="project-detail-members">
+                {members.map((m, i) => {
+                  const displayName =
+                    m.email || m.github_login || "Unknown user";
+                  return (
+                    <li
+                      key={`${m.user_id ?? m.github_login ?? i}`}
+                      className="project-detail-member"
                     >
-                      {m.level}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
+                      <Avatar
+                        name={displayName}
+                        src={
+                          m.user_id != null
+                            ? `${getApiBase()}/api/users/${m.user_id}/avatar`
+                            : null
+                        }
+                        size={32}
+                      />
+                      <span className="project-detail-member-text">
+                        <span className="project-detail-member-name">
+                          {displayName}
+                        </span>
+                        <span className="project-detail-member-meta">
+                          {m.github_login && <span>@{m.github_login}</span>}
+                          {!m.is_member && (
+                            <span className="project-detail-member-tag">
+                              GitHub only
+                            </span>
+                          )}
+                        </span>
+                      </span>
+                      <span
+                        className={`project-detail-member-level level-${m.level}`}
+                      >
+                        {m.level}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        )}
 
         <section className="project-detail-section">
           <h2 className="project-detail-section-title">Code repo</h2>
