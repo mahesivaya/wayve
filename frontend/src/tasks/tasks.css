@@ -2249,6 +2249,13 @@ body.is-col-resizing {
   background: rgb(15, 23, 42, 0.28);
 }
 
+/* Zero-height marker in the page flow: the line where the list begins, which
+   Tasks.tsx measures to start the drawer there. */
+.task-drawer-anchor {
+  display: block;
+  height: 0;
+}
+
 .task-drawer {
   position: absolute;
   top: 0;
