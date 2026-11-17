@@ -1,7 +1,8 @@
 // Workspace projects + teams endpoints. Proves the product rule "only an
 // organization owner can create projects and teams": an owner gets 201, a
-// plain member gets 403, and listing is org-scoped (members see their org's
-// items, a personal account sees an empty list).
+// plain member gets 403, and listing is org-scoped and membership-scoped (an
+// owner or admin sees all of the org's items, a member only the teams and
+// projects they belong to, a personal account an empty list).
 #[cfg(test)]
 mod tests {
     use crate::test_support::{insert_local_user, jwt_for, random_email, test_pool};
@@ -103,7 +104,7 @@ mod tests {
         // and shows in the team's members list.
         let req = actix_test::TestRequest::get()
             .uri("/teams/platformteam")
-            .insert_header(("Authorization", bearer(member_id, &member_email)))
+            .insert_header(("Authorization", bearer(owner_id, &owner_email)))
             .to_request();
         let team: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
         let members = team["members"]
@@ -117,12 +118,28 @@ mod tests {
             .uri("/projects")
             .insert_header(("Authorization", bearer(member_id, &member_email)))
             .to_request();
+        // The member is on neither the team nor the project, so sees neither;
+        // the owner sees both.
+        let projects: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
+        assert_eq!(projects.as_array().map(|a| a.len()), Some(0));
+
+        let req = actix_test::TestRequest::get()
+            .uri("/teams")
+            .insert_header(("Authorization", bearer(member_id, &member_email)))
+            .to_request();
+        let teams: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
+        assert_eq!(teams.as_array().map(|a| a.len()), Some(0));
+
+        let req = actix_test::TestRequest::get()
+            .uri("/projects")
+            .insert_header(("Authorization", bearer(owner_id, &owner_email)))
+            .to_request();
         let projects: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
         assert_eq!(projects.as_array().map(|a| a.len()), Some(1));
 
         let req = actix_test::TestRequest::get()
             .uri("/teams")
-            .insert_header(("Authorization", bearer(member_id, &member_email)))
+            .insert_header(("Authorization", bearer(owner_id, &owner_email)))
             .to_request();
         let teams: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
         assert_eq!(teams.as_array().map(|a| a.len()), Some(1));
@@ -346,9 +363,9 @@ mod tests {
         assert_eq!(created["name"], "Ada Lovelace");
         let member_row = created["id"].as_i64().unwrap_or_else(|| panic!("no id"));
 
-        // Persisted: any org member reading the team sees it.
+        // Persisted: reading the team back shows it.
         let team: serde_json::Value =
-            actix_test::call_and_read_body_json(&app, roster(member_id, &member_email)).await;
+            actix_test::call_and_read_body_json(&app, roster(owner_id, &owner_email)).await;
         assert_eq!(team["members"][0]["email"], "ada@example.com");
         assert!(team["members"][0]["joined_at"].is_string());
         assert_eq!(team["members"][0]["teams"], serde_json::json!(["roster"]));
@@ -366,7 +383,7 @@ mod tests {
                 .unwrap_or_else(|e| panic!("insert roster row: {e}"));
         }
         let team: serde_json::Value =
-            actix_test::call_and_read_body_json(&app, roster(member_id, &member_email)).await;
+            actix_test::call_and_read_body_json(&app, roster(owner_id, &owner_email)).await;
         assert_eq!(
             team["members"][0]["teams"],
             serde_json::json!(["roster", "second"])
@@ -824,5 +841,118 @@ mod tests {
         assert_eq!(teams.as_array().map(|a| a.len()), Some(0));
 
         cleanup(&pool, &[user_id], &[]).await;
+    }
+
+    // A plain member sees only the teams they are on (or created) and the
+    // projects they created or were granted the repository of; an owner still
+    // sees everything in the organization.
+    #[actix_web::test]
+    async fn member_sees_only_their_own_teams_and_projects() {
+        let pool = test_pool().await;
+        let org_id = insert_org(&pool, &format!("WS Org {}", random_email())).await;
+
+        let owner_email = random_email();
+        let owner_id = insert_local_user(&pool, &owner_email, "password123").await;
+        place_in_org(&pool, owner_id, org_id, "owner").await;
+        let member_email = random_email();
+        let member_id = insert_local_user(&pool, &member_email, "password123").await;
+        place_in_org(&pool, member_id, org_id, "member").await;
+
+        // Teams: on "mine" (roster email, different case), not on "theirs".
+        let mine = insert_org_team(&pool, org_id, "mine").await;
+        insert_org_team(&pool, org_id, "theirs").await;
+        sqlx::query("INSERT INTO team_members (team_id, name, email) VALUES ($1, 'M', $2)")
+            .bind(mine)
+            .bind(member_email.to_uppercase())
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("add roster row: {e}"));
+
+        // Projects: one granted through its repository, one the member
+        // created, one with neither.
+        let repo_owner = format!("acme{org_id}");
+        for (name, repo, creator) in [
+            ("Granted", Some("granted"), owner_id),
+            ("Created", None, member_id),
+            ("Hidden", Some("hidden"), owner_id),
+        ] {
+            sqlx::query(
+                "INSERT INTO projects (organization_id, name, github_owner, github_repo, created_by)
+                 VALUES ($1, $2, $3, $4, $5)",
+            )
+            .bind(org_id)
+            .bind(name)
+            .bind(repo.map(|_| repo_owner.clone()))
+            .bind(repo)
+            .bind(creator)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("insert project: {e}"));
+        }
+        sqlx::query(
+            "INSERT INTO member_project_access (user_id, repo_full_name, access_level)
+             VALUES ($1, $2, 'read')",
+        )
+        .bind(member_id)
+        .bind(format!("{repo_owner}/granted"))
+        .execute(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("grant: {e}"));
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(workspace::handler::list_projects)
+                .service(workspace::handler::list_teams)
+                .service(workspace::handler::get_team),
+        )
+        .await;
+        let names = |body: &serde_json::Value, key: &str| -> Vec<String> {
+            let mut out: Vec<String> = body
+                .as_array()
+                .unwrap_or_else(|| panic!("array: {body}"))
+                .iter()
+                .filter_map(|r| r[key].as_str().map(str::to_string))
+                .collect();
+            out.sort();
+            out
+        };
+        let get = |uri: &'static str, user: i32, email: &str| {
+            actix_test::TestRequest::get()
+                .uri(uri)
+                .insert_header(("Authorization", format!("Bearer {}", jwt_for(user, email))))
+                .to_request()
+        };
+
+        let body: serde_json::Value =
+            actix_test::call_and_read_body_json(&app, get("/teams", member_id, &member_email))
+                .await;
+        assert_eq!(names(&body, "slug"), ["mine"]);
+        let body: serde_json::Value =
+            actix_test::call_and_read_body_json(&app, get("/projects", member_id, &member_email))
+                .await;
+        assert_eq!(names(&body, "name"), ["Created", "Granted"]);
+
+        // Their own team opens; the other is not found, not merely hidden.
+        let res =
+            actix_test::call_service(&app, get("/teams/mine", member_id, &member_email)).await;
+        assert_eq!(res.status(), StatusCode::OK);
+        let res =
+            actix_test::call_service(&app, get("/teams/theirs", member_id, &member_email)).await;
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+        // The owner is on no roster and holds no grant, and still sees it all.
+        let body: serde_json::Value =
+            actix_test::call_and_read_body_json(&app, get("/teams", owner_id, &owner_email)).await;
+        assert_eq!(names(&body, "slug"), ["mine", "theirs"]);
+        let body: serde_json::Value =
+            actix_test::call_and_read_body_json(&app, get("/projects", owner_id, &owner_email))
+                .await;
+        assert_eq!(names(&body, "name"), ["Created", "Granted", "Hidden"]);
+        let res =
+            actix_test::call_service(&app, get("/teams/theirs", owner_id, &owner_email)).await;
+        assert_eq!(res.status(), StatusCode::OK);
+
+        cleanup(&pool, &[owner_id, member_id], &[org_id]).await;
     }
 }

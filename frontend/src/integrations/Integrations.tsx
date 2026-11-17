@@ -1,13 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getJiraConnection } from "../api/jira";
-import { getGithubConnection } from "../api/github";
-import { getGitlabConnection } from "../api/gitlab";
-import { getSlackConnection } from "../api/slack";
-import { getFigmaConnection } from "../api/figma";
-import { getMcpConnections } from "../api/mcp";
-import { getAccounts } from "../api/email";
-import { type EmailAccount } from "../emails/types";
 import { useAuth } from "../auth/useAuth";
 import SlackPanel from "./SlackPanel";
 import FigmaPanel from "./FigmaPanel";
@@ -22,6 +15,7 @@ import {
   type IntegrationKey,
 } from "./catalog";
 import SettingsShell from "../profile/SettingsShell";
+import { useIntegrationConnections } from "./useIntegrationConnections";
 import "./integrations.css";
 
 type Status = "enabled" | "available" | "soon" | "enterprise";
@@ -46,113 +40,25 @@ export default function Integrations() {
   // regardless of scope (personal, organization/enterprise, or platform).
   const canConnectMailbox = !!user;
 
-  // Connection badges are best-effort: any error just leaves the card unconnected.
-  const [jiraConnected, setJiraConnected] = useState(false);
+  // Which services are connected, shared with the settings menu. A panel that
+  // connects or disconnects a service reports it through `setConnected`.
+  const { connected, setConnected } = useIntegrationConnections(user);
+  const {
+    gmail: gmailConnected,
+    jira: jiraConnected,
+    github: githubConnected,
+    slack: slackConnected,
+    gitlab: gitlabConnected,
+    figma: figmaConnected,
+    mcp: mcpConnected,
+  } = connected;
   const [showJira, setShowJira] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    void getJiraConnection()
-      .then((s) => {
-        if (!cancelled) setJiraConnected(s.connected);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const [githubConnected, setGithubConnected] = useState(false);
   const [showGithub, setShowGithub] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    void getGithubConnection()
-      .then((s) => {
-        if (!cancelled) setGithubConnected(s.connected);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Probed only for enterprise orgs; anyone else would get a 403.
-  const [slackConnected, setSlackConnected] = useState(false);
   const [showSlack, setShowSlack] = useState(false);
-  useEffect(() => {
-    if (!isEnterprise) return;
-    let cancelled = false;
-    void getSlackConnection()
-      .then((s) => {
-        if (!cancelled) setSlackConnected(s.connected);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [isEnterprise]);
-
-  // Probed only for enterprise/platform owners; anyone else would get a 403.
-  const [mcpConnected, setMcpConnected] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
-  useEffect(() => {
-    if (!canManageMcp) return;
-    let cancelled = false;
-    void getMcpConnections()
-      .then((list) => {
-        if (!cancelled) setMcpConnected(list.some((c) => c.enabled));
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [canManageMcp]);
-
-  // Per-user, so every account probes it — no tier or scope gate.
-  const [figmaConnected, setFigmaConnected] = useState(false);
   const [showFigma, setShowFigma] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    void getFigmaConnection()
-      .then((s) => {
-        if (!cancelled) setFigmaConnected(s.connected);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const [gitlabConnected, setGitlabConnected] = useState(false);
   const [showGitlab, setShowGitlab] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    void getGitlabConnection()
-      .then((s) => {
-        if (!cancelled) setGitlabConnected(s.connected);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // The accounts summary doesn't expose the provider, so "connected" here just
-  // means the user owns at least one mailbox.
-  const [gmailConnected, setGmailConnected] = useState(false);
   const [showGmail, setShowGmail] = useState(false);
-  useEffect(() => {
-    if (!canConnectMailbox) return;
-    let cancelled = false;
-    void getAccounts<EmailAccount>()
-      .then((list) => {
-        if (!cancelled)
-          setGmailConnected(list.some((a) => a.is_owner !== false));
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [canConnectMailbox]);
 
   // A link to /integrations?service=<key> lands with that panel already open
   // instead of on a wall of tiles. Panels are independent toggles, so this only ever opens one
@@ -241,45 +147,61 @@ export default function Integrations() {
     ...detail[s.key],
   }));
 
+  // Connected services are listed first, in their own card, with everything
+  // else below. A service moves up as soon as it connects.
+  const connectedServices = visibleServices.filter(
+    (s) => s.status === "enabled"
+  );
+  const otherServices = visibleServices.filter((s) => s.status !== "enabled");
+  const renderTile = (s: (typeof visibleServices)[number]) => (
+    <button
+      key={s.key}
+      type="button"
+      className={`integration-tile${
+        s.status === "enabled" ? " integration-tile--connected" : ""
+      }`}
+      onClick={s.onClick}
+      disabled={s.status === "soon" || s.status === "enterprise"}
+    >
+      <div className="integration-tile-head">
+        <span className="integration-tile-icon">{s.icon}</span>
+        <span className="integration-tile-titles">
+          <span className="integration-tile-name">{s.name}</span>
+          <span
+            className={`integration-tile-status integration-tile-status--${s.status}`}
+          >
+            {/* The dot is decorative — the word "Connected" carries the
+                meaning, so the state never rests on colour alone. */}
+            {s.status === "enabled" && (
+              <span className="integration-tile-dot" aria-hidden="true" />
+            )}
+            {STATUS_LABEL[s.status]}
+          </span>
+        </span>
+      </div>
+      <p className="integration-tile-desc">{s.description}</p>
+    </button>
+  );
+
   return (
     <SettingsShell title="Integrations">
-      <section className="settings-card">
-        <h2 className="settings-card-title">Connect a service</h2>
-        <div className="integrations-cards">
-          {visibleServices.map((s) => (
-            <button
-              key={s.key}
-              type="button"
-              className={`integration-tile${
-                s.status === "enabled" ? " integration-tile--connected" : ""
-              }`}
-              onClick={s.onClick}
-              disabled={s.status === "soon" || s.status === "enterprise"}
-            >
-              <div className="integration-tile-head">
-                <span className="integration-tile-icon">{s.icon}</span>
-                <span className="integration-tile-titles">
-                  <span className="integration-tile-name">{s.name}</span>
-                  <span
-                    className={`integration-tile-status integration-tile-status--${s.status}`}
-                  >
-                    {/* The dot is decorative — the word "Connected" carries the
-                        meaning, so the state never rests on colour alone. */}
-                    {s.status === "enabled" && (
-                      <span
-                        className="integration-tile-dot"
-                        aria-hidden="true"
-                      />
-                    )}
-                    {STATUS_LABEL[s.status]}
-                  </span>
-                </span>
-              </div>
-              <p className="integration-tile-desc">{s.description}</p>
-            </button>
-          ))}
-        </div>
-      </section>
+      {connectedServices.length > 0 && (
+        <section className="settings-card">
+          <h2 className="settings-card-title">Connected</h2>
+          <div className="integrations-cards">
+            {connectedServices.map(renderTile)}
+          </div>
+        </section>
+      )}
+
+      {otherServices.length > 0 && (
+        <section className="settings-card">
+          <h2 className="settings-card-title">Connect a service</h2>
+          <div className="integrations-cards">
+            {otherServices.map(renderTile)}
+          </div>
+        </section>
+      )}
 
       <section className="settings-card integrations-info">
         <h2 className="settings-card-title">
@@ -320,7 +242,7 @@ export default function Integrations() {
       {canConnectMailbox && showGmail && (
         <section className="settings-card">
           <h2 className="settings-card-title">Gmail</h2>
-          <GmailPanel onChange={setGmailConnected} />
+          <GmailPanel onChange={(value) => setConnected("gmail", value)} />
         </section>
       )}
 
@@ -330,7 +252,7 @@ export default function Integrations() {
           <JiraPanel
             onImported={() =>
               void getJiraConnection()
-                .then((s) => setJiraConnected(s.connected))
+                .then((s) => setConnected("jira", s.connected))
                 .catch(() => {})
             }
           />
@@ -340,7 +262,7 @@ export default function Integrations() {
       {showGithub && (
         <section className="settings-card">
           <h2 className="settings-card-title">GitHub</h2>
-          <GitHubPanel onChange={setGithubConnected} />
+          <GitHubPanel onChange={(value) => setConnected("github", value)} />
         </section>
       )}
 

@@ -743,23 +743,6 @@ html.is-titlebar-inset .header .split-menu-btn svg {
   gap: 2px;
 }
 
-/* Hairline between two runs of nav items (Calendar / Drive). Inset to the same
-   8px the links pad to, so it starts and ends under their labels rather than
-   spanning the full sidebar. */
-.sidebar-divider {
-  height: 0;
-  margin: 6px 8px;
-  border: 0;
-  border-top: 1px solid var(--color-border);
-  opacity: 0.7;
-}
-
-/* In the icon-only rail the links lose their side padding, so the line runs
-   the width of the rail minus a small inset. */
-.sidebar.collapsed .sidebar-divider {
-  margin: 6px 12px;
-}
-
 .sidebar-section-label {
   display: flex;
   align-items: center;
@@ -1434,7 +1417,7 @@ html.is-titlebar-inset .header .split-menu-btn svg {
    When a .split-resize-handle sits between two panes, the handle owns the
    1px visual border instead — so the rule above doesn't double-up. */
 .split-pane + .split-pane {
-  border-left: 1px solid var(--color-border);
+  border-left: 1px solid var(--color-split-line);
 }
 
 .split-pane + .split-resize-handle + .split-pane {
@@ -1473,6 +1456,11 @@ html.is-titlebar-inset .header .split-menu-btn svg {
   transition:
     background 0.12s ease,
     width 0.12s ease;
+}
+
+/* Between split panes the line is a step darker than other resize handles. */
+.split-resize-handle::after {
+  background: var(--color-split-line);
 }
 
 /* Centered grip pill — currently never shown (opacity 0, at rest and on
@@ -1871,6 +1859,15 @@ html.is-titlebar-inset .header .split-menu-btn svg {
   border-color: var(--color-border-muted);
 }
 
+/* Upgrade in the sidebar: a full-width row above the account. */
+.sidebar-upgrade-btn {
+  display: block;
+  width: 100%;
+  min-height: 32px;
+  margin-bottom: 8px;
+  font-size: var(--text-sm);
+}
+
 /* Bug-report shortcut in the header — sits just before the Upgrade
    button so the monetization CTA still has the right-edge emphasis.
    Renders the multi-color amber warning glyph at a fixed size; we do
@@ -2121,3 +2118,23 @@ html.is-titlebar-inset .header .split-menu-btn svg {
 
 /* OS prefers-color-scheme blocks were removed — dark mode is now
    explicit-only via [data-theme="dark"]. */
+
+/* A sidebar row that is not a link (a project with no page to open). */
+.sidebar-link--static {
+  cursor: default;
+  color: var(--color-text-muted);
+}
+.sidebar-link--static:hover {
+  background: transparent;
+}
+
+/* A brand mark in the sidebar: sized like the other menu icons. The marks are
+   drawn for a white tile, so a near-black one (GitHub's) takes the text colour
+   here and stays visible on a dark menu. */
+.sidebar-icon--brand svg {
+  width: 18px;
+  height: 18px;
+}
+.sidebar-icon--brand svg [fill="#181717"] {
+  fill: currentColor;
+}

@@ -75,8 +75,17 @@ import {
   isSingleInstance,
   type PaneArrangement,
 } from "./paneLayout";
-import { listTeams, createTeam, type Team } from "../api/workspace";
+import {
+  listTeams,
+  createTeam,
+  listProjects,
+  createProject,
+  type Team,
+  type Project,
+} from "../api/workspace";
 import { getFeatureAccess } from "../api/featureAccess";
+import { isWorkspaceAdmin } from "../auth/workspaceAdmin";
+import ConnectedIntegrationLinks from "../integrations/ConnectedIntegrationLinks";
 import { isDesktopApp } from "../utils/desktop";
 import "./Layout.css";
 import {
@@ -97,6 +106,7 @@ import {
   UserLogsIcon,
   AuditIcon,
   TeamsIcon,
+  ProjectsTileIcon,
   ApiKeysIcon,
   CodeReviewIcon,
   BugReportIcon,
@@ -104,7 +114,6 @@ import {
   PlatformIcon,
   OrganizationIcon,
   MembersIcon,
-  SettingsIcon,
   BellIcon,
   PersonIcon,
   IntegrationsIcon,
@@ -456,6 +465,35 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     };
   }, [userId, userOrganizationId]);
 
+  // The Projects section lists the projects created in the workspace, not the
+  // GitHub repository list. It loads when the section is first opened. Keyed
+  // on the account, so a different one never shows the last one's projects.
+  const projectsKey = `${userId ?? ""}:${userOrganizationId ?? ""}`;
+  const [projectsLoad, setProjectsLoad] = useState<{
+    key: string;
+    rows: Project[];
+  } | null>(null);
+  const projects = projectsLoad?.key === projectsKey ? projectsLoad.rows : null;
+  // Organization and platform accounts only, never personal ones; and the same
+  // non-guest audience as the Code Repo these projects come from.
+  const showProjects =
+    (user?.scope === "organization" || user?.scope === "platform") &&
+    user.effective_role !== "guest";
+  const projectsOpen = showProjects && sections.isOpen("projects");
+  useEffect(() => {
+    if (!projectsOpen || userId == null || projects !== null) return;
+    let cancelled = false;
+    void listProjects()
+      .then((data) => (Array.isArray(data) ? data : []))
+      .catch(() => [] as Project[])
+      .then((rows) => {
+        if (!cancelled) setProjectsLoad({ key: projectsKey, rows });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectsOpen, userId, projects, projectsKey]);
+
   // The team page deletes through the api layer, which announces it here.
   useEffect(() => {
     const onDeleted = (e: Event) => {
@@ -491,6 +529,31 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       cancelled = true;
     };
   }, [userScope, userRole]);
+
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [projectCreateDraft, setProjectCreateDraft] = useState("");
+  const submitNewProject = () => {
+    const name = projectCreateDraft.trim();
+    setCreatingProject(false);
+    setProjectCreateDraft("");
+    if (!name) return;
+    createProject(name)
+      .then((created) => {
+        // Only into a list that has loaded; one still loading will include it.
+        setProjectsLoad((prev) =>
+          prev?.key === projectsKey
+            ? {
+                key: prev.key,
+                rows: [
+                  created,
+                  ...prev.rows.filter((p) => p.id !== created.id),
+                ],
+              }
+            : prev
+        );
+      })
+      .catch(() => {});
+  };
 
   const submitNewTeam = () => {
     const name = teamCreateDraft.trim();
@@ -1549,9 +1612,13 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       className={`sidebar-link ${isActive ? "active" : ""}`.trim()}
       onClick={() => setNavOpen(false)}
     >
-      <span className="sidebar-icon" aria-hidden="true">
-        {icon}
-      </span>
+      {/* A link with no icon has no icon slot either, so its label starts at
+          the left edge, in line with the group headings. */}
+      {icon != null && (
+        <span className="sidebar-icon" aria-hidden="true">
+          {icon}
+        </span>
+      )}
       <span className="sidebar-label">{label}</span>
     </Link>
   );
@@ -1852,8 +1919,10 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
             <AccessRequestsIcon size={16} /> Requests
           </Link>
           {/* The organization's sprint chart; platform staff have their own
-              Analytics under Platform. A plain page, not a split-pane app. */}
-          {user.scope === "organization" && (
+              Analytics under Platform. A plain page, not a split-pane app.
+              Owners find it below Feature Access in the Organization group;
+              everyone else has no such group, so it stays here for them. */}
+          {user.scope === "organization" && !isOrgOwner && (
             <Link
               to="/organization/analytics"
               title="Analytics"
@@ -1926,6 +1995,81 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       ),
     },
     {
+      key: "projects",
+      label: "Projects",
+      icon: <ProjectsTileIcon size={16} />,
+      visible: showProjects,
+      // Creating a project is org-owner-only (platform accounts cannot); the
+      // backend enforces it regardless.
+      onAdd:
+        isOrgOwner && !railCollapsed
+          ? () => {
+              sections.setOpen("projects", true);
+              setProjectCreateDraft("");
+              setCreatingProject(true);
+            }
+          : undefined,
+      body: (
+        <div className="sidebar-subitems">
+          {creatingProject && (
+            <input
+              className="sidebar-project-edit"
+              value={projectCreateDraft}
+              autoFocus
+              placeholder="New project…"
+              aria-label="New project name"
+              onChange={(e) => setProjectCreateDraft(e.target.value)}
+              onBlur={submitNewProject}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitNewProject();
+                else if (e.key === "Escape") {
+                  setCreatingProject(false);
+                  setProjectCreateDraft("");
+                }
+              }}
+            />
+          )}
+          {projects === null && (
+            <div className="sidebar-empty-hint">Loading…</div>
+          )}
+          {projects?.map((project) => {
+            // A project opens its page through its linked repository; one
+            // with no repository linked has no page yet, so it is a plain row.
+            if (!project.github_owner || !project.github_repo) {
+              return (
+                <div
+                  key={project.id}
+                  className="sidebar-link sidebar-link--static"
+                  title={`${project.name} (no repository linked)`}
+                >
+                  <span className="sidebar-icon" aria-hidden="true">
+                    <ProjectsTileIcon size={16} />
+                  </span>
+                  <span className="sidebar-label">{project.name}</span>
+                </div>
+              );
+            }
+            const path = `/projects/${encodeURIComponent(
+              project.github_owner
+            )}/${encodeURIComponent(project.github_repo)}`;
+            return (
+              <Fragment key={project.id}>
+                {renderSidebarLink(
+                  path,
+                  project.name,
+                  <ProjectsTileIcon size={16} />,
+                  location.pathname === path
+                )}
+              </Fragment>
+            );
+          })}
+          {!creatingProject && projects?.length === 0 && (
+            <div className="sidebar-empty-hint">No projects yet</div>
+          )}
+        </div>
+      ),
+    },
+    {
       key: "platform",
       label: "Platform",
       // Wide screens reach these pages from the Settings gear's "Platform
@@ -1965,12 +2109,6 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           visible: canAccessPlatformSupport,
         },
         {
-          path: "/platform/analytics",
-          label: "Analytics",
-          icon: <AnalyticsIcon size={16} />,
-          visible: canAccessPlatformAnalytics,
-        },
-        {
           path: "/platform/secrets",
           label: "Secrets",
           icon: <SecretsIcon size={16} />,
@@ -1981,6 +2119,12 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           label: "Feature Access",
           icon: <ApiKeysIcon size={16} />,
           visible: isPlatformOwner,
+        },
+        {
+          path: "/platform/analytics",
+          label: "Analytics",
+          icon: <AnalyticsIcon size={16} />,
+          visible: canAccessPlatformAnalytics,
         },
       ],
     },
@@ -2017,6 +2161,11 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           path: "/organization/access",
           label: "Feature Access",
           icon: <ApiKeysIcon size={16} />,
+        },
+        {
+          path: "/organization/analytics",
+          label: "Analytics",
+          icon: <AnalyticsIcon size={16} />,
         },
       ],
     },
@@ -2061,6 +2210,8 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
         "/settings/statuses",
         "/settings/repositories",
         "/settings/developers",
+        "/settings/teams",
+        "/settings/projects",
       ].includes(location.pathname));
   // The Platform admin pages do the same with the Platform menu. /platform/home
   // (the platform AI home) isn't one of its links, so it keeps the main menu.
@@ -2070,10 +2221,22 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   // swaps the sidebar's menu for the settings menu (see settingsNav below).
   const showTabs = !isNarrow;
 
+  // The desktop shell surfaces Upgrade on the Settings page instead.
+  const showUpgrade = !desktop && isBasicPersonalUser;
+  // Upgrade sits in the sidebar, above the account row, whenever the main menu
+  // is showing there, split or not: at the end of the tab strip it ended up
+  // stranded mid-screen once the page was split. It falls back to the tab
+  // strip (or the phone header) for the icon rail and the settings/platform
+  // takeovers, which have no account row.
+  const upgradeInSidebar =
+    showUpgrade &&
+    showTabs &&
+    !sidebarCollapsed &&
+    !settingsTakeover &&
+    !platformTakeover;
   const headerActions = (
     <>
-      {/* The desktop shell surfaces Upgrade on the Settings page instead. */}
-      {!desktop && isBasicPersonalUser && (
+      {showUpgrade && !upgradeInSidebar && (
         <button
           type="button"
           className="header-upgrade-btn"
@@ -2091,36 +2254,10 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     ? "/settings/repositories"
     : location.pathname;
   const settingsLinks: SidebarLinkDef[] = [
-    { path: "/settings", label: "General", icon: <SettingsIcon size={18} /> },
-    {
-      path: "/settings/notifications",
-      label: "Notifications",
-      icon: <BellIcon size={18} />,
-    },
-    {
-      path: "/settings/usage",
-      label: "Usage",
-      icon: <AnalyticsIcon size={18} />,
-    },
-    {
-      // Platform users have no billing cards; mirrors Settings' gate.
-      path: "/settings/billing",
-      label: "Billing",
-      icon: <BillingIcon size={18} />,
-      visible: user?.scope !== "platform",
-    },
-    { path: "/profile", label: "My Profile", icon: <PersonIcon size={18} /> },
-    {
-      path: "/integrations",
-      label: "Integrations",
-      icon: <IntegrationsIcon size={18} />,
-      visible: canViewIntegrations(user),
-    },
-    {
-      path: "/appearance",
-      label: "Appearance",
-      icon: <CanvasIcon size={18} />,
-    },
+    // General carries no icon, by request: its label sits at the left edge,
+    // in line with the group headings, with Shortcuts, Repositories and
+    // Developers under it.
+    { path: "/settings", label: "General", icon: null },
     {
       path: "/settings/shortcuts",
       label: "Shortcuts",
@@ -2140,6 +2277,66 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       visible: user?.account_type !== "personal",
     },
   ];
+  // Settings › Integrations: the full page first, then (rendered after it) the
+  // services this account has connected.
+  const integrationLinks: SidebarLinkDef[] = canViewIntegrations(user)
+    ? [
+        {
+          path: "/integrations",
+          label: "All integrations",
+          icon: <IntegrationsIcon size={18} />,
+          // Lit only for the page as a whole; a connected service's own row
+          // is lit when its panel is the one open.
+          active:
+            location.pathname === "/integrations" &&
+            !new URLSearchParams(location.search).has("service"),
+        },
+      ]
+    : [];
+  // Settings › Personal: the signed-in person's own profile and notifications.
+  const personalLinks: SidebarLinkDef[] = [
+    { path: "/profile", label: "My Profile", icon: <PersonIcon size={18} /> },
+    {
+      path: "/settings/notifications",
+      label: "Notifications",
+      icon: <BellIcon size={18} />,
+    },
+    {
+      path: "/appearance",
+      label: "Appearance",
+      icon: <CanvasIcon size={18} />,
+    },
+  ];
+  // Settings › Administration. Teams and Projects are for owners, super
+  // admins and admins; Billing and Usage are for everyone who had them before,
+  // so every account gets the group.
+  const isAdmin = isWorkspaceAdmin(user);
+  const administrationLinks: SidebarLinkDef[] = [
+    {
+      path: "/settings/teams",
+      label: "Teams",
+      icon: <TeamsIcon size={18} />,
+      visible: isAdmin,
+    },
+    {
+      path: "/settings/projects",
+      label: "Projects",
+      icon: <ProjectsTileIcon size={18} />,
+      visible: isAdmin,
+    },
+    {
+      // Platform users have no billing cards; mirrors Settings' gate.
+      path: "/settings/billing",
+      label: "Billing",
+      icon: <BillingIcon size={18} />,
+      visible: user?.scope !== "platform",
+    },
+    {
+      path: "/settings/usage",
+      label: "Usage",
+      icon: <AnalyticsIcon size={18} />,
+    },
+  ].filter((l) => l.visible !== false);
   const settingsNav = (
     <>
       <div className="sidebar-section">
@@ -2151,12 +2348,6 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
         )}
       </div>
       <div className="sidebar-section">
-        <div className="sidebar-section-label">
-          <span className="sidebar-section-icon" aria-hidden="true">
-            <SettingsIcon size={16} />
-          </span>
-          <span>Settings</span>
-        </div>
         {settingsLinks
           .filter((l) => l.visible !== false)
           .map((l) => (
@@ -2169,7 +2360,40 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
               )}
             </Fragment>
           ))}
-        {/* Log out sits right under Developers, as the menu's last row. */}
+      </div>
+      {[
+        {
+          label: "Integrations",
+          links: integrationLinks,
+          after: (
+            <ConnectedIntegrationLinks onNavigate={() => setNavOpen(false)} />
+          ),
+        },
+        { label: "Personal", links: personalLinks, after: null },
+        { label: "Administration", links: administrationLinks, after: null },
+      ]
+        .filter((group) => group.links.length > 0)
+        .map((group) => (
+          <div className="sidebar-section" key={group.label}>
+            {/* Plain text headings: only the links under them carry icons. */}
+            <div className="sidebar-section-label">
+              <span>{group.label}</span>
+            </div>
+            {group.links.map((l) => (
+              <Fragment key={l.path}>
+                {renderSidebarLink(
+                  l.path,
+                  l.label,
+                  l.icon,
+                  l.active ?? settingsPath === l.path
+                )}
+              </Fragment>
+            ))}
+            {group.after}
+          </div>
+        ))}
+      <div className="sidebar-section">
+        {/* Log out is the menu's last row, below every group. */}
         <button
           type="button"
           className="sidebar-link sidebar-link--button"
@@ -2433,10 +2657,6 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
                       "Calendar",
                       <SchedulerIcon size={18} />
                     )}
-                    {/* Splits the communication apps (Inbox / Chat / Calendar)
-                    from the content ones below, so the list reads as two short
-                    groups rather than one long run. Presentational only. */}
-                    <hr className="sidebar-divider" aria-hidden="true" />
                     {renderSidebarItem(
                       "/drive",
                       "drive",
@@ -2482,6 +2702,15 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
               Profile and Integrations back; Appearance is a card on the
               General settings page there instead. */}
                   <div className="sidebar-section sidebar-section-bottom">
+                    {upgradeInSidebar && (
+                      <button
+                        type="button"
+                        className="header-upgrade-btn sidebar-upgrade-btn"
+                        onClick={goToUpgrade}
+                      >
+                        Upgrade
+                      </button>
+                    )}
                     <ProfileMenu
                       placement="sidebar"
                       minimal={!isNarrow}

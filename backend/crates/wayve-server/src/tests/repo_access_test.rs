@@ -162,4 +162,87 @@ mod tests {
         }
         drop(mock);
     }
+
+    // Whoever created the project heads the list as an admin: added when they
+    // are neither a collaborator nor hold a grant, and raised to admin (never
+    // duplicated) when they already have a row.
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn project_creator_is_listed_first_as_admin() {
+        const CREATOR_REPO: &str = "gadgets";
+        let mock = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path(format!("/repos/{OWNER}/{CREATOR_REPO}/collaborators")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                { "login": "alice", "permissions": { "admin": false, "push": true,  "pull": true } },
+                { "login": "bob",   "permissions": { "admin": false, "push": false, "pull": true } }
+            ])))
+            .mount(&mock)
+            .await;
+        // SAFETY: serialized via #[serial]; points the GitHub client at the mock.
+        unsafe {
+            std::env::set_var("GITHUB_API_BASE", mock.uri());
+        }
+
+        let pool = test_pool().await;
+        let caller_email = random_email();
+        let caller = insert_local_user(&pool, &caller_email, "password123").await;
+        let bearer = format!("Bearer {}", jwt_for(caller, &caller_email));
+        sqlx::query(
+            "INSERT INTO projects (name, user_id, github_owner, github_repo, created_by)
+             VALUES ('P', $1, $2, $3, $1)",
+        )
+        .bind(caller)
+        .bind(OWNER)
+        .bind(CREATOR_REPO)
+        .execute(&pool)
+        .await
+        .unwrap_or_else(|e| panic!("insert project: {e}"));
+
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(crate::repo_access::handler::get_access),
+        )
+        .await;
+        let fetch = || async {
+            let req = actix_test::TestRequest::get()
+                .uri(&format!("/repos/{OWNER}/{CREATOR_REPO}/access"))
+                .insert_header(("Authorization", bearer.clone()))
+                .to_request();
+            let body: serde_json::Value = actix_test::call_and_read_body_json(&app, req).await;
+            body["rows"]
+                .as_array()
+                .cloned()
+                .unwrap_or_else(|| panic!("rows: {body}"))
+        };
+
+        // Not a collaborator, no grant: added ahead of alice and bob.
+        let rows = fetch().await;
+        assert_eq!(rows.len(), 3, "creator + alice + bob: {rows:?}");
+        assert_eq!(rows[0]["user_id"], serde_json::json!(caller));
+        assert_eq!(rows[0]["email"], serde_json::json!(caller_email));
+        assert_eq!(rows[0]["level"], serde_json::json!("admin"));
+        assert_eq!(rows[0]["is_member"], serde_json::json!(true));
+
+        // Now the creator is the collaborator "bob" (read on GitHub): the same
+        // row, moved first and shown as admin.
+        map_github(&pool, caller, "bob").await;
+        let rows = fetch().await;
+        assert_eq!(rows.len(), 2, "alice + bob only: {rows:?}");
+        assert_eq!(rows[0]["github_login"], serde_json::json!("bob"));
+        assert_eq!(rows[0]["user_id"], serde_json::json!(caller));
+        assert_eq!(rows[0]["level"], serde_json::json!("admin"));
+        assert_eq!(rows[1]["github_login"], serde_json::json!("alice"));
+        assert_eq!(rows[1]["level"], serde_json::json!("write"));
+
+        let _ = sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(caller)
+            .execute(&pool)
+            .await;
+        unsafe {
+            std::env::remove_var("GITHUB_API_BASE");
+        }
+        drop(mock);
+    }
 }

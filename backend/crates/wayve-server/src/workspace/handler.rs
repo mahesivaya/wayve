@@ -132,18 +132,59 @@ enum TeamScope {
     None,
 }
 
-async fn caller_team_scope(req: &HttpRequest, pool: &PgPool) -> Result<TeamScope, AppError> {
+/// Roles that see every team and project in their scope. Everyone else sees
+/// only the ones they belong to. The same roles as the Code Repo's
+/// `is_project_admin`, so the project list and the repo gate agree.
+fn sees_whole_scope(role: rbac::Role) -> bool {
+    matches!(
+        role,
+        rbac::Role::Owner | rbac::Role::SuperAdmin | rbac::Role::Admin
+    )
+}
+
+/// The caller's team scope, plus the user to restrict the teams to: `None` for
+/// an owner or admin (every team in scope), else the caller, who sees only the
+/// teams they are on or created.
+async fn caller_team_scope(
+    req: &HttpRequest,
+    pool: &PgPool,
+) -> Result<(TeamScope, Option<i32>), AppError> {
     let Some(user_id) = get_user_id_from_request(req) else {
         return Err(AppError::Unauthorized);
     };
     let ctx = rbac::resolve_role_context(pool, user_id)
         .await
         .map_err(AppError::Db)?;
-    Ok(match ctx.scope {
+    let scope = match ctx.scope {
         Scope::Organization => ctx.organization_id.map_or(TeamScope::None, TeamScope::Org),
         Scope::Platform => TeamScope::Platform,
         Scope::Personal => TeamScope::None,
-    })
+    };
+    let only_member = (!sees_whole_scope(ctx.role)).then_some(user_id);
+    Ok((scope, only_member))
+}
+
+/// SQL condition: `$N` is NULL (no restriction), or that user created the team
+/// or is on its roster. Rosters hold a name and email, not a user id, so
+/// membership is matched on the account's email.
+fn team_member_filter(param: u8) -> String {
+    format!(
+        "(${param}::INT IS NULL OR teams.created_by = ${param} OR EXISTS (
+            SELECT 1 FROM team_members tm JOIN users mu ON LOWER(mu.email) = LOWER(tm.email)
+             WHERE tm.team_id = teams.id AND mu.id = ${param}))"
+    )
+}
+
+/// SQL condition: `$N` is NULL (no restriction), or that user created the
+/// project or was granted its linked repository.
+fn project_member_filter(param: u8) -> String {
+    format!(
+        "(${param}::INT IS NULL OR projects.created_by = ${param} OR EXISTS (
+            SELECT 1 FROM member_project_access a
+             WHERE a.user_id = ${param}
+               AND LOWER(a.repo_full_name)
+                   = LOWER(projects.github_owner || '/' || projects.github_repo)))"
+    )
 }
 
 /// Shared shape for a project row, including its optional linked repo.
@@ -282,21 +323,26 @@ pub async fn list_projects(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
         .await
         .map_err(AppError::Db)?;
 
-    // Org members see their org's projects and personal accounts see their own.
-    // Platform staff are unrestricted and see every project, so consumers like
-    // the create-task project dropdown work for the platform owner too.
+    // Personal accounts see their own projects. In an organization, owners and
+    // admins see all of its projects and everyone else only the ones they
+    // created or were granted the repository of. Platform staff follow the
+    // same rule across every project, so consumers like the create-task project
+    // dropdown still work for the platform owner.
+    let only_member = (!sees_whole_scope(ctx.role)).then_some(user_id);
     let rows = match ctx.scope {
         Scope::Organization => {
             let Some(org_id) = ctx.organization_id else {
                 return Ok(HttpResponse::Ok().json(serde_json::json!([])));
             };
-            sqlx::query(
+            sqlx::query(&format!(
                 "SELECT id, name, github_owner, github_repo
                  FROM projects
-                 WHERE organization_id = $1
+                 WHERE organization_id = $1 AND {}
                  ORDER BY created_at DESC, id DESC",
-            )
+                project_member_filter(2)
+            ))
             .bind(org_id)
+            .bind(only_member)
             .fetch_all(pool.get_ref())
             .await?
         }
@@ -312,11 +358,14 @@ pub async fn list_projects(req: HttpRequest, pool: web::Data<PgPool>) -> AppResu
             .await?
         }
         Scope::Platform => {
-            sqlx::query(
+            sqlx::query(&format!(
                 "SELECT id, name, github_owner, github_repo
                  FROM projects
+                 WHERE {}
                  ORDER BY created_at DESC, id DESC",
-            )
+                project_member_filter(1)
+            ))
+            .bind(only_member)
             .fetch_all(pool.get_ref())
             .await?
         }
@@ -640,30 +689,24 @@ pub async fn delete_project(
 #[get("/teams")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn list_teams(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
-    let rows = match caller_team_scope(&req, pool.get_ref()).await? {
-        TeamScope::Org(org_id) => {
-            sqlx::query(
-                "SELECT id, name, slug, tagline, description, created_at
-                 FROM teams
-                 WHERE organization_id = $1
-                 ORDER BY created_at DESC, id DESC",
-            )
-            .bind(org_id)
-            .fetch_all(pool.get_ref())
-            .await?
-        }
-        TeamScope::Platform => {
-            sqlx::query(
-                "SELECT id, name, slug, tagline, description, created_at
-                 FROM teams
-                 WHERE organization_id IS NULL
-                 ORDER BY created_at DESC, id DESC",
-            )
-            .fetch_all(pool.get_ref())
-            .await?
-        }
+    let (scope, only_member) = caller_team_scope(&req, pool.get_ref()).await?;
+    // `$1` is the organization, NULL for platform teams.
+    let org_id = match scope {
+        TeamScope::Org(org_id) => Some(org_id),
+        TeamScope::Platform => None,
         TeamScope::None => return Ok(HttpResponse::Ok().json(serde_json::json!([]))),
     };
+    let rows = sqlx::query(&format!(
+        "SELECT id, name, slug, tagline, description, created_at
+         FROM teams
+         WHERE organization_id IS NOT DISTINCT FROM $1 AND {}
+         ORDER BY created_at DESC, id DESC",
+        team_member_filter(2)
+    ))
+    .bind(org_id)
+    .bind(only_member)
+    .fetch_all(pool.get_ref())
+    .await?;
 
     let teams: Vec<_> = rows.into_iter().map(team_summary_json).collect();
     Ok(HttpResponse::Ok().json(teams))
@@ -677,29 +720,30 @@ pub async fn get_team(
     path: web::Path<String>,
 ) -> AppResult {
     let slug = path.into_inner();
-    let row = match caller_team_scope(&req, pool.get_ref()).await? {
-        TeamScope::Org(org_id) => {
-            sqlx::query(
-                "SELECT id, name, slug, tagline, description, created_at
-                 FROM teams
-                 WHERE organization_id = $1 AND slug = $2",
-            )
-            .bind(org_id)
-            .bind(&slug)
-            .fetch_optional(pool.get_ref())
-            .await?
-        }
-        TeamScope::Platform => {
-            sqlx::query(
-                "SELECT id, name, slug, tagline, description, created_at
-                 FROM teams
-                 WHERE organization_id IS NULL AND slug = $1",
-            )
-            .bind(&slug)
-            .fetch_optional(pool.get_ref())
-            .await?
-        }
+    // A team the caller is not on is reported as not found, like one in
+    // another organization.
+    let (scope, only_member) = caller_team_scope(&req, pool.get_ref()).await?;
+    // `Some(org)` for an organization's teams, `Some(None)` for platform teams.
+    let team_org = match scope {
+        TeamScope::Org(org_id) => Some(Some(org_id)),
+        TeamScope::Platform => Some(None),
         TeamScope::None => None,
+    };
+    let row = match team_org {
+        None => None,
+        Some(org_id) => {
+            sqlx::query(&format!(
+                "SELECT id, name, slug, tagline, description, created_at
+                 FROM teams
+                 WHERE organization_id IS NOT DISTINCT FROM $1 AND {} AND slug = $3",
+                team_member_filter(2)
+            ))
+            .bind(org_id)
+            .bind(only_member)
+            .bind(&slug)
+            .fetch_optional(pool.get_ref())
+            .await?
+        }
     };
 
     let Some(row) = row else {
