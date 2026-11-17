@@ -2095,17 +2095,6 @@ export function GitHubRepoViewer({
                   </div>
                 )}
 
-                {repo?.html_url && (
-                  <a
-                    className="github-description-link"
-                    href={repo.html_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    View on GitHub →
-                  </a>
-                )}
-
                 <div className="github-panel-head github-description-readme-head">
                   <h2>README</h2>
                 </div>
