@@ -56,6 +56,51 @@
   color: var(--color-text-muted);
   margin: 0 0 12px;
 }
+/* The local runner's progress: a percentage, the current step, and a bar. */
+.aifix-progress {
+  margin: 0 0 12px;
+}
+.aifix-progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.aifix-progress-step {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.aifix-progress-pct {
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+.aifix-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-surface-hover);
+  overflow: hidden;
+}
+.aifix-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-primary-action);
+  transition: width 0.4s ease;
+}
+.aifix-progress.is-failed .aifix-progress-fill {
+  background: var(--color-danger);
+}
+@media (prefers-reduced-motion: reduce) {
+  .aifix-progress-fill {
+    transition: none;
+  }
+}
+
 .aifix-muted code {
   font-size: 0.85em;
   padding: 1px 5px;
@@ -252,4 +297,19 @@
   font-size: var(--text-sm);
   color: var(--color-text-muted);
   margin: 0;
+}
+
+/* What the local runner says failed: a check's output, or a git/GitHub error. */
+.aifix-error-log {
+  max-height: 320px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+  font-size: var(--text-xs);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

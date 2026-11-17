@@ -88,10 +88,10 @@ export default function AiFixPanel({
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  // While CI is running, poll for the diff to land.
+  // While the fix is queued or running, poll for the result to land.
   useEffect(() => {
-    if (state?.status !== "running") return;
-    const timer = window.setInterval(() => void load(), 8000);
+    if (state?.status !== "running" && state?.status !== "queued") return;
+    const timer = window.setInterval(() => void load(), 4000);
     return () => window.clearInterval(timer);
   }, [state?.status, load]);
 
@@ -100,23 +100,54 @@ export default function AiFixPanel({
     setMsg("");
     try {
       const r = await api.start(itemId);
+      const local = r.runner === "local";
       setMsg(
-        r.reused_fix_from
-          ? `Fix started in CI (reusing the fix from #${r.reused_fix_from}). The diff will appear here to review.`
-          : "Fix started in CI. The diff will appear here to review."
+        local
+          ? "Fix queued for the local runner. If its checks pass, it opens the pull request and the link appears here."
+          : r.reused_fix_from
+            ? `Fix started in CI (reusing the fix from #${r.reused_fix_from}). The diff will appear here to review.`
+            : "Fix started in CI. The diff will appear here to review."
       );
       setState({
-        status: "running",
+        status: local ? "queued" : "running",
         diff: null,
         files: [],
         commit_sha: null,
         branch: null,
         pr_url: null,
+        // The local runner reports a percentage; show 0% until it claims the job.
+        progress: local ? 0 : null,
+        step: null,
       });
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "Couldn't start the AI fix.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Stop a fix that is queued or running. The server decides whether there was
+  // still something to stop; either way the panel re-reads the item, so a run
+  // that finished a moment earlier shows its result instead of "canceled".
+  const [canceling, setCanceling] = useState(false);
+  const cancel = async () => {
+    setCanceling(true);
+    setMsg("");
+    try {
+      const r = await api.cancel(itemId);
+      setMsg(
+        r.canceled
+          ? "AI fix canceled."
+          : "The AI fix had already finished, so there was nothing to cancel."
+      );
+      await load();
+      onChanged?.();
+    } catch (err) {
+      setMsg(
+        err instanceof Error ? err.message : "Couldn't cancel the AI fix."
+      );
+    } finally {
+      setCanceling(false);
     }
   };
 
@@ -175,8 +206,18 @@ export default function AiFixPanel({
   };
 
   const status = state?.status ?? null;
+  // A queued fix can be queued again: nothing has started, and it is the way
+  // out if the local runner was never running.
   const showStart =
-    canFix && (!status || status === "no_change" || status === "error");
+    canFix &&
+    (!status ||
+      status === "no_change" ||
+      status === "error" ||
+      status === "canceled" ||
+      status === "queued");
+  // A fix on its way can be stopped by whoever can see this panel (the read
+  // behind it is limited to people who may run the fixer).
+  const showCancel = status === "queued" || status === "running";
 
   // The priority rules this item out. Said outright (when the caller told us
   // the rule) so the section doesn't just vanish. Waits for a successful read:
@@ -185,7 +226,10 @@ export default function AiFixPanel({
     !canFix &&
     minPriority !== undefined &&
     state !== null &&
-    (!status || status === "no_change" || status === "error");
+    (!status ||
+      status === "no_change" ||
+      status === "error" ||
+      status === "canceled");
 
   // Nothing to say: no run has ever happened, this item can't start one, and
   // the read didn't fail in a way worth reporting.
@@ -200,6 +244,19 @@ export default function AiFixPanel({
   // Once a commit object exists its content is fixed on GitHub, so editing is
   // only offered while the fix is still awaiting review.
   const editable = status === "ready";
+  // The local runner's percentage, while the fix is on its way or where it
+  // stopped. A CI run has none.
+  const progress =
+    typeof state?.progress === "number" &&
+    (status === "queued" || status === "running" || status === "error")
+      ? Math.max(0, Math.min(100, Math.round(state.progress)))
+      : null;
+  const progressStep =
+    status === "queued"
+      ? "Waiting for the runner"
+      : status === "error"
+        ? `Stopped at: ${state?.step ?? "an early step"}`
+        : (state?.step ?? "Starting");
 
   return (
     <section className="aifix" aria-label="AI fix">
@@ -219,6 +276,16 @@ export default function AiFixPanel({
               : status === "no_change" || status === "error"
                 ? "Retry AI fix"
                 : "Fix with AI"}
+          </button>
+        )}
+        {showCancel && (
+          <button
+            type="button"
+            className="aifix-start aifix-cancel"
+            onClick={() => void cancel()}
+            disabled={canceling}
+          >
+            {canceling ? "Canceling…" : "Cancel"}
           </button>
         )}
         {showLocked && (
@@ -242,10 +309,52 @@ export default function AiFixPanel({
         </p>
       )}
 
+      {progress !== null && (
+        <div
+          className={`aifix-progress${status === "error" ? " is-failed" : ""}`}
+        >
+          <div className="aifix-progress-head">
+            <span className="aifix-progress-step">{progressStep}</span>
+            <span className="aifix-progress-pct">{progress}%</span>
+          </div>
+          <div
+            className="aifix-progress-track"
+            role="progressbar"
+            aria-label="AI fix progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progress}
+          >
+            <div
+              className="aifix-progress-fill"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {status === "queued" && (
+        <p className="aifix-muted">
+          🤖 Waiting for the local runner to pick this up. Start it with{" "}
+          <code>python3 scripts/ai_fix_local_runner.py</code> if it isn’t
+          running.
+        </p>
+      )}
+
+      {/* Worded for both runners: CI posts a diff to review, the local runner
+          opens the pull request itself. */}
       {status === "running" && (
         <p className="aifix-muted">
-          🤖 Claude is implementing and verifying a fix in CI. The diff will
-          appear here for review when it’s ready — this can take a few minutes.
+          🤖 Claude is implementing and verifying a fix. The result will appear
+          here when it’s ready. This can take several minutes, longer when the
+          change touches the backend.
+        </p>
+      )}
+
+      {status === "canceled" && (
+        <p className="aifix-muted">
+          This AI fix was canceled before it finished. Nothing was changed. You
+          can start it again with Fix with AI.
         </p>
       )}
 
@@ -264,6 +373,14 @@ export default function AiFixPanel({
           before finding a fix. Refine the description with the affected feature
           or file and steps to reproduce, then retry.
         </p>
+      )}
+
+      {/* The local runner reports what failed (a check's output, a git or
+          GitHub error); CI reports nothing here. */}
+      {status === "error" && state?.diff && (
+        <pre className="aifix-error-log" aria-label="What failed">
+          {state.diff}
+        </pre>
       )}
 
       {reviewable && (

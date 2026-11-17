@@ -18,8 +18,10 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         // the ticket ones because both drive the identical `ai_fix_*` columns —
         // only the table, the visibility scope and the priority floor differ.
         .service(crate::tickets::handler::ai_fix_story)
+        .service(crate::tickets::handler::cancel_story_ai_fix)
         .service(crate::tickets::handler::get_story_ai_fix_state)
         .service(crate::tickets::handler::record_story_ai_fix_diff)
+        .service(crate::tickets::handler::record_story_ai_fix_progress)
         .service(crate::tickets::handler::edit_story_ai_fix)
         .service(crate::tickets::handler::commit_story_ai_fix)
         .service(crate::tickets::handler::push_story_ai_fix)

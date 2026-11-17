@@ -8,13 +8,17 @@
 import { apiFetchJson } from "./client";
 
 export type AiFixStatus =
+  // Local runner mode only: waiting for the runner on this machine to claim it.
+  | "queued"
   | "running"
   | "ready"
   | "committed"
   | "pushed"
   | "pr_opened"
   | "no_change"
-  | "error";
+  | "error"
+  // Stopped from the app while queued or running. It can be started again.
+  | "canceled";
 
 // One changed file. `content` is base64 so arbitrary bytes survive JSON — this,
 // not the diff, is what the Commit step turns into Git blobs.
@@ -31,16 +35,26 @@ export type AiFixState = {
   commit_sha: string | null;
   branch: string | null;
   pr_url: string | null;
+  // Local runner only: how far the run has got (0-100) and what it is doing.
+  // Absent for a CI run, which reports nothing until it finishes.
+  progress?: number | null;
+  step?: string | null;
 };
 
 export type AiFixStartResult = {
   dispatched?: boolean;
+  // "local" when the backend hands the job to a runner on this machine
+  // (AI_FIX_RUNNER=local) instead of dispatching CI.
+  runner?: string;
   reused_fix_from: number | null;
 };
 
 export type AiFixApi = {
   getState: (id: number) => Promise<AiFixState>;
   start: (id: number) => Promise<AiFixStartResult>;
+  // Stops a queued or running fix. `canceled` is false when there was nothing
+  // left to stop (the run had already finished).
+  cancel: (id: number) => Promise<{ canceled: boolean }>;
   saveEdits: (
     id: number,
     files: AiFixFile[],
@@ -68,6 +82,7 @@ export function makeAiFixApi(collection: string): AiFixApi {
       return { ...s, files: s.files ?? [] };
     },
     start: (id) => post<AiFixStartResult>(`${base(id)}/ai-fix`),
+    cancel: (id) => post<{ canceled: boolean }>(`${base(id)}/ai-fix-cancel`),
     saveEdits: (id, files, diff) =>
       post<{ saved: boolean }>(`${base(id)}/ai-fix-edit`, { files, diff }),
     commit: (id) => post<{ commit_sha: string }>(`${base(id)}/ai-fix-commit`),
