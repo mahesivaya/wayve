@@ -7,8 +7,6 @@ import { getApiBase } from "../config/env";
 import { ChevronUp, LogOut as LogOutIcon } from "lucide-react";
 import { PlatformIcon, SettingsIcon } from "../icons";
 import {
-  STATUS_OPTIONS,
-  chooseMyStatus,
   loadMyStatus,
   statusClass,
   statusLabel,
@@ -16,42 +14,8 @@ import {
 } from "../chat/myStatus";
 import type { ChatStatus } from "../api/chat";
 
-// Your chat status, set from the account menu on any page (the Chat page's
-// picker shares the same store). Shown as a dot on your avatar.
-function StatusItems({
-  status,
-  onPick,
-}: {
-  status: ChatStatus;
-  onPick: (s: ChatStatus) => void;
-}) {
-  return (
-    <div role="group" aria-label="Status">
-      <div className="profile-dropdown-heading">Status</div>
-      {STATUS_OPTIONS.map((o) => (
-        <button
-          key={o.value}
-          type="button"
-          role="menuitemradio"
-          aria-checked={o.value === status}
-          className="profile-dropdown-item profile-status-item"
-          onClick={() => onPick(o.value)}
-        >
-          <span className="profile-dropdown-icon" aria-hidden="true">
-            <span className={`profile-status-dot ${o.cls}`} />
-          </span>
-          <span className="profile-dropdown-label">{o.label}</span>
-          {o.value === status && (
-            <span className="profile-status-check" aria-hidden="true">
-              ✓
-            </span>
-          )}
-        </button>
-      ))}
-    </div>
-  );
-}
-
+// Your chat status shows as a dot on your avatar. It is set from the Chat
+// page's picker, not from this menu.
 function AvatarWithStatus({
   status,
   children,
@@ -132,11 +96,6 @@ export default function ProfileMenu({
     void navigate(path);
   };
 
-  const pickStatus = (next: ChatStatus) => {
-    setMenuOpen(false);
-    void chooseMyStatus(next);
-  };
-
   // Wide screens: the sidebar's account control is the profile picture and
   // name. It opens a small menu: Settings, Platform admin (platform admins
   // only) and Log out.
@@ -171,8 +130,6 @@ export default function ProfileMenu({
 
         {menuOpen && (
           <div className="profile-dropdown" role="menu">
-            <StatusItems status={status} onPick={pickStatus} />
-            <div className="profile-dropdown-divider" />
             <button
               type="button"
               role="menuitem"
@@ -249,8 +206,6 @@ export default function ProfileMenu({
 
       {menuOpen && (
         <div className="profile-dropdown" role="menu">
-          <StatusItems status={status} onPick={pickStatus} />
-          <div className="profile-dropdown-divider" />
           {!minimal && (
             <button
               className="profile-dropdown-item"

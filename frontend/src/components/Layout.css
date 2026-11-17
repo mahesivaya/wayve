@@ -246,22 +246,7 @@
   margin: 6px 0;
 }
 
-/* Status in the account menu: a small heading, then Active / Do Not Disturb /
-   Away, each with its dot and a check on the current one. Colours match the
-   chat presence dots (chat.css). */
-.profile-dropdown-heading {
-  padding: 4px 12px 2px;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--color-text-muted);
-}
-
-.profile-status-check {
-  margin-left: auto;
-  font-size: var(--text-md);
-  color: var(--color-text-muted);
-}
-
+/* Your status dot. Colours match the chat presence dots (chat.css). */
 .profile-status-dot {
   display: inline-block;
   width: 10px;
@@ -290,11 +275,6 @@
   height: 9px;
   border: 2px solid var(--color-surface);
   box-sizing: content-box;
-}
-
-.sidebar.collapsed .profile-dropdown-heading,
-.sidebar.collapsed .profile-status-check {
-  display: none;
 }
 
 .profile-dropdown-logout {
