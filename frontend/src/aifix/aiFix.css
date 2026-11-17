@@ -25,7 +25,9 @@
 
 .aifix-start {
   padding: 7px 14px;
-  border: 1px solid var(--color-border);
+  /* Mixed from the text colour so the outline shows in every theme. */
+  border: 1px solid
+    color-mix(in oklab, var(--color-text-primary) 30%, transparent);
   border-radius: 8px;
   background: var(--color-surface);
   color: var(--color-text-primary);

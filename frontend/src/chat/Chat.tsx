@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import { markChatOpen } from "./chatOpenRegistry";
+import { recipientPublicKeys } from "./outgoing";
 import { normalizeAccountType } from "../auth/accountHome";
 import {
   addChatChannelUsers,
@@ -51,7 +53,6 @@ import {
   encryptChatFile,
   type ChatAttachmentDescriptor,
 } from "./e2ee";
-import { loadPublicKey } from "../crypto/keyStore";
 import { useSharedCall } from "../call/useSharedCall";
 import {
   forgetOpenChat,
@@ -80,6 +81,9 @@ export default function Chat() {
   // Only the routed /chat page owns those params. In a split pane the URL belongs
   // to the routed pane, so a pane reopens from the session alone.
   const ownsUrl = useLocation().pathname === "/chat";
+  // While this view is mounted it shows messages itself, so the app-wide
+  // message popups stand down.
+  useEffect(() => markChatOpen(), []);
   const cParam = ownsUrl ? searchParams.get("c") : null;
   const dmParam = ownsUrl ? searchParams.get("dm") : null;
   const urlKey = cParam ? `c:${cParam}` : dmParam ? `dm:${dmParam}` : null;
@@ -761,54 +765,8 @@ export default function Chat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationKey]);
 
-  const recipientPublicKeysFor = async (conversation: Conversation) => {
-    if (!user) return null;
-
-    const keys = new Map<number, number[] | ArrayBuffer | Uint8Array>();
-    const currentUserPublicKey = await loadPublicKey(user.id);
-    if (!currentUserPublicKey) {
-      throw new Error(
-        "Your chat encryption key is not available on this device"
-      );
-    }
-    keys.set(user.id, currentUserPublicKey);
-
-    if (conversation.type === "user") {
-      // The directory is loaded once on mount, so a peer who published their key
-      // since then still looks keyless here. Re-check the server before refusing.
-      const peerKey = conversation.user.public_key?.length
-        ? conversation.user.public_key
-        : (await findChatUserByEmail(conversation.user.email).catch(() => null))
-            ?.public_key;
-      if (peerKey?.length) {
-        keys.set(conversation.user.id, peerKey);
-      } else {
-        throw new Error(
-          `Can't send — ${conversation.user.email} hasn't set up encryption yet. ` +
-            `They just need to open Wayve once.`
-        );
-      }
-      return keys;
-    }
-
-    // Members without a published key (never opened Wayve, or not in this user's
-    // directory) are skipped rather than blocking the whole channel. Their envelope
-    // has no entry for them, so they see a "sent before you set up encryption"
-    // placeholder for these messages.
-    for (const memberId of conversation.channel.member_ids) {
-      if (memberId === user.id) continue;
-      const member = users.find((candidate) => candidate.id === memberId);
-      if (member?.public_key?.length) {
-        keys.set(memberId, member.public_key);
-      } else {
-        logger.info(
-          `Channel member ${member?.email ?? `#${memberId}`} has no encryption key; skipping`
-        );
-      }
-    }
-
-    return keys;
-  };
+  const recipientPublicKeysFor = async (conversation: Conversation) =>
+    user ? recipientPublicKeys(user.id, conversation, users) : null;
 
   const sendMessage = async () => {
     if (!wsRef.current || !user || !selectedConversation) return;

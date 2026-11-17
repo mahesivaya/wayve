@@ -522,6 +522,32 @@ function EditSurface({
     localStorage.setItem(DRAWER_WIDTH_KEY, String(drawerWidth));
   }, [drawerWidth]);
 
+  // The drawer starts where the list starts, so the board's own header (title,
+  // filters, view switch) stays visible above it. This component is rendered
+  // in the flow right between that header and the list, so a zero-height
+  // marker here is exactly that line. Measured against the drawer's positioned
+  // parent, and re-measured when the parent resizes (filters can wrap).
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const [drawerTop, setDrawerTop] = useState(0);
+
+  useEffect(() => {
+    if (surface !== "drawer" || !isOpen) return;
+    const parent = drawerRef.current?.offsetParent;
+    if (!parent || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const anchor = anchorRef.current;
+      if (!anchor) return;
+      const top =
+        anchor.getBoundingClientRect().top - parent.getBoundingClientRect().top;
+      // A scrolled list puts the marker above the board; never go negative.
+      setDrawerTop(Math.max(0, Math.round(top)));
+    };
+    // Fires once on observe, which is the initial measurement.
+    const observer = new ResizeObserver(measure);
+    observer.observe(parent);
+    return () => observer.disconnect();
+  }, [surface, isOpen]);
+
   if (surface === "modal") {
     return (
       <Modal contained isOpen={isOpen} onClose={onClose} title={title}>
@@ -537,12 +563,17 @@ function EditSurface({
         onClick={onClose}
         aria-hidden="true"
       />
+      <span ref={anchorRef} className="task-drawer-anchor" aria-hidden="true" />
       <aside
         ref={drawerRef}
         className={`task-drawer${contained ? " task-drawer--contained" : ""}`}
         role="dialog"
         aria-label={title}
-        style={{ width: clampDrawerWidth(drawerWidth) }}
+        style={{
+          width: clampDrawerWidth(drawerWidth),
+          top: drawerTop,
+          height: `calc(100% - ${drawerTop}px)`,
+        }}
       >
         <div
           className="task-drawer-resizer"
@@ -635,8 +666,8 @@ export type TasksConfig = {
     // Shows the "Find related" (AI duplicate/similar) toolbar button. Tickets only.
     findRelated?: boolean;
     // Lowest priority *number* eligible for an AI fix. P1 is Highest, so this
-    // is a floor: 4 lets P4 (Low) and P5 (Lowest) through, 5 only P5. Defaults
-    // to 4. The backend enforces the real gate.
+    // is a floor: 4 lets P4 (Low) and P5 (Lowest) through, 5 only P5, 1 lets
+    // everything through. Defaults to 1. The backend enforces the real gate.
     aiFixMinPriority?: number;
     // Shows a dedicated "Type" column (Bug/Feature/… badge) in the list-view
     // table instead of rendering the badge inline after the name. Tickets only.
@@ -2736,7 +2767,8 @@ export default function Tasks({
                 <AiFixPanel
                   itemId={editingId}
                   api={config.api.aiFixPanel}
-                  canFix={priority >= (config.features.aiFixMinPriority ?? 4)}
+                  canFix={priority >= (config.features.aiFixMinPriority ?? 1)}
+                  minPriority={config.features.aiFixMinPriority ?? 1}
                   kind={config.labels.lowerSingular}
                   onChanged={() => void loadTasks()}
                 />

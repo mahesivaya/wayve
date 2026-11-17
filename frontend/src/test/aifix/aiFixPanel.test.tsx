@@ -66,6 +66,17 @@ describe("AiFixPanel", () => {
     expect(container.querySelector(".aifix")).toBeNull();
   });
 
+  it("explains the priority rule instead of hiding when told the rule", async () => {
+    render(
+      <AiFixPanel itemId={1} api={makeApi()} canFix={false} minPriority={4} />
+    );
+    expect(
+      await screen.findByText(/Available when the priority is Low or Lowest/)
+    ).toBeTruthy();
+    const button = screen.getByRole("button", { name: "Fix with AI" });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+  });
+
   // Regression: a 403 on the read used to look exactly like "no fix yet", so a
   // reviewed diff sitting on the row silently never appeared.
   it("reports a failed read instead of looking empty", async () => {

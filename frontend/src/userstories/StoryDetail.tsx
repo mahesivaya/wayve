@@ -17,9 +17,9 @@ import "../tickets/ticketDetail.css";
 
 const PRIORITIES: TaskPriority[] = [1, 2, 3, 4, 5];
 
-// Stories open up to the AI fixer only at P5 (Lowest) — the least risky end
-// of the backlog. The backend enforces the same floor.
-const AI_FIX_MIN_PRIORITY = 5;
+// Every priority may use the AI fixer (1 = no floor). The backend enforces
+// the same floor.
+const AI_FIX_MIN_PRIORITY = 1;
 
 // Full-page editable view of a single user story — the User Stories board's
 // Edit button routes here (config.detailPath) while a name click opens the
@@ -257,6 +257,7 @@ export default function StoryDetail() {
             itemId={story.id}
             api={storyAiFix}
             canFix={priority >= AI_FIX_MIN_PRIORITY}
+            minPriority={AI_FIX_MIN_PRIORITY}
             kind="story"
           />
         </>

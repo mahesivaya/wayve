@@ -31,8 +31,8 @@ const TICKETS_CONFIG: TasksConfig = {
   features: {
     attachments: true,
     statusSummary: true,
-    // P4 (Low) and P5 (Lowest) tickets may be auto-fixed.
-    aiFixMinPriority: 4,
+    // Every priority may be auto-fixed (1 = no floor).
+    aiFixMinPriority: 1,
     // Design (Figma) section is off on both boards now — file attachments cover
     // the same need without leaving the app. The ticket_figma_links table and
     // its endpoints stay, so flipping this back on restores existing links.

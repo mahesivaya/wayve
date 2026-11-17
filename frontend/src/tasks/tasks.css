@@ -613,12 +613,19 @@
 }
 
 /* ── Compact (Linear-style) task compose form ──
-   A borderless title + description over a row of property pills,
-   with attach / create-more / submit in a slim footer. */
+   An outlined title + description over a row of property pills,
+   with attach / create-more / submit in a slim footer. Outlines are mixed
+   from the text colour so they stay visible in every theme; the border
+   tokens nearly vanish against a dark surface. */
 .task-compose {
+  --task-compose-outline: color-mix(
+    in oklab,
+    var(--color-text-primary) 30%,
+    transparent
+  );
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   text-align: left;
   font-size: var(--text-md);
 }
@@ -656,8 +663,9 @@
 .task-compose-title {
   width: 100%;
   box-sizing: border-box;
-  padding: 2px 0;
-  border: none;
+  padding: 8px 10px;
+  border: 1px solid var(--task-compose-outline);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text-primary);
   font: inherit;
@@ -669,9 +677,11 @@
   width: 100%;
   box-sizing: border-box;
   min-height: 96px;
-  padding: 0;
-  border: none;
+  padding: 8px 10px;
+  border: 1px solid var(--task-compose-outline);
+  border-radius: var(--radius-sm);
   background: transparent;
+  line-height: 1.5;
   resize: vertical;
   color: var(--color-text-primary);
   font: inherit;
@@ -681,6 +691,9 @@
 .task-compose-title:focus,
 .task-compose-desc:focus {
   outline: none;
+  border-color: var(--color-primary-action);
+  box-shadow: 0 0 0 3px
+    color-mix(in oklab, var(--color-primary-action) 30%, transparent);
 }
 
 .task-compose-title::placeholder,
@@ -700,7 +713,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border: 1px solid var(--color-input-border);
+  border: 1px solid var(--task-compose-outline, var(--color-input-border));
   border-radius: 999px;
   background: var(--color-surface);
   color: var(--color-text-primary);
@@ -891,6 +904,18 @@
   margin-top: 4px;
   padding-top: 12px;
   border-top: 1px solid var(--color-border-generic-light);
+  flex-wrap: wrap;
+}
+
+/* The AI-fix panel is rendered inside the footer but is a section of its own
+   (heading, diff, commit steps). Give it a full row under the attach / save
+   line; as a plain flex item it squeezed in beside the save button. */
+.task-compose-footer > .aifix {
+  flex: 0 0 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  margin-top: 4px;
+  padding-top: 12px;
 }
 
 .task-compose-attach {
@@ -901,10 +926,10 @@
   height: 32px;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--color-input-border);
+  border: 1px solid var(--task-compose-outline);
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   cursor: pointer;
 }
 
@@ -925,11 +950,25 @@
   margin-left: auto;
 }
 
-/* Submit stays UA-styled, but its disabled state (an editor nothing has been
-   changed in) needs saying explicitly — the browser's own gray-out barely
-   registers against the themed surfaces this modal sits on. */
+/* A filled primary button. Its disabled state (an editor nothing has been
+   changed in) keeps the fill at reduced strength, so the button still reads as
+   a button — the browser's own gray-out all but disappears on a dark surface. */
+.task-compose-footer-right button[type="submit"] {
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-action);
+  color: #fff;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.task-compose-footer-right button[type="submit"]:hover:not(:disabled) {
+  background: var(--color-primary-action-hover);
+}
 .task-compose-footer-right button[type="submit"]:disabled {
-  opacity: 0.5;
+  opacity: 0.55;
   cursor: default;
 }
 
@@ -2200,39 +2239,39 @@ body.is-col-resizing {
    Tickets) opens its edit form here instead of the centered modal. A
    dim overlay keeps the list visible behind it (matching the reference
    detail panel) and catches outside clicks to close. */
+/* Both are absolute, not fixed: every page sits in a `.split-pane` (positioned,
+   clipped to the rounded page card), so the drawer stays inside that card
+   instead of covering the app chrome and poking past its corners. */
 .task-drawer-overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 60;
   background: rgb(15, 23, 42, 0.28);
 }
 
+/* Zero-height marker in the page flow: the line where the list begins, which
+   Tasks.tsx measures to start the drawer there. */
+.task-drawer-anchor {
+  display: block;
+  height: 0;
+}
+
 .task-drawer {
-  position: fixed;
+  position: absolute;
   top: 0;
   right: 0;
   z-index: 61;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   /* Starting width only — Tasks.tsx sets the dragged width inline. */
   width: min(460px, 92vw);
-  max-width: 95vw;
+  max-width: 100%;
   height: 100%;
   background: var(--color-surface);
   border-left: 1px solid var(--color-border);
   box-shadow: -12px 0 32px rgb(15, 23, 42, 0.18);
   animation: task-drawer-in 0.16s ease-out;
-}
-
-/* In a split pane the drawer and its overlay stay inside the board. */
-.task-drawer-overlay--contained,
-.task-drawer--contained {
-  position: absolute;
-}
-
-.task-drawer--contained {
-  box-sizing: border-box;
-  max-width: 100%;
 }
 
 /* Drag handle straddling the drawer's left edge. Sits outside the flex flow so

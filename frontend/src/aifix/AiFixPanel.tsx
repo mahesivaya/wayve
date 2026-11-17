@@ -19,6 +19,10 @@ type Props = {
   /// Whether this item's priority allows an AI fix. The button is hidden when
   /// false; the backend enforces the same rule.
   canFix: boolean;
+  /// The lowest-importance priority number that qualifies (4 = Low and Lowest,
+  /// 5 = Lowest only). When given, an item that doesn't qualify shows the
+  /// section with a disabled button and a note saying why, rather than nothing.
+  minPriority?: number;
   /// "ticket" | "story" — only used for wording.
   kind?: string;
   /// Notified after a step changes state, so a parent list can refresh.
@@ -29,6 +33,7 @@ export default function AiFixPanel({
   itemId,
   api,
   canFix,
+  minPriority,
   kind = "ticket",
   onChanged,
 }: Props) {
@@ -173,9 +178,18 @@ export default function AiFixPanel({
   const showStart =
     canFix && (!status || status === "no_change" || status === "error");
 
+  // The priority rules this item out. Said outright (when the caller told us
+  // the rule) so the section doesn't just vanish. Waits for a successful read:
+  // that read is manager-only, so nobody else is shown a button they can't use.
+  const showLocked =
+    !canFix &&
+    minPriority !== undefined &&
+    state !== null &&
+    (!status || status === "no_change" || status === "error");
+
   // Nothing to say: no run has ever happened, this item can't start one, and
   // the read didn't fail in a way worth reporting.
-  if (!status && !showStart && !loadError) return null;
+  if (!status && !showStart && !showLocked && !loadError) return null;
 
   const reviewable = REVIEWABLE.includes(status as (typeof REVIEWABLE)[number]);
   const order = reviewable
@@ -207,7 +221,20 @@ export default function AiFixPanel({
                 : "Fix with AI"}
           </button>
         )}
+        {showLocked && (
+          <button type="button" className="aifix-start" disabled>
+            Fix with AI
+          </button>
+        )}
       </div>
+
+      {showLocked && (
+        <p className="aifix-muted">
+          Available when the priority is{" "}
+          {minPriority >= 5 ? "Lowest" : "Low or Lowest"}. Change this {kind}’s
+          priority to use it.
+        </p>
+      )}
 
       {loadError && (
         <p className="aifix-msg" role="status">
