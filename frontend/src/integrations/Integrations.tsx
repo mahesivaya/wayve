@@ -241,45 +241,61 @@ export default function Integrations() {
     ...detail[s.key],
   }));
 
+  // Connected services are listed first, in their own card, with everything
+  // else below. A service moves up as soon as it connects.
+  const connectedServices = visibleServices.filter(
+    (s) => s.status === "enabled"
+  );
+  const otherServices = visibleServices.filter((s) => s.status !== "enabled");
+  const renderTile = (s: (typeof visibleServices)[number]) => (
+    <button
+      key={s.key}
+      type="button"
+      className={`integration-tile${
+        s.status === "enabled" ? " integration-tile--connected" : ""
+      }`}
+      onClick={s.onClick}
+      disabled={s.status === "soon" || s.status === "enterprise"}
+    >
+      <div className="integration-tile-head">
+        <span className="integration-tile-icon">{s.icon}</span>
+        <span className="integration-tile-titles">
+          <span className="integration-tile-name">{s.name}</span>
+          <span
+            className={`integration-tile-status integration-tile-status--${s.status}`}
+          >
+            {/* The dot is decorative — the word "Connected" carries the
+                meaning, so the state never rests on colour alone. */}
+            {s.status === "enabled" && (
+              <span className="integration-tile-dot" aria-hidden="true" />
+            )}
+            {STATUS_LABEL[s.status]}
+          </span>
+        </span>
+      </div>
+      <p className="integration-tile-desc">{s.description}</p>
+    </button>
+  );
+
   return (
     <SettingsShell title="Integrations">
-      <section className="settings-card">
-        <h2 className="settings-card-title">Connect a service</h2>
-        <div className="integrations-cards">
-          {visibleServices.map((s) => (
-            <button
-              key={s.key}
-              type="button"
-              className={`integration-tile${
-                s.status === "enabled" ? " integration-tile--connected" : ""
-              }`}
-              onClick={s.onClick}
-              disabled={s.status === "soon" || s.status === "enterprise"}
-            >
-              <div className="integration-tile-head">
-                <span className="integration-tile-icon">{s.icon}</span>
-                <span className="integration-tile-titles">
-                  <span className="integration-tile-name">{s.name}</span>
-                  <span
-                    className={`integration-tile-status integration-tile-status--${s.status}`}
-                  >
-                    {/* The dot is decorative — the word "Connected" carries the
-                        meaning, so the state never rests on colour alone. */}
-                    {s.status === "enabled" && (
-                      <span
-                        className="integration-tile-dot"
-                        aria-hidden="true"
-                      />
-                    )}
-                    {STATUS_LABEL[s.status]}
-                  </span>
-                </span>
-              </div>
-              <p className="integration-tile-desc">{s.description}</p>
-            </button>
-          ))}
-        </div>
-      </section>
+      {connectedServices.length > 0 && (
+        <section className="settings-card">
+          <h2 className="settings-card-title">Connected</h2>
+          <div className="integrations-cards">
+            {connectedServices.map(renderTile)}
+          </div>
+        </section>
+      )}
+
+      {otherServices.length > 0 && (
+        <section className="settings-card">
+          <h2 className="settings-card-title">Connect a service</h2>
+          <div className="integrations-cards">
+            {otherServices.map(renderTile)}
+          </div>
+        </section>
+      )}
 
       <section className="settings-card integrations-info">
         <h2 className="settings-card-title">
