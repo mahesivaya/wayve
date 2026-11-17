@@ -2252,12 +2252,6 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   const settingsLinks: SidebarLinkDef[] = [
     { path: "/settings", label: "General", icon: <SettingsIcon size={18} /> },
     {
-      path: "/settings/notifications",
-      label: "Notifications",
-      icon: <BellIcon size={18} />,
-    },
-    { path: "/profile", label: "My Profile", icon: <PersonIcon size={18} /> },
-    {
       path: "/integrations",
       label: "Integrations",
       icon: <IntegrationsIcon size={18} />,
@@ -2285,6 +2279,15 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       label: "Developers",
       icon: <DevelopersIcon size={18} />,
       visible: user?.account_type !== "personal",
+    },
+  ];
+  // Settings › Personal: the signed-in person's own profile and notifications.
+  const personalLinks: SidebarLinkDef[] = [
+    { path: "/profile", label: "My Profile", icon: <PersonIcon size={18} /> },
+    {
+      path: "/settings/notifications",
+      label: "Notifications",
+      icon: <BellIcon size={18} />,
     },
   ];
   // Settings › Administration. Teams and Projects are for owners, super
@@ -2328,12 +2331,6 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
         )}
       </div>
       <div className="sidebar-section">
-        <div className="sidebar-section-label">
-          <span className="sidebar-section-icon" aria-hidden="true">
-            <SettingsIcon size={16} />
-          </span>
-          <span>Settings</span>
-        </div>
         {settingsLinks
           .filter((l) => l.visible !== false)
           .map((l) => (
@@ -2359,26 +2356,39 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           <span className="sidebar-label">Log out</span>
         </button>
       </div>
-      {administrationLinks.length > 0 && (
-        <div className="sidebar-section">
-          <div className="sidebar-section-label">
-            <span className="sidebar-section-icon" aria-hidden="true">
-              <OrganizationIcon size={16} />
-            </span>
-            <span>Administration</span>
+      {[
+        {
+          label: "Personal",
+          icon: <PersonIcon size={16} />,
+          links: personalLinks,
+        },
+        {
+          label: "Administration",
+          icon: <OrganizationIcon size={16} />,
+          links: administrationLinks,
+        },
+      ]
+        .filter((group) => group.links.length > 0)
+        .map((group) => (
+          <div className="sidebar-section" key={group.label}>
+            <div className="sidebar-section-label">
+              <span className="sidebar-section-icon" aria-hidden="true">
+                {group.icon}
+              </span>
+              <span>{group.label}</span>
+            </div>
+            {group.links.map((l) => (
+              <Fragment key={l.path}>
+                {renderSidebarLink(
+                  l.path,
+                  l.label,
+                  l.icon,
+                  settingsPath === l.path
+                )}
+              </Fragment>
+            ))}
           </div>
-          {administrationLinks.map((l) => (
-            <Fragment key={l.path}>
-              {renderSidebarLink(
-                l.path,
-                l.label,
-                l.icon,
-                settingsPath === l.path
-              )}
-            </Fragment>
-          ))}
-        </div>
-      )}
+        ))}
     </>
   );
 
