@@ -7,6 +7,7 @@ import { hasPermission } from "../auth/permissions";
 import { getAuthToken } from "../auth/token";
 import RepoAccessPanel from "./RepoAccessPanel";
 import ReadmeView from "./ReadmeView";
+import { FileTypeIcon } from "./FileTypeIcon";
 import ResizeHandle from "../components/ResizeHandle";
 import { useResizableWidth } from "../components/useResizableWidth";
 import PrMergeBox from "./PrMergeBox";
@@ -44,7 +45,10 @@ import {
   CopyIcon,
   EditCommentIcon,
   GitBranchIcon,
+  PullRequestClosedIcon,
+  PullRequestDraftIcon,
   PullRequestIcon,
+  PullRequestMergedIcon,
   RepoIcon,
   SettingsIcon,
   WorkflowRunsIcon,
@@ -206,6 +210,30 @@ function pullStatus(d: { state: string; draft?: boolean; merged?: boolean }): {
   if (d.state === "closed") return { label: "Closed", cls: "is-closed" };
   if (d.draft) return { label: "Draft", cls: "is-draft" };
   return { label: "Open", cls: "is-open" };
+}
+
+// The state sign at the start of a pull request row, as on GitHub: green open,
+// grey draft, purple merged, red closed.
+function PullStateIcon({ cls, label }: { cls: string; label: string }) {
+  const Icon =
+    cls === "is-merged"
+      ? PullRequestMergedIcon
+      : cls === "is-closed"
+        ? PullRequestClosedIcon
+        : cls === "is-draft"
+          ? PullRequestDraftIcon
+          : PullRequestIcon;
+  return (
+    // The row's only statement of its state, so it's labelled.
+    <span
+      className={`github-pr-state-icon ${cls}`}
+      role="img"
+      aria-label={label}
+      title={label}
+    >
+      <Icon size={16} aria-hidden="true" />
+    </span>
+  );
 }
 
 function reviewBadge(state: string): { label: string; cls: string } {
@@ -585,36 +613,6 @@ function SearchIcon() {
   );
 }
 
-function FileIcon() {
-  return (
-    <svg
-      className="github-icon github-icon-file"
-      viewBox="0 0 16 16"
-      width="16"
-      height="16"
-      aria-hidden="true"
-    >
-      <path
-        fill="currentColor"
-        d="M3.75 1.5h6.69l3.06 3.06v9.69a.75.75 0 0 1-.75.75H3.75a.75.75 0 0 1-.75-.75V2.25a.75.75 0 0 1 .75-.75Z"
-        opacity="0.18"
-      />
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1"
-        d="M3.75 1.5h6.69l3.06 3.06v9.69a.75.75 0 0 1-.75.75H3.75a.75.75 0 0 1-.75-.75V2.25a.75.75 0 0 1 .75-.75Z"
-      />
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1"
-        d="M10.5 1.75v3h3"
-      />
-    </svg>
-  );
-}
-
 // One node per workflow, runs newest first, for the Actions tree. `rollupState`
 // colors the parent row: the latest run's conclusion if it has finished,
 // otherwise its in-progress/queued status.
@@ -947,7 +945,7 @@ export function GitHubRepoViewer({
     restoredView?.collapsedFiles
   );
   // Stable reference used by the PR loader's dependency array.
-  const { collapseFiles } = diffs;
+  const { collapseFiles, prefetch: prefetchCommits } = diffs;
   const [commitCommentsBySha, setCommitCommentsBySha] = useState<
     Record<string, IssueComment[]>
   >({});
@@ -1020,6 +1018,14 @@ export function GitHubRepoViewer({
     }
     return "description";
   });
+
+  // Each listed commit's +/- line counts, loaded with the page rather than on
+  // opening the commit.
+  useEffect(() => {
+    if (activeSection === "commits" && commits.length > 0) {
+      prefetchCommits(commits.map((commit) => commit.sha));
+    }
+  }, [activeSection, commits, prefetchCommits]);
 
   useEffect(() => {
     try {
@@ -2191,7 +2197,12 @@ export function GitHubRepoViewer({
                           }}
                         >
                           <span className="github-file-kind" aria-hidden="true">
-                            {isDirectory ? <FolderIcon /> : <FileIcon />}
+                            {isDirectory ? (
+                              <FolderIcon />
+                            ) : (
+                              // The same per-type sign as the commit file list.
+                              <FileTypeIcon path={item.path} />
+                            )}
                           </span>
                           <span className="github-file-name">{item.name}</span>
                           <span className="github-file-size">
@@ -2260,19 +2271,7 @@ export function GitHubRepoViewer({
                             )}
                           </small>
                         </span>
-                        <code>{commit.sha.slice(0, 7)}</code>
                       </button>
-                      <a
-                        className="github-commit-open"
-                        href={commit.html_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        data-tooltip="Open on GitHub"
-                        aria-label="Open on GitHub"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        ↗
-                      </a>
                     </div>
 
                     {isOpen && (
@@ -2506,6 +2505,7 @@ export function GitHubRepoViewer({
                     });
                     return (
                       <div key={pr.number} className="github-pr-node">
+                        <PullStateIcon cls={status.cls} label={status.label} />
                         <button
                           type="button"
                           className="github-pr-main github-pr-open-btn"
@@ -2520,17 +2520,6 @@ export function GitHubRepoViewer({
                             {formatDate(pr.created_at)}
                           </small>
                         </button>
-                        <span className={`github-pr-status ${status.cls}`}>
-                          {status.label}
-                        </span>
-                        <a
-                          className="github-pr-link"
-                          href={pr.html_url}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Open on GitHub →
-                        </a>
                       </div>
                     );
                   })
@@ -3240,6 +3229,7 @@ export function GitHubRepoViewer({
                                                   rel="noreferrer"
                                                   aria-label={`Open ${job.name} on GitHub`}
                                                   data-tooltip="Open on GitHub"
+                                                  data-tooltip-align="right"
                                                   onClick={(event) =>
                                                     event.stopPropagation()
                                                   }
