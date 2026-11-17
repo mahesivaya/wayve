@@ -27,6 +27,17 @@ struct RepoAdmin {
     user_id: i32,
     /// Whether the caller may mutate access, via MembersManage or repo ownership.
     can_manage: bool,
+    /// Which linked project the caller reaches this repo through.
+    project: ProjectScope,
+}
+
+/// The owner of the `projects` row a caller sees a repo through.
+#[derive(Clone, Copy)]
+enum ProjectScope {
+    Organization(i32),
+    Personal(i32),
+    /// Platform staff reach every repo, so any project linked to it.
+    Any,
 }
 
 /// Verify the caller may view access for `owner/repo` and compute whether they
@@ -62,6 +73,7 @@ async fn authorize(
             Ok(RepoAdmin {
                 user_id,
                 can_manage: ctx.has(Permission::MembersManage),
+                project: ProjectScope::Organization(org_id),
             })
         }
         Scope::Platform => {
@@ -71,6 +83,7 @@ async fn authorize(
             Ok(RepoAdmin {
                 user_id,
                 can_manage: ctx.has(Permission::MembersManage),
+                project: ProjectScope::Any,
             })
         }
         Scope::Personal => {
@@ -82,6 +95,7 @@ async fn authorize(
             Ok(RepoAdmin {
                 user_id,
                 can_manage: true,
+                project: ProjectScope::Personal(user_id),
             })
         }
     }
@@ -123,6 +137,37 @@ async fn repo_is_personal_project(
     .fetch_one(pool)
     .await?;
     Ok(exists)
+}
+
+/// The user who created the project this repo is linked to, if they still
+/// exist. With several linked projects (platform staff), the oldest one.
+async fn project_creator(
+    pool: &PgPool,
+    scope: ProjectScope,
+    owner: &str,
+    repo: &str,
+) -> Result<Option<i32>, AppError> {
+    let (org_id, user_id) = match scope {
+        ProjectScope::Organization(id) => (Some(id), None),
+        ProjectScope::Personal(id) => (None, Some(id)),
+        ProjectScope::Any => (None, None),
+    };
+    let creator: Option<i32> = sqlx::query_scalar(
+        "SELECT created_by FROM projects
+          WHERE LOWER(github_owner) = LOWER($1) AND LOWER(github_repo) = LOWER($2)
+            AND created_by IS NOT NULL
+            AND ($3::INT IS NULL OR (organization_id = $3 AND user_id IS NULL))
+            AND ($4::INT IS NULL OR (user_id = $4 AND organization_id IS NULL))
+          ORDER BY created_at, id
+          LIMIT 1",
+    )
+    .bind(owner)
+    .bind(repo)
+    .bind(org_id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(creator)
 }
 
 #[derive(Serialize)]
@@ -201,8 +246,13 @@ pub async fn get_access(
         .collect();
     let login_to_user = users_by_login(pool, &logins).await?;
 
-    let grant_user_ids: Vec<i32> = grant_by_user.keys().copied().collect();
-    let user_meta = users_by_id(pool, &grant_user_ids).await?;
+    // Whoever created the project is always listed, as an admin, whether or
+    // not they are a GitHub collaborator or hold a Wayve grant.
+    let creator = project_creator(pool, admin.project, &owner, &repo).await?;
+
+    let mut meta_user_ids: Vec<i32> = grant_by_user.keys().copied().collect();
+    meta_user_ids.extend(creator);
+    let user_meta = users_by_id(pool, &meta_user_ids).await?;
 
     let mut rows: Vec<AccessRow> = Vec::new();
     let mut covered_users: HashSet<i32> = HashSet::new();
@@ -241,6 +291,29 @@ pub async fn get_access(
             is_member: true,
             source: "wayve".to_string(),
         });
+    }
+
+    if let Some(creator_id) = creator {
+        let at = match rows.iter().position(|r| r.user_id == Some(creator_id)) {
+            Some(at) => Some(at),
+            None => user_meta.get(&creator_id).map(|meta| {
+                rows.push(AccessRow {
+                    user_id: Some(creator_id),
+                    github_login: meta.1.clone(),
+                    email: Some(meta.0.clone()),
+                    level: String::new(),
+                    in_dashboard: true,
+                    is_member: true,
+                    source: "wayve".to_string(),
+                });
+                rows.len() - 1
+            }),
+        };
+        if let Some(at) = at {
+            let mut row = rows.remove(at);
+            row.level = "admin".to_string();
+            rows.insert(0, row);
+        }
     }
 
     Ok(HttpResponse::Ok().json(AccessResponse {
