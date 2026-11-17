@@ -2,9 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   getRecentCommits,
-  getRepoLanguages,
   getVisibleProjects,
-  topLanguages,
   type GithubCommit,
   type GithubRepo,
 } from "../api/github";
@@ -20,7 +18,7 @@ import { CommitDiffBody, ChevronIcon } from "../github/commitDiff";
 import { useCommitDiffs } from "../github/commitDiffData";
 import "./projects.css";
 
-// Relative "time ago" for the Updated / commit rows (e.g. "3 days ago"),
+// Relative "time ago" for the commit rows (e.g. "3 days ago"),
 // falling back to "" for missing/unparseable timestamps.
 const timeAgo = (iso: string | null | undefined): string => {
   if (!iso) return "";
@@ -49,17 +47,6 @@ const timeAgo = (iso: string | null | undefined): string => {
   );
 };
 
-const absoluteDate = (iso: string | null | undefined): string => {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-};
-
 // Project detail page. A "project" in wayve is a linked GitHub repository, so
 // this shows the repo's real metadata (visibility, owner, branch, languages,
 // last activity) in a two-column overview — replacing the old behavior of
@@ -80,7 +67,6 @@ export default function ProjectDetail() {
   // null = still resolving; false = resolved (found or gave up).
   const [resolving, setResolving] = useState(!preset);
   const [notFound, setNotFound] = useState(false);
-  const [langs, setLangs] = useState<string[]>([]);
   const [commits, setCommits] = useState<GithubCommit[] | null>(null);
   // Users with access to this project (Wayve members + GitHub collaborators).
   // null = still loading; [] = none / not readable.
@@ -101,7 +87,7 @@ export default function ProjectDetail() {
 
   // Resolve the repo when we didn't get it via navigation state (direct URL
   // load / refresh). Fall back to a synthesized stub so the page still renders
-  // its name + "Open Code Repo" action even if the list can't be fetched.
+  // its name even if the list can't be fetched.
   useEffect(() => {
     if (preset) return;
     let cancelled = false;
@@ -140,9 +126,6 @@ export default function ProjectDetail() {
   useEffect(() => {
     if (!owner || !repoName) return;
     let cancelled = false;
-    getRepoLanguages(owner, repoName)
-      .then((data) => !cancelled && setLangs(topLanguages(data, 4)))
-      .catch(() => undefined);
     getRecentCommits(owner, repoName, 5)
       .then((list) => !cancelled && setCommits(Array.isArray(list) ? list : []))
       .catch(() => !cancelled && setCommits([]));
@@ -168,13 +151,6 @@ export default function ProjectDetail() {
       cancelled = true;
     };
   }, [owner, repoName]);
-
-  const openCodeRepo = () =>
-    navigate(
-      `/github?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(
-        repoName
-      )}`
-    );
 
   // The blurb we display: the Wayve summary if set, else the repo's own GitHub
   // description. Editing seeds from whichever is shown.
@@ -230,268 +206,185 @@ export default function ProjectDetail() {
     );
   }
 
-  const firstLang = langs[0] ?? repo.language ?? null;
-
   return (
     <div className="projects-page u-page-shell project-detail-page">
-      <header className="project-detail-topbar">
-        <nav className="project-detail-crumbs" aria-label="Breadcrumb">
-          <button
-            type="button"
-            className="project-detail-crumb-link"
-            onClick={() => navigate("/projects")}
-          >
-            Projects
-          </button>
-          <span className="project-detail-crumb-sep">›</span>
-          <span className="project-detail-crumb-current">{repo.name}</span>
-        </nav>
-        <button
-          type="button"
-          className="project-detail-open"
-          onClick={openCodeRepo}
-        >
-          Open Code Repo
-        </button>
-      </header>
-
-      <div className="project-detail-grid">
-        {/* Main column */}
-        <main className="project-detail-main">
-          <div className="project-detail-heading">
-            <span className="project-detail-icon" aria-hidden="true">
-              ▣
-            </span>
-            <h1 className="project-detail-name">{repo.name}</h1>
-          </div>
-          {editingSummary ? (
-            <div className="project-detail-summary-edit">
-              <textarea
-                className="project-detail-summary-input"
-                value={summaryDraft}
-                onChange={(e) => setSummaryDraft(e.target.value)}
-                placeholder="Add a short summary of this project…"
-                rows={3}
-                maxLength={2000}
-                autoFocus
-              />
-              {summaryError && (
-                <p className="project-detail-summary-error">{summaryError}</p>
-              )}
-              <div className="project-detail-summary-actions">
-                <button
-                  type="button"
-                  className="project-detail-summary-save"
-                  onClick={() => void saveSummary()}
-                  disabled={savingSummary || !summaryDirty}
-                  title={summaryDirty ? undefined : "No changes to save"}
-                >
-                  {savingSummary ? "Saving…" : "Save"}
-                </button>
-                <button
-                  type="button"
-                  className="project-detail-summary-cancel"
-                  onClick={() => setEditingSummary(false)}
-                  disabled={savingSummary}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="project-detail-summary-row">
-              <p
-                className={`project-detail-summary${
-                  displaySummary ? "" : " is-empty"
-                }`}
+      <main className="project-detail-main">
+        <div className="project-detail-heading">
+          <span className="project-detail-icon" aria-hidden="true">
+            ▣
+          </span>
+          <h1 className="project-detail-name">{repo.name}</h1>
+        </div>
+        {editingSummary ? (
+          <div className="project-detail-summary-edit">
+            <textarea
+              className="project-detail-summary-input"
+              value={summaryDraft}
+              onChange={(e) => setSummaryDraft(e.target.value)}
+              placeholder="Add a short summary of this project…"
+              rows={3}
+              maxLength={2000}
+              autoFocus
+            />
+            {summaryError && (
+              <p className="project-detail-summary-error">{summaryError}</p>
+            )}
+            <div className="project-detail-summary-actions">
+              <button
+                type="button"
+                className="project-detail-summary-save"
+                onClick={() => void saveSummary()}
+                disabled={savingSummary || !summaryDirty}
+                title={summaryDirty ? undefined : "No changes to save"}
               >
-                {displaySummary || "No summary yet."}
-              </p>
-              {canEditSummary && (
-                <button
-                  type="button"
-                  className="project-detail-summary-edit-btn"
-                  onClick={startEditSummary}
-                >
-                  {displaySummary ? "Edit" : "Add summary"}
-                </button>
-              )}
+                {savingSummary ? "Saving…" : "Save"}
+              </button>
+              <button
+                type="button"
+                className="project-detail-summary-cancel"
+                onClick={() => setEditingSummary(false)}
+                disabled={savingSummary}
+              >
+                Cancel
+              </button>
             </div>
-          )}
+          </div>
+        ) : (
+          <div className="project-detail-summary-row">
+            <p
+              className={`project-detail-summary${
+                displaySummary ? "" : " is-empty"
+              }`}
+            >
+              {displaySummary || "No summary yet."}
+            </p>
+            {canEditSummary && (
+              <button
+                type="button"
+                className="project-detail-summary-edit-btn"
+                onClick={startEditSummary}
+              >
+                {displaySummary ? "Edit" : "Add summary"}
+              </button>
+            )}
+          </div>
+        )}
 
-          <section className="project-detail-section">
-            <h2 className="project-detail-section-title">
-              Members
-              {members && members.length > 0 && (
-                <span className="project-detail-count">{members.length}</span>
-              )}
-            </h2>
-            {members === null ? (
-              <p className="project-detail-muted">Loading members…</p>
-            ) : members.length === 0 ? (
-              <p className="project-detail-muted">
-                {membersReadable
-                  ? "No one has access yet."
-                  : "Member list unavailable for this repo."}
-              </p>
-            ) : (
-              <ul className="project-detail-members">
-                {members.map((m, i) => {
-                  const displayName =
-                    m.email || m.github_login || "Unknown user";
-                  return (
-                    <li
-                      key={`${m.user_id ?? m.github_login ?? i}`}
-                      className="project-detail-member"
+        <section className="project-detail-section">
+          <h2 className="project-detail-section-title">
+            Members
+            {members && members.length > 0 && (
+              <span className="project-detail-count">{members.length}</span>
+            )}
+          </h2>
+          {members === null ? (
+            <p className="project-detail-muted">Loading members…</p>
+          ) : members.length === 0 ? (
+            <p className="project-detail-muted">
+              {membersReadable
+                ? "No one has access yet."
+                : "Member list unavailable for this repo."}
+            </p>
+          ) : (
+            <ul className="project-detail-members">
+              {members.map((m, i) => {
+                const displayName = m.email || m.github_login || "Unknown user";
+                return (
+                  <li
+                    key={`${m.user_id ?? m.github_login ?? i}`}
+                    className="project-detail-member"
+                  >
+                    <Avatar
+                      name={displayName}
+                      src={
+                        m.user_id != null
+                          ? `${getApiBase()}/api/users/${m.user_id}/avatar`
+                          : null
+                      }
+                      size={32}
+                    />
+                    <span className="project-detail-member-text">
+                      <span className="project-detail-member-name">
+                        {displayName}
+                      </span>
+                      <span className="project-detail-member-meta">
+                        {m.github_login && <span>@{m.github_login}</span>}
+                        {!m.is_member && (
+                          <span className="project-detail-member-tag">
+                            GitHub only
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                    <span
+                      className={`project-detail-member-level level-${m.level}`}
                     >
-                      <Avatar
-                        name={displayName}
-                        src={
-                          m.user_id != null
-                            ? `${getApiBase()}/api/users/${m.user_id}/avatar`
-                            : null
-                        }
-                        size={32}
-                      />
-                      <span className="project-detail-member-text">
-                        <span className="project-detail-member-name">
-                          {displayName}
-                        </span>
-                        <span className="project-detail-member-meta">
-                          {m.github_login && <span>@{m.github_login}</span>}
-                          {!m.is_member && (
-                            <span className="project-detail-member-tag">
-                              GitHub only
-                            </span>
-                          )}
-                        </span>
-                      </span>
+                      {m.level}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+
+        <section className="project-detail-section">
+          <h2 className="project-detail-section-title">Recent activity</h2>
+          {commits === null ? (
+            <p className="project-detail-muted">Loading activity…</p>
+          ) : commits.length === 0 ? (
+            <p className="project-detail-muted">No recent commits.</p>
+          ) : (
+            <ul className="project-detail-activity">
+              {commits.map((c) => {
+                const msg = c.commit.message.split("\n")[0];
+                const who =
+                  c.author?.login || c.commit.author?.name || "unknown";
+                const isOpen = diffs.expandedShas.has(c.sha);
+                return (
+                  <li key={c.sha} className="project-detail-activity-item">
+                    <button
+                      type="button"
+                      className="project-detail-activity-toggle"
+                      onClick={() => diffs.toggle(c.sha)}
+                      aria-expanded={isOpen}
+                    >
                       <span
-                        className={`project-detail-member-level level-${m.level}`}
+                        className={`github-tree-toggle ${isOpen ? "open" : ""}`}
+                        aria-hidden="true"
                       >
-                        {m.level}
+                        <ChevronIcon />
                       </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-
-          <section className="project-detail-section">
-            <h2 className="project-detail-section-title">Recent activity</h2>
-            {commits === null ? (
-              <p className="project-detail-muted">Loading activity…</p>
-            ) : commits.length === 0 ? (
-              <p className="project-detail-muted">No recent commits.</p>
-            ) : (
-              <ul className="project-detail-activity">
-                {commits.map((c) => {
-                  const msg = c.commit.message.split("\n")[0];
-                  const who =
-                    c.author?.login || c.commit.author?.name || "unknown";
-                  const isOpen = diffs.expandedShas.has(c.sha);
-                  return (
-                    <li key={c.sha} className="project-detail-activity-item">
-                      <button
-                        type="button"
-                        className="project-detail-activity-toggle"
-                        onClick={() => diffs.toggle(c.sha)}
-                        aria-expanded={isOpen}
-                      >
+                      <span className="project-detail-activity-text">
                         <span
-                          className={`github-tree-toggle ${isOpen ? "open" : ""}`}
-                          aria-hidden="true"
+                          className="project-detail-activity-msg"
+                          data-tooltip={msg}
                         >
-                          <ChevronIcon />
+                          {msg}
                         </span>
-                        <span className="project-detail-activity-text">
-                          <span
-                            className="project-detail-activity-msg"
-                            data-tooltip={msg}
-                          >
-                            {msg}
-                          </span>
-                          <span className="project-detail-activity-meta">
-                            {who}
-                            {c.commit.author?.date
-                              ? ` · ${timeAgo(c.commit.author.date)}`
-                              : ""}
-                          </span>
+                        <span className="project-detail-activity-meta">
+                          {who}
+                          {c.commit.author?.date
+                            ? ` · ${timeAgo(c.commit.author.date)}`
+                            : ""}
                         </span>
-                        <code className="project-detail-activity-sha">
-                          {c.sha.slice(0, 7)}
-                        </code>
-                      </button>
-                      {isOpen && (
-                        <div className="project-detail-activity-diff github-commit-diff">
-                          <CommitDiffBody sha={c.sha} diffs={diffs} />
-                        </div>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-        </main>
-
-        {/* Properties column */}
-        <aside className="project-detail-props">
-          <h2 className="project-detail-props-title">Properties</h2>
-          <dl className="project-detail-props-list">
-            <div className="project-detail-prop">
-              <dt>Visibility</dt>
-              <dd>
-                <span
-                  className={`project-card-badge ${
-                    repo.private ? "is-private" : "is-public"
-                  }`}
-                >
-                  {repo.private ? "Private" : "Public"}
-                </span>
-              </dd>
-            </div>
-            <div className="project-detail-prop">
-              <dt>Owner</dt>
-              <dd>{repo.owner.login}</dd>
-            </div>
-            <div className="project-detail-prop">
-              <dt>Members</dt>
-              <dd>{members === null ? "…" : members.length}</dd>
-            </div>
-            <div className="project-detail-prop">
-              <dt>Default branch</dt>
-              <dd>{repo.default_branch || "—"}</dd>
-            </div>
-            <div className="project-detail-prop">
-              <dt>Language</dt>
-              <dd>
-                {langs.length > 0 ? (
-                  <span className="project-card-langs">
-                    {langs.map((l) => (
-                      <span key={l} className="project-card-lang">
-                        {l}
                       </span>
-                    ))}
-                  </span>
-                ) : (
-                  firstLang || "—"
-                )}
-              </dd>
-            </div>
-            <div className="project-detail-prop">
-              <dt>Updated</dt>
-              <dd data-tooltip={absoluteDate(repo.updated_at)}>
-                {timeAgo(repo.updated_at) || "—"}
-              </dd>
-            </div>
-          </dl>
-          <p className="project-detail-props-note">
-            Status, priority, lead, milestones &amp; more are coming soon.
-          </p>
-        </aside>
-      </div>
+                      <code className="project-detail-activity-sha">
+                        {c.sha.slice(0, 7)}
+                      </code>
+                    </button>
+                    {isOpen && (
+                      <div className="project-detail-activity-diff github-commit-diff">
+                        <CommitDiffBody sha={c.sha} diffs={diffs} />
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      </main>
     </div>
   );
 }
