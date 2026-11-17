@@ -201,7 +201,7 @@ export function useEmailInbox(
       // of object references even when nothing changed — both read as the
       // whole list silently reloading out from under an idle user. Merge
       // instead: patch fields on rows the fresh page still has (read state,
-      // subject edits, etc.), prepend anything genuinely new, and leave
+      // subject edits, etc.), add anything genuinely new in list order, and leave
       // already-loaded older pages and `hasMore` untouched. A row deleted on
       // another device lingers until the next real folder/account/search
       // switch — an acceptable staleness cost against a full list reset.
@@ -238,7 +238,12 @@ export function useEmailInbox(
         const newAtTop = data.filter(
           (email) => !placed.has(conversationKey(email))
         );
-        return newAtTop.length > 0 ? [...newAtTop, ...merged] : merged;
+        // New rows are not always the newest: a sync can bring in an older
+        // email after a newer one is already listed. Put them where the
+        // server would, by time, rather than stacking them on top.
+        return newAtTop.length > 0
+          ? [...newAtTop, ...merged].sort(listOrder(activeFolder))
+          : merged;
       });
     };
     void fetchInitialEmails().catch((err) => {
