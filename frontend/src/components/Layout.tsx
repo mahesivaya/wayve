@@ -84,6 +84,7 @@ import {
   type Project,
 } from "../api/workspace";
 import { getFeatureAccess } from "../api/featureAccess";
+import { isWorkspaceAdmin } from "../auth/workspaceAdmin";
 import { isDesktopApp } from "../utils/desktop";
 import "./Layout.css";
 import {
@@ -2205,6 +2206,8 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
         "/settings/statuses",
         "/settings/repositories",
         "/settings/developers",
+        "/settings/teams",
+        "/settings/projects",
       ].includes(location.pathname));
   // The Platform admin pages do the same with the Platform menu. /platform/home
   // (the platform AI home) isn't one of its links, so it keeps the main menu.
@@ -2253,18 +2256,6 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       label: "Notifications",
       icon: <BellIcon size={18} />,
     },
-    {
-      path: "/settings/usage",
-      label: "Usage",
-      icon: <AnalyticsIcon size={18} />,
-    },
-    {
-      // Platform users have no billing cards; mirrors Settings' gate.
-      path: "/settings/billing",
-      label: "Billing",
-      icon: <BillingIcon size={18} />,
-      visible: user?.scope !== "platform",
-    },
     { path: "/profile", label: "My Profile", icon: <PersonIcon size={18} /> },
     {
       path: "/integrations",
@@ -2296,6 +2287,36 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       visible: user?.account_type !== "personal",
     },
   ];
+  // Settings › Administration. Teams and Projects are for owners, super
+  // admins and admins; Billing and Usage are for everyone who had them before,
+  // so every account gets the group.
+  const isAdmin = isWorkspaceAdmin(user);
+  const administrationLinks: SidebarLinkDef[] = [
+    {
+      path: "/settings/teams",
+      label: "Teams",
+      icon: <TeamsIcon size={18} />,
+      visible: isAdmin,
+    },
+    {
+      path: "/settings/projects",
+      label: "Projects",
+      icon: <ProjectsTileIcon size={18} />,
+      visible: isAdmin,
+    },
+    {
+      // Platform users have no billing cards; mirrors Settings' gate.
+      path: "/settings/billing",
+      label: "Billing",
+      icon: <BillingIcon size={18} />,
+      visible: user?.scope !== "platform",
+    },
+    {
+      path: "/settings/usage",
+      label: "Usage",
+      icon: <AnalyticsIcon size={18} />,
+    },
+  ].filter((l) => l.visible !== false);
   const settingsNav = (
     <>
       <div className="sidebar-section">
@@ -2338,6 +2359,26 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           <span className="sidebar-label">Log out</span>
         </button>
       </div>
+      {administrationLinks.length > 0 && (
+        <div className="sidebar-section">
+          <div className="sidebar-section-label">
+            <span className="sidebar-section-icon" aria-hidden="true">
+              <OrganizationIcon size={16} />
+            </span>
+            <span>Administration</span>
+          </div>
+          {administrationLinks.map((l) => (
+            <Fragment key={l.path}>
+              {renderSidebarLink(
+                l.path,
+                l.label,
+                l.icon,
+                settingsPath === l.path
+              )}
+            </Fragment>
+          ))}
+        </div>
+      )}
     </>
   );
 

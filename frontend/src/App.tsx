@@ -116,6 +116,14 @@ const PlanAdmin = lazy(() => import("./settings/PlanAdmin"));
 const AiSettings = lazy(() => import("./settings/AiSettings"));
 const TaskStatuses = lazy(() => import("./settings/TaskStatuses"));
 const RepositorySettings = lazy(() => import("./settings/RepositorySettings"));
+const AdminTeams = lazy(() =>
+  import("./settings/Administration").then((m) => ({ default: m.AdminTeams }))
+);
+const AdminProjects = lazy(() =>
+  import("./settings/Administration").then((m) => ({
+    default: m.AdminProjects,
+  }))
+);
 const Shortcuts = lazy(() => import("./settings/Shortcuts"));
 const RepoSettingsPage = lazy(() => import("./settings/RepoSettingsPage"));
 const AiUsageGovernance = lazy(() => import("./settings/AiUsageGovernance"));
@@ -541,6 +549,9 @@ export default function App() {
           {/* Readable by anyone in the scope — the page itself hides the
                   editing affordances without `task_statuses:manage`. */}
           <Route path="/settings/statuses" element={<TaskStatuses />} />
+          {/* Settings › Administration. The pages gate on the admin role. */}
+          <Route path="/settings/teams" element={<AdminTeams />} />
+          <Route path="/settings/projects" element={<AdminProjects />} />
           <Route
             path="/settings/repositories"
             element={<RepositorySettings />}
