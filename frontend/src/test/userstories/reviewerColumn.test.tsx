@@ -2,11 +2,18 @@
 // Assignee, saved on change. It is on by default, including for someone whose
 // column choice was saved before the column existed.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 // vi.mock factories are hoisted above the file's own declarations.
-const { update, story } = vi.hoisted(() => ({
+const { create, update, story } = vi.hoisted(() => ({
+  create: vi.fn(),
   update: vi.fn(),
   story: {
     id: 1,
@@ -26,7 +33,7 @@ const { update, story } = vi.hoisted(() => ({
 
 vi.mock("../../api/userStories", () => ({
   getUserStories: vi.fn().mockResolvedValue([story]),
-  createUserStoryApi: vi.fn(),
+  createUserStoryApi: (payload: Record<string, unknown>) => create(payload),
   updateUserStoryApi: (id: number, payload: Record<string, unknown>) =>
     update(id, payload),
   deleteUserStoryApi: vi.fn(),
@@ -90,6 +97,10 @@ describe("the Reviewer column on user stories", () => {
   beforeEach(() => {
     window.localStorage.clear();
     update.mockReset();
+    create.mockReset();
+    create.mockImplementation((payload: object) =>
+      Promise.resolve({ ...story, id: 2, task_number: 2, ...payload })
+    );
     update.mockImplementation((_id: number, payload: object) =>
       Promise.resolve({ ...story, ...payload })
     );
@@ -151,5 +162,56 @@ describe("the Reviewer column on user stories", () => {
     renderBoard();
     await screen.findByText("Checkout flow");
     expect(header().textContent).not.toMatch(/Reviewer/);
+  });
+
+  it("can be picked in the create form and is sent with the new story", async () => {
+    renderBoard();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "+ Create story" })
+    );
+    fireEvent.change(await screen.findByPlaceholderText("Story title"), {
+      target: { value: "Refund flow" },
+    });
+    // The form's Reviewer pill opens the same member menu Assignee uses.
+    fireEvent.click(screen.getByRole("button", { name: "Reviewer" }));
+    const menu = await screen.findByRole("dialog", { name: "Choose reviewer" });
+    expect(menu.textContent).toContain("No reviewer");
+    fireEvent.click(within(menu).getByText("Bo"));
+    // The pill now names the reviewer.
+    expect(screen.getByRole("button", { name: "Bo" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create story" }));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Refund flow",
+        reviewer: "bo@test.local",
+        reviewer_id: 12,
+      })
+    );
+  });
+
+  it("is loaded into the edit form and only saved when changed", async () => {
+    renderBoard();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Checkout flow" })
+    );
+    const form = await screen.findByRole("dialog", { name: "Edit Story" });
+    const save = within(form).getByRole("button", { name: "Save changes" });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.click(within(form).getByRole("button", { name: "Reviewer" }));
+    fireEvent.click(
+      within(
+        await screen.findByRole("dialog", { name: "Choose reviewer" })
+      ).getByText("Ann")
+    );
+    expect((save as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(save);
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(update).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ reviewer: "ann@test.local", reviewer_id: 11 })
+    );
   });
 });

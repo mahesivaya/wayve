@@ -257,6 +257,8 @@ type ComposeFields = {
   assignedBy: string;
   assignee: string;
   assigneeId: number | null;
+  reviewer: string;
+  reviewerId: number | null;
   projectId: number | null;
   badgeKind: string;
   pendingAttachments: number;
@@ -324,13 +326,16 @@ function AssigneeMenu({
   selectedEmail,
   onSelect,
   onClose,
+  role = "assignee",
   children,
 }: {
   users: AssignableUser[];
   selectedEmail: string;
-  /** `null` selects "No assignee". */
+  /** `null` selects "No assignee" (or "No reviewer"). */
   onSelect: (user: AssignableUser | null) => void;
   onClose: () => void;
+  /** Who is being picked; only changes the menu's wording. */
+  role?: "assignee" | "reviewer";
   children?: React.ReactNode;
 }) {
   const [query, setQuery] = useState("");
@@ -348,7 +353,7 @@ function AssigneeMenu({
     <div
       className="task-assignee-pop"
       role="dialog"
-      aria-label="Choose assignee"
+      aria-label={`Choose ${role}`}
     >
       {users.length > 6 && (
         <input
@@ -388,7 +393,7 @@ function AssigneeMenu({
               <circle cx="8" cy="5.5" r="2.8" />
               <path d="M2.5 14c.8-2.8 3-4.2 5.5-4.2s4.7 1.4 5.5 4.2" />
             </svg>
-            <span className="task-assignee-row-name">No assignee</span>
+            <span className="task-assignee-row-name">{`No ${role}`}</span>
             {selected === "" && (
               <span className="task-assignee-check" aria-hidden="true">
                 ✓
@@ -1079,6 +1084,12 @@ export default function Tasks({
   // `assigneeId` is set only when a real member is picked, not for a hand-typed
   // email.
   const [assigneeId, setAssigneeId] = useState<number | null>(null);
+  // The form's Reviewer, on boards that have one (stories, tickets). Same
+  // shape as the assignee: a member's address plus their id.
+  const [reviewer, setReviewer] = useState("");
+  const [reviewerId, setReviewerId] = useState<number | null>(null);
+  const [reviewerPickerOpen, setReviewerPickerOpen] = useState(false);
+  const reviewerPickerRef = useRef<HTMLDivElement | null>(null);
   const [projectId, setProjectId] = useState<number | null>(null);
   // The edit modal's Type field, only used on the Tickets board (one of
   // TYPE_OPTIONS; "" = no type). Bug-derived tickets keep their support category
@@ -1126,6 +1137,20 @@ export default function Tasks({
     return () => document.removeEventListener("mousedown", onDocPointer);
   }, [assigneePickerOpen]);
 
+  useEffect(() => {
+    if (!reviewerPickerOpen) return;
+    const onDocPointer = (event: MouseEvent) => {
+      if (
+        reviewerPickerRef.current &&
+        !reviewerPickerRef.current.contains(event.target as Node)
+      ) {
+        setReviewerPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocPointer);
+    return () => document.removeEventListener("mousedown", onDocPointer);
+  }, [reviewerPickerOpen]);
+
   const isEditing = editingId !== null;
   // The open item, for the form's Delete button (rows no longer carry one).
   const editingTask = isEditing
@@ -1147,6 +1172,8 @@ export default function Tasks({
       assignedBy,
       assignee,
       assigneeId,
+      reviewer,
+      reviewerId,
       projectId,
       badgeKind,
       pendingAttachments: pendingAttachments.length,
@@ -1157,6 +1184,10 @@ export default function Tasks({
   const assigneeUser =
     assignableUsers.find(
       (u) => u.email.toLowerCase() === assignee.trim().toLowerCase()
+    ) ?? null;
+  const reviewerUser =
+    assignableUsers.find(
+      (u) => u.email.toLowerCase() === reviewer.trim().toLowerCase()
     ) ?? null;
 
   // The org's configured statuses, in board order. Everything status-shaped on
@@ -1360,6 +1391,8 @@ export default function Tasks({
     setAssignedBy(isPersonal ? "" : (user?.email ?? ""));
     setAssignee("");
     setAssigneeId(null);
+    setReviewer("");
+    setReviewerId(null);
     setProjectId(null);
     setBadgeKind("");
     clearSuggestions();
@@ -1406,6 +1439,8 @@ export default function Tasks({
       assignedBy: task.assigned_by ?? "",
       assignee: task.assignee ?? "",
       assigneeId: task.assignee_id ?? null,
+      reviewer: task.reviewer ?? "",
+      reviewerId: task.reviewer_id ?? null,
       projectId: task.project_id ?? null,
       badgeKind: task.badge_kind ?? "",
       pendingAttachments: 0,
@@ -1419,6 +1454,8 @@ export default function Tasks({
     setAssignedBy(loaded.assignedBy);
     setAssignee(loaded.assignee);
     setAssigneeId(loaded.assigneeId);
+    setReviewer(loaded.reviewer);
+    setReviewerId(loaded.reviewerId);
     setProjectId(loaded.projectId);
     setBadgeKind(loaded.badgeKind);
     setError("");
@@ -1804,6 +1841,9 @@ export default function Tasks({
           assignee_id: assigneeId,
           project_id: projectId,
           badge_kind: showType ? badgeKind || null : undefined,
+          ...(config.features.reviewer
+            ? { reviewer: reviewer.trim(), reviewer_id: reviewerId }
+            : {}),
         });
         targetTaskId = updated.id;
         setTasks((prev) =>
@@ -1830,6 +1870,9 @@ export default function Tasks({
           assignee_id: assigneeId,
           project_id: projectId,
           badge_kind: showType ? badgeKind || null : undefined,
+          ...(config.features.reviewer
+            ? { reviewer: reviewer.trim(), reviewer_id: reviewerId }
+            : {}),
         });
         targetTaskId = created.id;
         setTasks((prev) =>
@@ -3105,6 +3148,55 @@ export default function Tasks({
                         </div>
                       )}
                     </AssigneeMenu>
+                  )}
+                </div>
+              )}
+
+              {/* Reviewer, on the boards that have one. A team feature like
+                    assignment, so personal accounts don't see it. */}
+              {!isPersonal && config.features.reviewer && (
+                <div className="task-pill-wrap" ref={reviewerPickerRef}>
+                  <button
+                    type="button"
+                    className="task-pill task-pill--button"
+                    onClick={() => setReviewerPickerOpen((open) => !open)}
+                    aria-expanded={reviewerPickerOpen}
+                    aria-haspopup="dialog"
+                    data-tooltip="Reviewer"
+                  >
+                    {reviewerUser ? (
+                      <Avatar
+                        name={reviewerUser.username || reviewerUser.email}
+                        src={`${getApiBase()}/api/users/${reviewerUser.user_id}/avatar`}
+                        size={16}
+                      />
+                    ) : (
+                      <svg
+                        className="task-pill-icon task-pill-icon--stroke"
+                        viewBox="0 0 16 16"
+                        aria-hidden="true"
+                      >
+                        <path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z" />
+                        <circle cx="8" cy="8" r="2" />
+                      </svg>
+                    )}
+                    <span className="task-pill-text">
+                      {reviewerUser?.username || reviewer.trim() || "Reviewer"}
+                    </span>
+                  </button>
+
+                  {reviewerPickerOpen && (
+                    <AssigneeMenu
+                      role="reviewer"
+                      users={assignableUsers}
+                      selectedEmail={reviewer}
+                      onClose={() => setReviewerPickerOpen(false)}
+                      onSelect={(picked) => {
+                        setReviewer(picked ? picked.email : "");
+                        setReviewerId(picked ? picked.user_id : null);
+                        setReviewerPickerOpen(false);
+                      }}
+                    />
                   )}
                 </div>
               )}
