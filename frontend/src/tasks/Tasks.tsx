@@ -957,6 +957,10 @@ export default function Tasks({
   }, [assigneePickerOpen]);
 
   const isEditing = editingId !== null;
+  // The open item, for the form's Delete button (rows no longer carry one).
+  const editingTask = isEditing
+    ? (tasks.find((t) => t.id === editingId) ?? null)
+    : null;
 
   // Has anything actually moved since the editor opened? Compared against the
   // baseline `beginEdit` recorded, so Save is dead until there is something to
@@ -1494,7 +1498,7 @@ export default function Tasks({
 
   const deleteTask = async (task: Task) => {
     const ok = window.confirm(
-      `Delete task "${task.name}"? This cannot be undone.`
+      `Delete ${config.labels.lowerSingular} "${task.name}"? This cannot be undone.`
     );
     if (!ok) return;
     try {
@@ -1699,7 +1703,7 @@ export default function Tasks({
     showAssignee ? col("assignee", "176px") : null,
     col("priority", "64px"),
     col("status", "168px"),
-    "128px", // actions — a fixed Edit/Delete pair, nothing to reveal
+    "88px", // actions — a fixed Edit button, nothing to reveal
   ]
     .filter(Boolean)
     .join(" ");
@@ -1999,14 +2003,6 @@ export default function Tasks({
             aria-label={`Edit ${task.name}`}
           >
             Edit
-          </button>
-          <button
-            type="button"
-            className="task-delete-btn"
-            onClick={() => deleteTask(task)}
-            aria-label={`Delete ${task.name}`}
-          >
-            Delete
           </button>
         </div>
       </div>
@@ -2745,6 +2741,16 @@ export default function Tasks({
                     <span>Create more</span>
                   </label>
                 )}
+                {isEditing && editingTask && (
+                  <button
+                    type="button"
+                    className="task-delete-btn"
+                    onClick={() => void deleteTask(editingTask)}
+                    disabled={submitting}
+                  >
+                    Delete
+                  </button>
+                )}
                 <button
                   type="submit"
                   className="primary"
@@ -2908,14 +2914,6 @@ export default function Tasks({
                               >
                                 Edit
                               </button>
-                              <button
-                                type="button"
-                                className="task-delete-btn"
-                                onClick={() => deleteTask(task)}
-                                aria-label={`Delete ${task.name}`}
-                              >
-                                Delete
-                              </button>
                             </div>
                           </article>
                         ))
@@ -3001,14 +2999,6 @@ export default function Tasks({
                               aria-label={`Edit ${task.name}`}
                             >
                               Edit
-                            </button>
-                            <button
-                              type="button"
-                              className="task-delete-btn"
-                              onClick={() => deleteTask(task)}
-                              aria-label={`Delete ${task.name}`}
-                            >
-                              Delete
                             </button>
                             <span className="task-status-control">
                               <TaskStatusIcon
@@ -3113,14 +3103,6 @@ export default function Tasks({
                             aria-label={`Edit ${task.name}`}
                           >
                             Edit
-                          </button>
-                          <button
-                            type="button"
-                            className="task-delete-btn"
-                            onClick={() => deleteTask(task)}
-                            aria-label={`Delete ${task.name}`}
-                          >
-                            Delete
                           </button>
                         </div>
                       </article>
