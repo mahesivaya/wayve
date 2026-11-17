@@ -136,7 +136,10 @@
   --color-surface-deep-navy: #0d1b2a;
   /* The page behind everything: white in the default light theme. */
   --color-canvas: #ffffff;
-  --color-pane: var(--color-surface-hover);
+  /* Panels, page headers and empty states: white in the default light theme,
+     set apart by their borders rather than a grey fill. Dark mode and custom
+     themes set their own. */
+  --color-pane: #ffffff;
   --color-resizer-hover: #9fb4cd;
   /* The line between split panes: a step darker than --color-border in light
      mode, where the hairline was hard to see against the page. */

@@ -15,8 +15,11 @@
   --bg: var(--color-canvas);
   --surface: var(--color-pane);
   --surface-alt: var(--color-surface-cool-mist);
-  --border: rgb(255, 255, 255, 0.7);
-  --border-soft: rgb(255, 255, 255, 0.55);
+  /* Grid lines and cell edges. The grid surface is white in the default light
+     theme, so these are the themed border colors, not white hairlines (which
+     only showed against a grey surface). */
+  --border: var(--color-border-muted);
+  --border-soft: var(--color-border);
   --text: var(--color-text-primary);
   --text-muted: var(--color-text-muted);
   --text-faint: var(--color-input-border-strong);
