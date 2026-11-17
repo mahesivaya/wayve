@@ -52,6 +52,56 @@ async fn can_manage_bug_tickets_service(pool: &PgPool, user_id: i32) -> bool {
         .unwrap_or(false)
 }
 
+/// Local runner mode only: whether the caller may start a fix on an item they
+/// can see without being platform staff. On a developer's own machine the
+/// people using the button are the owners and admins of the organization (or
+/// the personal account) whose stories they are working on, so they qualify,
+/// in admin mode. Always false outside local runner mode.
+async fn can_start_local_fix(req: &HttpRequest, pool: &PgPool, user_id: i32) -> bool {
+    if !crate::config::ai_fix_runner_local() {
+        return false;
+    }
+    rbac::resolve_role_context_moded(req, pool, user_id)
+        .await
+        .map(|ctx| {
+            matches!(
+                ctx.role,
+                rbac::Role::Owner | rbac::Role::SuperAdmin | rbac::Role::Admin
+            )
+        })
+        .unwrap_or(false)
+}
+
+/// Header the local runner sends its shared secret in.
+const RUNNER_TOKEN_HEADER: &str = "X-AI-Fix-Runner-Token";
+
+/// Whether the request is from the local runner: local runner mode is on, a
+/// token is configured, and the request carries exactly that token. The runner
+/// has no user of its own, so this stands in for the API key the CI callbacks
+/// use. Compared without an early exit, so timing reveals nothing.
+fn is_local_runner(req: &HttpRequest) -> bool {
+    if !crate::config::ai_fix_runner_local() {
+        return false;
+    }
+    let Some(expected) = crate::config::ai_fix_runner_token() else {
+        return false;
+    };
+    let Some(given) = req
+        .headers()
+        .get(RUNNER_TOKEN_HEADER)
+        .and_then(|v| v.to_str().ok())
+    else {
+        return false;
+    };
+    let (expected, given) = (expected.as_bytes(), given.trim().as_bytes());
+    expected.len() == given.len()
+        && expected
+            .iter()
+            .zip(given)
+            .fold(0u8, |acc, (a, b)| acc | (a ^ b))
+            == 0
+}
+
 /// Resolve the caller and confirm `ticket_id` is within their visible scope
 /// (own board, or a bug-derived ticket when they manage bugs). Returns the
 /// caller's `user_id` on success, `NotFound` otherwise. Shared with the ticket
@@ -278,6 +328,8 @@ pub struct AiFixTarget {
     pub audit_requested: &'static str,
     /// `audit_log.action` when the reviewed fix reaches an open PR.
     pub audit_pr_opened: &'static str,
+    /// `audit_log.action` when a queued or running fix is canceled.
+    pub audit_canceled: &'static str,
 }
 
 pub const TICKET_TARGET: AiFixTarget = AiFixTarget {
@@ -290,6 +342,7 @@ pub const TICKET_TARGET: AiFixTarget = AiFixTarget {
     resource_type: "workspace_ticket",
     audit_requested: "workspace_ticket_ai_fix_requested",
     audit_pr_opened: "workspace_ticket_ai_fix_pr_opened",
+    audit_canceled: "workspace_ticket_ai_fix_canceled",
 };
 
 pub const STORY_TARGET: AiFixTarget = AiFixTarget {
@@ -302,6 +355,7 @@ pub const STORY_TARGET: AiFixTarget = AiFixTarget {
     resource_type: "user_story",
     audit_requested: "user_story_ai_fix_requested",
     audit_pr_opened: "user_story_ai_fix_pr_opened",
+    audit_canceled: "user_story_ai_fix_canceled",
 };
 
 /// On-demand AI pass: ask Claude to group the caller's visible tickets into
@@ -462,7 +516,10 @@ async fn dispatch_ai_fix(
     let owner = statuses::owner_for_user(pool.get_ref(), user_id).await?;
     let (org_id, uid) = owner_ids(owner);
     let manage_bugs = can_manage_bug_tickets(&req, pool.get_ref(), user_id).await;
-    if !manage_bugs {
+    // Platform staff everywhere; in local runner mode also the owners and
+    // admins of the board the item is on (the query below keeps it to items
+    // the caller can see).
+    if !manage_bugs && !can_start_local_fix(&req, pool.get_ref(), user_id).await {
         return Err(AppError::Forbidden);
     }
     let (table, scope) = (target.table, target.scope);
@@ -548,6 +605,41 @@ async fn dispatch_ai_fix(
         }
     }
 
+    // Local runner mode: no workflow to dispatch. The row is queued for the
+    // runner on this machine, which claims it (`ai-fix-local/claim`), runs the
+    // fix and the checks, and reports back through the same `ai-fix-diff`
+    // callback. The worked example is not passed along in this mode.
+    if crate::config::ai_fix_runner_local() {
+        sqlx::query(&format!(
+            "UPDATE {table}
+                SET ai_fix_status = 'queued', ai_fix_diff = NULL, ai_fix_files = NULL,
+                    ai_fix_base_sha = NULL, ai_fix_commit_sha = NULL, ai_fix_branch = NULL,
+                    ai_fix_pr_url = NULL, ai_fix_progress = 0, ai_fix_step = NULL,
+                    updated_at = NOW()
+              WHERE id = $1"
+        ))
+        .bind(id)
+        .execute(pool.get_ref())
+        .await?;
+        crate::audit::record_action(
+            pool.get_ref(),
+            &req,
+            crate::audit::AuditEvent {
+                actor_user_id: user_id,
+                action: target.audit_requested,
+                resource_type: target.resource_type,
+                resource_id: Some(id.to_string()),
+                metadata: Some(serde_json::json!({ "runner": "local" })),
+            },
+        )
+        .await;
+        return Ok(HttpResponse::Ok().json(serde_json::json!({
+            "dispatched": true,
+            "runner": "local",
+            "reused_fix_from": null,
+        })));
+    }
+
     // Kick off the CI fixer workflow via the GitHub API.
     let Some(gh_token) = crate::github_proxy::effective_github_token(&req, pool.get_ref()).await
     else {
@@ -602,7 +694,8 @@ async fn dispatch_ai_fix(
         "UPDATE {table}
             SET ai_fix_status = 'running', ai_fix_diff = NULL, ai_fix_files = NULL,
                 ai_fix_base_sha = NULL, ai_fix_commit_sha = NULL, ai_fix_branch = NULL,
-                ai_fix_pr_url = NULL, updated_at = NOW()
+                ai_fix_pr_url = NULL, ai_fix_progress = NULL, ai_fix_step = NULL,
+                updated_at = NOW()
           WHERE id = $1"
     ))
     .bind(id)
@@ -624,6 +717,141 @@ async fn dispatch_ai_fix(
 
     Ok(HttpResponse::Ok()
         .json(serde_json::json!({ "dispatched": true, "reused_fix_from": matched })))
+}
+
+/// POST /workspace-tickets/{id}/ai-fix-cancel — stop a ticket's queued or
+/// running fix.
+#[post("/workspace-tickets/{id}/ai-fix-cancel")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn cancel_ai_fix(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> AppResult {
+    cancel_ai_fix_for(req, pool, path.into_inner(), TICKET_TARGET).await
+}
+
+/// POST /user-stories/{id}/ai-fix-cancel — the same, for a story.
+#[post("/user-stories/{id}/ai-fix-cancel")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn cancel_story_ai_fix(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> AppResult {
+    cancel_ai_fix_for(req, pool, path.into_inner(), STORY_TARGET).await
+}
+
+/// Cancels a fix that is still `queued` or `running`, for whoever could have
+/// started it. The row moves to `canceled`, which is what stops the run from
+/// landing: a queued job is never claimed, and the progress and result
+/// callbacks ignore a canceled row (see `record_progress`, `record_ai_fix`).
+/// The local runner learns it from its next progress report and stops; a CI
+/// run can't be reached from here, so it finishes and its result is dropped.
+/// Anything already past running (a diff under review, a PR) is left alone.
+async fn cancel_ai_fix_for(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    id: i32,
+    target: AiFixTarget,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let owner = statuses::owner_for_user(pool.get_ref(), user_id).await?;
+    let (org_id, uid) = owner_ids(owner);
+    let manage_bugs = can_manage_bug_tickets(&req, pool.get_ref(), user_id).await;
+    if !manage_bugs && !can_start_local_fix(&req, pool.get_ref(), user_id).await {
+        return Err(AppError::Forbidden);
+    }
+    let (table, scope) = (target.table, target.scope);
+
+    // Scoped to the caller's view, so an item elsewhere reads as not found.
+    let status: Option<Option<String>> = sqlx::query_scalar(&format!(
+        "SELECT ai_fix_status FROM {table} WHERE id = $4 AND {scope}"
+    ))
+    .bind(org_id)
+    .bind(uid)
+    .bind(manage_bugs)
+    .bind(id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+    if status.is_none() {
+        return Err(AppError::NotFound(target.not_found));
+    }
+
+    let canceled = sqlx::query_scalar::<_, i32>(&format!(
+        "UPDATE {table}
+            SET ai_fix_status = 'canceled', ai_fix_step = NULL, updated_at = NOW()
+          WHERE id = $1 AND ai_fix_status IN ('queued', 'running')
+         RETURNING id"
+    ))
+    .bind(id)
+    .fetch_optional(pool.get_ref())
+    .await?
+    .is_some();
+
+    if canceled {
+        crate::audit::record_action(
+            pool.get_ref(),
+            &req,
+            crate::audit::AuditEvent {
+                actor_user_id: user_id,
+                action: target.audit_canceled,
+                resource_type: target.resource_type,
+                resource_id: Some(id.to_string()),
+                metadata: None,
+            },
+        )
+        .await;
+    }
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "canceled": canceled })))
+}
+
+/// `POST /workspace-tickets/ai-fix-local/claim` — the local runner asks for its
+/// next job. Takes the longest-waiting queued ticket, then story, marks it
+/// running and returns what the fixer needs; `{"job": null}` when nothing is
+/// queued. Only in local runner mode (404 otherwise), and only for the runner
+/// (its shared token) or a service caller mapped to a platform `tickets:manage`
+/// user, like the other callbacks.
+#[post("/workspace-tickets/ai-fix-local/claim")]
+#[instrument(target = "http", skip(req, pool))]
+pub async fn claim_local_ai_fix(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+    if !crate::config::ai_fix_runner_local() {
+        return Err(AppError::NotFound("local AI-fix runner"));
+    }
+    // The runner's shared token, or a service caller like the CI callbacks.
+    if !is_local_runner(&req) {
+        let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+        if !can_manage_bug_tickets_service(pool.get_ref(), user_id).await {
+            return Err(AppError::Forbidden);
+        }
+    }
+    for target in [TICKET_TARGET, STORY_TARGET] {
+        let table = target.table;
+        // SKIP LOCKED: two runners never claim the same row.
+        let row = sqlx::query(&format!(
+            "UPDATE {table}
+                SET ai_fix_status = 'running', updated_at = NOW()
+              WHERE id = (SELECT id FROM {table}
+                           WHERE ai_fix_status = 'queued'
+                           ORDER BY updated_at, id
+                           LIMIT 1
+                           FOR UPDATE SKIP LOCKED)
+             RETURNING id, name, description"
+        ))
+        .fetch_optional(pool.get_ref())
+        .await?;
+        if let Some(row) = row {
+            return Ok(HttpResponse::Ok().json(serde_json::json!({
+                "job": {
+                    "kind": target.kind,
+                    "id": row.get::<i32, _>("id"),
+                    "title": row.get::<String, _>("name"),
+                    "description": row.get::<String, _>("description"),
+                }
+            })));
+        }
+    }
+    Ok(HttpResponse::Ok().json(serde_json::json!({ "job": null })))
 }
 
 #[derive(serde::Deserialize)]
@@ -738,7 +966,7 @@ async fn ai_fix_state(
 
     let row = sqlx::query(&format!(
         "SELECT ai_fix_status, ai_fix_diff, ai_fix_files, ai_fix_commit_sha,
-                ai_fix_branch, ai_fix_pr_url
+                ai_fix_branch, ai_fix_pr_url, ai_fix_progress, ai_fix_step
          FROM {table} WHERE id = $4 AND {scope}"
     ))
     .bind(org_id)
@@ -765,7 +993,121 @@ async fn ai_fix_state(
         "commit_sha": row.try_get::<Option<String>, _>("ai_fix_commit_sha").ok().flatten(),
         "branch": row.try_get::<Option<String>, _>("ai_fix_branch").ok().flatten(),
         "pr_url": row.try_get::<Option<String>, _>("ai_fix_pr_url").ok().flatten(),
+        // Local runner only: how far the run has got (0-100) and what it is
+        // doing. NULL for a CI run, which reports nothing until it finishes.
+        "progress": row.try_get::<Option<i16>, _>("ai_fix_progress").ok().flatten(),
+        "step": row.try_get::<Option<String>, _>("ai_fix_step").ok().flatten(),
     })))
+}
+
+#[derive(serde::Deserialize)]
+pub struct AiFixProgressInput {
+    /// How far the run has got, 0-99. 100 is set only by the final report.
+    pub percent: i16,
+    /// What the runner is doing now, shown under the bar.
+    #[serde(default)]
+    pub step: Option<String>,
+}
+
+/// POST /workspace-tickets/{id}/ai-fix-progress — the local runner reports how
+/// far a ticket's fix has got.
+#[post("/workspace-tickets/{id}/ai-fix-progress")]
+#[instrument(target = "http", skip(req, pool, path, body))]
+pub async fn record_ai_fix_progress(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+    body: web::Json<AiFixProgressInput>,
+) -> AppResult {
+    record_progress(
+        req,
+        pool,
+        path.into_inner(),
+        body.into_inner(),
+        TICKET_TARGET,
+    )
+    .await
+}
+
+/// POST /user-stories/{id}/ai-fix-progress — the same, for a story.
+#[post("/user-stories/{id}/ai-fix-progress")]
+#[instrument(target = "http", skip(req, pool, path, body))]
+pub async fn record_story_ai_fix_progress(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+    body: web::Json<AiFixProgressInput>,
+) -> AppResult {
+    record_progress(
+        req,
+        pool,
+        path.into_inner(),
+        body.into_inner(),
+        STORY_TARGET,
+    )
+    .await
+}
+
+const AI_FIX_STEP_MAX_CHARS: usize = 160;
+
+/// Stores the runner's progress on a running fix. The percent never goes
+/// backwards and stops at 99: only the final `ai-fix-diff` report completes
+/// it. A report for a fix that is not running (finished, or queued again) is
+/// ignored rather than refused, so a late one cannot disturb the result.
+/// Authenticated like the other runner callbacks.
+async fn record_progress(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    id: i32,
+    body: AiFixProgressInput,
+    target: AiFixTarget,
+) -> AppResult {
+    if !is_local_runner(&req) {
+        let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+        if !can_manage_bug_tickets_service(pool.get_ref(), user_id).await {
+            return Err(AppError::Forbidden);
+        }
+    }
+    let percent = body.percent.clamp(0, 99);
+    let step = body
+        .step
+        .map(|s| {
+            s.trim()
+                .chars()
+                .take(AI_FIX_STEP_MAX_CHARS)
+                .collect::<String>()
+        })
+        .filter(|s| !s.is_empty());
+    let table = target.table;
+    let updated = sqlx::query_scalar::<_, i32>(&format!(
+        "UPDATE {table}
+            SET ai_fix_progress = GREATEST(COALESCE(ai_fix_progress, 0), $1),
+                ai_fix_step = $2
+          WHERE id = $3 AND ai_fix_status = 'running'
+         RETURNING id"
+    ))
+    .bind(percent)
+    .bind(step)
+    .bind(id)
+    .fetch_optional(pool.get_ref())
+    .await?;
+    // A report that didn't land may be for a canceled fix. Say so, so the
+    // runner stops working on it instead of running to the end for nothing.
+    let canceled = updated.is_none() && is_ai_fix_canceled(pool.get_ref(), table, id).await?;
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "recorded": updated.is_some(),
+        "canceled": canceled,
+    })))
+}
+
+/// Whether the item's fix was canceled (see `cancel_ai_fix_for`).
+async fn is_ai_fix_canceled(pool: &PgPool, table: &str, id: i32) -> Result<bool, AppError> {
+    let status: Option<Option<String>> =
+        sqlx::query_scalar(&format!("SELECT ai_fix_status FROM {table} WHERE id = $1"))
+            .bind(id)
+            .fetch_optional(pool)
+            .await?;
+    Ok(status.flatten().as_deref() == Some("canceled"))
 }
 
 /// One changed file in the CI-reported fix. `content` is base64 (so any bytes /
@@ -782,13 +1124,23 @@ pub struct AiFixFile {
 #[derive(serde::Deserialize)]
 pub struct AiFixDiffInput {
     /// 'ready' (diff + base_sha + files present), 'no_change' (agent produced
-    /// nothing), or 'error' (the CI run failed before it could produce a fix).
+    /// nothing), or 'error' (the run failed before it could produce a fix; the
+    /// local runner sends the failing output as `diff`). The local runner may
+    /// also report 'pr_opened' (with `pr_url`).
     pub status: String,
     pub diff: Option<String>,
     /// The `main` commit the change is based on (parent of the commit to create).
     pub base_sha: Option<String>,
     #[serde(default)]
     pub files: Vec<AiFixFile>,
+    /// Local runner only, with status 'pr_opened': the runner pushed the branch
+    /// and opened the pull request itself.
+    #[serde(default)]
+    pub pr_url: Option<String>,
+    #[serde(default)]
+    pub branch: Option<String>,
+    #[serde(default)]
+    pub commit_sha: Option<String>,
 }
 
 /// POST /workspace-tickets/{id}/ai-fix-diff — the CI callback for a ticket.
@@ -826,38 +1178,79 @@ async fn record_ai_fix(
     body: web::Json<AiFixDiffInput>,
     target: AiFixTarget,
 ) -> AppResult {
-    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    if !can_manage_bug_tickets_service(pool.get_ref(), user_id).await {
-        return Err(AppError::Forbidden);
+    // The local runner's shared token, or the CI callback's API key.
+    if !is_local_runner(&req) {
+        let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+        if !can_manage_bug_tickets_service(pool.get_ref(), user_id).await {
+            return Err(AppError::Forbidden);
+        }
     }
     let table = target.table;
+    let local = crate::config::ai_fix_runner_local();
     let status = match body.status.trim() {
         s @ ("ready" | "no_change" | "error") => s.to_string(),
+        // Only the local runner opens the PR itself; CI never reports this.
+        "pr_opened" if local => "pr_opened".to_string(),
         _ => return Err(AppError::BadRequest("invalid status".into())),
     };
     let body = body.into_inner();
+    let non_blank = |v: Option<String>| v.filter(|s| !s.trim().is_empty());
     // A 'ready' report must carry the diff, base SHA, and the changed files.
-    let (diff, base_sha, files_json) = if status == "ready" {
-        let diff = body.diff.filter(|d| !d.is_empty());
-        let base = body.base_sha.filter(|s| !s.trim().is_empty());
-        if diff.is_none() || base.is_none() || body.files.is_empty() {
-            return Err(AppError::BadRequest(
-                "ready requires diff, base_sha and files".into(),
-            ));
+    let (diff, base_sha, files_json) = match status.as_str() {
+        "ready" => {
+            let diff = body.diff.filter(|d| !d.is_empty());
+            let base = non_blank(body.base_sha);
+            if diff.is_none() || base.is_none() || body.files.is_empty() {
+                return Err(AppError::BadRequest(
+                    "ready requires diff, base_sha and files".into(),
+                ));
+            }
+            let files = serde_json::to_value(&body.files)
+                .map_err(|_| AppError::internal("could not serialize files"))?;
+            (diff, base, Some(files))
         }
-        let files = serde_json::to_value(&body.files)
-            .map_err(|_| AppError::internal("could not serialize files"))?;
-        (diff, base, Some(files))
+        // The PR already exists; the diff and files are kept for reading.
+        "pr_opened" => {
+            let files = serde_json::to_value(&body.files)
+                .map_err(|_| AppError::internal("could not serialize files"))?;
+            (
+                body.diff.filter(|d| !d.is_empty()),
+                non_blank(body.base_sha),
+                Some(files),
+            )
+        }
+        // The local runner's failing check output, shown on the item.
+        "error" if local => (body.diff.filter(|d| !d.is_empty()), None, None),
+        _ => (None, None, None),
+    };
+    let (pr_url, branch, commit_sha) = if status == "pr_opened" {
+        let pr_url = non_blank(body.pr_url);
+        if pr_url.is_none() {
+            return Err(AppError::BadRequest("pr_opened requires pr_url".into()));
+        }
+        (pr_url, non_blank(body.branch), non_blank(body.commit_sha))
     } else {
         (None, None, None)
     };
 
+    // A canceled fix stays canceled: the run it belonged to may still finish
+    // and report, and that result must not bring the fix back.
+    if is_ai_fix_canceled(pool.get_ref(), table, id).await? {
+        return Ok(HttpResponse::Ok().json(serde_json::json!({
+            "recorded": false,
+            "canceled": true,
+        })));
+    }
+
     let updated = sqlx::query_scalar::<_, i32>(&format!(
         "UPDATE {table}
             SET ai_fix_status = $1, ai_fix_diff = $2, ai_fix_base_sha = $3, ai_fix_files = $4,
-                ai_fix_commit_sha = NULL, ai_fix_branch = NULL, ai_fix_pr_url = NULL,
+                ai_fix_commit_sha = $6, ai_fix_branch = $7, ai_fix_pr_url = $8,
+                -- A failed run keeps the point it reached; anything else is done.
+                ai_fix_progress = CASE WHEN $1 = 'error' THEN ai_fix_progress ELSE 100 END,
+                ai_fix_step = CASE WHEN $1 = 'error' THEN ai_fix_step ELSE NULL END,
                 updated_at = NOW()
-          WHERE id = $5
+          WHERE id = $5 AND COALESCE(ai_fix_status, '') <> 'canceled'
          RETURNING id"
     ))
     .bind(&status)
@@ -865,6 +1258,9 @@ async fn record_ai_fix(
     .bind(base_sha)
     .bind(files_json)
     .bind(id)
+    .bind(commit_sha)
+    .bind(branch)
+    .bind(pr_url)
     .fetch_optional(pool.get_ref())
     .await?;
     if updated.is_none() {

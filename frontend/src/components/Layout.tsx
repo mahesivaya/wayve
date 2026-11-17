@@ -121,6 +121,7 @@ import {
   ShortcutsIcon,
   LibrariesIcon,
   DevelopersIcon,
+  AssistantIcon,
 } from "../icons";
 import { ArrowLeft, LogOut } from "lucide-react";
 import { homePathForUser } from "../auth/accountHome";
@@ -2212,6 +2213,7 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
         "/settings/developers",
         "/settings/teams",
         "/settings/projects",
+        "/settings/ai",
       ].includes(location.pathname));
   // The Platform admin pages do the same with the Platform menu. /platform/home
   // (the platform AI home) isn't one of its links, so it keeps the main menu.
@@ -2323,6 +2325,17 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       label: "Projects",
       icon: <ProjectsTileIcon size={18} />,
       visible: isAdmin,
+    },
+    {
+      // Connecting the organization's (or the platform team's) AI provider.
+      // Owner-only: `ai:manage` is held by no other role, and a personal
+      // account's owner is refused by the backend.
+      path: "/settings/ai",
+      label: "AI",
+      icon: <AssistantIcon size={18} />,
+      visible:
+        hasPermission(user, "ai:manage") &&
+        (user?.scope === "organization" || user?.scope === "platform"),
     },
     {
       // Platform users have no billing cards; mirrors Settings' gate.

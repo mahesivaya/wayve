@@ -1,5 +1,6 @@
-//! AI provider configuration. Restricted to owners on the enterprise tier (see
-//! `require_ai_owner`); admins and super_admins are rejected. The key is validated
+//! AI provider configuration. Restricted to owners (see `require_ai_owner`), of
+//! an organization on any plan or of the platform; admins and super_admins are
+//! rejected. The key is validated
 //! with a live probe before storing, encrypted at rest, and never returned to the
 //! browser. Custom `base_url`s are SSRF-guarded via the MCP guard.
 
@@ -45,8 +46,9 @@ impl AiOwner {
     }
 }
 
-/// `Role::Owner` only, never super_admin or admin. An organization owner must
-/// additionally be on the enterprise tier; personal owners are rejected.
+/// `Role::Owner` only, never super_admin or admin. An organization's owner
+/// qualifies on any plan (this used to need the enterprise tier); personal
+/// owners are rejected.
 pub(crate) async fn require_ai_owner(
     req: &HttpRequest,
     pool: &PgPool,
@@ -61,11 +63,7 @@ pub(crate) async fn require_ai_owner(
     match ctx.scope {
         Scope::Organization => {
             let org_id = ctx.organization_id.ok_or(AppError::Forbidden)?;
-            if is_enterprise_org(pool, org_id).await? {
-                Ok(AiOwner::Org(org_id))
-            } else {
-                Err(AppError::Forbidden)
-            }
+            Ok(AiOwner::Org(org_id))
         }
         Scope::Platform => Ok(AiOwner::Platform),
         Scope::Personal => Err(AppError::Forbidden),
@@ -202,19 +200,6 @@ async fn delete_config_row(pool: &PgPool, owner: AiOwner) -> sqlx::Result<()> {
             .await
             .map(|_| ()),
     }
-}
-
-async fn is_enterprise_org(pool: &PgPool, org_id: i32) -> Result<bool, AppError> {
-    let enterprise: bool = sqlx::query_scalar(
-        "SELECT EXISTS(
-            SELECT 1 FROM subscriptions s JOIN plans p ON p.id = s.plan_id
-            WHERE s.organization_id = $1 AND s.status = 'active' AND p.tier = 'enterprise'
-        )",
-    )
-    .bind(org_id)
-    .fetch_one(pool)
-    .await?;
-    Ok(enterprise)
 }
 
 /// Surfaced so the settings page need not hardcode the catalog.

@@ -496,6 +496,11 @@ pub async fn ensure_email_schema(pool: &PgPool) {
         "ALTER TABLE user_stories ADD COLUMN IF NOT EXISTS ai_fix_commit_sha TEXT",
         "ALTER TABLE user_stories ADD COLUMN IF NOT EXISTS ai_fix_branch TEXT",
         "ALTER TABLE user_stories ADD COLUMN IF NOT EXISTS ai_fix_pr_url TEXT",
+        // How far a local runner's fix has got (0-100) and what it is doing.
+        "ALTER TABLE user_stories ADD COLUMN IF NOT EXISTS ai_fix_progress SMALLINT",
+        "ALTER TABLE user_stories ADD COLUMN IF NOT EXISTS ai_fix_step TEXT",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_progress SMALLINT",
+        "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_step TEXT",
         "ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS support_ticket_id INTEGER",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_workspace_tickets_support_ticket \
          ON workspace_tickets(support_ticket_id)",

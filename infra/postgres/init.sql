@@ -1729,6 +1729,9 @@ CREATE TABLE IF NOT EXISTS user_stories (
     ai_fix_commit_sha TEXT,
     ai_fix_branch TEXT,
     ai_fix_pr_url TEXT,
+    -- Local runner only: how far the run has got (0-100) and its current step.
+    ai_fix_progress SMALLINT,
+    ai_fix_step TEXT,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     CONSTRAINT user_stories_owner_chk CHECK (
@@ -1827,6 +1830,9 @@ CREATE TABLE IF NOT EXISTS workspace_tickets (
     ai_fix_commit_sha TEXT,
     ai_fix_branch TEXT,
     ai_fix_pr_url TEXT,
+    -- Local runner only: how far the run has got (0-100) and its current step.
+    ai_fix_progress SMALLINT,
+    ai_fix_step TEXT,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     CONSTRAINT workspace_tickets_owner_chk CHECK (
@@ -3211,3 +3217,10 @@ CREATE INDEX IF NOT EXISTS idx_workspace_tickets_project     ON workspace_ticket
 CREATE INDEX IF NOT EXISTS idx_folders_parent                ON folders (parent_folder_id);
 CREATE INDEX IF NOT EXISTS idx_org_document_folders_parent   ON org_document_folders (parent_folder_id);
 CREATE INDEX IF NOT EXISTS idx_org_documents_folder          ON org_documents (folder_id);
+
+-- Fix with AI progress (local runner): how far a run has got and what it is
+-- doing. Same statements as migrations/2026-11-ai-fix-progress.sql.
+ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_progress SMALLINT;
+ALTER TABLE workspace_tickets ADD COLUMN IF NOT EXISTS ai_fix_step TEXT;
+ALTER TABLE user_stories ADD COLUMN IF NOT EXISTS ai_fix_progress SMALLINT;
+ALTER TABLE user_stories ADD COLUMN IF NOT EXISTS ai_fix_step TEXT;

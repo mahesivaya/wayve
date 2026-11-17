@@ -33,6 +33,7 @@ const EMPTY: AiFixState = {
 const makeApi = (state: AiFixState = EMPTY): AiFixApi => ({
   getState: vi.fn().mockResolvedValue(state),
   start: vi.fn().mockResolvedValue({ reused_fix_from: null }),
+  cancel: vi.fn().mockResolvedValue({ canceled: true }),
   saveEdits: vi.fn().mockResolvedValue({ saved: true }),
   commit: vi.fn().mockResolvedValue({ commit_sha: "abc1234def" }),
   push: vi.fn().mockResolvedValue({ branch: "ai-fix/ticket-1-abc1234" }),
@@ -160,5 +161,90 @@ describe("AiFixPanel", () => {
       "Contents of src/a.ts"
     ) as HTMLTextAreaElement;
     expect(editor.readOnly).toBe(true);
+  });
+
+  // Local runner mode (AI_FIX_RUNNER=local on the backend).
+  it("shows a queued fix as waiting for the local runner", async () => {
+    const api = makeApi();
+    (api.start as ReturnType<typeof vi.fn>).mockResolvedValue({
+      runner: "local",
+      reused_fix_from: null,
+    });
+    render(<AiFixPanel itemId={1} api={api} canFix />);
+    fireEvent.click(await screen.findByRole("button", { name: "Fix with AI" }));
+    expect(
+      await screen.findByText(/Waiting for the local runner/)
+    ).toBeTruthy();
+    expect(screen.getByText(/Fix queued for the local runner/)).toBeTruthy();
+  });
+
+  it("shows the local runner's percentage and current step", async () => {
+    const api = makeApi({
+      ...EMPTY,
+      status: "running",
+      progress: 42,
+      step: "Claude is working (turn 20 of up to 60)",
+    });
+    render(<AiFixPanel itemId={1} api={api} canFix />);
+
+    expect(await screen.findByText("42%")).toBeTruthy();
+    expect(screen.getByText(/Claude is working \(turn 20/)).toBeTruthy();
+    expect(
+      screen.getByRole("progressbar", { name: "AI fix progress" })
+    ).toHaveProperty("ariaValueNow", "42");
+  });
+
+  it("starts a local fix at 0% and shows where a failed one stopped", async () => {
+    const api = makeApi();
+    (api.start as ReturnType<typeof vi.fn>).mockResolvedValue({
+      runner: "local",
+      reused_fix_from: null,
+    });
+    const { unmount } = render(<AiFixPanel itemId={1} api={api} canFix />);
+    fireEvent.click(await screen.findByRole("button", { name: /Fix with AI/ }));
+    expect(await screen.findByText("0%")).toBeTruthy();
+    expect(screen.getByText("Waiting for the runner")).toBeTruthy();
+    unmount();
+
+    render(
+      <AiFixPanel
+        itemId={1}
+        api={makeApi({
+          ...EMPTY,
+          status: "error",
+          diff: "npm test failed",
+          progress: 78,
+          step: "Checking: npm test",
+        })}
+        canFix
+      />
+    );
+    expect(await screen.findByText("78%")).toBeTruthy();
+    expect(screen.getByText("Stopped at: Checking: npm test")).toBeTruthy();
+  });
+
+  it("shows no percentage for a CI run, which reports none", async () => {
+    render(
+      <AiFixPanel
+        itemId={1}
+        api={makeApi({ ...EMPTY, status: "running" })}
+        canFix
+      />
+    );
+    expect(await screen.findByText(/Claude is implementing/)).toBeTruthy();
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
+  it("shows what the local runner says failed", async () => {
+    const api = makeApi({
+      ...EMPTY,
+      status: "error",
+      diff: "Local check failed, so nothing was pushed: npm test",
+    });
+    render(<AiFixPanel itemId={1} api={api} canFix />);
+    expect((await screen.findByLabelText("What failed")).textContent).toContain(
+      "npm test"
+    );
+    expect(screen.getByRole("button", { name: "Retry AI fix" })).toBeTruthy();
   });
 });
