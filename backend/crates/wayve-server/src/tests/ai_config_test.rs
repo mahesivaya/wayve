@@ -1,5 +1,5 @@
-// The enterprise-owner-controlled AI provider. These tests pin that only an
-// enterprise org owner can configure it, that the API key is stored encrypted
+// The owner-controlled AI provider. These tests pin that only an org owner (on
+// any plan) can configure it, that the API key is stored encrypted
 // and never read back, that every member of the org resolves the owner's
 // provider, that the SSRF guard rejects a private custom base_url, and that a
 // fail-closed provider error never silently falls back to the platform default.
@@ -183,6 +183,44 @@ mod tests {
             .bind(personal)
             .execute(&pool)
             .await;
+    }
+
+    // Connecting a provider no longer needs the enterprise tier: the owner of
+    // an organization with no subscription at all reaches the config.
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn owner_of_an_org_on_any_plan_reaches_the_config() {
+        let pool = test_pool().await;
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(ai::config_handler::get_config),
+        )
+        .await;
+
+        let email = random_email();
+        let owner = insert_local_user(&pool, &email, "password123").await;
+        let org_id = make_enterprise(&pool, owner).await;
+        sqlx::query("DELETE FROM subscriptions WHERE organization_id = $1")
+            .bind(org_id)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("drop subscription: {e}"));
+
+        let req = actix_test::TestRequest::get()
+            .uri("/ai/config")
+            .insert_header((
+                "Authorization",
+                format!("Bearer {}", jwt_for(owner, &email)),
+            ))
+            .to_request();
+        assert_eq!(
+            actix_test::call_service(&app, req).await.status(),
+            StatusCode::OK
+        );
+
+        drop(app);
+        cleanup(&pool, org_id).await;
     }
 
     #[actix_web::test]

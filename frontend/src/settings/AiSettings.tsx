@@ -1,6 +1,6 @@
 // Owner-only page to choose the org's AI provider, which every member then uses.
-// The backend enforces both the `ai:manage` permission and an enterprise-tier
-// org. The API key is encrypted at rest and never returned to the browser.
+// The backend enforces the `ai:manage` permission (owners only), on any plan.
+// The API key is encrypted at rest and never returned to the browser.
 
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -78,10 +78,8 @@ export default function AiSettings() {
   const navigate = useNavigate();
 
   const canManage = hasPermission(user, "ai:manage");
-  const isEnterprise = user?.current_plan?.tier === "enterprise";
   // Platform owners configure a separate singleton config that applies only to
-  // platform members, never to an org. The backend accepts platform owners
-  // without an enterprise tier, so they must not be gated on it here.
+  // platform members, never to an org.
   const isPlatform = user?.scope === "platform";
   const audience = isPlatform ? "platform team" : "organization";
 
@@ -267,14 +265,6 @@ export default function AiSettings() {
           View usage &amp; cost governance →
         </button>
       </header>
-
-      {!isEnterprise && !isPlatform && (
-        <p className="ai-warn">
-          Selecting your own AI provider is an <strong>Enterprise</strong>{" "}
-          feature. Saving will be rejected until your organization is on the
-          Enterprise plan.
-        </p>
-      )}
 
       {loading ? (
         <p>Loading…</p>
