@@ -76,6 +76,7 @@ import {
   type PaneArrangement,
 } from "./paneLayout";
 import { listTeams, createTeam, type Team } from "../api/workspace";
+import { getVisibleProjects, type GithubRepo } from "../api/github";
 import { getFeatureAccess } from "../api/featureAccess";
 import { isDesktopApp } from "../utils/desktop";
 import "./Layout.css";
@@ -97,6 +98,7 @@ import {
   UserLogsIcon,
   AuditIcon,
   TeamsIcon,
+  ProjectsTileIcon,
   ApiKeysIcon,
   CodeReviewIcon,
   BugReportIcon,
@@ -455,6 +457,37 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       cancelled = true;
     };
   }, [userId, userOrganizationId]);
+
+  // The Projects section lists the repositories of the Projects page. That list
+  // comes from GitHub, so it loads when the section is first opened, not with
+  // every page. Keyed on the account, so a different one never shows the last
+  // one's projects.
+  const projectsKey = `${userId ?? ""}:${userOrganizationId ?? ""}`;
+  const [projectsLoad, setProjectsLoad] = useState<{
+    key: string;
+    repos: GithubRepo[];
+  } | null>(null);
+  const projects =
+    projectsLoad?.key === projectsKey ? projectsLoad.repos : null;
+  // Organization and platform accounts only, never personal ones; and the same
+  // non-guest audience as the Code Repo these projects come from.
+  const showProjects =
+    (user?.scope === "organization" || user?.scope === "platform") &&
+    user.effective_role !== "guest";
+  const projectsOpen = showProjects && sections.isOpen("projects");
+  useEffect(() => {
+    if (!projectsOpen || userId == null || projects !== null) return;
+    let cancelled = false;
+    void getVisibleProjects()
+      .then((data) => (Array.isArray(data?.repos) ? data.repos : []))
+      .catch(() => [] as GithubRepo[])
+      .then((repos) => {
+        if (!cancelled) setProjectsLoad({ key: projectsKey, repos });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectsOpen, userId, projects, projectsKey]);
 
   // The team page deletes through the api layer, which announces it here.
   useEffect(() => {
@@ -1921,6 +1954,37 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           ))}
           {!creatingTeam && teams.length === 0 && (
             <div className="sidebar-empty-hint">No teams yet</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "projects",
+      label: "Projects",
+      icon: <ProjectsTileIcon size={16} />,
+      visible: showProjects,
+      body: (
+        <div className="sidebar-subitems">
+          {projects === null && (
+            <div className="sidebar-empty-hint">Loading…</div>
+          )}
+          {projects?.map((repo) => {
+            const path = `/projects/${encodeURIComponent(
+              repo.owner.login
+            )}/${encodeURIComponent(repo.name)}`;
+            return (
+              <Fragment key={repo.full_name}>
+                {renderSidebarLink(
+                  path,
+                  repo.name,
+                  <ProjectsTileIcon size={16} />,
+                  location.pathname === path
+                )}
+              </Fragment>
+            );
+          })}
+          {projects?.length === 0 && (
+            <div className="sidebar-empty-hint">No projects yet</div>
           )}
         </div>
       ),
