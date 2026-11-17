@@ -279,7 +279,7 @@
    switcher sits inside it without padding of its own. */
 .github-branch-card {
   padding: 6px;
-  gap: 6px;
+  gap: 12px;
 }
 
 .github-branch-card > .github-repo-switch {
@@ -369,11 +369,18 @@
   background: var(--color-surface-hover);
 }
 
+/* The section list: rows close together. */
+.github-section-nav {
+  gap: 2px;
+}
+
 .github-sidebar-link {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  /* Compact rows, spaced like the Emails folder list. */
+  padding: 5px 10px;
+  line-height: 1.4;
   border: none;
   border-radius: 6px;
   background: transparent;
@@ -419,8 +426,9 @@
   font-weight: 700;
   color: var(--color-text-muted);
   background: var(--color-surface-hover);
-  padding: 2px 7px;
+  padding: 1px 7px;
   border-radius: 999px;
+  line-height: 1.5;
   min-width: 22px;
   text-align: center;
 }
@@ -626,6 +634,7 @@
     flex-direction: row;
     flex-wrap: nowrap;
     align-items: center;
+    gap: 4px;
     padding: 4px 8px 0;
   }
   .github-section-nav .github-sidebar-link {
