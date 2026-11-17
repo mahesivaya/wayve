@@ -198,8 +198,7 @@
 .github-toolbar label,
 .github-panel-head span,
 .github-file-size,
-.github-run small,
-.github-workflow small {
+.github-run small {
   display: block;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
@@ -221,7 +220,7 @@
 /* =============================
    🧭 SECTION LAYOUT — left rail + right content
    The GitHub page is now divided into a permanent left sidebar that
-   switches between Files / Workflows / Commits / Actions, and a right
+   switches between Files / Commits / Pull Requests / Actions, and a right
    content area that renders only the active section. Mirrors the
    main-app shell so the page feels at home in the same chrome.
 ============================== */
@@ -446,7 +445,7 @@
   min-height: 0;
 }
 
-/* Workflows / Commits / Actions each render one top-level panel as the
+/* Commits / Pull Requests / Actions each render one top-level panel as the
    content child — fill the remaining height and scroll inside the panel so
    the whole view fits within the page (no outer scroll). */
 .github-content > .github-panel {
@@ -1061,7 +1060,6 @@
   margin-top: 14px;
 }
 
-.github-workflow,
 .github-run,
 .github-commit {
   width: 100%;
@@ -1082,7 +1080,6 @@
   font-size: var(--text-sm);
 }
 
-.github-workflow:hover,
 .github-run:hover,
 .github-commit:hover {
   background: var(--color-surface-hover);
@@ -2669,33 +2666,6 @@
   padding-top: 8px;
   border-top: 1px solid var(--color-border);
   font-size: var(--text-xs);
-}
-
-/* Inline preview of an opened workflow .yml inside the Workflows panel (which,
-   unlike Files, has no side-by-side split). */
-.github-workflow.active {
-  border-color: var(--color-primary-border);
-  background: var(--color-primary-soft);
-}
-
-.github-workflow-preview {
-  margin-top: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-surface);
-  overflow: hidden;
-}
-
-.github-workflow-preview pre {
-  margin: 0;
-  padding: 12px 14px;
-  overflow: auto;
-  max-height: 60vh;
-  white-space: pre;
-  font-family: var(--font-mono, ui-monospace, Menlo, Consolas, monospace);
-  font-size: var(--text-md);
-  line-height: 1.5;
-  color: var(--color-text-primary);
 }
 
 /* ═══════════════════════════════════════════════════════════════════

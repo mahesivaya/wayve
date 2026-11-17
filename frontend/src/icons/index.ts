@@ -141,4 +141,5 @@ export {
 } from "lucide-react";
 
 export { default as GitLogoIcon } from "./GitLogoIcon";
+export { default as WorkflowRunsIcon } from "./WorkflowRunsIcon";
 export { default as BugReportIcon } from "./BugReportIcon";

@@ -45,6 +45,8 @@ import {
   GitBranchIcon,
   PullRequestIcon,
   RepoIcon,
+  SettingsIcon,
+  WorkflowRunsIcon,
 } from "../icons";
 import { useDiffPrefs } from "./diffPrefs";
 import {
@@ -962,7 +964,6 @@ export function GitHubRepoViewer({
   const [loadingCommentShas, setLoadingCommentShas] = useState<Set<string>>(
     new Set()
   );
-  const [workflows, setWorkflows] = useState<ContentItem[]>([]);
   // Keyed by workflow display name (workflow_run.name).
   const [expandedWorkflows, setExpandedWorkflows] = useState<Set<string>>(
     new Set()
@@ -1000,19 +1001,12 @@ export function GitHubRepoViewer({
     created_at: string;
   };
   type Section =
-    | "description"
-    | "files"
-    | "workflows"
-    | "commits"
-    | "pulls"
-    | "actions"
-    | "access";
+    "description" | "files" | "commits" | "pulls" | "actions" | "access";
   const [activeSection, setActiveSection] = useState<Section>(() => {
     try {
       const raw = localStorage.getItem("rwayve.github.section");
       if (
         raw === "files" ||
-        raw === "workflows" ||
         raw === "commits" ||
         raw === "pulls" ||
         raw === "actions" ||
@@ -1147,22 +1141,6 @@ export function GitHubRepoViewer({
           next.delete(nextPath);
           return next;
         });
-      }
-    },
-    [API_BASE]
-  );
-
-  const loadWorkflows = useCallback(
-    async (nextBranch: string) => {
-      try {
-        const data = await githubJson<ContentItem | ContentItem[]>(
-          `${API_BASE}/contents/.github/workflows?ref=${encodeURIComponent(nextBranch)}`
-        );
-        setWorkflows(
-          isContentList(data) ? data.filter((item) => item.type === "file") : []
-        );
-      } catch {
-        setWorkflows([]);
       }
     },
     [API_BASE]
@@ -1810,7 +1788,6 @@ export function GitHubRepoViewer({
   useEffect(() => {
     if (!repo) return;
     void loadReadme(branch);
-    void loadWorkflows(branch);
     // Back on the page of commits it was left on, the first time through.
     void loadCommits(
       branch,
@@ -1834,7 +1811,6 @@ export function GitHubRepoViewer({
     loadCommitsTotal,
     loadReadme,
     loadRuns,
-    loadWorkflows,
     repo,
     restoredView,
   ]);
@@ -2037,12 +2013,6 @@ export function GitHubRepoViewer({
               { id: "description", label: "Description", icon: "📖" },
               { id: "files", label: "Files", icon: "📁" },
               {
-                id: "workflows",
-                label: "Workflows",
-                icon: "⚙️",
-                count: workflows.length,
-              },
-              {
                 id: "commits",
                 label: "Commits",
                 icon: "📝",
@@ -2060,11 +2030,19 @@ export function GitHubRepoViewer({
               {
                 id: "actions",
                 label: "Actions",
-                icon: "▶",
+                icon: <WorkflowRunsIcon size={16} />,
                 count: runsTotal || runs.length,
               },
               ...(canManageAccess
-                ? [{ id: "access" as const, label: "Access", icon: "👥" }]
+                ? [
+                    {
+                      // Holds repository access; the id stays "access" so a
+                      // remembered open section still resolves.
+                      id: "access" as const,
+                      label: "Settings",
+                      icon: <SettingsIcon size={16} />,
+                    },
+                  ]
                 : []),
             ]}
           />
@@ -2223,67 +2201,6 @@ export function GitHubRepoViewer({
                 )}
               </section>
             </main>
-          )}
-
-          {activeSection === "workflows" && (
-            <div className="github-panel">
-              <div className="github-panel-head">
-                <h2>Workflows</h2>
-                <span>{workflows.length}</span>
-              </div>
-              {workflows.map((workflow) => (
-                <button
-                  key={workflow.path}
-                  type="button"
-                  className={`github-workflow ${
-                    selectedFile?.path === workflow.path ? "active" : ""
-                  }`}
-                  onClick={() => void openFile(workflow)}
-                >
-                  <span>{workflow.name}</span>
-                  <small>{formatSize(workflow.size)}</small>
-                </button>
-              ))}
-              {workflows.length === 0 && (
-                <div className="github-empty">No workflows found.</div>
-              )}
-
-              {/* Preview the opened workflow file inline (the Workflows panel
-                  has no split pane of its own, unlike Files). Guarded to a
-                  workflow path so a file opened in the Files tab doesn't leak
-                  in here. */}
-              {selectedFile &&
-                workflows.some((w) => w.path === selectedFile.path) && (
-                  <section
-                    className="github-preview github-workflow-preview"
-                    aria-label="Workflow preview"
-                  >
-                    <div className="github-panel-head">
-                      <h2>{selectedFile.name}</h2>
-                      <span className="github-panel-head-trail">
-                        <span>{formatSize(selectedFile.size)}</span>
-                        <button
-                          type="button"
-                          className="github-preview-close"
-                          onClick={() => {
-                            setSelectedFile(null);
-                            setFileText("");
-                          }}
-                          aria-label="Close workflow preview"
-                          data-tooltip="Close preview"
-                        >
-                          ✕
-                        </button>
-                      </span>
-                    </div>
-                    {fileLoading ? (
-                      <div className="github-empty">Loading file...</div>
-                    ) : (
-                      <CodeFile path={selectedFile.path} text={fileText} />
-                    )}
-                  </section>
-                )}
-            </div>
           )}
 
           {activeSection === "commits" && (
