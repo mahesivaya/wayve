@@ -10,6 +10,6 @@
 export const BRAND_NAME = "Fluxze";
 
 // The name in the page header only (the app's top-left header and the public
-// home page's). Kept apart from BRAND_NAME while the rename to Hadal Mail is
+// home page's). Kept apart from BRAND_NAME while the rename to Hadal is
 // tried in the header first; everything else still reads BRAND_NAME.
-export const HEADER_NAME = "Hadal Mail";
+export const HEADER_NAME = "Hadal";

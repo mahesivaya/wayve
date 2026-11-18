@@ -1,10 +1,10 @@
-# Wayve
+# HadalSpace
 
-**Wayve is a private, all-in-one workspace** — everything your team needs to communicate and get work done, brought together in a single app, with privacy built in from the ground up.
+**HadalSpace is a private, all-in-one workspace** — everything your team needs to communicate and get work done, brought together in a single app, with privacy built in from the ground up.
 
-Most teams spend their day hopping between half a dozen different tools — one for email, another for chat, others for video calls, file storage, notes, and calendars. Each one is a separate login, a separate bill, and another place your company's information ends up living. Wayve replaces that patchwork with one connected workspace, so your team can do everything in a single place and your business keeps all of its information under one roof.
+Most teams spend their day hopping between half a dozen different tools — one for email, another for chat, others for video calls, file storage, notes, and calendars. Each one is a separate login, a separate bill, and another place your company's information ends up living. HadalSpace replaces that patchwork with one connected workspace, so your team can do everything in a single place and your business keeps all of its information under one roof.
 
-## What you can do with Wayve
+## What you can do with HadalSpace
 
 - 📧 **Email** — send and receive messages from one inbox, without leaving the app.
 - 💬 **Chat & calls** — message teammates instantly in one-to-one or group conversations, and jump straight into voice or video calls.
@@ -17,9 +17,9 @@ Most teams spend their day hopping between half a dozen different tools — one 
 
 **Your information stays private — by design.** Your messages and files are locked so that only you and the people you choose can open them. Not even the people running the servers can read your content, so your conversations and documents stay yours alone.
 
-**Your business stays in control.** Because Wayve is self-hosted, your organization runs it on its own systems and fully owns its data — nothing is handed off to an outside provider. That means stronger privacy, no surprise vendor lock-in, and one tool instead of many to manage and pay for.
+**Your business stays in control.** Because HadalSpace is self-hosted, your organization runs it on its own systems and fully owns its data — nothing is handed off to an outside provider. That means stronger privacy, no surprise vendor lock-in, and one tool instead of many to manage and pay for.
 
-**Built for teams of any size.** Wayve supports individuals, organizations, and larger platforms, with flexible roles and permissions so the right people have the right level of access.
+**Built for teams of any size.** HadalSpace supports individuals, organizations, and larger platforms, with flexible roles and permissions so the right people have the right level of access.
 
 ---
 

@@ -105,17 +105,13 @@ pub(crate) async fn issue_verification_code_and_email(
     };
 
     let body = format!(
-        "Hi,\n\nWelcome to HadalMail! Your email verification code is:\n\n    {code}\n\n\
+        "Hi,\n\nWelcome to Hadal! Your email verification code is:\n\n    {code}\n\n\
          Enter it in the app within {within} to activate your account.\n\
-         If you didn't create a HadalMail account, you can safely ignore this email.\n"
+         If you didn't create a Hadal account, you can safely ignore this email.\n"
     );
-    send_mail(
-        email,
-        "Verify your email address for HadalMail account",
-        &body,
-    )
-    .await
-    .map_err(|e| AppError::Internal(format!("verification email send: {e}")))?;
+    send_mail(email, "Verify your email address for Hadal account", &body)
+        .await
+        .map_err(|e| AppError::Internal(format!("verification email send: {e}")))?;
     Ok(())
 }
 
