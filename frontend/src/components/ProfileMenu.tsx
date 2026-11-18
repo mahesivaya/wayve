@@ -5,7 +5,7 @@ import { canViewIntegrations } from "../auth/permissions";
 import Avatar from "./Avatar";
 import { getApiBase } from "../config/env";
 import { ChevronUp, LogOut as LogOutIcon } from "lucide-react";
-import { PlatformIcon, SettingsIcon } from "../icons";
+import { SettingsIcon } from "../icons";
 import {
   loadMyStatus,
   statusClass,
@@ -38,7 +38,6 @@ function AvatarWithStatus({
 export default function ProfileMenu({
   placement = "header",
   minimal = false,
-  platformAdminPath,
 }: {
   placement?: "header" | "sidebar";
   // Only Settings and Log out. For wide screens, where
@@ -46,9 +45,6 @@ export default function ProfileMenu({
   // Appearance is never in this menu: it lives in Settings (the rail on wide
   // screens, a card on the General page on narrow ones).
   minimal?: boolean;
-  // Where the gear menu's "Platform admin" item goes; omitted for users who
-  // can't open any Platform page, which hides the item.
-  platformAdminPath?: string;
 } = {}) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -97,8 +93,8 @@ export default function ProfileMenu({
   };
 
   // Wide screens: the sidebar's account control is the profile picture and
-  // name. It opens a small menu: Settings, Platform admin (platform admins
-  // only) and Log out.
+  // name. It opens a small menu: Settings and Log out. (The Platform pages
+  // are in the settings menu, under Administration.)
   if (inSidebar && minimal) {
     return (
       <div className="profile-menu profile-menu--sidebar" ref={menuRef}>
@@ -142,20 +138,6 @@ export default function ProfileMenu({
               </span>
               <span className="profile-dropdown-label">Settings</span>
             </button>
-            {platformAdminPath && (
-              <button
-                type="button"
-                role="menuitem"
-                className="profile-dropdown-item"
-                title="Platform admin"
-                onClick={() => go(platformAdminPath)}
-              >
-                <span className="profile-dropdown-icon" aria-hidden="true">
-                  <PlatformIcon size={18} />
-                </span>
-                <span className="profile-dropdown-label">Platform admin</span>
-              </button>
-            )}
             <div className="profile-dropdown-divider" />
             <button
               type="button"

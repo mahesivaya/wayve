@@ -1,6 +1,5 @@
 // The wide-screen sidebar's account row (profile picture + username or email)
-// opens a small menu: Settings, Platform admin (platform admins only) and Log
-// out.
+// opens a small menu: Settings and Log out.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
@@ -30,14 +29,10 @@ function Where() {
   return <div data-testid="where">{useLocation().pathname}</div>;
 }
 
-const renderGear = (platformAdminPath?: string) =>
+const renderGear = () =>
   render(
     <MemoryRouter initialEntries={["/home"]}>
-      <ProfileMenu
-        placement="sidebar"
-        minimal
-        platformAdminPath={platformAdminPath}
-      />
+      <ProfileMenu placement="sidebar" minimal />
       <Routes>
         <Route path="*" element={<Where />} />
       </Routes>
@@ -58,32 +53,22 @@ describe("Account menu", () => {
   });
 
   it("opens a menu instead of navigating", () => {
-    renderGear("/platform/members");
+    renderGear();
     fireEvent.click(screen.getByRole("button", { name: /account menu/i }));
     expect(screen.getByTestId("where").textContent).toBe("/home");
     expect(screen.getByRole("menuitem", { name: "Settings" })).toBeTruthy();
-    expect(
-      screen.getByRole("menuitem", { name: "Platform admin" })
-    ).toBeTruthy();
   });
 
   it("goes to Settings from the menu and closes it", () => {
-    renderGear("/platform/members");
+    renderGear();
     fireEvent.click(screen.getByRole("button", { name: /account menu/i }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Settings" }));
     expect(screen.getByTestId("where").textContent).toBe("/settings");
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
-  it("goes to the first Platform page from Platform admin", () => {
-    renderGear("/platform/billing");
-    fireEvent.click(screen.getByRole("button", { name: /account menu/i }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Platform admin" }));
-    expect(screen.getByTestId("where").textContent).toBe("/platform/billing");
-  });
-
-  it("hides Platform admin without a Platform page, and closes on Escape", () => {
-    renderGear(undefined);
+  it("has no Platform admin item, and closes on Escape", () => {
+    renderGear();
     fireEvent.click(screen.getByRole("button", { name: /account menu/i }));
     expect(
       screen.queryByRole("menuitem", { name: "Platform admin" })
@@ -92,11 +77,11 @@ describe("Account menu", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
-  it("lists Log out under Platform admin, and logs out", () => {
-    renderGear("/platform/members");
+  it("lists Log out under Settings, and logs out", () => {
+    renderGear();
     fireEvent.click(screen.getByRole("button", { name: /account menu/i }));
     const items = screen.getAllByRole("menuitem").map((i) => i.textContent);
-    expect(items).toEqual(["Settings", "Platform admin", "Log out"]);
+    expect(items).toEqual(["Settings", "Log out"]);
     fireEvent.click(screen.getByRole("menuitem", { name: "Log out" }));
     expect(logout).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("menu")).toBeNull();
