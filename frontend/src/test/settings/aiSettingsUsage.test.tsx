@@ -59,7 +59,23 @@ const baseUsage = {
   by_model: [
     { model: "claude-opus-4-8", requests: 7, tokens: 1545, cost_cents: 0 },
   ],
-  by_member: [{ name: "Asha Rao", requests: 7, tokens: 1545, cost_cents: 0 }],
+  by_member: [
+    {
+      name: "Asha Rao",
+      username: "asha",
+      requests: 7,
+      tokens: 1545,
+      cost_cents: 0,
+    },
+    // On the team, never used the AI.
+    {
+      name: "bo@acme.test",
+      username: "bo@acme.test",
+      requests: 0,
+      tokens: 0,
+      cost_cents: 0,
+    },
+  ],
   by_scope: [],
   platform_members: [],
 };
@@ -71,8 +87,10 @@ const renderPage = () =>
     </MemoryRouter>
   );
 
+// The tile, not the member table's column of the same name.
 const kpi = (label: string) =>
-  screen.getByText(label).parentElement as HTMLElement;
+  screen.getByText(label, { selector: ".ai-kpi-label" })
+    .parentElement as HTMLElement;
 
 describe("AI provider page token usage", () => {
   afterEach(() => {
@@ -95,8 +113,16 @@ describe("AI provider page token usage", () => {
     expect(within(kpi("Output tokens")).getByText("345")).toBeTruthy();
     expect(within(kpi("Requests")).getByText("7")).toBeTruthy();
 
-    expect(screen.getByRole("heading", { name: "By member" })).toBeTruthy();
-    expect(screen.getByText("Asha Rao")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "By team member" })
+    ).toBeTruthy();
+    // Username first, then the tokens that member used.
+    const asha = screen.getByText("asha").closest("tr") as HTMLElement;
+    expect(within(asha).getByText(/Asha Rao/)).toBeTruthy();
+    expect(within(asha).getByText("1,545")).toBeTruthy();
+    // A member who used nothing is still listed, at zero.
+    const bo = screen.getByText("bo@acme.test").closest("tr") as HTMLElement;
+    expect(within(bo).getAllByText("0")).toHaveLength(2);
     expect(screen.getByRole("heading", { name: "By model" })).toBeTruthy();
     // The site-wide breakdown is the platform owner's only.
     expect(screen.queryByText(/by scope/i)).toBeNull();
@@ -111,7 +137,9 @@ describe("AI provider page token usage", () => {
         { label: "Acme", kind: "organization", tokens: 500, requests: 2 },
         { label: "Platform team", kind: "platform", tokens: 145, requests: 1 },
       ],
-      platform_members: [{ name: "Priya Shah", tokens: 145, requests: 1 }],
+      platform_members: [
+        { name: "Priya Shah", username: "priya", tokens: 145, requests: 1 },
+      ],
     });
 
     renderPage();
@@ -126,8 +154,12 @@ describe("AI provider page token usage", () => {
     expect(
       screen.getByRole("heading", { name: "Platform team members" })
     ).toBeTruthy();
-    expect(screen.getByText("Priya Shah")).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "By member" })).toBeNull();
+    const priya = screen.getByText("priya").closest("tr") as HTMLElement;
+    expect(within(priya).getByText(/Priya Shah/)).toBeTruthy();
+    expect(within(priya).getByText("145")).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "By team member" })
+    ).toBeNull();
   });
 
   it("says so when nobody has used the AI yet", async () => {
@@ -146,7 +178,7 @@ describe("AI provider page token usage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("No member usage yet.")).toBeTruthy();
+    expect(await screen.findByText("No team members yet.")).toBeTruthy();
     expect(screen.getByText("No AI usage yet.")).toBeTruthy();
   });
 

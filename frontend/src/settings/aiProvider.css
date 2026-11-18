@@ -368,6 +368,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The member's full name, after the username it belongs to. */
+.ai-member-name {
+  color: var(--color-text-muted);
+}
+
 /* ── Data access panel (platform team only) ──────────────────────────────
    A list of the data categories the assistant may read, each with a switch.
    Categories without native tools yet render as a dimmed "coming soon" row. */

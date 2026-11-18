@@ -93,8 +93,11 @@ export type AiUsage = {
     tokens: number;
     cost_cents: number;
   }[];
+  // One row per team member, including those with no usage. `username` is
+  // the account's username, or its email when it has none.
   by_member: {
     name: string;
+    username?: string;
     requests: number;
     tokens: number;
     cost_cents: number;
@@ -110,6 +113,7 @@ export type AiUsage = {
   }[];
   platform_members?: {
     name: string;
+    username?: string;
     tokens: number;
     requests: number;
   }[];

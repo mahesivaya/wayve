@@ -138,39 +138,58 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
     })
     .collect();
 
-    // The name falls back through username to email so a row always has a label.
-    let by_member: Vec<Value> = sqlx::query(
-        "SELECT COALESCE(
+    // One row per team member, whether or not they have used the AI, so the
+    // owner sees the whole team and who used nothing. `name` falls back through
+    // username to email, and `username` to email, so a row always has both.
+    // For the platform owner this is the platform-scope events' users; the
+    // platform team itself is listed in `platform_members` below.
+    const MEMBER_LABELS: &str = "COALESCE(
                     NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), ''),
                     u.username,
                     u.email
                 )                                    AS name,
-                COUNT(*)::bigint                     AS requests,
+                COALESCE(NULLIF(TRIM(u.username), ''), u.email) AS username,
+                COUNT(e.id)::bigint                  AS requests,
                 COALESCE(SUM(e.input_tokens + e.output_tokens), 0)::bigint AS tokens,
-                COALESCE(SUM(e.cost_micro_cents), 0)::bigint AS cost_micro
-           FROM ai_usage_events e
-           JOIN users u ON u.id = e.user_id
-          WHERE e.created_at >= NOW() - INTERVAL '30 days'
-            AND (($1::int IS NULL AND e.organization_id IS NULL)
-                 OR e.organization_id = $1
-                 OR u.organization_id = $1)
-          GROUP BY u.id
-          ORDER BY tokens DESC
-          LIMIT 10",
-    )
-    .bind(scope)
-    .fetch_all(pool.get_ref())
-    .await?
-    .iter()
-    .map(|r| {
-        serde_json::json!({
-            "name": r.get::<Option<String>, _>("name").unwrap_or_else(|| "Unknown".into()),
-            "requests": r.get::<i64, _>("requests"),
-            "tokens": r.get::<i64, _>("tokens"),
-            "cost_cents": r.get::<i64, _>("cost_micro") as f64 / 1_000_000.0,
+                COALESCE(SUM(e.cost_micro_cents), 0)::bigint AS cost_micro";
+    let member_sql = match scope {
+        Some(_) => format!(
+            "SELECT {MEMBER_LABELS}
+               FROM users u
+               LEFT JOIN ai_usage_events e
+                      ON e.user_id = u.id
+                     AND e.created_at >= NOW() - INTERVAL '30 days'
+              WHERE u.organization_id = $1
+              GROUP BY u.id
+              ORDER BY tokens DESC, name
+              LIMIT 500"
+        ),
+        None => format!(
+            "SELECT {MEMBER_LABELS}
+               FROM ai_usage_events e
+               JOIN users u ON u.id = e.user_id
+              WHERE e.created_at >= NOW() - INTERVAL '30 days'
+                AND $1::int IS NULL AND e.organization_id IS NULL
+              GROUP BY u.id
+              ORDER BY tokens DESC, name
+              LIMIT 10"
+        ),
+    };
+    let by_member: Vec<Value> = sqlx::query(&member_sql)
+        .bind(scope)
+        .fetch_all(pool.get_ref())
+        .await?
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "name": r.get::<Option<String>, _>("name").unwrap_or_else(|| "Unknown".into()),
+                "username": r.get::<Option<String>, _>("username").unwrap_or_else(|| "Unknown".into()),
+                "requests": r.get::<i64, _>("requests"),
+                "tokens": r.get::<i64, _>("tokens"),
+                "cost_cents": r.get::<i64, _>("cost_micro") as f64 / 1_000_000.0,
+            })
         })
-    })
-    .collect();
+        .collect();
 
     // Platform-owner only: a site-wide breakdown of "complete website usage" by
     // tenant scope — all personal users summed, each organization, the platform
@@ -255,21 +274,23 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
             }));
         }
 
-        // Each platform-team member individually.
+        // Every platform-team member, including those with no usage.
         platform_members = sqlx::query(
             "SELECT COALESCE(
                         NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), ''),
                         u.username, u.email
                     )                                    AS name,
+                    COALESCE(NULLIF(TRIM(u.username), ''), u.email) AS username,
                     COALESCE(SUM(e.input_tokens + e.output_tokens), 0)::bigint AS tokens,
-                    COUNT(*)::bigint                     AS requests
-               FROM ai_usage_events e
-               JOIN users u             ON u.id = e.user_id
-               JOIN platform_members pm ON pm.user_id = u.id
-              WHERE e.created_at >= NOW() - INTERVAL '30 days'
+                    COUNT(e.id)::bigint                  AS requests
+               FROM platform_members pm
+               JOIN users u ON u.id = pm.user_id
+               LEFT JOIN ai_usage_events e
+                      ON e.user_id = u.id
+                     AND e.created_at >= NOW() - INTERVAL '30 days'
               GROUP BY u.id
-              ORDER BY tokens DESC
-              LIMIT 50",
+              ORDER BY tokens DESC, name
+              LIMIT 500",
         )
         .fetch_all(pool.get_ref())
         .await?
@@ -277,6 +298,7 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         .map(|r| {
             serde_json::json!({
                 "name": r.get::<Option<String>, _>("name").unwrap_or_else(|| "Unknown".into()),
+                "username": r.get::<Option<String>, _>("username").unwrap_or_else(|| "Unknown".into()),
                 "tokens": r.get::<i64, _>("tokens"),
                 "requests": r.get::<i64, _>("requests"),
             })
