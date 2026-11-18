@@ -8,7 +8,10 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 
-vi.mock("../../components/useIsNarrow", () => ({ useIsNarrow: () => true }));
+vi.mock("../../components/useIsNarrow", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../components/useIsNarrow")>()),
+  useIsNarrow: () => true,
+}));
 // Layout pulls in a lot of the app shell. None of it is what's under test, so
 // each dependency is stubbed down to the shape Layout actually consumes.
 vi.mock("../../auth/useAuth", () => ({
