@@ -67,6 +67,9 @@ export interface UntrustedMarkdownOptions {
   linkBase?: string;
   // Where relative images load from, e.g. the repo's raw-content URL.
   imageBase?: string;
+  // false drops images altogether, for text whose author could use an image
+  // URL to send data out (it loads with no click).
+  images?: boolean;
 }
 
 // Renders Markdown someone else wrote (a repository's README) to HTML that is
@@ -76,11 +79,19 @@ export interface UntrustedMarkdownOptions {
 export function renderUntrustedMarkdown(
   parse: MarkedFn,
   markdown: string,
-  { linkBase, imageBase }: UntrustedMarkdownOptions = {}
+  { linkBase, imageBase, images = true }: UntrustedMarkdownOptions = {}
 ): string {
   const clean = DOMPurify.sanitize(parse(markdown), {
     USE_PROFILES: { html: true },
-    FORBID_TAGS: ["style", "form", "input", "button", "textarea", "select"],
+    FORBID_TAGS: [
+      "style",
+      "form",
+      "input",
+      "button",
+      "textarea",
+      "select",
+      ...(images ? [] : ["img", "picture", "svg", "video", "audio"]),
+    ],
   });
   const doc = new DOMParser().parseFromString(clean, "text/html");
   doc.querySelectorAll("a[href]").forEach((a) => {

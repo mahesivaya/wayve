@@ -9,6 +9,7 @@ import {
   type PendingEmail,
 } from "../api/ai";
 import { sendEmail, getAccounts } from "../api/email";
+import AiReply from "./AiReply";
 import { useGlobalSearch } from "../search/SearchContext";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
@@ -362,7 +363,11 @@ export default function AIChat({
                 key={i}
                 className={`ai-msg ${m.role === "user" ? "ai-msg-user" : "ai-msg-model"}`}
               >
-                <div className="ai-msg-bubble">{m.content}</div>
+                {m.role === "model" ? (
+                  <AiReply content={m.content} />
+                ) : (
+                  <div className="ai-msg-bubble">{m.content}</div>
+                )}
               </div>
             ))}
 
