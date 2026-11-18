@@ -138,3 +138,71 @@ describe("Platform pages in the settings menu", () => {
     expect(screen.queryByRole("link", { name: "Back to Home" })).toBeNull();
   });
 });
+
+// An organization's owner (in admin mode) gets the Organization pages the same
+// way: in the settings menu, not as a group in the main one.
+describe("Organization pages in the settings menu", () => {
+  const ORG_OWNER = {
+    id: 3,
+    email: "owner@org.test",
+    account_type: "organization_admin",
+    scope: "organization",
+    effective_role: "owner",
+    mode: "admin",
+  };
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    authState.user = { ...ORG_OWNER };
+  });
+
+  const administrationLabels = () => {
+    const section = screen
+      .getByText("Administration")
+      .closest(".sidebar-section");
+    if (!(section instanceof HTMLElement)) throw new Error("no section");
+    return within(section)
+      .getAllByRole("link")
+      .map((l) => l.textContent);
+  };
+
+  it("lists them under Administration on Settings", () => {
+    renderAt("/settings");
+    expect(administrationLabels()).toEqual(
+      expect.arrayContaining([
+        "App Logs",
+        "Audit Logs",
+        "User Audit",
+        "Feature Access",
+        "Analytics",
+      ])
+    );
+    // No Platform pages for an organization.
+    expect(administrationLabels()).not.toContain("Members & roles");
+  });
+
+  it("keeps the settings menu on an Organization page, with its link lit", () => {
+    renderAt("/logs/audit");
+    expect(screen.getByRole("link", { name: "Back to Home" })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Audit Logs" }).className
+    ).toContain("active");
+    expect(
+      screen.getByRole("link", { name: "User Audit" }).className
+    ).not.toContain("active");
+    expect(screen.queryByRole("link", { name: "Inbox" })).toBeNull();
+  });
+
+  it("drops the Organization group from the main menu", () => {
+    renderAt("/home");
+    expect(screen.getByRole("link", { name: "Inbox" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Audit Logs" })).toBeNull();
+    expect(screen.queryByText("Organization")).toBeNull();
+  });
+
+  it("gives a member who is not the owner none of them", () => {
+    authState.user = { ...ORG_OWNER, effective_role: "member" };
+    renderAt("/settings");
+    expect(administrationLabels()).not.toContain("Audit Logs");
+  });
+});

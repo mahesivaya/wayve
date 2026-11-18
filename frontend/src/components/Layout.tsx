@@ -1923,8 +1923,9 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           </Link>
           {/* The organization's sprint chart; platform staff have their own
               Analytics under Platform. A plain page, not a split-pane app.
-              Owners find it below Feature Access in the Organization group;
-              everyone else has no such group, so it stays here for them. */}
+              Owners find it with the other Organization pages (Settings ›
+              Administration on wide screens); everyone else has no such
+              pages, so it stays here for them. */}
           {user.scope === "organization" && !isOrgOwner && (
             <Link
               to="/organization/analytics"
@@ -2138,7 +2139,9 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     {
       key: "organization",
       label: "Organization",
-      visible: isOrgOwner,
+      // Like Platform: wide screens list these pages in the settings menu,
+      // under Administration; narrow screens keep the group here.
+      visible: isOrgOwner && isNarrow,
       icon: <OrganizationIcon size={16} />,
       collapsible: false,
       links: [
@@ -2183,7 +2186,15 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           .find((s) => s.key === "platform")
           ?.links?.filter((l) => l.visible !== false) ?? [])
       : [];
-  const onPlatformLink = (l: SidebarLinkDef) =>
+  // The Organization pages an organization's owner can open, listed there too.
+  const organizationLinks: SidebarLinkDef[] = isOrgOwner
+    ? (sectionDefs
+        .find((s) => s.key === "organization")
+        ?.links?.filter((l) => l.visible !== false) ?? [])
+    : [];
+  // Both sets, in the order Administration shows them.
+  const adminPageLinks = [...platformLinks, ...organizationLinks];
+  const onAdminPageLink = (l: SidebarLinkDef) =>
     location.pathname === l.path || location.pathname.startsWith(`${l.path}/`);
 
   // The profile control lives at the bottom of the sidebar in both runtimes
@@ -2214,10 +2225,10 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
         "/settings/projects",
         "/settings/ai",
       ].includes(location.pathname) ||
-      // The Platform pages sit in the same menu, under Administration.
-      // /platform/home (the platform AI home) isn't one of them, so it keeps
-      // the main menu.
-      platformLinks.some(onPlatformLink));
+      // The Platform and Organization pages sit in the same menu, under
+      // Administration. /platform/home (the platform AI home) isn't one of
+      // them, so it keeps the main menu.
+      adminPageLinks.some(onAdminPageLink));
   // Settings keeps the app's frame — sidebar, tab strip, top row — and only
   // swaps the sidebar's menu for the settings menu (see settingsNav below).
   const showTabs = !isNarrow;
@@ -2230,10 +2241,7 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   // strip (or the phone header) for the icon rail and the settings takeover,
   // which have no account row.
   const upgradeInSidebar =
-    showUpgrade &&
-    showTabs &&
-    !sidebarCollapsed &&
-    !settingsTakeover;
+    showUpgrade && showTabs && !sidebarCollapsed && !settingsTakeover;
   const headerActions = (
     <>
       {showUpgrade && !upgradeInSidebar && (
@@ -2310,7 +2318,8 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   // Settings › Administration. Teams and Projects are for owners, super
   // admins and admins; Billing and Usage are for everyone who had them before,
   // so every account gets the group. Platform admins also get the Platform
-  // pages here, after the settings ones.
+  // pages here, and an organization's owner the Organization ones, after the
+  // settings links.
   const isAdmin = isWorkspaceAdmin(user);
   const administrationLinks: SidebarLinkDef[] = [
     {
@@ -2348,13 +2357,13 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       label: "Usage",
       icon: <AnalyticsIcon size={18} />,
     },
-    ...platformLinks.map((l) => ({
+    ...adminPageLinks.map((l) => ({
       ...l,
       // The main menu draws these at 16; this menu's icons are 18.
       icon: isValidElement<{ size?: number }>(l.icon)
         ? cloneElement(l.icon, { size: 18 })
         : l.icon,
-      active: onPlatformLink(l),
+      active: onAdminPageLink(l),
     })),
   ].filter((l) => l.visible !== false);
   const settingsNav = (
