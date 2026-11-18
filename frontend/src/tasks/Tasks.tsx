@@ -823,6 +823,9 @@ export type TasksConfig = {
     // Shows the "Design" section in the editor, for attaching Figma files.
     // On for the workspace boards; personal Tasks leave it off.
     figmaLinks?: boolean;
+    // The list view's table text is two pixels larger (see
+    // .workspace-large-text in index.css). On for User Stories and Tickets.
+    largeText?: boolean;
     // Keys are written the story way: "SAM004", or "NON004" with no project
     // (see userstories/storyKey.ts). User Stories only; the other boards keep
     // "sam4" / "#4".
@@ -896,6 +899,9 @@ export default function Tasks({
   // the field for editing; other boards keep the badge inline after the name and
   // never send a type.
   const showType = !!config.features.typeColumn;
+  const largeTextClass = config.features.largeText
+    ? " workspace-large-text"
+    : "";
   // In a split pane the page collapses to one column and clicking a task
   // expands it inline instead of opening the edit modal.
   const inSplitPane = useInSplitPane();
@@ -3549,7 +3555,7 @@ export default function Tasks({
             {useTable ? (
               (listPlaceholder ?? (
                 <div
-                  className={`task-table${hasCustomCols ? " task-table--resized" : ""}`}
+                  className={`task-table${hasCustomCols ? " task-table--resized" : ""}${largeTextClass}`}
                   style={tableStyle}
                   role="table"
                 >
@@ -3653,7 +3659,7 @@ export default function Tasks({
                 </h3>
                 {useTable ? (
                   <div
-                    className={`task-table${hasCustomCols ? " task-table--resized" : ""}`}
+                    className={`task-table${hasCustomCols ? " task-table--resized" : ""}${largeTextClass}`}
                     style={tableStyle}
                     role="table"
                   >
