@@ -193,9 +193,9 @@ describe("the Reviewer column on user stories", () => {
 
   it("is loaded into the edit form and only saved when changed", async () => {
     renderBoard();
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Checkout flow" })
-    );
+    // A story opens from its key, not its name.
+    fireEvent.click(await screen.findByRole("button", { name: "NON001" }));
+    expect(screen.queryByRole("button", { name: "Checkout flow" })).toBeNull();
     const form = await screen.findByRole("dialog", { name: "Edit Story" });
     const save = within(form).getByRole("button", { name: "Save changes" });
     expect((save as HTMLButtonElement).disabled).toBe(true);

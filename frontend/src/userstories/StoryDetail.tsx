@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import type { Task, TaskPriority } from "../api/tasks";
+import { getProjects, type Task, type TaskPriority } from "../api/tasks";
+import { storyKey } from "./storyKey";
 import {
   getUserStories,
   updateUserStoryApi,
@@ -32,6 +33,8 @@ export default function StoryDetail() {
 
   const [story, setStory] = useState<Task | null>(null);
   const [statuses, setStatuses] = useState<TaskStatusRow[]>([]);
+  // The story's project name, for its key. "" until loaded or with no project.
+  const [projectName, setProjectName] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
@@ -61,6 +64,19 @@ export default function StoryDetail() {
         return;
       }
       setStory(found);
+      // Only the key needs the project, so a failed lookup is not an error:
+      // the key falls back to the no-project one.
+      if (found.project_id != null) {
+        void getProjects()
+          .then((projects) =>
+            setProjectName(
+              projects.find((p) => p.id === found.project_id)?.name ?? ""
+            )
+          )
+          .catch(() => setProjectName(""));
+      } else {
+        setProjectName("");
+      }
       setName(found.name);
       setDescription(found.description);
       setPriority((found.priority as TaskPriority) ?? 3);
@@ -130,7 +146,7 @@ export default function StoryDetail() {
 
   useTabTitle(
     story
-      ? `${story.task_number != null ? `#${story.task_number} ` : ""}${story.name}`
+      ? `${story.task_number != null ? `${storyKey(story.task_number, projectName)} ` : ""}${story.name}`
       : null
   );
 
@@ -169,7 +185,9 @@ export default function StoryDetail() {
         <>
           <div className="ticket-detail-head">
             {story.task_number != null && (
-              <span className="ticket-detail-key">#{story.task_number}</span>
+              <span className="ticket-detail-key">
+                {storyKey(story.task_number, projectName)}
+              </span>
             )}
             <h1>{name || "Untitled story"}</h1>
           </div>

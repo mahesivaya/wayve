@@ -1155,6 +1155,28 @@
   white-space: nowrap;
 }
 
+/* The badge as the item's link (boards where the key, not the name, opens
+   it): a button, so it takes the page font and shows it can be clicked. */
+.task-number-badge--link {
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    color 0.12s,
+    border-color 0.12s;
+}
+
+.task-number-badge--link:hover {
+  color: var(--color-primary-action);
+  border-color: var(--color-primary-action);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.task-number-badge--link:focus-visible {
+  outline: 2px solid var(--color-primary-action);
+  outline-offset: 2px;
+}
+
 /* Card badge for a ticket materialised from a reported bug — one pill per
    support category, coloured to read at a glance on the board. Only tickets
    carry `badge_kind`, so tasks/user stories never show this. */

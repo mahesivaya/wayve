@@ -47,6 +47,7 @@ import { GitlabBadge } from "./GitlabBadge";
 import TaskStatusIcon from "./TaskStatusIcon";
 import FigmaLinks from "../integrations/FigmaLinks";
 import AiFixPanel from "../aifix/AiFixPanel";
+import { storyKey } from "../userstories/storyKey";
 import type { AiFixApi } from "../api/aiFix";
 import "./tasks.css";
 import { displayLocale, hourOptions } from "../utils/datetime";
@@ -505,11 +506,28 @@ function CopyLinkButton({
 function TaskKeyBadge({
   value,
   tooltip,
+  onOpen,
+  openTooltip,
 }: {
   value: string | null;
   tooltip: string;
+  // Set on boards where the key, not the name, opens the item.
+  onOpen?: () => void;
+  openTooltip?: string;
 }) {
   if (!value) return null;
+  if (onOpen) {
+    return (
+      <button
+        type="button"
+        className="task-number-badge task-number-badge--link"
+        onClick={onOpen}
+        data-tooltip={openTooltip ?? tooltip}
+      >
+        {value}
+      </button>
+    );
+  }
   return (
     <span className="task-number-badge" data-tooltip={tooltip}>
       {value}
@@ -805,6 +823,10 @@ export type TasksConfig = {
     // Shows the "Design" section in the editor, for attaching Figma files.
     // On for the workspace boards; personal Tasks leave it off.
     figmaLinks?: boolean;
+    // Keys are written the story way: "SAM004", or "NON004" with no project
+    // (see userstories/storyKey.ts). User Stories only; the other boards keep
+    // "sam4" / "#4".
+    storyKeys?: boolean;
   };
   // localStorage prefix so the two boards keep independent view/mode state.
   storageKey: string;
@@ -1490,6 +1512,34 @@ export default function Tasks({
     beginEdit(task, "modal");
   };
 
+  // What opens an item from its row or card. Usually the name; on boards with
+  // story keys it is the key badge, and the name is plain text. An item with
+  // no key keeps the link on its name, so it can always be opened.
+  const openTooltip = `Open ${config.labels.lowerSingular} details`;
+  const keyOpens = (task: Task) =>
+    !!config.features.storyKeys && taskKey(task) !== null;
+  const keyOpenProps = (task: Task) =>
+    keyOpens(task) ? { onOpen: () => openDetail(task), openTooltip } : {};
+  const taskNameEl = (task: Task, className: string) =>
+    keyOpens(task) ? (
+      <span
+        className={
+          className.replace("task-card-title-link", "").trim() || undefined
+        }
+      >
+        {task.name}
+      </span>
+    ) : (
+      <button
+        type="button"
+        className={className}
+        onClick={() => openDetail(task)}
+        data-tooltip={openTooltip}
+      >
+        {task.name}
+      </button>
+    );
+
   // Clicking the Edit button: the full page when the board has one, else the
   // modal. Never the drawer — Edit is the "open the full editor" affordance.
   const openEditor = (task: Task) => {
@@ -1725,10 +1775,11 @@ export default function Tasks({
 
   // The card badge key is the project name's first three letters plus the
   // per-user task number ("wayve" + 12 → "way12"), falling back to "#12" when
-  // the task has no resolvable project.
+  // the task has no resolvable project. User stories use their own format.
   const taskKey = (task: Task): string | null => {
     if (task.task_number == null) return null;
     const name = projects.find((p) => p.id === task.project_id)?.name ?? "";
+    if (config.features.storyKeys) return storyKey(task.task_number, name);
     const prefix = name
       .replace(/[^a-zA-Z0-9]/g, "")
       .slice(0, 3)
@@ -2330,6 +2381,7 @@ export default function Tasks({
             <TaskKeyBadge
               value={taskKey(task)}
               tooltip={config.labels.numberBadgeTooltip}
+              {...keyOpenProps(task)}
             />
           </div>
         );
@@ -2340,16 +2392,10 @@ export default function Tasks({
               <TaskKeyBadge
                 value={taskKey(task)}
                 tooltip={config.labels.numberBadgeTooltip}
+                {...keyOpenProps(task)}
               />
             )}
-            <button
-              type="button"
-              className="task-card-title-link task-trow-title"
-              onClick={() => openDetail(task)}
-              data-tooltip={`Open ${config.labels.lowerSingular} details`}
-            >
-              {task.name}
-            </button>
+            {taskNameEl(task, "task-card-title-link task-trow-title")}
             {!showType && <TaskBadge kind={task.badge_kind} />}
             <JiraBadge task={task} />
             <GitlabBadge task={task} />
@@ -3469,6 +3515,7 @@ export default function Tasks({
                               <TaskKeyBadge
                                 value={taskKey(task)}
                                 tooltip={config.labels.numberBadgeTooltip}
+                                {...keyOpenProps(task)}
                               />
                               <CopyLinkButton
                                 copied={copiedTaskId === task.id}
@@ -3477,14 +3524,10 @@ export default function Tasks({
                               />
                               <TaskBadge kind={task.badge_kind} />
                             </div>
-                            <button
-                              type="button"
-                              className="task-card-title-link task-board-card-title"
-                              onClick={() => openDetail(task)}
-                              data-tooltip={`Open ${config.labels.lowerSingular} details`}
-                            >
-                              {task.name}
-                            </button>
+                            {taskNameEl(
+                              task,
+                              "task-card-title-link task-board-card-title"
+                            )}
                             <JiraBadge task={task} />
                             <GitlabBadge task={task} />
                             {formatCreatedAt(task.created_at) && (
@@ -3531,6 +3574,7 @@ export default function Tasks({
                             <TaskKeyBadge
                               value={taskKey(task)}
                               tooltip={config.labels.numberBadgeTooltip}
+                              {...keyOpenProps(task)}
                             />
                             <CopyLinkButton
                               copied={copiedTaskId === task.id}
@@ -3539,14 +3583,7 @@ export default function Tasks({
                             />
                             <TaskBadge kind={task.badge_kind} />
                             <h3>
-                              <button
-                                type="button"
-                                className="task-card-title-link"
-                                onClick={() => openDetail(task)}
-                                data-tooltip={`Open ${config.labels.lowerSingular} details`}
-                              >
-                                {task.name}
-                              </button>
+                              {taskNameEl(task, "task-card-title-link")}
                               <JiraBadge task={task} />
                               <GitlabBadge task={task} />
                             </h3>
@@ -3637,6 +3674,7 @@ export default function Tasks({
                             <TaskKeyBadge
                               value={taskKey(task)}
                               tooltip={config.labels.numberBadgeTooltip}
+                              {...keyOpenProps(task)}
                             />
                             <CopyLinkButton
                               copied={copiedTaskId === task.id}
@@ -3645,14 +3683,7 @@ export default function Tasks({
                             />
                             <TaskBadge kind={task.badge_kind} />
                             <h3>
-                              <button
-                                type="button"
-                                className="task-card-title-link"
-                                onClick={() => openDetail(task)}
-                                data-tooltip={`Open ${config.labels.lowerSingular} details`}
-                              >
-                                {task.name}
-                              </button>
+                              {taskNameEl(task, "task-card-title-link")}
                               <JiraBadge task={task} />
                               <GitlabBadge task={task} />
                             </h3>
