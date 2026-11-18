@@ -16,8 +16,6 @@ type Props = {
   value: string[];
   onChange: (next: string[]) => void;
   placeholder?: string;
-  /** Rendered to the right of the field — the Cc/Bcc toggles on the To row. */
-  actions?: React.ReactNode;
 };
 
 /** Splits on commas and semicolons so a pasted list lands as separate chips. */
@@ -33,7 +31,6 @@ export default function RecipientChips({
   value,
   onChange,
   placeholder,
-  actions,
 }: Props) {
   const [draft, setDraft] = useState("");
 
@@ -103,7 +100,6 @@ export default function RecipientChips({
           aria-label={label}
         />
       </div>
-      {actions}
     </div>
   );
 }

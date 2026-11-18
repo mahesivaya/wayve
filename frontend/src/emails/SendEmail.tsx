@@ -20,6 +20,7 @@ import {
 import { sealSecureMessage } from "./secureSend";
 import { formatFileSize } from "./renderUtils";
 import ContactAvatar from "../shared/ContactAvatar";
+import AiAssistBar from "./AiAssistBar";
 import type { EmailAccount } from "./types";
 
 import { useState, useEffect, useRef, type ChangeEvent } from "react";
@@ -661,6 +662,18 @@ export default function SendEmail({
           minHeight: 120,
           resize: "none",
         }}
+      />
+
+      {/* Rewriting sends the draft to the AI provider, so it is off for the
+          sends whose text is promised never to leave this device readable. */}
+      <AiAssistBar
+        text={body}
+        onApply={setBody}
+        offReason={
+          secureSend || fluxzeOnly || encryptionMode === "e2e"
+            ? "Off for encrypted sends: the AI would need to read your text."
+            : undefined
+        }
       />
 
       {/* Organization and platform accounts get basic encryption only, so

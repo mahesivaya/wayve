@@ -4013,3 +4013,69 @@ img.email-mention-avatar {
     justify-content: center;
   }
 }
+
+/* ================= AI ASSIST ROW (compose + reply) ================= */
+/* A single wrapping row of small buttons under the editor. */
+.ai-assist-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+}
+
+.ai-assist-label {
+  margin-right: 2px;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ai-assist-btn {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--color-input-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ai-assist-btn:hover:not(:disabled),
+.ai-assist-btn:focus-visible {
+  border-color: var(--color-primary-action);
+  color: var(--color-primary-action);
+  outline: none;
+}
+
+.ai-assist-primary {
+  border-color: var(--color-primary-action);
+  color: var(--color-primary-action);
+  font-weight: 600;
+}
+
+.ai-assist-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.ai-assist-undo {
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: var(--color-primary-action);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ai-assist-note {
+  color: var(--color-text-muted);
+}
+
+.ai-assist-error {
+  flex-basis: 100%;
+  color: var(--color-danger, #b91c1c);
+}

@@ -41,6 +41,12 @@ const email: EmailItem = {
   created_at: "2026-07-01T12:00:00Z",
 };
 
+/** Opens the To/Cc/Bcc rows if the recipients are still the one-line summary. */
+function openRecipients() {
+  const summary = document.querySelector(".recipient-summary");
+  if (summary) fireEvent.click(summary);
+}
+
 async function openReply(overrides: Partial<EmailItem> = {}) {
   render(
     <EmailDetail
@@ -54,7 +60,10 @@ async function openReply(overrides: Partial<EmailItem> = {}) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
   fireEvent.keyDown(document, { key: "r" });
+  const summary = document.querySelector(".recipient-summary")?.textContent;
+  openRecipients();
   return {
+    summary,
     to: screen.getByLabelText("To") as HTMLInputElement,
     subject: screen.getByLabelText("Reply subject") as HTMLInputElement,
     body: screen.getByLabelText("Reply body") as HTMLTextAreaElement,
@@ -248,6 +257,13 @@ describe("reply composer recipients and subject", () => {
 
     fireEvent.keyDown(document, { key: "r" });
 
+    // Folded back to the one line, which still names both.
+    expect(
+      screen.getByRole("button", {
+        name: "To: ada@test.local, bo@corp.test",
+      })
+    ).toBeTruthy();
+    openRecipients();
     expect(chips(screen.getByLabelText("To") as HTMLInputElement)).toEqual([
       "ada@test.local",
       "bo@corp.test",
@@ -261,25 +277,66 @@ describe("reply composer Cc and Bcc", () => {
     sendEmail.mockResolvedValue(undefined);
   });
 
-  it("hides both rows until they are asked for", async () => {
-    await openReply();
+  it("starts as one plain To line, with no fields", async () => {
+    render(
+      <EmailDetail
+        selectedEmail={email}
+        viewMode="email"
+        onBack={vi.fn()}
+        onDeleteEmail={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    fireEvent.keyDown(document, { key: "r" });
+
+    expect(
+      screen.getByRole("button", { name: "To: ada@test.local" })
+    ).toBeTruthy();
+    expect(screen.queryByLabelText("To")).toBeNull();
     expect(screen.queryByLabelText("Cc")).toBeNull();
     expect(screen.queryByLabelText("Bcc")).toBeNull();
   });
 
-  it("opens each row from its toggle", async () => {
+  it("opens To, Cc and Bcc with a click on that line", async () => {
+    const { to } = await openReply();
+
+    expect(chips(to)).toEqual(["ada@test.local"]);
+    expect(screen.getByLabelText("Cc")).toBeTruthy();
+    expect(screen.getByLabelText("Bcc")).toBeTruthy();
+    expect(document.querySelector(".recipient-summary")).toBeNull();
+  });
+
+  it("stays open while the only recipient is replaced", async () => {
+    const { to } = await openReply();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove ada@test.local" })
+    );
+    addChip(to, "grace@test.local");
+
+    expect(chips(screen.getByLabelText("To") as HTMLInputElement)).toEqual([
+      "grace@test.local",
+    ]);
+    expect(document.querySelector(".recipient-summary")).toBeNull();
+  });
+
+  it("is back to the one line when the reply is cancelled and reopened", async () => {
     await openReply();
-    fireEvent.click(screen.getByRole("button", { name: "Cc" }));
     expect(screen.getByLabelText("Cc")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Bcc" }));
-    expect(screen.getByLabelText("Bcc")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.keyDown(document, { key: "r" });
+
+    expect(
+      screen.getByRole("button", { name: "To: ada@test.local" })
+    ).toBeTruthy();
+    expect(screen.queryByLabelText("Cc")).toBeNull();
+    expect(screen.queryByLabelText("Bcc")).toBeNull();
   });
 
   it("sends Cc and Bcc as separate lists", async () => {
     const { body } = await openReply();
-    fireEvent.click(screen.getByRole("button", { name: "Cc" }));
-    fireEvent.click(screen.getByRole("button", { name: "Bcc" }));
     addChip(screen.getByLabelText("Cc") as HTMLInputElement, "cc@corp.test");
     addChip(
       screen.getByLabelText("Bcc") as HTMLInputElement,
@@ -308,37 +365,5 @@ describe("reply composer Cc and Bcc", () => {
     const payload = sendEmail.mock.calls[0][0] as Record<string, unknown>;
     expect(payload.cc).toBeUndefined();
     expect(payload.bcc).toBeUndefined();
-  });
-
-  it("collapses a populated row but counts it on the toggle", async () => {
-    const { body } = await openReply();
-    fireEvent.click(screen.getByRole("button", { name: "Bcc" }));
-    addChip(
-      screen.getByLabelText("Bcc") as HTMLInputElement,
-      "blind@corp.test"
-    );
-
-    // While the row is open the count is redundant, so the button is plain
-    // "Bcc" until this click closes it.
-    fireEvent.click(screen.getByRole("button", { name: "Bcc" }));
-
-    // The row is gone, but the count means the recipient isn't invisible…
-    expect(screen.queryByLabelText("Bcc")).toBeNull();
-    expect(screen.getByRole("button", { name: "Bcc (1)" })).toBeTruthy();
-
-    // …and collapsing it does not drop them from the send.
-    fireEvent.change(body, { target: { value: "Sounds good." } });
-    send();
-    await waitFor(() => expect(sendEmail).toHaveBeenCalled());
-    expect(sendEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ bcc: ["blind@corp.test"] })
-    );
-  });
-
-  it("counts an @mentioned address without opening the Cc row", async () => {
-    await openReply();
-    // The row stays shut until asked for; the count is what shows the add.
-    expect(screen.queryByLabelText("Cc")).toBeNull();
-    expect(screen.getByRole("button", { name: "Cc" })).toBeTruthy();
   });
 });

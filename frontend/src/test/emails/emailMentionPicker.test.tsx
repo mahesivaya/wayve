@@ -127,13 +127,14 @@ describe("reply composer @mention picker", () => {
 
     expect(box.value).toBe("@maheshy85@gmail.com ");
 
-    // The Cc row stays shut — it opens only when asked for — so the count on
-    // the toggle is what shows the address was added.
+    // The recipients are still the one-line summary, and it names the address
+    // that was added, so it can't go out unseen.
     expect(screen.queryByLabelText("Cc")).toBeNull();
-    const toggle = screen.getByRole("button", { name: "Cc (1)" });
+    const summary = document.querySelector(".recipient-summary");
+    expect(summary?.textContent).toContain("Cc: maheshy85@gmail.com");
 
     // Opening it shows the chip that actually reaches the wire.
-    fireEvent.click(toggle);
+    fireEvent.click(summary as Element);
     expect(screen.getByLabelText("Cc")).toBeTruthy();
     expect(screen.getByText("maheshy85@gmail.com")).toBeTruthy();
   });

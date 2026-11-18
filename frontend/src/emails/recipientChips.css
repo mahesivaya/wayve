@@ -84,30 +84,37 @@
   padding: 2px 0;
 }
 
-.recipient-actions {
-  flex: 0 0 auto;
+/* The closed state of a composer's recipients: one plain line naming everyone
+   the message goes to. A click opens the To, Cc and Bcc rows. */
+.recipient-summary {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding-top: 4px;
-}
-
-.recipient-toggle {
-  border: none;
+  flex-wrap: wrap;
+  gap: 2px var(--space-4);
+  width: 100%;
+  padding: 6px var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   background: transparent;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  cursor: pointer;
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-sm);
-}
-
-.recipient-toggle:hover {
   color: var(--color-text-primary);
-  background: var(--color-surface-hover);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
 }
 
-.recipient-toggle.active {
-  color: var(--color-primary-action);
+.recipient-summary:hover,
+.recipient-summary:focus-visible {
+  border-color: var(--color-border-soft);
+  background: var(--color-surface-hover);
+  outline: none;
+}
+
+.recipient-summary-part {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.recipient-summary-label {
+  color: var(--color-text-muted);
+  font-weight: 600;
 }

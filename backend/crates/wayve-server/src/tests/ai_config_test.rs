@@ -583,6 +583,8 @@ mod tests {
         let owner = insert_local_user(&pool, &email, "password123").await;
         let org_id = make_enterprise(&pool, owner).await;
         let member = add_member(&pool, org_id, "member").await;
+        // On the team, never used the AI: listed all the same, at zero.
+        add_member(&pool, org_id, "member").await;
         let outsider = insert_local_user(&pool, &random_email(), "password123").await;
 
         for (uid, input, output) in [
@@ -622,9 +624,19 @@ mod tests {
         let members = body["by_member"]
             .as_array()
             .unwrap_or_else(|| panic!("by_member is not an array"));
-        assert_eq!(members.len(), 2);
+        assert_eq!(members.len(), 3);
         assert_eq!(members[0]["tokens"], 340);
         assert_eq!(members[1]["tokens"], 120);
+        assert_eq!(members[2]["tokens"], 0);
+        assert_eq!(members[2]["requests"], 0);
+        // Every row names its user, by username or failing that by email.
+        for member in members {
+            assert!(
+                member["username"]
+                    .as_str()
+                    .is_some_and(|name| !name.trim().is_empty())
+            );
+        }
 
         drop(app);
         let _ = sqlx::query("DELETE FROM ai_usage_events WHERE user_id = ANY($1)")

@@ -61,8 +61,15 @@ async function show(overrides: Partial<EmailItem> = {}) {
 const replyAllButton = () =>
   screen.queryByRole("button", { name: "Reply all" });
 
+/** Opens the To/Cc/Bcc rows if the recipients are still the one-line summary. */
+function openRecipients() {
+  const summary = document.querySelector(".recipient-summary");
+  if (summary) fireEvent.click(summary);
+}
+
 /** The addresses chipped in the row whose input is labelled `label`. */
 function chips(label: string): string[] {
+  openRecipients();
   const row = screen.getByLabelText(label).closest(".recipient-field");
   return Array.from(row?.querySelectorAll(".recipient-chip") ?? []).map(
     (el) => el.firstChild?.textContent?.trim() ?? ""
@@ -147,6 +154,7 @@ describe("Reply all", () => {
   it("keeps the Cc when reopened after Cancel, and keeps an edited To", async () => {
     await show();
     fireEvent.click(replyAllButton() as HTMLElement);
+    openRecipients();
     fireEvent.change(screen.getByLabelText("To"), {
       target: { value: "eve@test.local," },
     });
@@ -207,7 +215,7 @@ describe("Reply all", () => {
     it("adds the Cc when it arrives", async () => {
       const arrive = await openEarly();
       expect(chips("To")).toEqual(["ada@test.local", "bo@test.local"]);
-      expect(screen.queryByLabelText("Cc")).toBeNull();
+      expect(chips("Cc")).toEqual([]);
 
       await arrive(email);
 
@@ -225,6 +233,7 @@ describe("Reply all", () => {
     it("adds it once, so a Cc removed afterwards stays removed", async () => {
       const arrive = await openEarly();
       await arrive(email);
+      openRecipients();
       fireEvent.click(
         screen.getByRole("button", { name: "Remove dan@test.local" })
       );
@@ -256,7 +265,7 @@ describe("Reply all", () => {
       fireEvent.click(screen.getByRole("button", { name: "Reply" }));
 
       expect(chips("To")).toEqual(["zed@test.local"]);
-      expect(screen.queryByLabelText("Cc")).toBeNull();
+      expect(chips("Cc")).toEqual([]);
     });
 
     it("leaves a reply switched to Reply alone", async () => {
@@ -266,7 +275,7 @@ describe("Reply all", () => {
       await arrive(email);
 
       expect(chips("To")).toEqual(["ada@test.local"]);
-      expect(screen.queryByLabelText("Cc")).toBeNull();
+      expect(chips("Cc")).toEqual([]);
     });
   });
 

@@ -52,6 +52,63 @@ function TokenTable({
   );
 }
 
+type Member = {
+  name: string;
+  username?: string;
+  tokens: number;
+  requests: number;
+};
+
+// The team, one row each: who they are and what they used. Everyone on the
+// team is listed, so a member at zero is visible too.
+function MemberTable({
+  title,
+  rows,
+  empty,
+}: {
+  title: string;
+  rows: Member[];
+  empty: string;
+}) {
+  return (
+    <section className="ai-card">
+      <h2>{title}</h2>
+      <table className="ai-table">
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Requests</th>
+            <th>Tokens</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length ? (
+            rows.map((r) => {
+              const username = r.username || r.name;
+              return (
+                <tr key={username}>
+                  <td>
+                    {username}
+                    {r.name && r.name !== username && (
+                      <span className="ai-member-name"> · {r.name}</span>
+                    )}
+                  </td>
+                  <td>{num(r.requests)}</td>
+                  <td>{num(r.tokens)}</td>
+                </tr>
+              );
+            })
+          ) : (
+            <tr>
+              <td colSpan={3}>{empty}</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
 // True when the response carries the platform owner's site-wide breakdown.
 const isPlatformUsage = (usage: AiUsage) =>
   (usage.by_scope?.length ?? 0) > 0 ||
@@ -120,11 +177,10 @@ export default function AiUsagePanel({
             }))}
             empty="No AI usage yet."
           />
-          <TokenTable
+          <MemberTable
             title="Platform team members"
-            column="Member"
             rows={usage.platform_members ?? []}
-            empty="No platform-team usage yet."
+            empty="No platform team members yet."
           />
         </div>
         <div className="ai-table-row">{modelCard}</div>
@@ -133,11 +189,10 @@ export default function AiUsagePanel({
   } else {
     breakdown = (
       <div className="ai-table-row">
-        <TokenTable
-          title="By member"
-          column="Member"
+        <MemberTable
+          title="By team member"
           rows={usage.by_member}
-          empty="No member usage yet."
+          empty="No team members yet."
         />
         {modelCard}
       </div>
