@@ -1218,7 +1218,7 @@ pub async fn admin_send_create_code(
     .await?;
 
     let body = format!(
-        "Hi,\n\nAn administrator is creating a HadalMail account for {account_email}.\n\n\
+        "Hi,\n\nAn administrator is creating a Hadal account for {account_email}.\n\n\
          Your verification code is:\n\n    {code}\n\n\
          Give it to the administrator within {CODE_TTL_MINUTES} minutes to finish creating the account.\n\
          If you weren't expecting this, you can safely ignore this email — no account is created \
@@ -1226,7 +1226,7 @@ pub async fn admin_send_create_code(
     );
     crate::email::sender::send_mail(
         &delivery_email,
-        "Your HadalMail account verification code",
+        "Your Hadal account verification code",
         &body,
     )
     .await

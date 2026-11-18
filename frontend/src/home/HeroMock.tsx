@@ -14,7 +14,7 @@ function MailScreen() {
     },
     {
       from: "GitHub",
-      subject: "[hadal-mail] PR #482 merged into main",
+      subject: "[hadal] PR #482 merged into main",
       time: "8:10",
     },
     {
@@ -375,7 +375,7 @@ function HomeScreen() {
     },
     {
       from: "GitHub",
-      subject: "[hadal-mail] PR #482 merged into main",
+      subject: "[hadal] PR #482 merged into main",
       time: "8:10",
     },
     {
