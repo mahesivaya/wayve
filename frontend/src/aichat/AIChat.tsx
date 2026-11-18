@@ -54,11 +54,11 @@ export default function AIChat({
   const draftKey = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // An enterprise org owner OR a platform owner (both have ai:manage) can change
-  // the provider — gate the shortcut exactly like the /settings/ai page does.
+  // An organization's owner (on any plan) or a platform owner can change the
+  // provider — gate the shortcut exactly like the sidebar's /settings/ai entry.
   const canManageAi =
     hasPermission(user, "ai:manage") &&
-    (user?.current_plan?.tier === "enterprise" || user?.scope === "platform");
+    (user?.scope === "organization" || user?.scope === "platform");
 
   const providerName = provider
     ? (PROVIDER_LABELS[provider] ?? provider)
