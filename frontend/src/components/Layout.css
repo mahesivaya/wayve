@@ -1273,7 +1273,7 @@ html.is-titlebar-inset .header .split-menu-btn svg {
 }
 
 /* Phones have no width to give to a margin. */
-@media (max-width: 768px) {
+@media (max-width: 768px) and (pointer: coarse) {
   .page-card-frame {
     padding: 0;
   }
@@ -1936,11 +1936,12 @@ html.is-titlebar-inset .header .split-menu-btn svg {
   }
 }
 
-/* At 768px and below (phones, narrow windows) the icons stay on screen as the
+/* On a touch device at 768px and below (the pair useIsNarrow tests; a desktop
+   window dragged narrow keeps the full layout) the icons stay on screen as the
    collapsed 56px rail (the base .sidebar.collapsed rules). Expanding only adds
    the labels: the rail widens OVER the content instead of pushing it, via a
    negative right margin that keeps its footprint in the row at 56px. */
-@media (max-width: 768px) {
+@media (max-width: 768px) and (pointer: coarse) {
   /* Anchors the scrim to the area below the header (and any banner). */
   .body {
     position: relative;
@@ -1979,7 +1980,7 @@ html.is-titlebar-inset .header .split-menu-btn svg {
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px) and (pointer: coarse) {
   .header {
     padding: 0 12px;
     column-gap: 6px;
@@ -2007,7 +2008,7 @@ html.is-titlebar-inset .header .split-menu-btn svg {
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 480px) and (pointer: coarse) {
   .header {
     padding: 0 8px;
   }
