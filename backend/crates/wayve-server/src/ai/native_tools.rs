@@ -44,7 +44,9 @@ pub(crate) fn declarations(access: DataAccess) -> Vec<NeutralTool> {
                 "Draft an email FROM one of the user's connected accounts. This does NOT send the \
                  email — it shows the draft to the user, who reviews and confirms it before \
                  anything is sent. Call wayve_list_email_accounts first if you need an account_id; \
-                 omit account_id to let the user pick the sending account."
+                 omit account_id to let the user pick the sending account. Write the body as \
+                 plain text ready to send: no Markdown, and no placeholders such as [Your Name] — \
+                 leave out anything you do not know."
                     .to_string(),
             ),
             input_schema: Some(serde_json::json!({
@@ -157,8 +159,10 @@ fn compose_email(args: &Value) -> (Value, Option<PendingAction>) {
     (
         serde_json::json!({
             "status": "draft_created",
-            "note": "The draft is shown to the user for confirmation. Do NOT attempt to send it \
-                     yourself — the user will review and send it."
+            "note": "The draft is shown to the user in an editable card for confirmation. Do \
+                     NOT attempt to send it yourself — the user will review and send it. Do not \
+                     repeat the subject or body in your reply; say in a sentence that the draft \
+                     is ready below."
         }),
         Some(PendingAction::Email {
             to,
