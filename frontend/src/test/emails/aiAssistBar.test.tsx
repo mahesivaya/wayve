@@ -98,7 +98,8 @@ describe("AiAssistBar", () => {
     expect(mockAssist).toHaveBeenCalledWith({
       action: "reply",
       text: "yes 1pm",
-      original: ORIGINAL,
+      // The sender's name goes to the AI; their address stays here.
+      original: { ...ORIGINAL, from: "Asha" },
     });
   });
 

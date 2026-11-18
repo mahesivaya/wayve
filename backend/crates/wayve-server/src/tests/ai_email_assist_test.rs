@@ -7,7 +7,7 @@
 mod tests {
     use crate::ai;
     use crate::ai::email_assist::{
-        AssistAction, AssistRequest, OriginalEmail, build_prompt, clean_reply,
+        AssistAction, AssistRequest, OriginalEmail, build_prompt, clean_reply, sender_name,
     };
     use crate::test_support::{insert_local_user, jwt_for, random_email, test_pool};
     use actix_web::{App, http::StatusCode, test as actix_test, web};
@@ -83,7 +83,9 @@ mod tests {
             Some(("Asha <asha@x.io>", "Lunch?", "Are you free Friday?")),
         ))
         .unwrap_or_else(|| panic!("an email should build a reply prompt"));
-        assert!(bare.contains("From: Asha <asha@x.io>"));
+        // The display name is passed on; the address never is.
+        assert!(bare.contains("From: Asha\nSubject: Lunch?"));
+        assert!(!bare.contains("asha@x.io"));
         assert!(bare.contains("Subject: Lunch?"));
         assert!(bare.contains("Are you free Friday?"));
         assert!(!bare.contains("<notes>"));
@@ -95,6 +97,20 @@ mod tests {
         ))
         .unwrap_or_else(|| panic!("notes should build a reply prompt"));
         assert!(guided.contains("<notes>\nyes, 1pm works\n</notes>"));
+        // A bare address has no name to give, so there is no From line at all.
+        assert!(!guided.contains("From:"));
+        assert!(!guided.contains("asha@x.io"));
+        assert!(guided.contains("<email>\nSubject: Lunch?"));
+    }
+
+    #[test]
+    fn only_the_senders_display_name_is_kept() {
+        assert_eq!(sender_name("Asha Rao <asha@x.io>"), "Asha Rao");
+        assert_eq!(sender_name("\"Rao, Asha\" <asha@x.io>"), "Rao, Asha");
+        assert_eq!(sender_name("asha@x.io"), "");
+        assert_eq!(sender_name("<asha@x.io>"), "");
+        assert_eq!(sender_name("asha@x.io <asha@x.io>"), "");
+        assert_eq!(sender_name("  "), "");
     }
 
     #[test]
