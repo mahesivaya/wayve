@@ -134,3 +134,60 @@ export type AnthropicCost = {
 
 export const getAnthropicCost = async () =>
   apiFetchJson<AnthropicCost>("/api/ai/anthropic-cost");
+
+// Pausing AI. An organization's owner pauses the whole organization or single
+// members; the platform owner pauses any organization. The platform's pause is
+// separate from the owner's, and only the platform can lift it.
+export type AiPauseMember = {
+  user_id: number;
+  name: string;
+  username: string;
+  paused: boolean;
+};
+
+export type AiPauseOrganization = {
+  id: number;
+  name: string;
+  members: number;
+  // Paused by the platform (this switch).
+  paused: boolean;
+  // Paused by the organization's own owner; shown, not changed from here.
+  paused_by_owner: boolean;
+};
+
+export type AiPauseState =
+  | {
+      scope: "organization";
+      paused: boolean;
+      paused_by_platform: boolean;
+      members: AiPauseMember[];
+    }
+  | {
+      scope: "platform";
+      organizations: AiPauseOrganization[];
+      // The most organizations one response lists; search for the rest.
+      limit: number;
+    };
+
+const putPause = (path: string, paused: boolean) =>
+  apiFetchJson<{ paused: boolean }>(path, {
+    method: "PUT",
+    body: JSON.stringify({ paused }),
+  });
+
+// `search` narrows the platform owner's organization list by name.
+export const getAiPause = async (search = "") =>
+  apiFetchJson<AiPauseState>(
+    `/api/ai/pause${search ? `?q=${encodeURIComponent(search)}` : ""}`
+  );
+
+export const setAiOrgPaused = async (paused: boolean) =>
+  putPause("/api/ai/pause", paused);
+
+export const setAiMemberPaused = async (userId: number, paused: boolean) =>
+  putPause(`/api/ai/pause/members/${userId}`, paused);
+
+export const setAiOrganizationPausedByPlatform = async (
+  organizationId: number,
+  paused: boolean
+) => putPause(`/api/ai/pause/organizations/${organizationId}`, paused);

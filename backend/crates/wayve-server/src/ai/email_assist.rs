@@ -188,6 +188,10 @@ pub async fn email_assist(
         ));
     }
 
+    if let Some(reason) = crate::ai::pause::pause_reason(pool.get_ref(), user_id).await? {
+        return Ok(reason.response());
+    }
+
     let Some(ai) = resolve_ai_for_user(pool.get_ref(), user_id).await? else {
         return Ok(refuse(
             StatusCode::SERVICE_UNAVAILABLE,

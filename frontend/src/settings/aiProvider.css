@@ -517,3 +517,96 @@
   opacity: 0.7;
   font-size: 0.85em;
 }
+
+/* ── Pause AI ─────────────────────────────────────────────────────────── */
+.ai-pause-org {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ai-pause-org > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-pause-org p {
+  margin: 2px 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.ai-pause-status {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.ai-pause-status.is-paused {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
+.ai-pause-btn {
+  min-width: 72px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.ai-pause-btn.is-danger {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+.ai-pause-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Status and action sit at the right; the generic table rule right-aligns
+   numeric columns 2 and 3, which is what the status column wants too. */
+.ai-pause-table td:last-child,
+.ai-pause-table th:last-child {
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ai-pause-search {
+  width: 100%;
+  max-width: 320px;
+  height: 32px;
+  margin-bottom: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+}
+
+.ai-pause-banner {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+.ai-pause-note {
+  margin: 8px 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}

@@ -85,11 +85,21 @@ pub struct ResolvedAi {
 
 /// Resolution order: the caller's org's enabled `org_ai_configs` row; else
 /// `platform_ai_config`, but only for platform members; else the platform default
-/// (Gemini from `GEMINI_API_KEY`). `Ok(None)` means none is configured anywhere.
+/// (Gemini from `GEMINI_API_KEY`). `Ok(None)` means none is configured anywhere,
+/// or that AI is paused for this user (see `ai::pause`).
 pub async fn resolve_ai_for_user(
     pool: &PgPool,
     user_id: i32,
 ) -> Result<Option<ResolvedAi>, AppError> {
+    // A paused user has no AI. Checked here, at the one place every feature
+    // gets a user's AI from, so none of them can forget it.
+    if crate::ai::pause::pause_reason(pool, user_id)
+        .await?
+        .is_some()
+    {
+        return Ok(None);
+    }
+
     // Platform and personal users have organization_id NULL, so this never
     // matches for them.
     let row = sqlx::query(

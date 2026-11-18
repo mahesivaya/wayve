@@ -3,6 +3,7 @@ pub mod config_handler;
 pub mod email_assist;
 pub mod handler;
 pub mod native_tools;
+pub mod pause;
 pub mod provider;
 pub mod usage_handler;
 
@@ -14,4 +15,5 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(email_assist::email_assist);
     config_handler::routes(cfg);
     usage_handler::routes(cfg);
+    pause::routes(cfg);
 }

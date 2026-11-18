@@ -1651,6 +1651,17 @@ ALTER TABLE organizations ADD COLUMN IF NOT EXISTS ui_font_key TEXT;
 -- are estimated from the model + token counts at record time (see
 -- `ai::agent::cost_cents`), so historical rows keep the price they were metered
 -- at even if the pricing table changes later.
+-- Pausing AI (see ai/pause.rs). An organization's owner can pause it for the
+-- whole organization (`organizations.ai_paused`) or for one member
+-- (`users.ai_paused`); the platform owner can pause it for any organization
+-- (`ai_paused_by_platform`, a separate column so the organization's owner
+-- cannot lift it).
+ALTER TABLE organizations
+    ADD COLUMN IF NOT EXISTS ai_paused             BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS ai_paused_by_platform BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS ai_paused BOOLEAN NOT NULL DEFAULT FALSE;
+
 CREATE TABLE IF NOT EXISTS ai_usage_events (
     id              BIGSERIAL PRIMARY KEY,
     user_id         INTEGER REFERENCES users(id) ON DELETE SET NULL,
