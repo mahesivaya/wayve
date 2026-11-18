@@ -1231,6 +1231,20 @@ html.is-titlebar-inset .header .split-menu-btn svg {
   display: none;
 }
 
+/* A phone's opened menu is drawn over the page (.sidebar.peek, z-index 200).
+   This covers the rest of the page beneath it and closes the menu on a tap. */
+.sidebar-scrim--phone {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 150;
+  background: rgb(0, 0, 0, 0.32);
+}
+
+.body:has(> .sidebar-scrim--phone) {
+  position: relative;
+}
+
 /* =============================
    📄 CONTENT
 ============================== */

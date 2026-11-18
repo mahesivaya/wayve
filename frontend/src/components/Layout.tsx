@@ -616,7 +616,15 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   // On a phone the opened sidebar is drawn over the page, like a peek, rather
   // than pushing it: beside a 220px menu the page would be a sliver.
   const isPhone = useIsPhone();
-  const drawnOver = peeking || (isPhone && !sidebarCollapsed && !isNarrow);
+  // Open on a phone either way: expanded with the toggle, or peeked by a tap
+  // on the rail (a touch browser reports that tap as a hover, and never
+  // reports the pointer leaving unless something else tappable is hit).
+  const phoneMenuOpen = isPhone && !isNarrow && (!sidebarCollapsed || peeking);
+  const closePhoneMenu = () => {
+    endRailPeek();
+    setSidebarCollapsed(true);
+  };
+  const drawnOver = peeking || phoneMenuOpen;
   // The desktop app's shrunk sidebar shows no icon rail at all: just a thin
   // hover strip down the window's left edge (see .sidebar.rail-hidden) that
   // peeks the full menu open. The browser keeps its 56px icon rail.
@@ -2751,6 +2759,17 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
                 aria-hidden="true"
               />
             )}
+            {/* Phone browsers only: the opened menu covers the page, so a tap
+                anywhere outside it closes it again. The scrim takes the tap,
+                so it doesn't also press whatever is underneath. */}
+            {phoneMenuOpen && (
+              <div
+                className="sidebar-scrim sidebar-scrim--phone"
+                data-testid="phone-menu-scrim"
+                onClick={closePhoneMenu}
+                aria-hidden="true"
+              />
+            )}
 
             <div className={`content`} ref={contentRef}>
               <div
@@ -2780,14 +2799,17 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
                     strip (phones and the settings takeover have no strip). */}
                 {showTabs && (
                   <TabBar
+                    singleTab={isPhone}
                     onCloseLast={splitOpen ? closeLeftPane : undefined}
                     closeLastLabel="Close left pane"
                     trailing={
                       <>
                         {headerActions}
                         {/* Cursor's "Split Editor Right": only while unsplit,
-                            since the second column is capped at one. */}
-                        {!splitOpen && (
+                            since the second column is capped at one. Not
+                            offered in a phone browser, where two columns
+                            would not fit. */}
+                        {!splitOpen && !isPhone && (
                           // Hovering (or focusing) the split button reveals
                           // a small menu: split right or left. A plain click
                           // still splits right.
