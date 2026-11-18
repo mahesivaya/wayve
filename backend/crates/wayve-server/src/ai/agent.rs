@@ -59,6 +59,20 @@ pub enum PendingAction {
         #[serde(skip_serializing_if = "Option::is_none")]
         account_id: Option<i32>,
     },
+    /// Move a user story or ticket to another status (see
+    /// `workspace_tools`). `kind` is `user_story` or `ticket`; `to_status` is
+    /// the status slug the board's update endpoint takes, and the two names
+    /// and the key are for the confirmation card.
+    SetStatus {
+        kind: String,
+        id: i32,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        key: Option<String>,
+        name: String,
+        from_status: String,
+        to_status: String,
+        to_status_name: String,
+    },
 }
 
 pub struct ChatResult {

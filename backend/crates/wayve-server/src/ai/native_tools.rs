@@ -5,11 +5,15 @@
 //! executes through the authenticated endpoint, which keeps irreversible actions
 //! behind a human click and out of a prompt-injectable agent loop.
 //!
+//! The workspace tools (user stories and tickets) live in `workspace_tools`;
+//! they are declared and dispatched here with the rest.
+//!
 //! Native tool names carry a reserved `wayve_` prefix so they can never collide
 //! with the MCP `c{idx}_` namespacing in `agent::load_mcp_tools`.
 
 use super::agent::{NeutralTool, PendingAction, ToolUsed};
 use super::provider::DataAccess;
+use super::workspace_tools::{self, Board};
 use crate::prelude::*;
 use sqlx::Row;
 use tracing::warn;
@@ -22,6 +26,10 @@ const COMPOSE_EMAIL: &str = "wayve_compose_email";
 const LIST_EMAIL_ACCOUNTS: &str = "wayve_list_email_accounts";
 const LIST_RECENT_EMAILS: &str = "wayve_list_recent_emails";
 const LIST_MEETINGS: &str = "wayve_list_meetings";
+const LIST_USER_STORIES: &str = "wayve_list_user_stories";
+const LIST_TICKETS: &str = "wayve_list_tickets";
+const SET_USER_STORY_STATUS: &str = "wayve_set_user_story_status";
+const SET_TICKET_STATUS: &str = "wayve_set_ticket_status";
 
 /// How many rows the read tools return.
 const READ_LIMIT: usize = 10;
@@ -87,10 +95,60 @@ pub(crate) fn declarations(access: DataAccess) -> Vec<NeutralTool> {
             ),
             input_schema: Some(serde_json::json!({ "type": "object", "properties": {} })),
         },
+        list_board_tool(LIST_USER_STORIES, "user stories", "story"),
+        list_board_tool(LIST_TICKETS, "tickets", "ticket"),
+        set_status_tool(SET_USER_STORY_STATUS, "user story", "story", LIST_USER_STORIES),
+        set_status_tool(SET_TICKET_STATUS, "ticket", "ticket", LIST_TICKETS),
     ];
     all.into_iter()
         .filter(|t| tool_allowed(&t.ns_name, access))
         .collect()
+}
+
+fn list_board_tool(name: &str, plural: &str, singular: &str) -> NeutralTool {
+    NeutralTool {
+        ns_name: name.to_string(),
+        description: Some(format!(
+            "List the {plural} on the user's workspace board: each one's key, name, status, \
+             priority, assignee and project. Also returns `statuses`, the names a {singular} can \
+             be moved to. Pass `status` to list only the ones in that status."
+        )),
+        input_schema: Some(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "description": "Optional status name to filter by, e.g. \"To Do\""
+                }
+            }
+        })),
+    }
+}
+
+fn set_status_tool(name: &str, noun: &str, arg: &str, list_tool: &str) -> NeutralTool {
+    NeutralTool {
+        ns_name: name.to_string(),
+        description: Some(format!(
+            "Propose moving one {noun} to another status. This does NOT make the change — it \
+             shows the move to the user, who confirms it before anything is saved. Name the \
+             {noun} by its key (as {list_tool} returns it), its number or its name. Call once \
+             per {noun}."
+        )),
+        input_schema: Some(serde_json::json!({
+            "type": "object",
+            "properties": {
+                arg: {
+                    "type": "string",
+                    "description": format!("The {noun}'s key, number or name")
+                },
+                "status": {
+                    "type": "string",
+                    "description": "The status to move it to, by name, e.g. \"Completed\""
+                }
+            },
+            "required": [arg, "status"]
+        })),
+    }
 }
 
 /// Dispatch a native tool. Returns `None` when `name` is not a native tool, so
@@ -126,6 +184,20 @@ pub(crate) async fn dispatch(
         LIST_EMAIL_ACCOUNTS => (list_email_accounts(pool, user_id).await, None),
         LIST_RECENT_EMAILS => (list_recent_emails(pool, user_id).await, None),
         LIST_MEETINGS => (list_meetings(pool, user_id).await, None),
+        LIST_USER_STORIES => (
+            workspace_tools::list(pool, user_id, Board::UserStories, args).await,
+            None,
+        ),
+        LIST_TICKETS => (
+            workspace_tools::list(pool, user_id, Board::Tickets, args).await,
+            None,
+        ),
+        SET_USER_STORY_STATUS => {
+            workspace_tools::propose_status(pool, user_id, Board::UserStories, args).await
+        }
+        SET_TICKET_STATUS => {
+            workspace_tools::propose_status(pool, user_id, Board::Tickets, args).await
+        }
         _ => (
             serde_json::json!({ "isError": true, "error": "unknown tool" }),
             None,

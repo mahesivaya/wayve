@@ -10,6 +10,7 @@ mod ai_fix_cancel_test;
 mod ai_fix_local_test;
 mod ai_fix_progress_test;
 mod ai_pause_test;
+mod ai_workspace_tools_test;
 mod auth_key_scheme_test;
 mod billing_audit_test;
 mod billing_seats_test;

@@ -19,7 +19,21 @@ export type PendingEmail = {
   account_id?: number;
 };
 
-export type PendingAction = PendingEmail;
+// A proposed move of one user story or ticket to another status. `to_status`
+// is the status slug the board's update endpoint takes; the names and the key
+// are what the confirmation card shows.
+export type PendingStatusChange = {
+  type: "set_status";
+  kind: "user_story" | "ticket";
+  id: number;
+  key?: string;
+  name: string;
+  from_status: string;
+  to_status: string;
+  to_status_name: string;
+};
+
+export type PendingAction = PendingEmail | PendingStatusChange;
 
 // The backend resolves provider and model per request and returns them with the
 // reply, so the UI can label itself accurately. `provider` is the id, never the
