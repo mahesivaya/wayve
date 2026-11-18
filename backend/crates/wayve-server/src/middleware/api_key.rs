@@ -23,8 +23,8 @@ use std::{
 };
 use tracing::{error, warn};
 use wayve_security::api_key::{
-    ApiKeyPrincipal, AuditEntry, AuditOutcome, AuthFailure, required_scope, resolve_api_key,
-    scope_satisfied, write_audit,
+    ApiKeyPrincipal, AuditEntry, AuditOutcome, AuthFailure, key_scope_satisfied, required_scope,
+    resolve_api_key, write_audit,
 };
 
 const API_KEY_HEADER: &str = "X-API-KEY";
@@ -145,7 +145,7 @@ where
 
             // The route's required scope must be satisfied by this key.
             let in_scope = required_scope(&method, &path)
-                .map(|scope| scope_satisfied(&resolved.scopes, scope))
+                .map(|scope| key_scope_satisfied(&resolved.key_type, &resolved.scopes, scope))
                 .unwrap_or(false);
             if !in_scope {
                 audit(

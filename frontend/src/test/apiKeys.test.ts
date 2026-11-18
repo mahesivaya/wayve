@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { API_SCOPES } from "../api/apiKeys";
+import { API_SCOPES, scopesFor } from "../api/apiKeys";
 
 // The frontend scope catalog must stay in lockstep with the backend
 // (backend/src/security/api_key.rs::API_SCOPES).
@@ -33,5 +33,19 @@ describe("API_SCOPES catalog", () => {
     for (const scope of API_SCOPES) {
       expect(scope).toMatch(/^[a-z_]+(:[a-z_]+)?$/);
     }
+  });
+});
+
+// `admin` opens every management surface, so only an internal key may hold it.
+describe("scopesFor", () => {
+  it("offers admin to internal keys only", () => {
+    expect(scopesFor("internal")).toContain("admin");
+    expect(scopesFor("external")).not.toContain("admin");
+  });
+
+  it("leaves every other scope available to external keys", () => {
+    expect(scopesFor("external")).toEqual(
+      API_SCOPES.filter((scope) => scope !== "admin")
+    );
   });
 });

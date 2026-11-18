@@ -2,11 +2,11 @@ import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
 import {
-  API_SCOPES,
   createApiKey,
   getApiKeyAudit,
   listApiKeys,
   revokeApiKey,
+  scopesFor,
   type ApiKey,
   type ApiKeyAuditRow,
   type KeyType,
@@ -169,8 +169,15 @@ export default function ApiKeysPage() {
             <select
               value={keyType}
               onChange={(e) => {
-                setKeyType(e.target.value as KeyType);
+                const next = e.target.value as KeyType;
+                setKeyType(next);
                 setFullAccess(false);
+                // A scope ticked for an internal key must not ride along
+                // into an external one that cannot hold it.
+                const allowed = new Set<string>(scopesFor(next));
+                setScopes(
+                  (prev) => new Set([...prev].filter((s) => allowed.has(s)))
+                );
               }}
             >
               <option value="external">
@@ -198,7 +205,7 @@ export default function ApiKeysPage() {
           {!(keyType === "internal" && fullAccess) && (
             <fieldset className="api-keys-scopes">
               <legend>Scopes</legend>
-              {API_SCOPES.map((scope) => (
+              {scopesFor(keyType).map((scope) => (
                 <label key={scope} className="api-keys-checkbox">
                   <input
                     type="checkbox"

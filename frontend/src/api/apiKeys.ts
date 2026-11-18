@@ -24,6 +24,18 @@ export const API_SCOPES = [
 ] as const;
 
 export type ApiScope = (typeof API_SCOPES)[number];
+
+// Scopes only an internal key may hold (the backend also reserves "*"):
+// `admin` opens every management surface, so a key handed to a third party
+// cannot have it. Mirrors INTERNAL_ONLY_SCOPES in api_key.rs; the server
+// refuses it regardless of what this list says.
+export const INTERNAL_ONLY_SCOPES: readonly string[] = ["admin"];
+
+// The scopes a key of this type may be given.
+export const scopesFor = (keyType: "internal" | "external"): ApiScope[] =>
+  API_SCOPES.filter(
+    (scope) => keyType === "internal" || !INTERNAL_ONLY_SCOPES.includes(scope)
+  );
 export type KeyType = "internal" | "external";
 
 export type ApiKey = {
