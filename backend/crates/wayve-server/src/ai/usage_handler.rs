@@ -1,5 +1,6 @@
 //! AI usage and cost governance, backed by per-turn metering from
-//! `ai_usage_events`. An org owner sees only its own rows; the platform owner
+//! `ai_usage_events`. An org owner sees only its own members' usage (on its own
+//! provider or the platform default alike); the platform owner
 //! sees the whole website (site-wide totals) plus a per-tenant breakdown
 //! (`by_scope`: personal users, each organization, the platform team,
 //! unattributed) and the platform team member list (`platform_members`). Gated
@@ -44,8 +45,10 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
         .as_ref()
         .and_then(|r| r.try_get::<Option<String>, _>("model").ok().flatten());
 
-    // The `($1 IS NULL AND organization_id IS NULL) OR organization_id = $1`
-    // predicate below serves both dashboards from a single Option<i32> bind.
+    // An organization's usage is everything its members ran, whichever key paid
+    // for it: an event carries `organization_id` only when the org had its own AI
+    // config at the time, so on the platform default it is NULL and the member's
+    // own `users.organization_id` is what ties the event to the org.
     let scope: Option<i32> = match owner {
         AiOwner::Org(org_id) => Some(org_id),
         AiOwner::Platform => None,
@@ -65,7 +68,7 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
            COUNT(DISTINCT user_id)::bigint        AS active_users
          FROM ai_usage_events
         WHERE created_at >= NOW() - INTERVAL '30 days'
-          AND ($2::bool OR (($1::int IS NULL AND organization_id IS NULL) OR organization_id = $1))",
+          AND ($2::bool OR organization_id = $1::int OR user_id IN (SELECT id FROM users WHERE organization_id = $1))",
     )
     .bind(scope)
     .bind(site_wide)
@@ -90,7 +93,7 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
            LEFT JOIN ai_usage_events e
              ON e.created_at >= d.day
             AND e.created_at <  d.day + INTERVAL '1 day'
-            AND ($2::bool OR (($1::int IS NULL AND e.organization_id IS NULL) OR e.organization_id = $1))
+            AND ($2::bool OR e.organization_id = $1::int OR e.user_id IN (SELECT id FROM users WHERE organization_id = $1))
           GROUP BY d.day
           ORDER BY d.day",
     )
@@ -115,7 +118,7 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
                 COALESCE(SUM(cost_micro_cents), 0)::bigint AS cost_micro
            FROM ai_usage_events
           WHERE created_at >= NOW() - INTERVAL '30 days'
-            AND ($2::bool OR (($1::int IS NULL AND organization_id IS NULL) OR organization_id = $1))
+            AND ($2::bool OR organization_id = $1::int OR user_id IN (SELECT id FROM users WHERE organization_id = $1))
           GROUP BY model
           ORDER BY tokens DESC
           LIMIT 10",
@@ -148,7 +151,9 @@ pub async fn get_usage(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
            FROM ai_usage_events e
            JOIN users u ON u.id = e.user_id
           WHERE e.created_at >= NOW() - INTERVAL '30 days'
-            AND (($1::int IS NULL AND e.organization_id IS NULL) OR e.organization_id = $1)
+            AND (($1::int IS NULL AND e.organization_id IS NULL)
+                 OR e.organization_id = $1
+                 OR u.organization_id = $1)
           GROUP BY u.id
           ORDER BY tokens DESC
           LIMIT 10",

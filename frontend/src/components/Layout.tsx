@@ -7,6 +7,8 @@ import { recordActivity } from "../api/activity";
 import {
   Suspense,
   Fragment,
+  cloneElement,
+  isValidElement,
   useState,
   useCallback,
   useContext,
@@ -1921,8 +1923,9 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           </Link>
           {/* The organization's sprint chart; platform staff have their own
               Analytics under Platform. A plain page, not a split-pane app.
-              Owners find it below Feature Access in the Organization group;
-              everyone else has no such group, so it stays here for them. */}
+              Owners find it with the other Organization pages (Settings ›
+              Administration on wide screens); everyone else has no such
+              pages, so it stays here for them. */}
           {user.scope === "organization" && !isOrgOwner && (
             <Link
               to="/organization/analytics"
@@ -2073,9 +2076,9 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     {
       key: "platform",
       label: "Platform",
-      // Wide screens reach these pages from the Settings gear's "Platform
-      // admin" item, and they get their own sidebar menu (platformNav), like
-      // Settings. Narrow screens have no gear menu, so they keep the group.
+      // Wide screens list these pages in the settings menu, under
+      // Administration (see administrationLinks). Narrow screens have no
+      // settings menu in the sidebar, so they keep the group.
       visible: hasPlatformSection && isNarrow,
       icon: <PlatformIcon size={16} />,
       links: [
@@ -2136,7 +2139,9 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     {
       key: "organization",
       label: "Organization",
-      visible: isOrgOwner,
+      // Like Platform: wide screens list these pages in the settings menu,
+      // under Administration; narrow screens keep the group here.
+      visible: isOrgOwner && isNarrow,
       icon: <OrganizationIcon size={16} />,
       collapsible: false,
       links: [
@@ -2172,10 +2177,8 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     },
   ];
 
-  // The Settings gear's menu offers "Platform admin": the first Platform page
-  // this user can open (none when the Platform group is hidden).
-  // Only platform admin accounts get Platform admin; everyone else's gear menu
-  // is just Settings and Log out.
+  // The Platform pages this user can open, listed under Settings ›
+  // Administration. Only platform admin accounts get them.
   const isPlatformAdminAccount = user.account_type === "platform_admin";
   const platformLinks: SidebarLinkDef[] =
     isPlatformAdminAccount && hasPlatformSection
@@ -2183,8 +2186,15 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           .find((s) => s.key === "platform")
           ?.links?.filter((l) => l.visible !== false) ?? [])
       : [];
-  const platformAdminPath = platformLinks[0]?.path;
-  const onPlatformLink = (l: SidebarLinkDef) =>
+  // The Organization pages an organization's owner can open, listed there too.
+  const organizationLinks: SidebarLinkDef[] = isOrgOwner
+    ? (sectionDefs
+        .find((s) => s.key === "organization")
+        ?.links?.filter((l) => l.visible !== false) ?? [])
+    : [];
+  // Both sets, in the order Administration shows them.
+  const adminPageLinks = [...platformLinks, ...organizationLinks];
+  const onAdminPageLink = (l: SidebarLinkDef) =>
     location.pathname === l.path || location.pathname.startsWith(`${l.path}/`);
 
   // The profile control lives at the bottom of the sidebar in both runtimes
@@ -2214,11 +2224,11 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
         "/settings/teams",
         "/settings/projects",
         "/settings/ai",
-      ].includes(location.pathname));
-  // The Platform admin pages do the same with the Platform menu. /platform/home
-  // (the platform AI home) isn't one of its links, so it keeps the main menu.
-  const platformTakeover =
-    !isNarrow && !settingsTakeover && platformLinks.some(onPlatformLink);
+      ].includes(location.pathname) ||
+      // The Platform and Organization pages sit in the same menu, under
+      // Administration. /platform/home (the platform AI home) isn't one of
+      // them, so it keeps the main menu.
+      adminPageLinks.some(onAdminPageLink));
   // Settings keeps the app's frame — sidebar, tab strip, top row — and only
   // swaps the sidebar's menu for the settings menu (see settingsNav below).
   const showTabs = !isNarrow;
@@ -2228,14 +2238,10 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   // Upgrade sits in the sidebar, above the account row, whenever the main menu
   // is showing there, split or not: at the end of the tab strip it ended up
   // stranded mid-screen once the page was split. It falls back to the tab
-  // strip (or the phone header) for the icon rail and the settings/platform
-  // takeovers, which have no account row.
+  // strip (or the phone header) for the icon rail and the settings takeover,
+  // which have no account row.
   const upgradeInSidebar =
-    showUpgrade &&
-    showTabs &&
-    !sidebarCollapsed &&
-    !settingsTakeover &&
-    !platformTakeover;
+    showUpgrade && showTabs && !sidebarCollapsed && !settingsTakeover;
   const headerActions = (
     <>
       {showUpgrade && !upgradeInSidebar && (
@@ -2311,7 +2317,9 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   ];
   // Settings › Administration. Teams and Projects are for owners, super
   // admins and admins; Billing and Usage are for everyone who had them before,
-  // so every account gets the group.
+  // so every account gets the group. Platform admins also get the Platform
+  // pages here, and an organization's owner the Organization ones, after the
+  // settings links.
   const isAdmin = isWorkspaceAdmin(user);
   const administrationLinks: SidebarLinkDef[] = [
     {
@@ -2349,6 +2357,14 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       label: "Usage",
       icon: <AnalyticsIcon size={18} />,
     },
+    ...adminPageLinks.map((l) => ({
+      ...l,
+      // The main menu draws these at 16; this menu's icons are 18.
+      icon: isValidElement<{ size?: number }>(l.icon)
+        ? cloneElement(l.icon, { size: 18 })
+        : l.icon,
+      active: onAdminPageLink(l),
+    })),
   ].filter((l) => l.visible !== false);
   const settingsNav = (
     <>
@@ -2418,28 +2434,6 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           </span>
           <span className="sidebar-label">Log out</span>
         </button>
-      </div>
-    </>
-  );
-
-  // The Platform admin menu, shown in the main sidebar on Platform pages the
-  // same way the settings menu is: Back to Home, then the Platform pages.
-  const platformNav = (
-    <>
-      <div className="sidebar-section">
-        {renderSidebarLink(
-          user ? homePathForUser(user) : "/home",
-          "Back to Home",
-          <ArrowLeft size={18} />,
-          false
-        )}
-      </div>
-      <div className="sidebar-section">
-        {platformLinks.map((l) => (
-          <Fragment key={l.path}>
-            {renderSidebarLink(l.path, l.label, l.icon, onPlatformLink(l))}
-          </Fragment>
-        ))}
       </div>
     </>
   );
@@ -2633,8 +2627,6 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
               {showTabs && <div className="sidebar-brand">{brand}</div>}
               {settingsTakeover ? (
                 settingsNav
-              ) : platformTakeover ? (
-                platformNav
               ) : (
                 <>
                   <div className="sidebar-section">
@@ -2724,11 +2716,7 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
                         Upgrade
                       </button>
                     )}
-                    <ProfileMenu
-                      placement="sidebar"
-                      minimal={!isNarrow}
-                      platformAdminPath={platformAdminPath}
-                    />
+                    <ProfileMenu placement="sidebar" minimal={!isNarrow} />
                   </div>
                 </>
               )}

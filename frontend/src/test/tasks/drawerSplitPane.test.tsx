@@ -60,7 +60,8 @@ const openDrawer = async (inSplitPane: boolean) => {
       </SplitPaneContext.Provider>
     </MemoryRouter>
   );
-  fireEvent.click(await screen.findByRole("button", { name: "Story one" }));
+  // A story opens from its key; the name beside it is plain text.
+  fireEvent.click(await screen.findByRole("button", { name: "NON001" }));
   return screen.getByRole("dialog", { name: "Edit Story" });
 };
 

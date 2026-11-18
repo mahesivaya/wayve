@@ -39,6 +39,8 @@ const TICKETS_CONFIG: TasksConfig = {
     // its endpoints stay, so flipping this back on restores existing links.
     figmaLinks: false,
     typeColumn: true,
+    largeText: true,
+    rowSelect: true,
   },
   storageKey: "tickets",
   // Name click opens the ticket in a right-side drawer; Edit (and deep links)

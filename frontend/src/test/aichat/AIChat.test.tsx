@@ -40,7 +40,8 @@ describe("AIChat provider badge", () => {
   it("shows the resolved provider (not hard-coded Gemini) + an owner-only AI settings link", async () => {
     mockUser = {
       permissions: ["ai:manage"],
-      current_plan: { tier: "enterprise" },
+      scope: "organization",
+      current_plan: { tier: "free" },
     };
     mockGetProvider.mockResolvedValue({
       provider: "anthropic",
@@ -54,7 +55,7 @@ describe("AIChat provider badge", () => {
     expect(screen.getByText("claude-sonnet")).toBeTruthy();
     expect(screen.queryByText("Gemini")).toBeNull();
 
-    // Enterprise owner sees the shortcut and it routes to /settings/ai.
+    // An org owner on any plan sees the shortcut and it routes to /settings/ai.
     const settings = await screen.findByRole("button", {
       name: /ai settings/i,
     });

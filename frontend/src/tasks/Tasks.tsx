@@ -33,6 +33,7 @@ import {
   isTerminalCategory,
   type TaskStatusRow,
 } from "../api/taskStatuses";
+import { Link as LinkIcon } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { taskShareText, taskShareUrl } from "./taskShareLink";
@@ -47,6 +48,7 @@ import { GitlabBadge } from "./GitlabBadge";
 import TaskStatusIcon from "./TaskStatusIcon";
 import FigmaLinks from "../integrations/FigmaLinks";
 import AiFixPanel from "../aifix/AiFixPanel";
+import { storyKey } from "../userstories/storyKey";
 import type { AiFixApi } from "../api/aiFix";
 import "./tasks.css";
 import { displayLocale, hourOptions } from "../utils/datetime";
@@ -121,7 +123,8 @@ type TableColumn = {
 
 const TABLE_COLUMNS: TableColumn[] = [
   { key: "created", label: "Created", width: "124px", defaultOn: true },
-  { key: "key", label: "Key", width: "96px", defaultOn: false },
+  // Wide enough for the copy-link icon and a key such as "SAM004".
+  { key: "key", label: "Key", width: "116px", defaultOn: false },
   {
     key: "title",
     label: "Summary",
@@ -475,21 +478,7 @@ function CopyLinkButton({
           <path d="M3.5 8.5l3 3 6-6.5" />
         </svg>
       ) : (
-        <svg
-          className="task-copy-link-icon"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M2.5 6.5V13.5H9.5V8.5L7.5 6.5Z" />
-          <path d="M7.5 6.5V8.5H9.5" />
-          <path d="M5.5 6.5V3.5H10.5L12.5 5.5V10.5H9.5" />
-          <path d="M10.5 3.5V5.5H12.5" />
-        </svg>
+        <LinkIcon className="task-copy-link-icon" aria-hidden="true" />
       )}
       {copied && (
         <span className="task-copy-link-toast" role="status">
@@ -505,11 +494,28 @@ function CopyLinkButton({
 function TaskKeyBadge({
   value,
   tooltip,
+  onOpen,
+  openTooltip,
 }: {
   value: string | null;
   tooltip: string;
+  // Set on boards where the key, not the name, opens the item.
+  onOpen?: () => void;
+  openTooltip?: string;
 }) {
   if (!value) return null;
+  if (onOpen) {
+    return (
+      <button
+        type="button"
+        className="task-number-badge task-number-badge--link"
+        onClick={onOpen}
+        data-tooltip={openTooltip ?? tooltip}
+      >
+        {value}
+      </button>
+    );
+  }
   return (
     <span className="task-number-badge" data-tooltip={tooltip}>
       {value}
@@ -759,6 +765,9 @@ export type RelatedResult = {
   similar: number;
 };
 
+// The list view's checkbox column (boards with `rowSelect`).
+const SELECT_COL_WIDTH = "20px";
+
 export type TasksConfig = {
   api: {
     list: () => Promise<Task[]>;
@@ -805,6 +814,16 @@ export type TasksConfig = {
     // Shows the "Design" section in the editor, for attaching Figma files.
     // On for the workspace boards; personal Tasks leave it off.
     figmaLinks?: boolean;
+    // The list view's table text is two pixels larger (see
+    // .workspace-large-text in index.css). On for User Stories and Tickets.
+    largeText?: boolean;
+    // Each list-view row has a checkbox, and the header one selects them all.
+    // On for User Stories and Tickets.
+    rowSelect?: boolean;
+    // Keys are written the story way: "SAM004", or "NON004" with no project
+    // (see userstories/storyKey.ts). User Stories only; the other boards keep
+    // "sam4" / "#4".
+    storyKeys?: boolean;
   };
   // localStorage prefix so the two boards keep independent view/mode state.
   storageKey: string;
@@ -874,6 +893,9 @@ export default function Tasks({
   // the field for editing; other boards keep the badge inline after the name and
   // never send a type.
   const showType = !!config.features.typeColumn;
+  const largeTextClass = config.features.largeText
+    ? " workspace-large-text"
+    : "";
   // In a split pane the page collapses to one column and clicking a task
   // expands it inline instead of opening the edit modal.
   const inSplitPane = useInSplitPane();
@@ -884,6 +906,10 @@ export default function Tasks({
   const openedFromDeepLink = useRef(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [copiedTaskId, setCopiedTaskId] = useState<number | null>(null);
+  // Rows ticked in the list view (boards with `rowSelect`), by item id.
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<number>>(
+    () => new Set()
+  );
   // Last deep-link value auto-opened. Guards against reopening the task when it
   // is closed (param unchanged) while still honoring a newly clicked task link.
   const deepLinkApplied = useRef<string | null>(null);
@@ -1490,6 +1516,34 @@ export default function Tasks({
     beginEdit(task, "modal");
   };
 
+  // What opens an item from its row or card. Usually the name; on boards with
+  // story keys it is the key badge, and the name is plain text. An item with
+  // no key keeps the link on its name, so it can always be opened.
+  const openTooltip = `Open ${config.labels.lowerSingular} details`;
+  const keyOpens = (task: Task) =>
+    !!config.features.storyKeys && taskKey(task) !== null;
+  const keyOpenProps = (task: Task) =>
+    keyOpens(task) ? { onOpen: () => openDetail(task), openTooltip } : {};
+  const taskNameEl = (task: Task, className: string) =>
+    keyOpens(task) ? (
+      <span
+        className={
+          className.replace("task-card-title-link", "").trim() || undefined
+        }
+      >
+        {task.name}
+      </span>
+    ) : (
+      <button
+        type="button"
+        className={className}
+        onClick={() => openDetail(task)}
+        data-tooltip={openTooltip}
+      >
+        {task.name}
+      </button>
+    );
+
   // Clicking the Edit button: the full page when the board has one, else the
   // modal. Never the drawer — Edit is the "open the full editor" affordance.
   const openEditor = (task: Task) => {
@@ -1725,10 +1779,11 @@ export default function Tasks({
 
   // The card badge key is the project name's first three letters plus the
   // per-user task number ("wayve" + 12 → "way12"), falling back to "#12" when
-  // the task has no resolvable project.
+  // the task has no resolvable project. User stories use their own format.
   const taskKey = (task: Task): string | null => {
     if (task.task_number == null) return null;
     const name = projects.find((p) => p.id === task.project_id)?.name ?? "";
+    if (config.features.storyKeys) return storyKey(task.task_number, name);
     const prefix = name
       .replace(/[^a-zA-Z0-9]/g, "")
       .slice(0, 3)
@@ -1966,12 +2021,18 @@ export default function Tasks({
   const showKeyColumn = visibleCols.some((c) => c.key === "key");
   // No actions column: an item opens from its name, and Delete lives in the
   // editor it opens.
-  const tableCols = visibleCols.map((c) => col(c.key, c.width)).join(" ");
+  // Boards with row checkboxes get a fixed leading track for them.
+  const rowSelect = !!config.features.rowSelect;
+  const selectTrack = rowSelect ? `${SELECT_COL_WIDTH} ` : "";
+  const tableCols =
+    selectTrack + visibleCols.map((c) => col(c.key, c.width)).join(" ");
   // The narrow-pane template: only the columns that keep a track there.
-  const tableColsNarrow = visibleCols
-    .filter((c) => c.narrow)
-    .map((c) => c.narrow)
-    .join(" ");
+  const tableColsNarrow =
+    selectTrack +
+    visibleCols
+      .filter((c) => c.narrow)
+      .map((c) => c.narrow)
+      .join(" ");
   const tableStyle = {
     "--task-cols": tableCols,
     "--task-cols-narrow": tableColsNarrow,
@@ -2270,11 +2331,50 @@ export default function Tasks({
   };
 
   // The table's column headers, reused above the active and completed rows.
-  const tableHead = (
-    <div className="task-thead" role="row">
-      {visibleCols.map((c) => headFor(c.key))}
-    </div>
-  );
+  const toggleSelected = (id: number) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  // The header checkbox covers the rows of its own table (the open items or
+  // the completed ones): ticked when all are, and a click ticks or clears them.
+  const setRowsSelected = (rows: Task[], selected: boolean) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const t of rows) {
+        if (selected) next.add(t.id);
+        else next.delete(t.id);
+      }
+      return next;
+    });
+  // Counted against the loaded items, so a deleted one drops out by itself.
+  const selectedCount = tasks.filter((t) => selectedIds.has(t.id)).length;
+
+  const tableHead = (rows: Task[]) => {
+    const picked = rows.filter((t) => selectedIds.has(t.id)).length;
+    const all = rows.length > 0 && picked === rows.length;
+    return (
+      <div className="task-thead" role="row">
+        {rowSelect && (
+          <div className="task-tcell task-tcell--select" role="columnheader">
+            <input
+              type="checkbox"
+              className="task-row-check"
+              checked={all}
+              ref={(el) => {
+                if (el) el.indeterminate = picked > 0 && !all;
+              }}
+              disabled={rows.length === 0}
+              onChange={() => setRowsSelected(rows, !all)}
+              aria-label={`Select all ${config.labels.lowerPlural}`}
+            />
+          </div>
+        )}
+        {visibleCols.map((c) => headFor(c.key))}
+      </div>
+    );
+  };
 
   // "Duplicate of way4" / "Similar to way4": the related ticket opens on click
   // when it's on this board, else the label shows its id.
@@ -2327,37 +2427,41 @@ export default function Tasks({
       case "key":
         return (
           <div key={key} className={cls}>
+            <CopyLinkButton
+              copied={copiedTaskId === task.id}
+              onCopy={() => copyTaskLink(task)}
+              label={task.name}
+            />
             <TaskKeyBadge
               value={taskKey(task)}
               tooltip={config.labels.numberBadgeTooltip}
+              {...keyOpenProps(task)}
             />
           </div>
         );
       case "title":
         return (
           <div key={key} className={cls}>
+            {/* The copy-link icon leads the key: here, or in the Key column
+                when that is shown. */}
             {!showKeyColumn && (
-              <TaskKeyBadge
-                value={taskKey(task)}
-                tooltip={config.labels.numberBadgeTooltip}
-              />
+              <>
+                <CopyLinkButton
+                  copied={copiedTaskId === task.id}
+                  onCopy={() => copyTaskLink(task)}
+                  label={task.name}
+                />
+                <TaskKeyBadge
+                  value={taskKey(task)}
+                  tooltip={config.labels.numberBadgeTooltip}
+                  {...keyOpenProps(task)}
+                />
+              </>
             )}
-            <button
-              type="button"
-              className="task-card-title-link task-trow-title"
-              onClick={() => openDetail(task)}
-              data-tooltip={`Open ${config.labels.lowerSingular} details`}
-            >
-              {task.name}
-            </button>
+            {taskNameEl(task, "task-card-title-link task-trow-title")}
             {!showType && <TaskBadge kind={task.badge_kind} />}
             <JiraBadge task={task} />
             <GitlabBadge task={task} />
-            <CopyLinkButton
-              copied={copiedTaskId === task.id}
-              onCopy={() => copyTaskLink(task)}
-              label={task.name}
-            />
           </div>
         );
       case "type":
@@ -2473,9 +2577,22 @@ export default function Tasks({
     return (
       <div
         key={task.id}
-        className={`task-trow${completed ? " task-trow--completed" : ""}`}
+        className={`task-trow${completed ? " task-trow--completed" : ""}${
+          rowSelect && selectedIds.has(task.id) ? " task-trow--selected" : ""
+        }`}
         role="row"
       >
+        {rowSelect && (
+          <div className="task-tcell task-tcell--select" role="cell">
+            <input
+              type="checkbox"
+              className="task-row-check"
+              checked={selectedIds.has(task.id)}
+              onChange={() => toggleSelected(task.id)}
+              aria-label={`Select ${task.name}`}
+            />
+          </div>
+        )}
         {visibleCols.map((c) => cellFor(c.key, task, st))}
       </div>
     );
@@ -3466,25 +3583,22 @@ export default function Tasks({
                           >
                             <div className="task-board-card-top">
                               {priorityPicker(task)}
-                              <TaskKeyBadge
-                                value={taskKey(task)}
-                                tooltip={config.labels.numberBadgeTooltip}
-                              />
                               <CopyLinkButton
                                 copied={copiedTaskId === task.id}
                                 onCopy={() => copyTaskLink(task)}
                                 label={task.name}
                               />
+                              <TaskKeyBadge
+                                value={taskKey(task)}
+                                tooltip={config.labels.numberBadgeTooltip}
+                                {...keyOpenProps(task)}
+                              />
                               <TaskBadge kind={task.badge_kind} />
                             </div>
-                            <button
-                              type="button"
-                              className="task-card-title-link task-board-card-title"
-                              onClick={() => openDetail(task)}
-                              data-tooltip={`Open ${config.labels.lowerSingular} details`}
-                            >
-                              {task.name}
-                            </button>
+                            {taskNameEl(
+                              task,
+                              "task-card-title-link task-board-card-title"
+                            )}
                             <JiraBadge task={task} />
                             <GitlabBadge task={task} />
                             {formatCreatedAt(task.created_at) && (
@@ -3503,14 +3617,26 @@ export default function Tasks({
           )
         ) : (
           <>
+            {useTable && rowSelect && selectedCount > 0 && (
+              <div className="task-selection-bar" role="status">
+                <span>{selectedCount} selected</span>
+                <button
+                  type="button"
+                  className="task-selection-clear"
+                  onClick={() => setSelectedIds(new Set())}
+                >
+                  Clear
+                </button>
+              </div>
+            )}
             {useTable ? (
               (listPlaceholder ?? (
                 <div
-                  className={`task-table${hasCustomCols ? " task-table--resized" : ""}`}
+                  className={`task-table${hasCustomCols ? " task-table--resized" : ""}${largeTextClass}`}
                   style={tableStyle}
                   role="table"
                 >
-                  {tableHead}
+                  {tableHead(activeTasks)}
                   {sortForTable(activeTasks).map((task) =>
                     renderRow(task, false)
                   )}
@@ -3528,25 +3654,19 @@ export default function Tasks({
                       >
                         <div className="task-card-body">
                           <div className="task-card-title">
-                            <TaskKeyBadge
-                              value={taskKey(task)}
-                              tooltip={config.labels.numberBadgeTooltip}
-                            />
                             <CopyLinkButton
                               copied={copiedTaskId === task.id}
                               onCopy={() => copyTaskLink(task)}
                               label={task.name}
                             />
+                            <TaskKeyBadge
+                              value={taskKey(task)}
+                              tooltip={config.labels.numberBadgeTooltip}
+                              {...keyOpenProps(task)}
+                            />
                             <TaskBadge kind={task.badge_kind} />
                             <h3>
-                              <button
-                                type="button"
-                                className="task-card-title-link"
-                                onClick={() => openDetail(task)}
-                                data-tooltip={`Open ${config.labels.lowerSingular} details`}
-                              >
-                                {task.name}
-                              </button>
+                              {taskNameEl(task, "task-card-title-link")}
                               <JiraBadge task={task} />
                               <GitlabBadge task={task} />
                             </h3>
@@ -3616,11 +3736,11 @@ export default function Tasks({
                 </h3>
                 {useTable ? (
                   <div
-                    className={`task-table${hasCustomCols ? " task-table--resized" : ""}`}
+                    className={`task-table${hasCustomCols ? " task-table--resized" : ""}${largeTextClass}`}
                     style={tableStyle}
                     role="table"
                   >
-                    {tableHead}
+                    {tableHead(completedTasks)}
                     {sortForTable(completedTasks).map((task) =>
                       renderRow(task, true)
                     )}
@@ -3634,25 +3754,19 @@ export default function Tasks({
                       >
                         <div className="task-card-body">
                           <div className="task-card-title">
-                            <TaskKeyBadge
-                              value={taskKey(task)}
-                              tooltip={config.labels.numberBadgeTooltip}
-                            />
                             <CopyLinkButton
                               copied={copiedTaskId === task.id}
                               onCopy={() => copyTaskLink(task)}
                               label={task.name}
                             />
+                            <TaskKeyBadge
+                              value={taskKey(task)}
+                              tooltip={config.labels.numberBadgeTooltip}
+                              {...keyOpenProps(task)}
+                            />
                             <TaskBadge kind={task.badge_kind} />
                             <h3>
-                              <button
-                                type="button"
-                                className="task-card-title-link"
-                                onClick={() => openDetail(task)}
-                                data-tooltip={`Open ${config.labels.lowerSingular} details`}
-                              >
-                                {task.name}
-                              </button>
+                              {taskNameEl(task, "task-card-title-link")}
                               <JiraBadge task={task} />
                               <GitlabBadge task={task} />
                             </h3>

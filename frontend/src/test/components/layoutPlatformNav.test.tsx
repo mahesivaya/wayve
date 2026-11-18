@@ -1,8 +1,8 @@
-// Wide screens: the Platform pages (reached from the Settings gear's "Platform
-// admin" item) swap the sidebar's menu for the Platform menu, like Settings,
-// and the main menu has no Platform group.
+// Wide screens: the Platform pages are listed in the settings menu, under
+// Administration, and opening one keeps that menu in the sidebar. The main
+// menu has no Platform group, and the account menu no Platform admin item.
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 // Layout pulls in a lot of the app shell. None of it is what's under test, so
@@ -47,12 +47,7 @@ vi.mock("../../search/SearchBar", () => ({ default: () => null }));
 vi.mock("../../components/NotificationBell", () => ({ default: () => null }));
 vi.mock("../../components/ReminderPopups", () => ({ default: () => null }));
 vi.mock("../../components/StorageLimitBanner", () => ({ default: () => null }));
-// Shows which Platform admin target Layout hands the Settings gear menu.
-vi.mock("../../components/ProfileMenu", () => ({
-  default: ({ platformAdminPath }: { platformAdminPath?: string }) => (
-    <div data-testid="gear-platform-admin">{platformAdminPath ?? "none"}</div>
-  ),
-}));
+vi.mock("../../components/ProfileMenu", () => ({ default: () => null }));
 
 import Layout from "../../components/Layout";
 
@@ -65,18 +60,48 @@ const renderAt = (path: string) =>
     </MemoryRouter>
   );
 
-describe("Platform admin sidebar menu", () => {
+describe("Platform pages in the settings menu", () => {
   beforeEach(() => {
     window.localStorage.clear();
     authState.user = { ...PLATFORM_ADMIN };
   });
 
-  it("swaps the sidebar for the Platform menu on a Platform page", () => {
+  const administrationLabels = () => {
+    const heading = screen.getByText("Administration");
+    const section = heading.closest(".sidebar-section");
+    if (!(section instanceof HTMLElement)) throw new Error("no section");
+    return within(section)
+      .getAllByRole("link")
+      .map((l) => l.textContent);
+  };
+
+  it("lists every Platform page under Administration on Settings", () => {
+    renderAt("/settings");
+    expect(administrationLabels()).toEqual([
+      "Teams",
+      "Projects",
+      "AI",
+      "Usage",
+      "Members & roles",
+      "Personal accounts",
+      "Billing",
+      "Developer",
+      "Support",
+      "Secrets",
+      "Feature Access",
+      "Analytics",
+    ]);
+  });
+
+  it("keeps the settings menu on a Platform page, with its link lit", () => {
     renderAt("/platform/members");
     expect(screen.getByRole("link", { name: "Back to Home" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "General" })).toBeTruthy();
     const members = screen.getByRole("link", { name: "Members & roles" });
     expect(members.className).toContain("active");
-    expect(screen.getByRole("link", { name: "Analytics" })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Analytics" }).className
+    ).not.toContain("active");
     // The main menu is swapped out, as on the settings pages.
     expect(screen.queryByRole("link", { name: "Inbox" })).toBeNull();
   });
@@ -88,14 +113,20 @@ describe("Platform admin sidebar menu", () => {
     expect(screen.queryByRole("link", { name: "Back to Home" })).toBeNull();
   });
 
-  it("offers Platform admin in the gear menu to a platform admin", () => {
-    renderAt("/home");
-    expect(screen.getByTestId("gear-platform-admin").textContent).toBe(
-      "/platform/members"
-    );
+  it("gives everyone else no Platform pages", () => {
+    authState.user = {
+      id: 2,
+      email: "org@test.local",
+      account_type: "organization_admin",
+      scope: "organization",
+      effective_role: "owner",
+    };
+    renderAt("/settings");
+    expect(administrationLabels()).not.toContain("Members & roles");
+    expect(screen.queryByRole("link", { name: "Secrets" })).toBeNull();
   });
 
-  it("gives everyone else no Platform admin item or menu", () => {
+  it("does not swap the menu on a Platform page for anyone else", () => {
     authState.user = {
       id: 2,
       email: "org@test.local",
@@ -104,7 +135,74 @@ describe("Platform admin sidebar menu", () => {
       effective_role: "owner",
     };
     renderAt("/platform/members");
-    expect(screen.getByTestId("gear-platform-admin").textContent).toBe("none");
     expect(screen.queryByRole("link", { name: "Back to Home" })).toBeNull();
+  });
+});
+
+// An organization's owner (in admin mode) gets the Organization pages the same
+// way: in the settings menu, not as a group in the main one.
+describe("Organization pages in the settings menu", () => {
+  const ORG_OWNER = {
+    id: 3,
+    email: "owner@org.test",
+    account_type: "organization_admin",
+    scope: "organization",
+    effective_role: "owner",
+    mode: "admin",
+  };
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    authState.user = { ...ORG_OWNER };
+  });
+
+  const administrationLabels = () => {
+    const section = screen
+      .getByText("Administration")
+      .closest(".sidebar-section");
+    if (!(section instanceof HTMLElement)) throw new Error("no section");
+    return within(section)
+      .getAllByRole("link")
+      .map((l) => l.textContent);
+  };
+
+  it("lists them under Administration on Settings", () => {
+    renderAt("/settings");
+    expect(administrationLabels()).toEqual(
+      expect.arrayContaining([
+        "App Logs",
+        "Audit Logs",
+        "User Audit",
+        "Feature Access",
+        "Analytics",
+      ])
+    );
+    // No Platform pages for an organization.
+    expect(administrationLabels()).not.toContain("Members & roles");
+  });
+
+  it("keeps the settings menu on an Organization page, with its link lit", () => {
+    renderAt("/logs/audit");
+    expect(screen.getByRole("link", { name: "Back to Home" })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Audit Logs" }).className
+    ).toContain("active");
+    expect(
+      screen.getByRole("link", { name: "User Audit" }).className
+    ).not.toContain("active");
+    expect(screen.queryByRole("link", { name: "Inbox" })).toBeNull();
+  });
+
+  it("drops the Organization group from the main menu", () => {
+    renderAt("/home");
+    expect(screen.getByRole("link", { name: "Inbox" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Audit Logs" })).toBeNull();
+    expect(screen.queryByText("Organization")).toBeNull();
+  });
+
+  it("gives a member who is not the owner none of them", () => {
+    authState.user = { ...ORG_OWNER, effective_role: "member" };
+    renderAt("/settings");
+    expect(administrationLabels()).not.toContain("Audit Logs");
   });
 });
