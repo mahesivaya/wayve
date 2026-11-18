@@ -40,6 +40,7 @@ const TICKETS_CONFIG: TasksConfig = {
     figmaLinks: false,
     typeColumn: true,
     largeText: true,
+    rowSelect: true,
   },
   storageKey: "tickets",
   // Name click opens the ticket in a right-side drawer; Edit (and deep links)

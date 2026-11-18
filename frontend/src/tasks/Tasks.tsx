@@ -777,6 +777,9 @@ export type RelatedResult = {
   similar: number;
 };
 
+// The list view's checkbox column (boards with `rowSelect`).
+const SELECT_COL_WIDTH = "20px";
+
 export type TasksConfig = {
   api: {
     list: () => Promise<Task[]>;
@@ -826,6 +829,9 @@ export type TasksConfig = {
     // The list view's table text is two pixels larger (see
     // .workspace-large-text in index.css). On for User Stories and Tickets.
     largeText?: boolean;
+    // Each list-view row has a checkbox, and the header one selects them all.
+    // On for User Stories and Tickets.
+    rowSelect?: boolean;
     // Keys are written the story way: "SAM004", or "NON004" with no project
     // (see userstories/storyKey.ts). User Stories only; the other boards keep
     // "sam4" / "#4".
@@ -912,6 +918,10 @@ export default function Tasks({
   const openedFromDeepLink = useRef(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [copiedTaskId, setCopiedTaskId] = useState<number | null>(null);
+  // Rows ticked in the list view (boards with `rowSelect`), by item id.
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<number>>(
+    () => new Set()
+  );
   // Last deep-link value auto-opened. Guards against reopening the task when it
   // is closed (param unchanged) while still honoring a newly clicked task link.
   const deepLinkApplied = useRef<string | null>(null);
@@ -2023,12 +2033,18 @@ export default function Tasks({
   const showKeyColumn = visibleCols.some((c) => c.key === "key");
   // No actions column: an item opens from its name, and Delete lives in the
   // editor it opens.
-  const tableCols = visibleCols.map((c) => col(c.key, c.width)).join(" ");
+  // Boards with row checkboxes get a fixed leading track for them.
+  const rowSelect = !!config.features.rowSelect;
+  const selectTrack = rowSelect ? `${SELECT_COL_WIDTH} ` : "";
+  const tableCols =
+    selectTrack + visibleCols.map((c) => col(c.key, c.width)).join(" ");
   // The narrow-pane template: only the columns that keep a track there.
-  const tableColsNarrow = visibleCols
-    .filter((c) => c.narrow)
-    .map((c) => c.narrow)
-    .join(" ");
+  const tableColsNarrow =
+    selectTrack +
+    visibleCols
+      .filter((c) => c.narrow)
+      .map((c) => c.narrow)
+      .join(" ");
   const tableStyle = {
     "--task-cols": tableCols,
     "--task-cols-narrow": tableColsNarrow,
@@ -2327,11 +2343,50 @@ export default function Tasks({
   };
 
   // The table's column headers, reused above the active and completed rows.
-  const tableHead = (
-    <div className="task-thead" role="row">
-      {visibleCols.map((c) => headFor(c.key))}
-    </div>
-  );
+  const toggleSelected = (id: number) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  // The header checkbox covers the rows of its own table (the open items or
+  // the completed ones): ticked when all are, and a click ticks or clears them.
+  const setRowsSelected = (rows: Task[], selected: boolean) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const t of rows) {
+        if (selected) next.add(t.id);
+        else next.delete(t.id);
+      }
+      return next;
+    });
+  // Counted against the loaded items, so a deleted one drops out by itself.
+  const selectedCount = tasks.filter((t) => selectedIds.has(t.id)).length;
+
+  const tableHead = (rows: Task[]) => {
+    const picked = rows.filter((t) => selectedIds.has(t.id)).length;
+    const all = rows.length > 0 && picked === rows.length;
+    return (
+      <div className="task-thead" role="row">
+        {rowSelect && (
+          <div className="task-tcell task-tcell--select" role="columnheader">
+            <input
+              type="checkbox"
+              className="task-row-check"
+              checked={all}
+              ref={(el) => {
+                if (el) el.indeterminate = picked > 0 && !all;
+              }}
+              disabled={rows.length === 0}
+              onChange={() => setRowsSelected(rows, !all)}
+              aria-label={`Select all ${config.labels.lowerPlural}`}
+            />
+          </div>
+        )}
+        {visibleCols.map((c) => headFor(c.key))}
+      </div>
+    );
+  };
 
   // "Duplicate of way4" / "Similar to way4": the related ticket opens on click
   // when it's on this board, else the label shows its id.
@@ -2525,9 +2580,22 @@ export default function Tasks({
     return (
       <div
         key={task.id}
-        className={`task-trow${completed ? " task-trow--completed" : ""}`}
+        className={`task-trow${completed ? " task-trow--completed" : ""}${
+          rowSelect && selectedIds.has(task.id) ? " task-trow--selected" : ""
+        }`}
         role="row"
       >
+        {rowSelect && (
+          <div className="task-tcell task-tcell--select" role="cell">
+            <input
+              type="checkbox"
+              className="task-row-check"
+              checked={selectedIds.has(task.id)}
+              onChange={() => toggleSelected(task.id)}
+              aria-label={`Select ${task.name}`}
+            />
+          </div>
+        )}
         {visibleCols.map((c) => cellFor(c.key, task, st))}
       </div>
     );
@@ -3552,6 +3620,18 @@ export default function Tasks({
           )
         ) : (
           <>
+            {useTable && rowSelect && selectedCount > 0 && (
+              <div className="task-selection-bar" role="status">
+                <span>{selectedCount} selected</span>
+                <button
+                  type="button"
+                  className="task-selection-clear"
+                  onClick={() => setSelectedIds(new Set())}
+                >
+                  Clear
+                </button>
+              </div>
+            )}
             {useTable ? (
               (listPlaceholder ?? (
                 <div
@@ -3559,7 +3639,7 @@ export default function Tasks({
                   style={tableStyle}
                   role="table"
                 >
-                  {tableHead}
+                  {tableHead(activeTasks)}
                   {sortForTable(activeTasks).map((task) =>
                     renderRow(task, false)
                   )}
@@ -3663,7 +3743,7 @@ export default function Tasks({
                     style={tableStyle}
                     role="table"
                   >
-                    {tableHead}
+                    {tableHead(completedTasks)}
                     {sortForTable(completedTasks).map((task) =>
                       renderRow(task, true)
                     )}

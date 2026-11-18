@@ -38,6 +38,7 @@ const USER_STORIES_CONFIG: TasksConfig = {
     figmaLinks: false,
     storyKeys: true,
     largeText: true,
+    rowSelect: true,
     // Every priority may be auto-fixed (1 = no floor), same as tickets.
     aiFixMinPriority: 1,
   },

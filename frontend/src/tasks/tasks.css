@@ -1860,6 +1860,52 @@ body.is-col-resizing {
   box-shadow: inset 3px 0 0 var(--color-primary);
 }
 
+/* A ticked row stays tinted (without the hover bar) so the selection reads at
+   a glance. */
+.task-trow--selected {
+  background: var(--color-primary-soft);
+}
+
+/* The checkbox column on boards with row selection. */
+.task-tcell--select {
+  justify-content: center;
+}
+
+.task-row-check {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--color-primary-action);
+}
+
+.task-row-check:disabled {
+  cursor: default;
+}
+
+/* "3 selected · Clear", above the table while any row is ticked. */
+.task-selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.task-selection-clear {
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: var(--color-primary-action);
+  cursor: pointer;
+}
+
+.task-selection-clear:hover {
+  text-decoration: underline;
+}
+
 .task-tcell {
   min-width: 0;
   display: flex;
