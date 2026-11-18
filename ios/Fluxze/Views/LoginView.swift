@@ -22,7 +22,7 @@ struct LoginView: View {
                             .scaledToFit()
                             .frame(width: 64, height: 64)
                             .clipShape(RoundedRectangle(cornerRadius: 14))
-                        Text("Sign in to Fluxze")
+                        Text("Sign in")
                             .font(.title2.bold())
                     }
                     .frame(maxWidth: .infinity)
@@ -63,7 +63,7 @@ struct LoginView: View {
 
                 Section {
                     Link("Forgot password?", destination: Config.webURL("/forgot-password"))
-                    Link("New to Fluxze? Create an account", destination: Config.webURL("/register"))
+                    Link("New to Hadal? Create an account", destination: Config.webURL("/register"))
                 }
             }
             .navigationDestination(isPresented: Binding(

@@ -2,7 +2,8 @@ import SwiftUI
 
 /// The inbox of every mailbox the user connected on the web, newest first.
 struct EmailListView: View {
-    @StateObject var store: EmailsStore
+    /// Owned by MainTabView, which badges the Inbox tab from it.
+    @ObservedObject var store: EmailsStore
     @State private var showingSettings = false
     @State private var searchText = ""
     @State private var composing = false

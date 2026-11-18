@@ -5,7 +5,7 @@ struct MailAccount: Codable, Identifiable, Hashable {
     let id: Int
     let email: String
     let displayName: String?
-    let unreadCount: Int?
+    var unreadCount: Int?
     let isShared: Bool?
     let sharedLabel: String?
 

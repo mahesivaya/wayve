@@ -283,9 +283,17 @@ final class EmailsStore: ObservableObject {
         return list.map(\.id)
     }
 
+    /// Unread inbox mail across every connected mailbox, for the tab's badge.
+    var unreadTotal: Int {
+        accounts.reduce(0) { $0 + max($1.unreadCount ?? 0, 0) }
+    }
+
     private func setRead(_ id: Int, _ read: Bool) {
-        if let index = emails.firstIndex(where: { $0.id == id }) {
-            emails[index].isRead = read
+        guard let index = emails.firstIndex(where: { $0.id == id }), emails[index].isRead != read else { return }
+        emails[index].isRead = read
+        // Keep the mailbox's count in step until the next reload brings the server's.
+        if let account = accounts.firstIndex(where: { $0.id == emails[index].accountId }) {
+            accounts[account].unreadCount = max((accounts[account].unreadCount ?? 0) + (read ? -1 : 1), 0)
         }
     }
 

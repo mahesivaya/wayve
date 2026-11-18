@@ -58,19 +58,23 @@ struct MainTabView: View {
     /// Held here, not in the Chat tab, so the unread badge and the live
     /// connection work before the tab is opened.
     @StateObject private var chat: ChatStore
+    /// Held here so the Inbox tab can show its unread count.
+    @StateObject private var emails: EmailsStore
 
     init(api: APIClient, me: Me?) {
         self.api = api
         userID = me?.id
         canSeeCode = me?.canSeeCode ?? true
         _chat = StateObject(wrappedValue: ChatStore(api: api, me: me))
+        _emails = StateObject(wrappedValue: EmailsStore(api: api, userID: me?.id))
     }
 
     var body: some View {
         // Inbox is the first tab, so the app opens on it.
         TabView {
-            EmailListView(store: EmailsStore(api: api, userID: userID))
+            EmailListView(store: emails)
                 .tabItem { Label("Inbox", systemImage: "tray") }
+                .badge(emails.unreadTotal)
             ChatListView(store: chat)
                 .tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right") }
                 .badge(chat.totalUnread)
