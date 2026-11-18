@@ -73,6 +73,33 @@ pub fn is_valid_scope(scope: &str) -> bool {
     scope == "*" || API_SCOPES.contains(&scope)
 }
 
+/// Scopes only an internal key may hold. `*` is everything; `admin` opens every
+/// management surface (keys, audit, organizations, platform, billing), which is
+/// most of what `*` would. An external key is one handed to a third party, so it
+/// is held to the per-resource scopes.
+pub const INTERNAL_ONLY_SCOPES: &[&str] = &["*", "admin"];
+
+/// Whether `scope` is reserved for internal keys.
+pub fn is_internal_only_scope(scope: &str) -> bool {
+    INTERNAL_ONLY_SCOPES.contains(&scope)
+}
+
+/// Whether a key of `key_type` holding `granted` satisfies `required`. This is
+/// the check to use for a real key: for anything but an internal key the
+/// internal-only grants are ignored, so an external key created before they
+/// were refused at creation gains nothing from still carrying one.
+pub fn key_scope_satisfied(key_type: &str, granted: &[String], required: &str) -> bool {
+    if key_type == "internal" {
+        return scope_satisfied(granted, required);
+    }
+    let usable: Vec<String> = granted
+        .iter()
+        .filter(|grant| !is_internal_only_scope(grant))
+        .cloned()
+        .collect();
+    scope_satisfied(&usable, required)
+}
+
 /// Whether a key holding `granted` scopes satisfies `required`. Accepts an
 /// exact match, the per-resource wildcard (`notes:*`), or the full `*`.
 pub fn scope_satisfied(granted: &[String], required: &str) -> bool {
@@ -473,6 +500,27 @@ mod tests {
         assert!(scope_satisfied(&full, "admin"));
 
         assert!(!scope_satisfied(&[], "notes:read"));
+    }
+
+    #[test]
+    fn an_external_key_gains_nothing_from_an_internal_only_scope() {
+        let admin = vec!["admin".to_string(), "notes:read".to_string()];
+        assert!(key_scope_satisfied("internal", &admin, "admin"));
+        assert!(!key_scope_satisfied("external", &admin, "admin"));
+        // Its ordinary scopes still work.
+        assert!(key_scope_satisfied("external", &admin, "notes:read"));
+
+        let full = vec!["*".to_string()];
+        assert!(key_scope_satisfied("internal", &full, "email:read"));
+        assert!(!key_scope_satisfied("external", &full, "email:read"));
+        assert!(!key_scope_satisfied("external", &full, "admin"));
+
+        // Anything that is not explicitly internal is held to the external rule.
+        assert!(!key_scope_satisfied("", &admin, "admin"));
+
+        assert!(is_internal_only_scope("*"));
+        assert!(is_internal_only_scope("admin"));
+        assert!(!is_internal_only_scope("notes:read"));
     }
 
     #[test]

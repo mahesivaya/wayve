@@ -6,7 +6,9 @@ use crate::prelude::*;
 use actix_web::{HttpRequest, HttpResponse, delete, get, post, web};
 use chrono::{DateTime, Utc};
 use tracing::{info, instrument};
-use wayve_security::api_key::{generate_api_key, hash_api_key, is_valid_scope};
+use wayve_security::api_key::{
+    generate_api_key, hash_api_key, is_internal_only_scope, is_valid_scope,
+};
 use wayve_security::rbac::{self, Permission, RoleContext, Scope};
 
 const INTERNAL_RATE_DEFAULT: i32 = 6000;
@@ -139,6 +141,13 @@ pub async fn create_api_key(
         if has_wildcard {
             return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                 "message": "External keys may not hold the '*' scope"
+            })));
+        }
+        // `admin` opens every management surface, which is most of what `*`
+        // would, so it is refused for the same reason.
+        if let Some(scope) = data.scopes.iter().find(|s| is_internal_only_scope(s)) {
+            return Ok(HttpResponse::BadRequest().json(serde_json::json!({
+                "message": format!("External keys may not hold the '{scope}' scope")
             })));
         }
         if data.expires_at.is_none() {
@@ -455,6 +464,98 @@ mod tests {
         )
         .await;
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        let _ = sqlx::query("DELETE FROM api_keys WHERE user_id = $1")
+            .bind(user_id)
+            .execute(&pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_id)
+            .execute(&pool)
+            .await;
+    }
+
+    /// `admin` opens every management surface, so it is internal-only: an
+    /// external key cannot be created with it, and one that already carries it
+    /// (created before this rule) gets nothing from it.
+    #[actix_web::test]
+    async fn an_external_key_cannot_hold_or_use_the_admin_scope() {
+        let pool = test_pool().await;
+        let email = random_email();
+        let user_id = insert_local_user(&pool, &email, "password123").await;
+        let future = Utc::now() + chrono::Duration::hours(1);
+
+        // Creation is refused, for `admin` as for `*`.
+        let create_app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(create_api_key),
+        )
+        .await;
+        let token = crate::test_support::jwt_for(user_id, &email);
+        for scopes in [vec!["admin"], vec!["notes:read", "admin"], vec!["*"]] {
+            let req = actix_test::TestRequest::post()
+                .uri("/keys")
+                .insert_header(("Authorization", format!("Bearer {token}")))
+                .set_json(serde_json::json!({
+                    "name": "third party",
+                    "key_type": "external",
+                    "scopes": scopes,
+                    "expires_at": future.to_rfc3339(),
+                }))
+                .to_request();
+            let resp = actix_test::call_service(&create_app, req).await;
+            assert_eq!(
+                resp.status(),
+                StatusCode::BAD_REQUEST,
+                "an external key must not be created with {scopes:?}"
+            );
+        }
+        let created: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM api_keys WHERE user_id = $1")
+            .bind(user_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("count keys: {e}"));
+        assert_eq!(created, 0);
+
+        // An external key that already carries `admin`: the management routes
+        // stay closed, its ordinary scope still works.
+        let legacy = "wv_sk_legacy_external_admin_key_for_tests";
+        insert_test_key(
+            &pool,
+            user_id,
+            legacy,
+            &["admin", "notes:read"],
+            Some(future),
+            false,
+        )
+        .await;
+        let app = actix_test::init_service(
+            App::new()
+                .wrap(ApiKeyMiddleware)
+                .app_data(web::Data::new(pool.clone()))
+                .app_data(web::Data::new(None::<Cache>))
+                .route("/api/notes", web::get().to(echo_user))
+                .route("/api/keys", web::get().to(echo_user))
+                .route("/api/audit/logs", web::get().to(echo_user)),
+        )
+        .await;
+        let call = |uri: &str| {
+            actix_test::TestRequest::get()
+                .uri(uri)
+                .insert_header(("X-API-KEY", legacy))
+                .to_request()
+        };
+        for uri in ["/api/keys", "/api/audit/logs"] {
+            let resp = actix_test::call_service(&app, call(uri)).await;
+            assert_eq!(
+                resp.status(),
+                StatusCode::FORBIDDEN,
+                "an external key's admin scope must not open {uri}"
+            );
+        }
+        let resp = actix_test::call_service(&app, call("/api/notes")).await;
+        assert_eq!(resp.status(), StatusCode::OK);
 
         let _ = sqlx::query("DELETE FROM api_keys WHERE user_id = $1")
             .bind(user_id)
