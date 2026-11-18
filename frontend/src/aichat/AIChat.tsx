@@ -10,6 +10,11 @@ import {
 } from "../api/ai";
 import { sendEmail, getAccounts } from "../api/email";
 import AiReply from "./AiReply";
+import {
+  forgetAiConversation,
+  loadAiConversation,
+  saveAiConversation,
+} from "./conversationSession";
 import { useGlobalSearch } from "../search/SearchContext";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
@@ -25,6 +30,12 @@ type EmailDraft = PendingEmail & {
   accountId?: number;
   status: "pending" | "sending" | "sent" | "error";
   errorText?: string;
+};
+
+// What survives a refresh: the turns and the cards still on screen.
+type SavedConversation = {
+  messages: AiTurn[];
+  drafts: EmailDraft[];
 };
 
 // Friendly labels for the provider ids the backend returns (mirrors the catalog
@@ -43,16 +54,29 @@ export default function AIChat({
   const { normalizedSearchQuery } = useGlobalSearch();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [messages, setMessages] = useState<AiTurn[]>([]);
+  // Picked up once, on mount: the conversation this user had in this tab before
+  // a refresh. A send the refresh cut off goes back to waiting for its
+  // confirmation, since nobody knows whether it went through.
+  const [restored] = useState(() =>
+    loadAiConversation<SavedConversation>(user?.id)
+  );
+  const [messages, setMessages] = useState<AiTurn[]>(restored?.messages ?? []);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [provider, setProvider] = useState<string | null>(null);
   const [model, setModel] = useState<string | null>(null);
   // Email drafts the assistant proposed, each awaiting explicit confirmation.
-  const [drafts, setDrafts] = useState<EmailDraft[]>([]);
+  const [drafts, setDrafts] = useState<EmailDraft[]>(() =>
+    (restored?.drafts ?? []).map((d) =>
+      d.status === "sending" ? { ...d, status: "pending" } : d
+    )
+  );
   const [accounts, setAccounts] = useState<MailboxLite[]>([]);
-  const draftKey = useRef(0);
+  // Card keys carry on past the restored ones so a new card never reuses one.
+  const draftKey = useRef(
+    Math.max(0, ...(restored?.drafts ?? []).map((d) => d.key))
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // An organization's owner (on any plan) or a platform owner can change the
@@ -88,6 +112,16 @@ export default function AIChat({
       cancelled = true;
     };
   }, []);
+
+  const userId = user?.id;
+  useEffect(() => {
+    if (userId == null) return;
+    if (messages.length === 0 && drafts.length === 0) {
+      forgetAiConversation();
+      return;
+    }
+    saveAiConversation<SavedConversation>(userId, { messages, drafts });
+  }, [userId, messages, drafts]);
 
   // Pin the scroll to the bottom whenever new messages or drafts arrive.
   useEffect(() => {
