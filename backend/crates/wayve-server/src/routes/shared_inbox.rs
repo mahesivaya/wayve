@@ -72,10 +72,12 @@ async fn require_scope_for_org(
     Ok(ctx)
 }
 
+// `email_accounts.created_at` is a plain TIMESTAMP, which does not decode into
+// `DateTime<Utc>`; every query below casts it.
 async fn load_account(pool: &PgPool, account_id: i32) -> sqlx::Result<Option<SharedInboxView>> {
     sqlx::query_as::<_, SharedInboxView>(
         r#"SELECT id, email, provider, shared_label, organization_id, is_shared,
-                  user_id AS owner_user_id, created_at
+                  user_id AS owner_user_id, created_at::timestamptz AS created_at
              FROM email_accounts
             WHERE id = $1"#,
     )
@@ -96,7 +98,7 @@ pub async fn list_shared_inboxes(req: HttpRequest, pool: web::Data<PgPool>) -> A
         Scope::Platform => {
             sqlx::query_as::<_, SharedInboxView>(
                 r#"SELECT id, email, provider, shared_label, organization_id, is_shared,
-                          user_id AS owner_user_id, created_at
+                          user_id AS owner_user_id, created_at::timestamptz AS created_at
                      FROM email_accounts
                     WHERE is_shared = TRUE
                     ORDER BY created_at DESC"#,
@@ -107,7 +109,7 @@ pub async fn list_shared_inboxes(req: HttpRequest, pool: web::Data<PgPool>) -> A
         Scope::Organization => {
             sqlx::query_as::<_, SharedInboxView>(
                 r#"SELECT id, email, provider, shared_label, organization_id, is_shared,
-                          user_id AS owner_user_id, created_at
+                          user_id AS owner_user_id, created_at::timestamptz AS created_at
                      FROM email_accounts
                     WHERE is_shared = TRUE AND organization_id = $1
                     ORDER BY created_at DESC"#,
@@ -128,15 +130,19 @@ pub async fn create_shared_inbox(
     pool: web::Data<PgPool>,
     body: web::Json<ShareInput>,
 ) -> AppResult {
-    if let Err(resp) = require_scope_for_org(&req, pool.get_ref(), body.organization_id).await {
-        return Ok(resp);
-    }
+    let ctx = match require_scope_for_org(&req, pool.get_ref(), body.organization_id).await {
+        Ok(ctx) => ctx,
+        Err(resp) => return Ok(resp),
+    };
+    // `inbox:manage` says the caller may publish shared inboxes, not whose
+    // mailbox they may publish. Only the mailbox's own owner can share it;
+    // anyone else's mailbox reads as missing, so its id confirms nothing.
+    let not_found = || {
+        HttpResponse::NotFound().json(serde_json::json!({ "message": "Email account not found" }))
+    };
     let acc = match load_account(pool.get_ref(), body.account_id).await? {
-        Some(acc) => acc,
-        None => {
-            return Ok(HttpResponse::NotFound()
-                .json(serde_json::json!({ "message": "Email account not found" })));
-        }
+        Some(acc) if acc.owner_user_id == ctx.user_id => acc,
+        _ => return Ok(not_found()),
     };
     if acc.is_shared {
         return Ok(HttpResponse::Conflict().json(serde_json::json!({
@@ -144,20 +150,26 @@ pub async fn create_shared_inbox(
         })));
     }
 
+    // The owner is re-checked in the UPDATE so the write can't land on a
+    // mailbox that changed hands between the load and here.
     let updated = sqlx::query_as::<_, SharedInboxView>(
         r#"UPDATE email_accounts
               SET is_shared = TRUE,
                   shared_label = $1,
                   organization_id = $2
-            WHERE id = $3
+            WHERE id = $3 AND user_id = $4
         RETURNING id, email, provider, shared_label, organization_id, is_shared,
-                  user_id AS owner_user_id, created_at"#,
+                  user_id AS owner_user_id, created_at::timestamptz AS created_at"#,
     )
     .bind(body.label.as_deref().map(str::trim))
     .bind(body.organization_id)
     .bind(body.account_id)
-    .fetch_one(pool.get_ref())
+    .bind(ctx.user_id)
+    .fetch_optional(pool.get_ref())
     .await?;
+    let Some(updated) = updated else {
+        return Ok(not_found());
+    };
 
     info!(
         target: "http",
@@ -195,7 +207,7 @@ pub async fn update_shared_inbox(
                   is_shared    = COALESCE($2, is_shared)
             WHERE id = $3
         RETURNING id, email, provider, shared_label, organization_id, is_shared,
-                  user_id AS owner_user_id, created_at"#,
+                  user_id AS owner_user_id, created_at::timestamptz AS created_at"#,
     )
     .bind(body.label.as_deref().map(str::trim))
     .bind(body.is_shared)
@@ -297,6 +309,14 @@ pub async fn add_inbox_member(
         Ok(ctx) => ctx,
         Err(resp) => return Ok(resp),
     };
+    // Membership is what grants read and reply, so it only exists on a mailbox
+    // its owner has shared. A private mailbox has no organization, which would
+    // otherwise pass the scope check above for platform staff.
+    if !acc.is_shared {
+        return Ok(
+            HttpResponse::NotFound().json(serde_json::json!({ "message": "Inbox not found" }))
+        );
+    }
 
     // For an org-scoped inbox the target must belong to the same org.
     // Platform-level inboxes have no such requirement: platform staff are

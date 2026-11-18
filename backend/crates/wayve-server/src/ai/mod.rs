@@ -6,6 +6,7 @@ pub mod native_tools;
 pub mod pause;
 pub mod provider;
 pub mod usage_handler;
+pub mod workspace_tools;
 
 use actix_web::web;
 

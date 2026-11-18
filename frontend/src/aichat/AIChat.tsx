@@ -7,8 +7,10 @@ import {
   getAiProvider,
   type AiTurn,
   type PendingEmail,
+  type PendingStatusChange,
 } from "../api/ai";
 import { sendEmail, getAccounts } from "../api/email";
+import { applyStatusChange } from "./applyStatusChange";
 import AiReply from "./AiReply";
 import {
   forgetAiConversation,
@@ -32,10 +34,19 @@ type EmailDraft = PendingEmail & {
   errorText?: string;
 };
 
+// A status change the assistant proposed for a user story or ticket, awaiting
+// the same explicit confirmation before the board's update endpoint is called.
+type StatusMove = PendingStatusChange & {
+  cardKey: number;
+  status: "pending" | "saving" | "done" | "error";
+  errorText?: string;
+};
+
 // What survives a refresh: the turns and the cards still on screen.
 type SavedConversation = {
   messages: AiTurn[];
   drafts: EmailDraft[];
+  moves: StatusMove[];
 };
 
 // Friendly labels for the provider ids the backend returns (mirrors the catalog
@@ -55,8 +66,8 @@ export default function AIChat({
   const { user } = useAuth();
   const navigate = useNavigate();
   // Picked up once, on mount: the conversation this user had in this tab before
-  // a refresh. A send the refresh cut off goes back to waiting for its
-  // confirmation, since nobody knows whether it went through.
+  // a refresh. A send or a save the refresh cut off goes back to waiting for
+  // its confirmation, since nobody knows whether it went through.
   const [restored] = useState(() =>
     loadAiConversation<SavedConversation>(user?.id)
   );
@@ -72,10 +83,20 @@ export default function AIChat({
       d.status === "sending" ? { ...d, status: "pending" } : d
     )
   );
+  // Status changes the assistant proposed, each awaiting confirmation too.
+  const [moves, setMoves] = useState<StatusMove[]>(() =>
+    (restored?.moves ?? []).map((m) =>
+      m.status === "saving" ? { ...m, status: "pending" } : m
+    )
+  );
   const [accounts, setAccounts] = useState<MailboxLite[]>([]);
   // Card keys carry on past the restored ones so a new card never reuses one.
   const draftKey = useRef(
-    Math.max(0, ...(restored?.drafts ?? []).map((d) => d.key))
+    Math.max(
+      0,
+      ...(restored?.drafts ?? []).map((d) => d.key),
+      ...(restored?.moves ?? []).map((m) => m.cardKey)
+    )
   );
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -116,18 +137,18 @@ export default function AIChat({
   const userId = user?.id;
   useEffect(() => {
     if (userId == null) return;
-    if (messages.length === 0 && drafts.length === 0) {
+    if (messages.length === 0 && drafts.length === 0 && moves.length === 0) {
       forgetAiConversation();
       return;
     }
-    saveAiConversation<SavedConversation>(userId, { messages, drafts });
-  }, [userId, messages, drafts]);
+    saveAiConversation<SavedConversation>(userId, { messages, drafts, moves });
+  }, [userId, messages, drafts, moves]);
 
   // Pin the scroll to the bottom whenever new messages or drafts arrive.
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, drafts, busy]);
+  }, [messages, drafts, moves, busy]);
 
   const send = async () => {
     const text = input.trim();
@@ -147,12 +168,16 @@ export default function AIChat({
       if (data.provider) setProvider(data.provider);
       if (data.model) setModel(data.model);
       const reply = (data.reply ?? "").trim();
-      const proposed = (data.pending_actions ?? []).filter(
+      const actions = data.pending_actions ?? [];
+      const proposed = actions.filter(
         (a): a is PendingEmail => a.type === "email"
+      );
+      const proposedMoves = actions.filter(
+        (a): a is PendingStatusChange => a.type === "set_status"
       );
 
       // A turn is only empty if there's neither text nor a proposed action.
-      if (!reply && proposed.length === 0) {
+      if (!reply && proposed.length === 0 && proposedMoves.length === 0) {
         throw new Error("Empty reply from model");
       }
 
@@ -171,12 +196,48 @@ export default function AIChat({
           })),
         ]);
       }
+
+      if (proposedMoves.length > 0) {
+        setMoves((prev) => [
+          ...prev,
+          ...proposedMoves.map((p) => ({
+            ...p,
+            cardKey: (draftKey.current += 1),
+            status: "pending" as const,
+          })),
+        ]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Request failed");
     } finally {
       setBusy(false);
     }
   };
+
+  const patchMove = (cardKey: number, patch: Partial<StatusMove>) =>
+    setMoves((prev) =>
+      prev.map((m) => (m.cardKey === cardKey ? { ...m, ...patch } : m))
+    );
+
+  // The ONLY place a story or ticket is actually moved: an explicit user
+  // click, routed through the board's own update endpoint (so the status
+  // history and audit log are written as for any other edit).
+  const confirmMove = async (move: StatusMove) => {
+    if (move.status === "saving" || move.status === "done") return;
+    patchMove(move.cardKey, { status: "saving", errorText: undefined });
+    try {
+      await applyStatusChange(move);
+      patchMove(move.cardKey, { status: "done" });
+    } catch (err) {
+      patchMove(move.cardKey, {
+        status: "error",
+        errorText: err instanceof Error ? err.message : "Could not move it",
+      });
+    }
+  };
+
+  const cancelMove = (cardKey: number) =>
+    setMoves((prev) => prev.filter((m) => m.cardKey !== cardKey));
 
   const patchDraft = (key: number, patch: Partial<EmailDraft>) =>
     setDrafts((prev) =>
@@ -230,6 +291,7 @@ export default function AIChat({
   const clear = () => {
     setMessages([]);
     setDrafts([]);
+    setMoves([]);
     setError(null);
   };
 
@@ -245,7 +307,54 @@ export default function AIChat({
   // Before the conversation starts, center the intro + composer in the middle
   // of the page; once a message is sent (or a draft appears) the composer drops
   // to the bottom.
-  const isEmpty = messages.length === 0 && drafts.length === 0;
+  const isEmpty =
+    messages.length === 0 && drafts.length === 0 && moves.length === 0;
+
+  const moveCards = moves.map((m) => {
+    const noun = m.kind === "ticket" ? "ticket" : "user story";
+    const label = m.key ? `${m.key} ${m.name}` : m.name;
+    return (
+      <div key={m.cardKey} className="ai-draft ai-move">
+        <div className="ai-draft-head">
+          <span className="ai-draft-icon">↪️</span>
+          Move {noun} — review and confirm
+        </div>
+        <div className="ai-draft-row">
+          <span>{m.kind === "ticket" ? "Ticket" : "Story"}</span>
+          <div className="ai-draft-val">{label}</div>
+        </div>
+        <div className="ai-draft-row">
+          <span>Status</span>
+          <div className="ai-draft-val">
+            {m.from_status} → <strong>{m.to_status_name}</strong>
+          </div>
+        </div>
+        {m.status === "error" && (
+          <div className="ai-chat-error">{m.errorText}</div>
+        )}
+        {m.status === "done" ? (
+          <div className="ai-draft-sent">✅ Moved to {m.to_status_name}</div>
+        ) : (
+          <div className="ai-draft-actions">
+            <button
+              className="ai-draft-confirm"
+              onClick={() => void confirmMove(m)}
+              disabled={m.status === "saving"}
+            >
+              {m.status === "saving" ? "Moving…" : "Confirm move"}
+            </button>
+            <button
+              className="ai-draft-cancel"
+              onClick={() => cancelMove(m.cardKey)}
+              disabled={m.status === "saving"}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  });
 
   const draftCards = drafts.map((d) => (
     <div key={d.key} className="ai-draft">
@@ -406,6 +515,7 @@ export default function AIChat({
             ))}
 
             {!normalizedSearchQuery && draftCards}
+            {!normalizedSearchQuery && moveCards}
 
             {busy && (
               <div className="ai-msg ai-msg-model">
