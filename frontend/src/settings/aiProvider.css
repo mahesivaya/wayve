@@ -371,19 +371,22 @@
 /* ── Data access panel (platform team only) ──────────────────────────────
    A list of the data categories the assistant may read, each with a switch.
    Categories without native tools yet render as a dimmed "coming soon" row. */
-.ai-data-access {
+.ai-data-access,
+.ai-usage-section {
   margin-top: 28px;
   padding-top: 20px;
   border-top: 1px solid var(--color-border);
 }
 
-.ai-data-access h2 {
+.ai-data-access h2,
+.ai-usage-section > h2 {
   margin: 0 0 6px;
   font-size: var(--text-xl, 1.15rem);
   color: var(--color-text-primary);
 }
 
-.ai-data-access > p {
+.ai-data-access > p,
+.ai-usage-section > p {
   margin: 0 0 14px;
   color: var(--color-text-muted);
   max-width: 60ch;

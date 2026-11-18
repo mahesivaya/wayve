@@ -564,4 +564,77 @@ mod tests {
             .await;
         drop(mock);
     }
+
+    /// An org on the platform default has no AI config, so its members' events
+    /// carry no `organization_id`. The owner must still see them, and must not
+    /// see anyone else's.
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn org_owner_sees_member_usage_on_the_platform_default() {
+        let pool = test_pool().await;
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .service(ai::usage_handler::get_usage),
+        )
+        .await;
+
+        let email = random_email();
+        let owner = insert_local_user(&pool, &email, "password123").await;
+        let org_id = make_enterprise(&pool, owner).await;
+        let member = add_member(&pool, org_id, "member").await;
+        let outsider = insert_local_user(&pool, &random_email(), "password123").await;
+
+        for (uid, input, output) in [
+            (owner, 100_i64, 20_i64),
+            (member, 300, 40),
+            (outsider, 9000, 900),
+        ] {
+            sqlx::query(
+                "INSERT INTO ai_usage_events
+                   (user_id, organization_id, provider, model, input_tokens, output_tokens)
+                 VALUES ($1, NULL, 'anthropic', 'usage-test-model', $2, $3)",
+            )
+            .bind(uid)
+            .bind(input)
+            .bind(output)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("usage event: {e}"));
+        }
+
+        let req = actix_test::TestRequest::get()
+            .uri("/ai/usage")
+            .insert_header((
+                "Authorization",
+                format!("Bearer {}", jwt_for(owner, &email)),
+            ))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: serde_json::Value = actix_test::read_body_json(resp).await;
+
+        assert_eq!(body["totals"]["requests"], 2);
+        assert_eq!(body["totals"]["input_tokens"], 400);
+        assert_eq!(body["totals"]["output_tokens"], 60);
+        assert_eq!(body["by_model"][0]["model"], "usage-test-model");
+        assert_eq!(body["by_model"][0]["tokens"], 460);
+        let members = body["by_member"]
+            .as_array()
+            .unwrap_or_else(|| panic!("by_member is not an array"));
+        assert_eq!(members.len(), 2);
+        assert_eq!(members[0]["tokens"], 340);
+        assert_eq!(members[1]["tokens"], 120);
+
+        drop(app);
+        let _ = sqlx::query("DELETE FROM ai_usage_events WHERE user_id = ANY($1)")
+            .bind(vec![owner, member, outsider])
+            .execute(&pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(outsider)
+            .execute(&pool)
+            .await;
+        cleanup(&pool, org_id).await;
+    }
 }

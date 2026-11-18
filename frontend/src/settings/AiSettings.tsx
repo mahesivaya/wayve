@@ -17,6 +17,7 @@ import {
   type AiProviderId,
   type AiProviderOption,
 } from "../api/aiProvider";
+import AiUsagePanel from "./AiUsagePanel";
 import "./aiProvider.css";
 
 // Only categories the assistant has native tools for (email, calendar) are
@@ -454,6 +455,16 @@ export default function AiSettings() {
           {daError && <p className="ai-error">{daError}</p>}
         </section>
       )}
+
+      <section className="ai-usage-section">
+        <h2>Token usage</h2>
+        <p>
+          {isPlatform
+            ? "AI tokens used across the whole platform — by scope, by platform team member, and by model."
+            : "AI tokens your organization has used — in total, by member, and by model."}
+        </p>
+        <AiUsagePanel />
+      </section>
     </div>
   );
 }
