@@ -61,6 +61,10 @@ type Props = {
   closeLastLabel?: string;
   /** Controls pinned to the strip's right end (e.g. Upgrade). */
   trailing?: ReactNode;
+  /** One page at a time (a phone browser): no tabs are shown and none can be
+   *  opened, leaving only the trailing controls. The strip still tracks the
+   *  current page, and tabs saved earlier are kept, just not listed. */
+  singleTab?: boolean;
 };
 
 /** The main view's tab strip. Each tab keeps its own URL; the active tab
@@ -72,6 +76,7 @@ export default function TabBar({
   onCloseLast,
   closeLastLabel = "Close pane",
   trailing,
+  singleTab = false,
 }: Props) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -131,12 +136,18 @@ export default function TabBar({
   useEffect(() => {
     goRef.current = go;
   });
+  const singleTabRef = useRef(singleTab);
+  useEffect(() => {
+    singleTabRef.current = singleTab;
+  }, [singleTab]);
 
   const titleOf = (tab: Tab) => tabTitle(tab, TAB_TITLE_SOURCES);
   const select = (id: string) => go(activateTab(state, id));
   const open = () => go(addTab(state, NEW_TAB_PATH));
   const close = (id: string) =>
-    state.tabs.length <= 1 ? onCloseLast?.(id) : go(closeTab(state, id));
+    singleTab || state.tabs.length <= 1
+      ? onCloseLast?.(id)
+      : go(closeTab(state, id));
 
   useEffect(() => {
     // A tab dropped into the right group moves there, as in Cursor: it leaves
@@ -188,6 +199,7 @@ export default function TabBar({
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.altKey && e.code === "KeyT") {
         e.preventDefault();
+        if (singleTabRef.current) return;
         goRef.current(addTab(s, NEW_TAB_PATH));
       } else if (mod && e.altKey && e.code === "KeyW") {
         e.preventDefault();
@@ -213,19 +225,23 @@ export default function TabBar({
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
+  const shownTabs = singleTab ? [] : state.tabs;
+
   return (
     <>
       <TabStrip
         stripId="main"
         ariaLabel="Open tabs"
-        tabs={state.tabs}
+        tabs={shownTabs}
         activeId={state.activeId}
         titleOf={titleOf}
         onSelect={select}
         onClose={close}
-        canClose={state.tabs.length > 1 || !!onCloseLast}
+        canClose={
+          singleTab ? !!onCloseLast : state.tabs.length > 1 || !!onCloseLast
+        }
         closeLabel={(_tab, title) =>
-          state.tabs.length <= 1 && onCloseLast
+          (singleTab || state.tabs.length <= 1) && onCloseLast
             ? closeLastLabel
             : `Close ${title}`
         }
@@ -244,13 +260,13 @@ export default function TabBar({
           onPaneDragStart?.(e, tab, title, state.tabs.length <= 1)
         }
         onTabDragEnd={onPaneDragEnd}
-        onAdd={open}
+        onAdd={singleTab ? undefined : open}
         addDisabled={state.tabs.length >= MAX_TABS}
         trailing={trailing}
       />
       {/* Hold Ctrl+Option (Ctrl+Alt) to see every open tab, like Cmd+Tab. */}
       <TabSwitcher
-        tabs={state.tabs}
+        tabs={shownTabs}
         activeId={state.activeId}
         titleOf={titleOf}
         onPick={select}

@@ -2033,8 +2033,57 @@ body.is-col-resizing {
   .task-trow {
     grid-template-columns: var(--task-cols-narrow);
   }
-  .task-col--wide {
+  /* Scoped to the rows so it outranks the per-cell `display: flex` rules that
+     come later in this file. Unscoped, a people cell (.task-tcell--p) stayed
+     on screen with no track of its own, pushed priority and status one column
+     along, and wrapped the last cell onto a second line. */
+  .task-thead .task-col--wide,
+  .task-trow .task-col--wide {
     display: none;
+  }
+}
+
+/* Phone-width pane: even the narrow template (checkbox, type, priority and
+   status are ~310px of fixed tracks and gaps) leaves the flexible title no
+   width at all. Each item becomes two lines instead: its summary across the
+   full width, then type, priority and status beneath it. The column headings
+   no longer line up with anything, so they go. Nothing scrolls sideways.
+
+   The header's buttons wrap onto further lines rather than running off the
+   right edge of the card. */
+@container (max-width: 560px) {
+  .task-thead {
+    display: none;
+  }
+  .task-table .task-trow {
+    grid-template-columns: 20px auto auto minmax(0, 1fr);
+    column-gap: 10px;
+    row-gap: 6px;
+    min-width: 0;
+  }
+  .task-trow .task-tcell--title {
+    grid-column: 2 / -1;
+  }
+  /* Placed by name, so a board without a Type column still lines up. */
+  .task-trow .task-tcell--type {
+    grid-column: 2;
+  }
+  .task-trow .task-tcell--priority {
+    grid-column: 3;
+  }
+  .task-trow .task-tcell--status {
+    grid-column: 4;
+    min-width: 0;
+  }
+  /* The picker has a fixed desktop width; here it takes what the line has. */
+  .task-trow .task-tcell--status .task-status-select {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .tasks-header-actions {
+    flex-wrap: wrap;
   }
 }
 
