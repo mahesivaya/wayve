@@ -5,6 +5,7 @@
 // one; locally, run `psql "$DATABASE_URL" -f infra/postgres/init.sql` first.
 mod admin_create_verification_test;
 mod ai_config_test;
+mod ai_email_assist_test;
 mod ai_fix_cancel_test;
 mod ai_fix_local_test;
 mod ai_fix_progress_test;

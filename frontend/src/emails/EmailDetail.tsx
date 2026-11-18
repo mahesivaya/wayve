@@ -6,7 +6,8 @@ import {
   MAX_ATTACHMENTS_BYTES,
 } from "../api/email";
 import { formatFileSize } from "./renderUtils";
-import { isGmailReconnectError } from "./bodyUtils";
+import { isGmailReconnectError, normalizeEmailBody } from "./bodyUtils";
+import AiAssistBar from "./AiAssistBar";
 import EmailBody from "./EmailBody";
 import { ConversationView } from "./ConversationView";
 import { InviteCard } from "./InviteCard";
@@ -1356,6 +1357,24 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
           </div>
           {/* The Cc chips that used to live here are now the editable Cc row
               above, so a mentioned address can be removed as well as added. */}
+          <AiAssistBar
+            text={replyBody}
+            onApply={setReplyBody}
+            original={{
+              from: selectedEmail.sender || "",
+              subject: selectedEmail.subject || "",
+              // Text only: the model has no use for the markup, and it is
+              // what keeps a long HTML email inside the size limit.
+              body:
+                selectedEmail._bodyLoading ||
+                selectedEmail._bodyError ||
+                // Still sealed (it could not be opened on this device):
+                // ciphertext is no use to the model.
+                (selectedEmail.body || "").includes("WAYVE_SECURE_V1")
+                  ? ""
+                  : normalizeEmailBody(selectedEmail.body || ""),
+            }}
+          />
           {replyError && <p className="email-body-error">{replyError}</p>}
           {renderAttachField(
             replyAttachments,

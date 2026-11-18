@@ -1,5 +1,5 @@
 use crate::ai::agent::ChatMsg;
-use crate::ai::provider::resolve_ai_for_user;
+use crate::ai::provider::{ResolvedAi, resolve_ai_for_user};
 use crate::prelude::*;
 use tracing::{error, info, instrument, warn};
 use wayve_security::jwt::get_user_id_from_request;
@@ -81,22 +81,48 @@ pub async fn ai_chat(
         }
     };
 
-    // Metering is best-effort: a failure here must never fail the chat. The owner
-    // scope mirrors provider resolution, so an org with its own enabled config owns
-    // its members' usage and everyone else falls to platform scope.
+    record_usage(
+        pool.get_ref(),
+        user_id,
+        &ai,
+        result.input_tokens,
+        result.output_tokens,
+    )
+    .await;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "reply": result.reply,
+        "tools_used": result.tools_used,
+        "pending_actions": result.pending_actions,
+        "provider": ai.provider.as_str(),
+        "model": ai.model,
+    })))
+}
+
+/// Records one metered AI request against the user. Best-effort: a failure
+/// here must never fail the request it is counting. The owner scope mirrors
+/// provider resolution, so an org with its own enabled config owns its members'
+/// usage and everyone else falls to platform scope.
+pub(crate) async fn record_usage(
+    pool: &PgPool,
+    user_id: i32,
+    ai: &ResolvedAi,
+    input_tokens: i64,
+    output_tokens: i64,
+) {
     let owner_org: Option<i32> = sqlx::query_scalar(
         "SELECT u.organization_id FROM users u
            JOIN org_ai_configs c ON c.organization_id = u.organization_id
           WHERE u.id = $1 AND c.enabled",
     )
     .bind(user_id)
-    .fetch_optional(pool.get_ref())
+    .fetch_optional(pool)
     .await
     .ok()
     .flatten();
     // The dashboard aggregates micro-cents; cost_cents is a rounded legacy copy.
     let cost_micro_cents =
-        crate::ai::agent::cost_micro_cents(&ai.model, result.input_tokens, result.output_tokens);
+        crate::ai::agent::cost_micro_cents(&ai.model, input_tokens, output_tokens);
     let cost_cents = (cost_micro_cents + 500_000) / 1_000_000;
     if let Err(e) = sqlx::query(
         "INSERT INTO ai_usage_events
@@ -107,23 +133,15 @@ pub async fn ai_chat(
     .bind(owner_org)
     .bind(ai.provider.as_str())
     .bind(&ai.model)
-    .bind(result.input_tokens)
-    .bind(result.output_tokens)
+    .bind(input_tokens)
+    .bind(output_tokens)
     .bind(cost_cents)
     .bind(cost_micro_cents)
-    .execute(pool.get_ref())
+    .execute(pool)
     .await
     {
         warn!(target: "ai", error = ?e, "failed to record ai usage event");
     }
-
-    Ok(HttpResponse::Ok().json(serde_json::json!({
-        "reply": result.reply,
-        "tools_used": result.tools_used,
-        "pending_actions": result.pending_actions,
-        "provider": ai.provider.as_str(),
-        "model": ai.model,
-    })))
 }
 
 /// Returns only the provider id and model, never the API key, which is what makes

@@ -231,6 +231,16 @@ pub async fn complete(ai: &ResolvedAi, prompt: &str) -> Result<String, AppError>
     run_one(&msgs, &ToolCtx::none(), ai).await.map(|r| r.reply)
 }
 
+/// `complete`, but handing back the token counts too, for callers that meter
+/// the request to a user.
+pub async fn complete_metered(ai: &ResolvedAi, prompt: &str) -> Result<ChatResult, AppError> {
+    let msgs = vec![ChatMsg {
+        role: "user".to_string(),
+        content: prompt.to_string(),
+    }];
+    run_one(&msgs, &ToolCtx::none(), ai).await
+}
+
 /// Native Wayve tools are tried first; their reserved name prefix can't collide
 /// with the MCP `c{idx}_` namespacing. Otherwise the call routes to its MCP client.
 async fn dispatch_tool(
