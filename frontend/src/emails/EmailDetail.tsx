@@ -107,11 +107,11 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   // sender, or keep the thread's subject.
   const [replyToList, setReplyToList] = useState<string[]>([]);
   const [replyBcc, setReplyBcc] = useState<string[]>([]);
-  // Cc and Bcc stay out of the way until asked for, the way mail clients do it.
-  // An @mention opens Cc on its own, so a mentioned address is never added to a
-  // row the user can't see.
-  const [ccOpen, setCcOpen] = useState(false);
-  const [bccOpen, setBccOpen] = useState(false);
+  // The recipients start as one plain line ("To: …", plus any Cc and Bcc), and
+  // a click on it opens the three editable rows. The line names every address,
+  // so one added while it is closed (an @mention, Reply all's Cc) is never
+  // sent unseen.
+  const [recipientsOpen, setRecipientsOpen] = useState(false);
   const [replySubject, setReplySubject] = useState("");
   const [replyBody, setReplyBody] = useState("");
   const [replySending, setReplySending] = useState(false);
@@ -228,8 +228,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       setReplyToList([]);
       setReplyCc([]);
       setReplyBcc([]);
-      setCcOpen(false);
-      setBccOpen(false);
+      setRecipientsOpen(false);
       setReplySubject("");
       setReplyBody("");
       setReplyError(null);
@@ -362,6 +361,8 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   const showReply = (next: boolean) => {
     if (!selectedEmail) return;
     setReplyOpen(next);
+    // Every opening starts from the one-line recipients, however it was left.
+    if (next) setRecipientsOpen(false);
     // Seed only what the user hasn't already filled in, so reopening after a
     // stray Escape keeps an edited recipient or subject — the same rule the
     // body follows. Coming from Reply all, the recipients switch back to the
@@ -395,13 +396,14 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
   const showReplyAll = (next: boolean) => {
     if (!selectedEmail || !canReplyAll) return;
     setReplyOpen(next);
+    // Every opening starts from the one-line recipients, however it was left.
+    if (next) setRecipientsOpen(false);
     if (next) {
       const { to, cc } = replyAllRecipients(selectedEmail, ownAddressList);
       if (!replyAll || replyToList.length === 0) {
         setReplyToList(to);
       }
       setReplyCc((prev) => mergeCc(prev, cc));
-      if (cc.length > 0) setCcOpen(true);
       // The Cc comes with the full message; the list row has none.
       ccPendingRef.current =
         selectedEmail.cc === undefined ? selectedEmail.id : null;
@@ -438,7 +440,6 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       ccPendingRef.current = null;
       if (add.length === 0) return;
       setReplyCc((prev) => mergeCc(prev, add));
-      setCcOpen(true);
     }, 0);
     return () => window.clearTimeout(timer);
   }, [selectedId, ccKnown, lateCc, replyOpen, replyAll]);
@@ -594,8 +595,7 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       setReplyAttachments([]);
       setReplyCc([]);
       setReplyBcc([]);
-      setCcOpen(false);
-      setBccOpen(false);
+      setRecipientsOpen(false);
       setReplyOpen(false);
       setReplyAll(false);
       ccPendingRef.current = null;
@@ -1199,57 +1199,68 @@ export const EmailDetail: React.FC<EmailDetailProps> = ({
       {replyOpen && (
         <div className="email-reply-box">
           <div className="email-reply-fields">
-            <RecipientChips
-              label="To"
-              value={replyToList}
-              onChange={setReplyToList}
-              placeholder="Add a recipient"
-              actions={
-                <div className="recipient-actions">
-                  {/* A collapsed row still sends to whoever is in it, so the
-                      count is what stops an address going out unseen — an
-                      @mention adds to Cc without opening the row. */}
-                  <button
-                    type="button"
-                    className={`recipient-toggle${ccOpen ? " active" : ""}`}
-                    onClick={() => setCcOpen((open) => !open)}
-                    aria-pressed={ccOpen}
-                  >
-                    Cc
-                    {!ccOpen && replyCc.length > 0
-                      ? ` (${replyCc.length})`
-                      : ""}
-                  </button>
-                  <button
-                    type="button"
-                    className={`recipient-toggle${bccOpen ? " active" : ""}`}
-                    onClick={() => setBccOpen((open) => !open)}
-                    aria-pressed={bccOpen}
-                  >
-                    Bcc
-                    {!bccOpen && replyBcc.length > 0
-                      ? ` (${replyBcc.length})`
-                      : ""}
-                  </button>
-                </div>
-              }
-            />
-            {/* Shown only on request. */}
-            {ccOpen && (
-              <RecipientChips
-                label="Cc"
-                value={replyCc}
-                onChange={setReplyCc}
-                placeholder="Add a Cc recipient"
-              />
-            )}
-            {bccOpen && (
-              <RecipientChips
-                label="Bcc"
-                value={replyBcc}
-                onChange={setReplyBcc}
-                placeholder="Hidden from the other recipients"
-              />
+            {/* With nobody to send to there is nothing to summarise, so the
+                rows open on their own. */}
+            {!recipientsOpen && replyToList.length > 0 ? (
+              <button
+                type="button"
+                className="recipient-summary"
+                onClick={() => setRecipientsOpen(true)}
+                title="Edit recipients, Cc and Bcc"
+              >
+                <span className="recipient-summary-part">
+                  <span className="recipient-summary-label">To:</span>{" "}
+                  {replyToList.join(", ")}
+                </span>
+                {replyCc.length > 0 && (
+                  <span className="recipient-summary-part">
+                    <span className="recipient-summary-label">Cc:</span>{" "}
+                    {replyCc.join(", ")}
+                  </span>
+                )}
+                {replyBcc.length > 0 && (
+                  <span className="recipient-summary-part">
+                    <span className="recipient-summary-label">Bcc:</span>{" "}
+                    {replyBcc.join(", ")}
+                  </span>
+                )}
+              </button>
+            ) : (
+              <>
+                <RecipientChips
+                  label="To"
+                  value={replyToList}
+                  onChange={(next) => {
+                    // Opened for want of a recipient: stay open while one is
+                    // typed, instead of folding away on the first chip.
+                    setRecipientsOpen(true);
+                    setReplyToList(next);
+                  }}
+                  placeholder="Add a recipient"
+                />
+                <RecipientChips
+                  label="Cc"
+                  value={replyCc}
+                  onChange={(next) => {
+                    // Opened for want of a recipient: stay open while one is
+                    // typed, instead of folding away on the first chip.
+                    setRecipientsOpen(true);
+                    setReplyCc(next);
+                  }}
+                  placeholder="Add a Cc recipient"
+                />
+                <RecipientChips
+                  label="Bcc"
+                  value={replyBcc}
+                  onChange={(next) => {
+                    // Opened for want of a recipient: stay open while one is
+                    // typed, instead of folding away on the first chip.
+                    setRecipientsOpen(true);
+                    setReplyBcc(next);
+                  }}
+                  placeholder="Hidden from the other recipients"
+                />
+              </>
             )}
             <input
               className="email-composer-field"
