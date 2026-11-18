@@ -2013,17 +2013,8 @@ body.is-col-resizing {
   white-space: nowrap;
 }
 
-/* The copy-link button is quiet until the row is hovered/focused, so the
-   rows stay clean at rest (matching the reference table). */
-.task-tcell--title .task-copy-link {
-  opacity: 0;
-  transition: opacity 0.1s;
-}
-
-.task-trow:hover .task-tcell--title .task-copy-link,
-.task-trow:focus-within .task-tcell--title .task-copy-link {
-  opacity: 1;
-}
+/* The copy-link icon leads the key and is always shown; hovering it shows
+   "Copy link". */
 
 /* Narrow BOARD PANE: drop the lower-priority columns rather than letting the
    fixed template overflow. Overrides the inline `--task-cols`.

@@ -33,6 +33,7 @@ import {
   isTerminalCategory,
   type TaskStatusRow,
 } from "../api/taskStatuses";
+import { Link as LinkIcon } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
 import { taskShareText, taskShareUrl } from "./taskShareLink";
@@ -122,7 +123,8 @@ type TableColumn = {
 
 const TABLE_COLUMNS: TableColumn[] = [
   { key: "created", label: "Created", width: "124px", defaultOn: true },
-  { key: "key", label: "Key", width: "96px", defaultOn: false },
+  // Wide enough for the copy-link icon and a key such as "SAM004".
+  { key: "key", label: "Key", width: "116px", defaultOn: false },
   {
     key: "title",
     label: "Summary",
@@ -476,21 +478,7 @@ function CopyLinkButton({
           <path d="M3.5 8.5l3 3 6-6.5" />
         </svg>
       ) : (
-        <svg
-          className="task-copy-link-icon"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M2.5 6.5V13.5H9.5V8.5L7.5 6.5Z" />
-          <path d="M7.5 6.5V8.5H9.5" />
-          <path d="M5.5 6.5V3.5H10.5L12.5 5.5V10.5H9.5" />
-          <path d="M10.5 3.5V5.5H12.5" />
-        </svg>
+        <LinkIcon className="task-copy-link-icon" aria-hidden="true" />
       )}
       {copied && (
         <span className="task-copy-link-toast" role="status">
@@ -2439,6 +2427,11 @@ export default function Tasks({
       case "key":
         return (
           <div key={key} className={cls}>
+            <CopyLinkButton
+              copied={copiedTaskId === task.id}
+              onCopy={() => copyTaskLink(task)}
+              label={task.name}
+            />
             <TaskKeyBadge
               value={taskKey(task)}
               tooltip={config.labels.numberBadgeTooltip}
@@ -2449,22 +2442,26 @@ export default function Tasks({
       case "title":
         return (
           <div key={key} className={cls}>
+            {/* The copy-link icon leads the key: here, or in the Key column
+                when that is shown. */}
             {!showKeyColumn && (
-              <TaskKeyBadge
-                value={taskKey(task)}
-                tooltip={config.labels.numberBadgeTooltip}
-                {...keyOpenProps(task)}
-              />
+              <>
+                <CopyLinkButton
+                  copied={copiedTaskId === task.id}
+                  onCopy={() => copyTaskLink(task)}
+                  label={task.name}
+                />
+                <TaskKeyBadge
+                  value={taskKey(task)}
+                  tooltip={config.labels.numberBadgeTooltip}
+                  {...keyOpenProps(task)}
+                />
+              </>
             )}
             {taskNameEl(task, "task-card-title-link task-trow-title")}
             {!showType && <TaskBadge kind={task.badge_kind} />}
             <JiraBadge task={task} />
             <GitlabBadge task={task} />
-            <CopyLinkButton
-              copied={copiedTaskId === task.id}
-              onCopy={() => copyTaskLink(task)}
-              label={task.name}
-            />
           </div>
         );
       case "type":
@@ -3586,15 +3583,15 @@ export default function Tasks({
                           >
                             <div className="task-board-card-top">
                               {priorityPicker(task)}
-                              <TaskKeyBadge
-                                value={taskKey(task)}
-                                tooltip={config.labels.numberBadgeTooltip}
-                                {...keyOpenProps(task)}
-                              />
                               <CopyLinkButton
                                 copied={copiedTaskId === task.id}
                                 onCopy={() => copyTaskLink(task)}
                                 label={task.name}
+                              />
+                              <TaskKeyBadge
+                                value={taskKey(task)}
+                                tooltip={config.labels.numberBadgeTooltip}
+                                {...keyOpenProps(task)}
                               />
                               <TaskBadge kind={task.badge_kind} />
                             </div>
@@ -3657,15 +3654,15 @@ export default function Tasks({
                       >
                         <div className="task-card-body">
                           <div className="task-card-title">
-                            <TaskKeyBadge
-                              value={taskKey(task)}
-                              tooltip={config.labels.numberBadgeTooltip}
-                              {...keyOpenProps(task)}
-                            />
                             <CopyLinkButton
                               copied={copiedTaskId === task.id}
                               onCopy={() => copyTaskLink(task)}
                               label={task.name}
+                            />
+                            <TaskKeyBadge
+                              value={taskKey(task)}
+                              tooltip={config.labels.numberBadgeTooltip}
+                              {...keyOpenProps(task)}
                             />
                             <TaskBadge kind={task.badge_kind} />
                             <h3>
@@ -3757,15 +3754,15 @@ export default function Tasks({
                       >
                         <div className="task-card-body">
                           <div className="task-card-title">
-                            <TaskKeyBadge
-                              value={taskKey(task)}
-                              tooltip={config.labels.numberBadgeTooltip}
-                              {...keyOpenProps(task)}
-                            />
                             <CopyLinkButton
                               copied={copiedTaskId === task.id}
                               onCopy={() => copyTaskLink(task)}
                               label={task.name}
+                            />
+                            <TaskKeyBadge
+                              value={taskKey(task)}
+                              tooltip={config.labels.numberBadgeTooltip}
+                              {...keyOpenProps(task)}
                             />
                             <TaskBadge kind={task.badge_kind} />
                             <h3>
