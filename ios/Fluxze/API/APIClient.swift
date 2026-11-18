@@ -119,7 +119,7 @@ final class APIClient {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            throw APIError.network("Can't reach Fluxze. Check your connection and try again.")
+            throw APIError.network("Can't reach Hadal. Check your connection and try again.")
         }
         guard let http = response as? HTTPURLResponse else {
             throw APIError.network("No response from the server.")

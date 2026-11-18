@@ -322,14 +322,14 @@ struct EmailDetailView: View {
                 Label("Encrypted message", systemImage: "lock")
             } description: {
                 Text(KeyVault.hasKey
-                     ? "This message is encrypted with a key that isn't on this iPhone. Read it in Fluxze on the web."
+                     ? "This message is encrypted with a key that isn't on this iPhone. Read it in Hadal on the web."
                      : "This message is end-to-end encrypted. Unlock your key on this iPhone to read it here.")
             } actions: {
                 if !KeyVault.hasKey {
                     Button("Unlock with recovery phrase") { unlocking = true }
                         .buttonStyle(.borderedProminent)
                 }
-                Link("Open in Fluxze", destination: Config.webURL("/emails"))
+                Link("Open in Hadal", destination: Config.webURL("/emails"))
             }
         case .failed(let message):
             ContentUnavailableView {

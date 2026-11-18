@@ -29,7 +29,7 @@ targets:
     info:
       path: Fluxze/Info.plist
       properties:
-        CFBundleDisplayName: Fluxze
+        CFBundleDisplayName: Hadal
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSRequiresIPhoneOS: true

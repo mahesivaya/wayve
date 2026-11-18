@@ -69,13 +69,13 @@ struct ReviewsView: View {
             ContentUnavailableView(
                 "GitHub isn't connected",
                 systemImage: "link",
-                description: Text("Connect GitHub in Fluxze on the web, and your pull requests show up here.")
+                description: Text("Connect GitHub in Hadal on the web, and your pull requests show up here.")
             )
         } else if store.repos.isEmpty {
             ContentUnavailableView(
                 "No repositories",
                 systemImage: "folder",
-                description: Text("Pull requests show up here for repositories linked to a project in Fluxze. Link one on the web.")
+                description: Text("Pull requests show up here for repositories linked to a project in Hadal. Link one on the web.")
             )
         } else if store.shown.isEmpty {
             ContentUnavailableView {

@@ -302,7 +302,7 @@ final class ChatStore: ObservableObject {
             switch self {
             case .offline: "Chat isn't connected. Check your connection and try again."
             case .locked: "Unlock your encryption key on this iPhone to send messages."
-            case .noKey(let who): "Can't send: \(who) hasn't set up encryption yet. They just need to open Fluxze once."
+            case .noKey(let who): "Can't send: \(who) hasn't set up encryption yet. They just need to open Hadal once."
             }
         }
     }

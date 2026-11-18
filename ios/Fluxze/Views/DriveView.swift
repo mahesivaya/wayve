@@ -101,7 +101,7 @@ struct DriveFolderView: View {
             ContentUnavailableView(
                 folder == nil ? "Drive is empty" : "This folder is empty",
                 systemImage: "folder",
-                description: Text("Upload files in Fluxze on the web, and they show up here.")
+                description: Text("Upload files in Hadal on the web, and they show up here.")
             )
         } else {
             List {

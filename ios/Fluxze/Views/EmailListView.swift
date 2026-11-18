@@ -174,9 +174,9 @@ struct EmailListView: View {
             ContentUnavailableView {
                 Label("No mailbox connected", systemImage: "envelope")
             } description: {
-                Text("Connect Gmail, Outlook or another mailbox in Fluxze on the web, and its mail shows up here.")
+                Text("Connect Gmail, Outlook or another mailbox in Hadal on the web, and its mail shows up here.")
             } actions: {
-                Link("Open Fluxze", destination: Config.webURL("/emails"))
+                Link("Open Hadal", destination: Config.webURL("/emails"))
             }
         } else if store.emails.isEmpty {
             ContentUnavailableView(
