@@ -1,4 +1,5 @@
 use crate::ai::agent::ChatMsg;
+use crate::ai::pause::PauseReason;
 use crate::ai::provider::{ResolvedAi, resolve_ai_for_user};
 use crate::prelude::*;
 use tracing::{error, info, instrument, warn};
@@ -27,6 +28,10 @@ pub async fn ai_chat(
     data: web::Json<ChatRequest>,
 ) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+
+    if let Some(reason) = crate::ai::pause::pause_reason(pool.get_ref(), user_id).await? {
+        return Ok(reason.response());
+    }
 
     let ai = match resolve_ai_for_user(pool.get_ref(), user_id).await? {
         Some(ai) => ai,
@@ -156,8 +161,14 @@ pub async fn get_ai_provider(req: HttpRequest, pool: web::Data<PgPool>) -> AppRe
         None => (None, None),
     };
 
+    // Lets the UI say "paused" instead of showing an assistant with no provider.
+    let paused = crate::ai::pause::pause_reason(pool.get_ref(), user_id)
+        .await?
+        .map(PauseReason::as_str);
+
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "provider": provider,
         "model": model,
+        "paused": paused,
     })))
 }

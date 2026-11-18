@@ -18,6 +18,7 @@ import {
   type AiProviderOption,
 } from "../api/aiProvider";
 import AiUsagePanel from "./AiUsagePanel";
+import AiPausePanel from "./AiPausePanel";
 import "./aiProvider.css";
 
 // Only categories the assistant has native tools for (email, calendar) are
@@ -464,6 +465,16 @@ export default function AiSettings() {
             : "AI tokens your organization has used — in total, by member, and by model."}
         </p>
         <AiUsagePanel />
+      </section>
+
+      <section className="ai-usage-section">
+        <h2>Pause AI</h2>
+        <p>
+          {isPlatform
+            ? "Stop AI for any organization. Its members, and its owner, cannot use AI until you resume it."
+            : "Stop AI for the whole organization or for individual members. A paused member sees a message asking them to contact you."}
+        </p>
+        <AiPausePanel />
       </section>
     </div>
   );

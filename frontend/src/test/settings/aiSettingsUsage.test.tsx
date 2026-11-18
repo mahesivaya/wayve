@@ -33,6 +33,12 @@ vi.mock("../../api/aiProvider", () => ({
   getAiDataAccess: vi.fn().mockResolvedValue({ email: true, calendar: true }),
   putAiDataAccess: vi.fn(),
   getAiUsage: vi.fn(),
+  getAiPause: vi.fn().mockResolvedValue({
+    scope: "organization",
+    paused: false,
+    paused_by_platform: false,
+    members: [],
+  }),
 }));
 
 import AiSettings from "../../settings/AiSettings";

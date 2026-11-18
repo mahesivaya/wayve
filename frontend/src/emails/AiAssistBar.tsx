@@ -24,6 +24,19 @@ type Props = {
   offReason?: string;
 };
 
+// The sender's display name without their address: "Asha Rao <asha@x.io>"
+// gives "Asha Rao", a bare address gives nothing. The address is personal data
+// the model has no use for, so it never leaves the browser. The server strips
+// it again, so this is not the only guard.
+function senderName(from: string): string {
+  const name = from
+    .split("<")[0]
+    .trim()
+    .replace(/^["']+|["']+$/g, "")
+    .trim();
+  return name.includes("@") ? "" : name;
+}
+
 const REWRITES: { action: EmailAssistAction; label: string }[] = [
   { action: "fix_grammar", label: "Fix grammar" },
   { action: "improve", label: "Improve" },
@@ -71,7 +84,9 @@ export default function AiAssistBar({
       const { text: result } = await emailAssist({
         action,
         text: sent,
-        ...(action === "reply" && original ? { original } : {}),
+        ...(action === "reply" && original
+          ? { original: { ...original, from: senderName(original.from) } }
+          : {}),
       });
       if (latestText.current !== sent) {
         setError(
