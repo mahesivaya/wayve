@@ -1881,18 +1881,6 @@ html.is-titlebar-inset .header .split-menu-btn svg {
   display: block;
 }
 
-/* =============================
-   📱 LAYOUT — TABLET & PHONE
-   ============================
-   Survival-mode responsive: keep the app usable down to ~360px.
-   The header nav already collapses at ≤1100px (above). Below the
-   --bp-tablet (768px) threshold we also:
-     - drop the textual welcome/role chip from the header to free
-       horizontal space for the brand + actions,
-     - collapse any second/third split pane (multi-pane on a phone
-       is unreadable).
-   At ≤480px we tighten paddings further.
-============================== */
 /* Between 768px and 1100px we no longer FORCE the icon-only rail: the
    icon-only treatment now applies only when the user has actually collapsed
    the sidebar. An expanded sidebar keeps its full labels at every width so
@@ -1936,96 +1924,9 @@ html.is-titlebar-inset .header .split-menu-btn svg {
   }
 }
 
-/* On a touch device at 768px and below (the pair useIsNarrow tests; a desktop
-   window dragged narrow keeps the full layout) the icons stay on screen as the
-   collapsed 56px rail (the base .sidebar.collapsed rules). Expanding only adds
-   the labels: the rail widens OVER the content instead of pushing it, via a
-   negative right margin that keeps its footprint in the row at 56px. */
-@media (max-width: 768px) and (pointer: coarse) {
-  /* Anchors the scrim to the area below the header (and any banner). */
-  .body {
-    position: relative;
-  }
-
-  .sidebar {
-    --rail-width: 56px;
-    --rail-expanded-width: 220px;
-    /* Both states border-box, so the expanded rail's footprint (width plus the
-       negative margin) equals the collapsed rail's width exactly. */
-    box-sizing: border-box;
-    /* Width and margin move together, so the content never shifts. */
-    transition:
-      width 0.25s ease,
-      margin-right 0.25s ease;
-  }
-
-  .sidebar.collapsed {
-    width: var(--rail-width);
-  }
-
-  .sidebar.open {
-    position: relative;
-    z-index: 200;
-    width: var(--rail-expanded-width);
-    margin-right: calc(var(--rail-width) - var(--rail-expanded-width));
-    box-shadow: 6px 0 18px rgb(0, 0, 0, 0.12);
-  }
-
-  .sidebar-scrim {
-    display: block;
-    position: absolute;
-    inset: 0;
-    background: rgb(0, 0, 0, 0.32);
-    z-index: 150;
-  }
-}
-
-@media (max-width: 768px) and (pointer: coarse) {
-  .header {
-    padding: 0 12px;
-    column-gap: 6px;
-  }
-
-  .header-welcome {
-    display: none;
-  }
-
-  /* The global header search doesn't fit next to the brand + actions on phones
-     — it overflowed left onto the sidebar toggle and painted over its taps.
-     Hide it in mobile mode; page-level search (chat, emails) stays available
-     inside each view. */
-  .header > .global-search-row {
-    display: none;
-  }
-
-  /* Multi-pane is a desktop pattern. Auto-close any open split
-     panes by hiding them — the underlying state survives, so when
-     the user rotates / resizes wider they reappear. */
-  .split-pane.center,
-  .split-pane.right,
-  .split-resize-handle {
-    display: none;
-  }
-}
-
-@media (max-width: 480px) and (pointer: coarse) {
-  .header {
-    padding: 0 8px;
-  }
-
-  .logo {
-    font-size: var(--text-lg);
-  }
-
-  /* Phones: a 48px rail, with the side padding halved so the 22px icons keep
-     the same tap width (39px) they have in the 56px rail. */
-  .sidebar {
-    --rail-width: 48px;
-    --rail-expanded-width: min(260px, 80vw);
-    padding-left: 4px;
-    padding-right: 4px;
-  }
-}
+/* There is no separate phone layout: the app keeps the same frame (labelled
+   sidebar, tabs, search, split panes) at every width and on every device. The
+   sidebar's own collapse toggle is how a small screen gets room back. */
 
 @media (max-width: 700px) {
   .global-search-row:has(.email-layout-actions) {

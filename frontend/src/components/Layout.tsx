@@ -60,7 +60,7 @@ import { SplitPaneContext } from "./SplitPaneContext";
 import { SplitControlContext, type SplitTarget } from "./SplitControlContext";
 import ResizeHandle from "./ResizeHandle";
 import { useResizableWidth } from "./useResizableWidth";
-import { useIsNarrow } from "./useIsNarrow";
+import { PHONE_QUERY, useIsNarrow, useIsPhone } from "./useIsNarrow";
 import PaneDropOverlay from "./PaneDropOverlay";
 import {
   appKeyForTabPath,
@@ -573,6 +573,13 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       .catch(() => {});
   };
   const [collapsedPref, setSidebarCollapsed] = useState<boolean>(() => {
+    // A phone opens on the content: the labelled sidebar would take more than
+    // half of its screen, so it starts as the icon rail there whatever was
+    // saved. The toggle still opens it.
+    const smallTouchScreen =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia(PHONE_QUERY).matches;
+    if (smallTouchScreen) return true;
     try {
       return localStorage.getItem("rwayve.sidebar.collapsed") === "1";
     } catch {
@@ -606,6 +613,10 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   useEffect(() => () => window.clearTimeout(railHoverTimer.current), []);
 
   const railCollapsed = isNarrow ? !navOpen : sidebarCollapsed && !peeking;
+  // On a phone the opened sidebar is drawn over the page, like a peek, rather
+  // than pushing it: beside a 220px menu the page would be a sliver.
+  const isPhone = useIsPhone();
+  const drawnOver = peeking || (isPhone && !sidebarCollapsed && !isNarrow);
   // The desktop app's shrunk sidebar shows no icon rail at all: just a thin
   // hover strip down the window's left edge (see .sidebar.rail-hidden) that
   // peeks the full menu open. The browser keeps its 56px icon rail.
@@ -2602,11 +2613,11 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
           <div className="body">
             <nav
               ref={sidebarRef}
-              className={`sidebar ${showTabs ? "has-brand" : ""} ${isNarrow && navOpen ? "open" : ""} ${railCollapsed ? "collapsed" : ""} ${railHidden ? "rail-hidden" : ""} ${peeking ? "peek" : ""}`
+              className={`sidebar ${showTabs ? "has-brand" : ""} ${isNarrow && navOpen ? "open" : ""} ${railCollapsed ? "collapsed" : ""} ${railHidden ? "rail-hidden" : ""} ${drawnOver ? "peek" : ""}`
                 .replace(/\s+/g, " ")
                 .trim()}
               style={
-                peeking
+                drawnOver
                   ? {
                       // Widen to the user's expanded width; the matching
                       // negative margin keeps the shrunk rail's footprint

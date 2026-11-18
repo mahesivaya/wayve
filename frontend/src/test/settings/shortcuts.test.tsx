@@ -6,7 +6,10 @@ import { fireEvent, render, screen } from "@testing-library/react";
 
 const desktop = vi.hoisted(() => ({ value: false }));
 vi.mock("../../utils/desktop", () => ({ isDesktopApp: () => desktop.value }));
-vi.mock("../../components/useIsNarrow", () => ({ useIsNarrow: () => false }));
+vi.mock("../../components/useIsNarrow", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../components/useIsNarrow")>()),
+  useIsNarrow: () => false,
+}));
 
 import Shortcuts from "../../settings/Shortcuts";
 

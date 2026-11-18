@@ -1,32 +1,41 @@
 import { useEffect, useState } from "react";
 
-// The phone layout: the sidebar is an icon rail that expands over the content,
-// and the settings pages fall back to a single column.
+// Whether to use the separate phone layout: an icon rail that expands over the
+// content, the older account menu, no tabs, and the settings pages as one
+// stacked column.
 //
-// It needs a narrow screen AND a touch device. A desktop window dragged narrow
-// keeps the full layout (labelled menu, tabs, split panes) at every width, so
-// the app looks the same however far the window is shrunk. The same pair of
-// conditions gates the matching rules in Layout.css and profile.css.
+// That layout is switched off. The app keeps the same frame at every width and
+// on every device — labelled sidebar, the settings menu in it, tabs, split
+// panes — so a narrowed window or a phone looks like the full-screen app. A
+// small screen gets room back by collapsing the sidebar with its own toggle.
 //
-// Shared by Layout and SettingsShell so the two can't disagree about which side
-// of the breakpoint they're on. They cooperate on the settings takeover — Layout
-// hides the main sidebar, SettingsShell puts up the replacement rail — so a
-// mismatch would strand the user with neither.
-const NARROW_QUERY = "(max-width: 768px) and (pointer: coarse)";
-
+// Layout, Settings and SettingsShell still read this, so their phone branches
+// stay in step with each other; the phone-only rules in Layout.css are gone,
+// and would have to come back with it.
 export function useIsNarrow(): boolean {
-  const [isNarrow, setIsNarrow] = useState<boolean>(
+  return false;
+}
+
+// A phone-sized touch screen. It gets the same layout as everything else, with
+// two allowances for its width: the sidebar starts collapsed, and when opened
+// it is drawn over the page instead of squeezing it (see Layout).
+export const PHONE_QUERY = "(max-width: 768px) and (pointer: coarse)";
+
+export function useIsPhone(): boolean {
+  const [isPhone, setIsPhone] = useState<boolean>(
     () =>
-      typeof window !== "undefined" && window.matchMedia(NARROW_QUERY).matches
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia(PHONE_QUERY).matches
   );
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia(NARROW_QUERY);
-    const onChange = (e: MediaQueryListEvent) => setIsNarrow(e.matches);
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia(PHONE_QUERY);
+    const onChange = (e: MediaQueryListEvent) => setIsPhone(e.matches);
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
 
-  return isNarrow;
+  return isPhone;
 }

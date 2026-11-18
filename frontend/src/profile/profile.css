@@ -858,7 +858,7 @@
 }
 
 /* ================= NARROW SCREENS =================
-   On a touch device at 768px and below (the pair useIsNarrow tests)
+   On a touch device at 768px and below
    the page sits beside the 56px icon rail, so the desktop 32px page gutter and
    24px card padding leave a phone under 200px for content. Tighten both. */
 @media (max-width: 768px) and (pointer: coarse) {
