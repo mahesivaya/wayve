@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useIsPhone } from "../components/useIsNarrow";
 import { useNavigate } from "react-router-dom";
 import "./aichat.css";
 
@@ -62,6 +63,7 @@ export default function AIChat({
 }: {
   hideHeader?: boolean;
 }) {
+  const isPhone = useIsPhone();
   const { normalizedSearchQuery } = useGlobalSearch();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -437,7 +439,13 @@ export default function AIChat({
     <div className="ai-chat-input-row">
       <textarea
         className="ai-chat-input"
-        placeholder="Message AI…  (Enter to send, Shift+Enter for newline)"
+        // A phone has no Enter-versus-Shift+Enter to explain, and no room for
+        // the hint: it wrapped to three lines and the box cut the third off.
+        placeholder={
+          isPhone
+            ? "Message AI…"
+            : "Message AI…  (Enter to send, Shift+Enter for newline)"
+        }
         value={input}
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={onKeyDown}

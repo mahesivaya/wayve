@@ -288,6 +288,14 @@
   min-width: 0;
 }
 
+/* A date-and-time field has a fixed natural width, wider than a phone's
+   form; it may shrink to the row. */
+.reminder-form-time {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .reminder-form-title,
 .reminder-form-time,
 .reminder-form-note {

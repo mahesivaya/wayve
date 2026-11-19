@@ -263,4 +263,11 @@
   .ts-input--desc {
     flex-basis: 100%;
   }
+
+  /* Edit and Delete always take the second line. Left to wrap by itself, a row
+     that almost fit kept them beside the name and drew the name over them. */
+  .ts-actions {
+    flex-basis: 100%;
+    justify-content: flex-end;
+  }
 }

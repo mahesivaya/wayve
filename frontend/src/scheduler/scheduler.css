@@ -863,6 +863,9 @@
 }
 input.time-select-input {
   width: 100%;
+  /* Padding counts inside the width; without this the field ran 40px past
+     the right edge of the form. */
+  box-sizing: border-box;
   /* Room for the caret so a long label ("10:45 AM") never runs under it. */
   padding: 8px 28px 8px 10px;
   border: 1px solid var(--border);
@@ -1164,6 +1167,12 @@ input.time-select-input.is-invalid:focus {
   .time-spacer {
     width: 42px;
     flex-basis: 42px;
+  }
+  /* "11 AM" and "12 PM" are a few pixels wider than the slim gutter leaves
+     after its padding, and broke across two lines. */
+  .time-label {
+    padding-right: 4px;
+    white-space: nowrap;
   }
   .week-row .time-label {
     width: 42px;

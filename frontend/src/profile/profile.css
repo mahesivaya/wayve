@@ -866,8 +866,33 @@
     padding: 16px;
   }
 
+  /* The split layout adds its own 32px gutter inside the page's: three paddings
+     deep, a phone's card was 228px wide. One 12px gutter is enough. */
+  .settings-page.settings-page--split {
+    padding: 0;
+  }
+
+  .settings-page--split .settings-content {
+    padding: 12px;
+  }
+
   .settings-card {
     padding: 16px;
+  }
+
+  /* The switch columns only need to hold a switch; the rest goes to the label,
+     whose hint was wrapping one word to a line. */
+  .settings-alert-list .settings-alert-row {
+    grid-template-columns: minmax(0, 1fr) 60px 52px;
+    gap: 8px;
+  }
+
+  .settings-alert-list .settings-alert-row > span:first-child {
+    text-align: left;
+  }
+
+  .settings-alert-list .settings-alert-row.is-head {
+    font-size: var(--text-xs);
   }
 
   /* A row keeps its label and control side by side while they fit, and drops

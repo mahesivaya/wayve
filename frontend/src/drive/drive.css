@@ -675,8 +675,14 @@
     justify-content: flex-start;
   }
 
+  /* The buttons beside it don't shrink, so sharing their row squeezed the
+     folder name down to a sliver. It takes a row of its own instead. */
+  .drive-breadcrumb-actions {
+    flex-wrap: wrap;
+  }
+
   .drive-folder-input {
-    flex: 1;
+    flex: 1 1 100%;
     min-width: 0;
   }
 

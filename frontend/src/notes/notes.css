@@ -498,3 +498,23 @@
   text-align: center;
   padding: 24px;
 }
+
+/* Phones: beside Cancel and Create, the title had room for half its
+   placeholder ("Enter not"). The buttons go on their own line above it, so the
+   title has the full width. */
+@media (max-width: 768px) and (pointer: coarse) {
+  .note-read-header {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .note-read-header .notes-form-actions {
+    order: -1;
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
+
+  .note-read .note-title-input {
+    flex: 1 1 100%;
+  }
+}

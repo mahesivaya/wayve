@@ -430,6 +430,20 @@
   }
 }
 
+/* A phone browser (iOS Safari) zooms the page into any focused field whose text
+   is under 16px, and leaves it zoomed. A form that focuses its first field as it
+   opens ("New chat", "Create task") zoomed straight in and pushed the field past
+   the edge of the screen. 16px on touch devices stops the zoom everywhere.
+   !important because each field sets its own size by class. Checkboxes, radios
+   and sliders have no text to zoom for. */
+@media (hover: none) and (pointer: coarse) {
+  input:not([type="checkbox"], [type="radio"], [type="range"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
 /* The list-view table on the User Stories and Tickets boards reads two pixels
    larger than the rest of the app. The scale is redeclared here, not derived
    from --text-scale, because the tokens above are resolved on :root: a
