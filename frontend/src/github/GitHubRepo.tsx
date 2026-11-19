@@ -11,6 +11,7 @@ import { FileTypeIcon, FolderIcon } from "./FileTypeIcon";
 import { ChangedFilesTree } from "./ChangedFilesTree";
 import { useChangesTreePref, useFileTreePref } from "./fileTreePref";
 import { RepoFileTree } from "./RepoFileTree";
+import { PrCommitList } from "./PrCommitList";
 import { PrTabs } from "./PrTabs";
 import { isPrTab, type PrTab } from "./prTabList";
 import ResizeHandle from "../components/ResizeHandle";
@@ -3109,30 +3110,10 @@ export function GitHubRepoViewer({
                                   No commits to show.
                                 </div>
                               ) : (
-                                <ul className="pr-commit-list">
-                                  {bundle.commits.map((c) => (
-                                    <li key={c.sha} className="pr-commit-row">
-                                      <span className="pr-commit-message">
-                                        {c.commit.message.split("\n")[0]}
-                                      </span>
-                                      <span className="pr-commit-meta">
-                                        {c.author?.login ??
-                                          c.commit.author?.name ??
-                                          "unknown"}
-                                        {c.commit.author?.date &&
-                                          ` · ${formatDate(c.commit.author.date)}`}
-                                      </span>
-                                      <a
-                                        className="pr-commit-sha"
-                                        href={c.html_url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                      >
-                                        {c.sha.slice(0, 7)}
-                                      </a>
-                                    </li>
-                                  ))}
-                                </ul>
+                                <PrCommitList
+                                  commits={bundle.commits}
+                                  formatDate={formatDate}
+                                />
                               )}
                             </section>
                           )}

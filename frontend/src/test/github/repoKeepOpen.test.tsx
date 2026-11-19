@@ -238,10 +238,19 @@ describe("Code Repo keeps its place", () => {
     expect(screen.queryByText("Discussion")).toBeNull();
 
     fireEvent.click(await tab(/Commits/));
-    expect(
-      await screen.findByText("Add the thing", { selector: "span" })
-    ).toBeTruthy();
+    const commit = await screen.findByRole("button", {
+      name: /Add the thing/,
+    });
     expect(screen.getByRole("link", { name: "1111111" })).toBeTruthy();
+    // The row holds only the first line; clicking it shows the whole message.
+    expect(screen.queryByText(/Longer text\./)).toBeNull();
+    fireEvent.click(commit);
+    expect(commit.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText(/Longer text\./).textContent).toBe(
+      "Add the thing\n\nLonger text."
+    );
+    fireEvent.click(commit);
+    expect(screen.queryByText(/Longer text\./)).toBeNull();
 
     fireEvent.click(await tab(/Pipelines/));
     // Failing checks come first.

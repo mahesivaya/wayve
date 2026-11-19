@@ -3290,6 +3290,55 @@
   border-bottom: 0;
 }
 
+/* A commit: its row, and under it the whole message once the row is clicked.
+   The divider belongs to the commit, so it sits below the opened message. */
+.pr-commit {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.pr-commit:last-child {
+  border-bottom: 0;
+}
+
+.pr-commit .pr-commit-row {
+  border-bottom: 0;
+}
+
+.pr-commit-toggle {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pr-commit-toggle:focus-visible {
+  outline: 2px solid var(--color-primary-action);
+  outline-offset: 2px;
+}
+
+.pr-commit-toggle .github-tree-toggle {
+  flex-shrink: 0;
+}
+
+.pr-commit-full {
+  margin: 0;
+  padding: 0 12px 12px 36px;
+  color: var(--color-text-primary);
+  font-family: var(--mono);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .pr-commit-message,
 .pr-check-name {
   flex: 1 1 auto;
