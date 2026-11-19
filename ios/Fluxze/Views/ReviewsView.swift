@@ -4,7 +4,8 @@ import SwiftUI
 /// the web's Code & reviews. Created by you, waiting for your review, or all
 /// of them; open ones first, then merged, then closed.
 struct ReviewsView: View {
-    @StateObject var store: ReviewsStore
+    /// Owned by MainTabView, which also watches it for new pull requests.
+    @ObservedObject var store: ReviewsStore
     @State private var showingSettings = false
 
     var body: some View {

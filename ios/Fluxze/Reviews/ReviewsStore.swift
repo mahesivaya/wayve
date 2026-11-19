@@ -221,6 +221,18 @@ final class ReviewsStore: ObservableObject {
 
     let api: APIClient
     private var generation = 0
+    /// The open pull requests at the last read; nil before the first one.
+    private var knownOpen: Set<String>?
+
+    /// Open pull requests that weren't there at the last read, leaving out
+    /// your own (you know you opened them).
+    static func arrived(in items: [ReviewItem], since known: Set<String>, login: String?) -> [ReviewItem] {
+        items.filter { item in
+            guard item.status == .open || item.status == .draft, !known.contains(item.id) else { return false }
+            guard let login, let author = item.pr.user?.login else { return true }
+            return author.caseInsensitiveCompare(login) != .orderedSame
+        }
+    }
 
     /// Repositories read at once, to stay polite to GitHub's rate limit.
     static let parallel = 6
@@ -294,6 +306,12 @@ final class ReviewsStore: ObservableObject {
             let (found, refused, failed) = await fetchPulls(repos)
             guard mine == generation else { return }
             items = Self.sorted(found)
+            let open = items.filter { $0.status == .open || $0.status == .draft }
+            // A repository that failed this time would look all-new next time.
+            if failed.isEmpty {
+                if let knownOpen { Notifier.newReviews(Self.arrived(in: open, since: knownOpen, login: login)) }
+                knownOpen = Set(open.map(\.id))
+            }
             // GitHub lists every repo on the account, but only those linked to
             // a Fluxze project (or granted to you) can be read; the rest are
             // refused with 403 by design, so they leave the list quietly.

@@ -434,6 +434,7 @@ final class ChatStore: ObservableObject {
                 userId: message.senderId, unreadCount: (dm?.unreadCount ?? 0) + 1,
                 lastMessageAt: message.createdAt ?? Date())
             totalUnread += 1
+            Notifier.chatMessage(from: message.senderName ?? names[message.senderId], senderID: message.senderId)
         } else if let channelID = message.channelId,
                   let channel = channels.first(where: { $0.id == channelID }) {
             touch(.channel(channel), at: message.createdAt)

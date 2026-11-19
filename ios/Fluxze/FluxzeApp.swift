@@ -63,7 +63,11 @@ struct MainTabView: View {
     @StateObject private var chat: ChatStore
     /// Held here so the Inbox tab can show its unread count.
     @StateObject private var emails: EmailsStore
+    /// Held here so new pull requests can be noticed from any tab.
+    @StateObject private var reviews: ReviewsStore
     @AppStorage(Dock.storageKey) private var storedDock = ""
+    @AppStorage(Notifier.enabledKey) private var notificationsOn = true
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selection: DockTab
     /// The area picked from the ⋯ menu, shown in the ⋯ tab.
     @State private var moreArea: AppArea?
@@ -88,6 +92,7 @@ struct MainTabView: View {
         self.hasWorkspace = hasWorkspace
         _chat = StateObject(wrappedValue: ChatStore(api: api, me: me))
         _emails = StateObject(wrappedValue: EmailsStore(api: api, userID: me?.id))
+        _reviews = StateObject(wrappedValue: ReviewsStore(api: api))
         // The app opens on the dock's first area (Inbox, unless it was moved).
         let first = Dock.areas(
             stored: UserDefaults.standard.string(forKey: Dock.storageKey) ?? "",
@@ -138,12 +143,42 @@ struct MainTabView: View {
             }
         }
         .onChange(of: storedDock) { _, _ in keepSelectionValid() }
+        // The app icon carries the same unread counts as the dock.
+        .onChange(of: [emails.unreadTotal, chat.totalUnread], initial: true) { _, counts in
+            Notifier.setBadge(mail: counts[0], chat: counts[1])
+        }
+        .onChange(of: notificationsOn) { _, _ in Notifier.setBadge(mail: emails.unreadTotal, chat: chat.totalUnread) }
+        // New mail is looked for once a minute while the app is in front.
         .task {
+            _ = await emails.checkForNewMail()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                guard scenePhase == .active else { continue }
+                Notifier.newMail(await emails.checkForNewMail())
+            }
+        }
+        // Pull requests are re-read every five minutes; each read reports new ones.
+        .task {
+            guard canSeeCode else { return }
+            while !Task.isCancelled {
+                if scenePhase == .active, Notifier.isOn(Notifier.reviewsKey) { await reviews.load() }
+                try? await Task.sleep(for: .seconds(300))
+            }
+        }
+        // Meeting reminders are set up at launch and each time the app comes back.
+        .task(id: scenePhase == .active) {
+            if scenePhase == .active { await Notifier.refreshMeetings(api: api) }
+        }
+        .task {
+            Notifier.start()
             chat.start()
             if !chat.hasLoaded { await chat.load() }
         }
         // Signing out removes this view; the connection goes with it.
-        .onDisappear { chat.stop() }
+        .onDisappear {
+            chat.stop()
+            Notifier.clear()
+        }
     }
 
     @ViewBuilder
@@ -151,7 +186,7 @@ struct MainTabView: View {
         switch area {
         case .inbox: EmailListView(store: emails)
         case .chat: ChatListView(store: chat)
-        case .reviews: ReviewsView(store: ReviewsStore(api: api))
+        case .reviews: ReviewsView(store: reviews)
         case .tasks: TaskListView(store: TasksStore(api: api))
         case .calendar: CalendarView(store: MeetingsStore(api: api))
         case .drive: DriveView(api: api)

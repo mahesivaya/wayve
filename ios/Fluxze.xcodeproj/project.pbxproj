@@ -30,6 +30,7 @@
 		604D86C753B331BF216A1118 /* Dock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F9C817FD9BA7065F1FFD069 /* Dock.swift */; };
 		66979CAE40B01C9CE115F983 /* KeyVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3128A66A3D4A88578EDB8678 /* KeyVault.swift */; };
 		73D19A88E176F29E8FC90F4D /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E41182006D4E509E502D709 /* Config.swift */; };
+		7A1C00F673C98117A74B6ACD /* Notifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 943FB94391D408176019B25B /* Notifier.swift */; };
 		80D36CEE8C3D642056B88E15 /* ChatSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFCCD91F82D4B79F46DB4303 /* ChatSocket.swift */; };
 		82269CE9F27EA8A40303D737 /* DockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C07F702FD5E0C9CE6C26C64C /* DockTests.swift */; };
 		8452CDD52614BF85AA467C42 /* EmailListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A806B322552A8E7FF2EFF97B /* EmailListView.swift */; };
@@ -62,6 +63,7 @@
 		DEC178D609D05DE5F5EA753D /* CryptoVectors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DABFAFBE6D291D082B4E4C1 /* CryptoVectors.swift */; };
 		E1213DB9BA911F5AB1F426E7 /* FluxzeCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F4E368C5A7B23425891B961 /* FluxzeCrypto.swift */; };
 		E2ABF554072C9C0BBC3C8159 /* TasksStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B45F54C30DE426ACAF23DF0F /* TasksStore.swift */; };
+		E911E0106C8DB267FF0FCF7B /* NotifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AD170E09136A4D1059B7AC9 /* NotifierTests.swift */; };
 		EE5A5A0FDDC1BE2D24E9A87D /* EmailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF10773F318C79C658229FD2 /* EmailTests.swift */; };
 		EEEF7AB9609C4CD348714A13 /* ReviewsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B80ADB774D24E0CAA205C1C /* ReviewsView.swift */; };
 		EEF07746F012F2489091DF70 /* NewLabelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55A137460DFFA70FE657997C /* NewLabelView.swift */; };
@@ -107,6 +109,7 @@
 		5213878C2E83209B514FF266 /* DriveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveTests.swift; sourceTree = "<group>"; };
 		55A137460DFFA70FE657997C /* NewLabelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewLabelView.swift; sourceTree = "<group>"; };
 		56AAA9B20FBD68C3287066A5 /* AuthKeyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthKeyTests.swift; sourceTree = "<group>"; };
+		5AD170E09136A4D1059B7AC9 /* NotifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotifierTests.swift; sourceTree = "<group>"; };
 		6128E138195982F8D720BD56 /* EmailDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailDetailView.swift; sourceTree = "<group>"; };
 		6A3C7267EBB0F47D337E2AF3 /* DriveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveView.swift; sourceTree = "<group>"; };
 		6C2097708C2E965AFD9D852D /* FluxzeCryptoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxzeCryptoTests.swift; sourceTree = "<group>"; };
@@ -122,6 +125,7 @@
 		88F81FF196533060C4BCC785 /* BIP39Wordlist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BIP39Wordlist.swift; sourceTree = "<group>"; };
 		923956E585017DE3F98047CF /* ChatListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatListView.swift; sourceTree = "<group>"; };
 		92BE301963A31FA5300B627E /* InstallReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallReporter.swift; sourceTree = "<group>"; };
+		943FB94391D408176019B25B /* Notifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifier.swift; sourceTree = "<group>"; };
 		983F4294D15151907CC1482C /* ChatModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatModels.swift; sourceTree = "<group>"; };
 		98649CB7D547514D52F29CBA /* Fluxze.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Fluxze.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9F3BFC6A3688FA6F772F1750 /* ReviewsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewsTests.swift; sourceTree = "<group>"; };
@@ -178,6 +182,7 @@
 				5A606097FAD315DB9C6D8EC2 /* Crypto */,
 				E168C78D29794065DACD58FE /* Drive */,
 				B3925A76F9676C694EF4420D /* Emails */,
+				905A698BBAA70448E101B9A5 /* Notifications */,
 				B7C2E7B3C84A547408E8DFAA /* Reviews */,
 				31A6B14FC9FF64CC2472ED33 /* Tasks */,
 				B9ECE5C9EAF8D0132E946727 /* Views */,
@@ -237,10 +242,19 @@
 				E571995527BF46F24154CE6E /* LiveAPITests.swift */,
 				A793A25C948E6A811266F5D1 /* MeetingTests.swift */,
 				744CBD373E925EC5B42D1DB6 /* ModelTests.swift */,
+				5AD170E09136A4D1059B7AC9 /* NotifierTests.swift */,
 				9F3BFC6A3688FA6F772F1750 /* ReviewsTests.swift */,
 				D9791B30BC0FBF28BAD9FAF2 /* Fixtures */,
 			);
 			path = FluxzeTests;
+			sourceTree = "<group>";
+		};
+		905A698BBAA70448E101B9A5 /* Notifications */ = {
+			isa = PBXGroup;
+			children = (
+				943FB94391D408176019B25B /* Notifier.swift */,
+			);
+			path = Notifications;
 			sourceTree = "<group>";
 		};
 		B3925A76F9676C694EF4420D /* Emails */ = {
@@ -451,6 +465,7 @@
 				FB3AC3E5DD538292CF37D152 /* LiveAPITests.swift in Sources */,
 				DAFA4D61E1091E95A5CAE167 /* MeetingTests.swift in Sources */,
 				AB642C09E34CD8E7083813B5 /* ModelTests.swift in Sources */,
+				E911E0106C8DB267FF0FCF7B /* NotifierTests.swift in Sources */,
 				359A444CCFB63048BC6B5047 /* ReviewsTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -494,6 +509,7 @@
 				BFE5BFA694E56506EF74B3B3 /* MeetingsStore.swift in Sources */,
 				20F35B7C59F6F9FCB66E102D /* Models.swift in Sources */,
 				EEF07746F012F2489091DF70 /* NewLabelView.swift in Sources */,
+				7A1C00F673C98117A74B6ACD /* Notifier.swift in Sources */,
 				1BA2C914BF0C97B19A5CF35A /* PullRequestDetailView.swift in Sources */,
 				D597495524455D9FF269C46E /* ReviewsStore.swift in Sources */,
 				EEEF7AB9609C4CD348714A13 /* ReviewsView.swift in Sources */,

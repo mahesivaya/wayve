@@ -107,6 +107,39 @@ final class EmailsStore: ObservableObject {
         }
     }
 
+    // MARK: New mail, for notifications
+
+    /// The inbox's newest ids at the last check; nil before the first one.
+    private var knownInbox: Set<Int>?
+
+    /// Unread mail on the inbox's first page that wasn't there before. Mail
+    /// gets a higher id as it arrives, so an older message sliding onto the
+    /// page (after others were trashed) doesn't count.
+    static func arrived(in page: [EmailSummary], since known: Set<Int>) -> [EmailSummary] {
+        guard let newest = known.max() else { return [] }
+        return page.filter { !$0.isRead && $0.id > newest && !known.contains($0.id) }
+    }
+
+    /// Looks at the inbox of every mailbox and returns what arrived since the
+    /// last look (nothing the first time). Also brings the unread counts up to
+    /// date, and puts the new mail at the top of the inbox when it's showing.
+    func checkForNewMail() async -> [EmailSummary] {
+        let path = Self.listPath(folder: .inbox, accountID: nil, query: "", before: nil)
+        guard let page: [EmailSummary] = try? await api.get(path) else { return [] }
+        if let fresh: [MailAccount] = try? await api.get("/api/accounts") { accounts = fresh }
+        guard let known = knownInbox else {
+            knownInbox = Set(page.map(\.id))
+            return []
+        }
+        knownInbox = known.union(page.map(\.id))
+        let arrived = Self.arrived(in: page, since: known)
+        if !arrived.isEmpty, isInbox, accountID == nil, query.isEmpty, !isLoading {
+            let shown = Set(emails.map(\.id))
+            emails.insert(contentsOf: arrived.filter { !shown.contains($0.id) }, at: 0)
+        }
+        return arrived
+    }
+
     /// The message body, readable. Most stored bodies are sealed to the owner's
     /// end-to-end key: with that key on this phone it opens here, like in the
     /// browser. Otherwise `?live=true` has the server fetch the message from the

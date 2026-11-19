@@ -13,6 +13,9 @@ struct SettingsView: View {
                     NavigationLink { AccountSettingsView() } label: {
                         Label("Account", systemImage: "person")
                     }
+                    NavigationLink { NotificationSettingsView() } label: {
+                        Label("Notifications", systemImage: "bell")
+                    }
                     NavigationLink { AppearanceSettingsView() } label: {
                         Label("Appearance", systemImage: "circle.lefthalf.filled")
                     }
