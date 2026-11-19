@@ -97,7 +97,17 @@ pub async fn get_messages(
 
     // Mark what the caller received from the other party as read and push a
     // receipt so their ticks flip without waiting for their next history fetch.
-    let read_ids: Vec<(i32,)> = sqlx::query_as(
+    //
+    // The receiver is the authenticated caller, never a position in the query:
+    // either participant may list themselves first or second, and marking by
+    // position let a sender pass the ids the other way round and mark their own
+    // sent messages as read by the person who had not opened them.
+    let other_id = if caller_id == query.user1 {
+        query.user2
+    } else {
+        query.user1
+    };
+    let read_ids: Vec<(i32,)> = match sqlx::query_as(
         r#"
         UPDATE messages
         SET status = 'read'
@@ -106,13 +116,24 @@ pub async fn get_messages(
         RETURNING id
         "#,
     )
-    .bind(query.user1)
-    .bind(query.user2)
+    .bind(caller_id)
+    .bind(other_id)
     .fetch_all(&mut *tx)
     .await
-    .unwrap_or_default();
+    {
+        Ok(ids) => ids,
+        Err(e) => {
+            // The history above was already read; a failed receipt must not
+            // lose it. It is logged rather than swallowed.
+            warn!(target: "db", caller_id, other_id, error = ?e, "mark-read failed");
+            Vec::new()
+        }
+    };
+    // Committed before anyone is told, so a receipt never describes a change
+    // that could still roll back, and no row lock is held across the fan-out.
     tx.commit().await?;
 
+    // The sender's ticks, then the caller's own other tabs and devices.
     for (message_id,) in &read_ids {
         let payload = serde_json::json!({
             "type": "status_update",
@@ -120,10 +141,10 @@ pub async fn get_messages(
             "status": "read"
         })
         .to_string();
-        super::websocket::fan_out_user(cache.get_ref(), query.user2, payload).await;
+        super::websocket::fan_out_user(cache.get_ref(), other_id, payload).await;
     }
     if !read_ids.is_empty() {
-        super::websocket::notify_conversation_read(cache.get_ref(), query.user1, query.user2).await;
+        super::websocket::notify_conversation_read(cache.get_ref(), caller_id, other_id).await;
     }
 
     // `decrypt` strips only the storage-at-rest layer. What comes back is the
