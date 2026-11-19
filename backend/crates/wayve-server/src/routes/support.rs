@@ -10,7 +10,6 @@ use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
-use wayve_security::encryption::{decrypt_binary, encrypt_binary};
 use wayve_security::jwt::get_user_id_from_request;
 use wayve_security::rbac::{self, Permission, RoleContext, Scope};
 
@@ -444,10 +443,11 @@ pub async fn upload_ticket_attachments(
             plaintext.extend_from_slice(&data);
         }
 
-        let (file_iv, encrypted_bytes) = encrypt_binary(&plaintext).map_err(|e| {
-            error!(target: "http", error = %e, "support attachment encrypt failed");
-            actix_web::error::ErrorInternalServerError("File encrypt error")
-        })?;
+        let (file_iv, encrypted_bytes) =
+            crate::storage::encrypt_file(plaintext).await.map_err(|e| {
+                error!(target: "http", error = %e, "support attachment encrypt failed");
+                actix_web::error::ErrorInternalServerError("File encrypt error")
+            })?;
 
         crate::storage::put(&filepath, encrypted_bytes)
             .await
@@ -546,9 +546,11 @@ pub async fn download_ticket_attachment(
     match crate::storage::get(&file_path).await {
         Ok(bytes) => {
             let body = match file_iv.as_deref().filter(|v| !v.is_empty()) {
-                Some(iv) => decrypt_binary(iv, &bytes).map_err(|e| {
-                    AppError::Internal(format!("support attachment decrypt failed: {e}"))
-                })?,
+                Some(iv) => crate::storage::decrypt_file(iv.to_owned(), bytes)
+                    .await
+                    .map_err(|e| {
+                        AppError::Internal(format!("support attachment decrypt failed: {e}"))
+                    })?,
                 None => bytes,
             };
 

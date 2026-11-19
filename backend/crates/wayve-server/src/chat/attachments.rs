@@ -20,7 +20,6 @@ use futures_util::StreamExt;
 use sqlx::{PgPool, Row};
 use tracing::{error, info, instrument};
 use uuid::Uuid;
-use wayve_security::encryption::{decrypt_binary, encrypt_binary};
 use wayve_security::jwt::get_user_id_from_request;
 
 // Reject absurdly large attachments early (matches the ~25 MB client cap).
@@ -85,7 +84,7 @@ pub async fn upload_chat_attachment(
             plaintext.extend_from_slice(&data);
         }
 
-        let (iv, encrypted) = encrypt_binary(&plaintext).map_err(|e| {
+        let (iv, encrypted) = crate::storage::encrypt_file(plaintext).await.map_err(|e| {
             error!(target: "http", error = %e, "attachment encrypt failed");
             actix_web::error::ErrorInternalServerError("File encrypt error")
         })?;
@@ -193,7 +192,8 @@ pub async fn download_chat_attachment(
     // Strip the server at-rest layer. For an e2e upload the result is still the
     // client ciphertext, which only the browser can decrypt.
     let body = match file_iv.as_deref().filter(|v| !v.is_empty()) {
-        Some(iv) => decrypt_binary(iv, &bytes)
+        Some(iv) => crate::storage::decrypt_file(iv.to_owned(), bytes)
+            .await
             .map_err(|e| AppError::Internal(format!("attachment decrypt failed: {e}")))?,
         None => bytes,
     };

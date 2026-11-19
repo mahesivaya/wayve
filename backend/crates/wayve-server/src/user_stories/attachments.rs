@@ -12,7 +12,6 @@ use futures_util::StreamExt;
 use sqlx::Row;
 use tracing::{error, info, instrument};
 use uuid::Uuid;
-use wayve_security::encryption::{decrypt_binary, encrypt_binary};
 use wayve_security::jwt::get_user_id_from_request;
 
 #[derive(Serialize)]
@@ -110,7 +109,8 @@ pub async fn upload_attachments(
             plaintext.extend_from_slice(&data);
         }
 
-        let (file_iv, encrypted_bytes) = encrypt_binary(&plaintext)
+        let (file_iv, encrypted_bytes) = crate::storage::encrypt_file(plaintext)
+            .await
             .map_err(|_| actix_web::error::ErrorInternalServerError("File encrypt error"))?;
 
         crate::storage::put(&filepath, encrypted_bytes)
@@ -207,9 +207,11 @@ pub async fn download_attachment(
     match crate::storage::get(&file_path).await {
         Ok(bytes) => {
             let body = match file_iv.as_deref().filter(|v| !v.is_empty()) {
-                Some(iv) => decrypt_binary(iv, &bytes).map_err(|e| {
-                    AppError::Internal(format!("story attachment decrypt failed: {e}"))
-                })?,
+                Some(iv) => crate::storage::decrypt_file(iv.to_owned(), bytes)
+                    .await
+                    .map_err(|e| {
+                        AppError::Internal(format!("story attachment decrypt failed: {e}"))
+                    })?,
                 None => bytes,
             };
             Ok(HttpResponse::Ok()
