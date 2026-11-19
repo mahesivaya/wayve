@@ -1421,6 +1421,16 @@ pub async fn upsert_batch(
     Ok(results)
 }
 
+tokio::task_local! {
+    /// The newest `last_message_at` stamped while one account syncs, keyed by
+    /// that account. `sync_one_account` opens it around the whole sync and
+    /// returns what landed here, so the scheduler learns the account's new
+    /// freshness without reading the row back. Every stamp inside the sync runs
+    /// on the same task (the inner fan-out is `buffer_unordered`, not spawns),
+    /// so all of them see it; a stamp outside any sync finds no slot and skips.
+    pub(crate) static STAMPED_LAST_MESSAGE: std::cell::Cell<(i32, Option<NaiveDateTime>)>;
+}
+
 /// Advances the account's freshness signal to the newest genuinely-new row's
 /// timestamp. Only `is_new` rows count, and GREATEST + COALESCE stops a
 /// late-arriving older message (a backfill page) rolling the clock backwards.
@@ -1433,24 +1443,40 @@ async fn stamp_last_message_at(pool: &PgPool, account_id: i32, results: &[Insert
     else {
         return;
     };
-    if let Err(err) = sqlx::query(
+    // RETURNING gives the stored value after GREATEST, so a newer stamp from a
+    // concurrent sync of the same account is reported, not rolled back.
+    match sqlx::query_scalar::<_, Option<NaiveDateTime>>(
         "UPDATE email_accounts \
          SET last_message_at = GREATEST(COALESCE(last_message_at, $1), $1) \
-         WHERE id = $2",
+         WHERE id = $2 \
+         RETURNING last_message_at",
     )
     .bind(max_new)
     .bind(account_id)
-    .execute(pool)
+    .fetch_optional(pool)
     .await
     {
-        // Best-effort: a failed stamp only makes the next sync cycle treat this
-        // account as quieter than it is, and the email row already landed.
-        tracing::warn!(
-            target: "worker",
-            account_id,
-            error = ?err,
-            "failed to stamp last_message_at after upsert"
-        );
+        Ok(Some(stored)) => {
+            let _ = STAMPED_LAST_MESSAGE.try_with(|slot| {
+                let (slot_account, seen) = slot.get();
+                if slot_account == account_id {
+                    slot.set((account_id, seen.max(stored)));
+                }
+            });
+        }
+        // The account was deleted mid-sync; nothing to report.
+        Ok(None) => {}
+        Err(err) => {
+            // Best-effort: a failed stamp only makes the next sync cycle treat
+            // this account as quieter than it is, and the email row already
+            // landed.
+            tracing::warn!(
+                target: "worker",
+                account_id,
+                error = ?err,
+                "failed to stamp last_message_at after upsert"
+            );
+        }
     }
 }
 

@@ -45,6 +45,7 @@ mod email_reply_headers_test;
 mod email_resync_test;
 mod email_sidebar_test;
 mod email_snooze_test;
+mod email_stamp_slot_test;
 mod email_star_test;
 mod email_threading_test;
 mod email_trash_test;
