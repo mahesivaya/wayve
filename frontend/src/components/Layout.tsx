@@ -93,7 +93,7 @@ import { isDesktopApp } from "../utils/desktop";
 import "./Layout.css";
 import {
   HomeIcon,
-  EmailsIcon,
+  InboxIcon,
   ChatIcon,
   SchedulerIcon,
   DriveIcon,
@@ -2664,7 +2664,7 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
                       "/emails",
                       "emails",
                       "Inbox",
-                      <EmailsIcon size={18} />,
+                      <InboxIcon size={18} />,
                       emailsUnreadCount
                     )}
                     {renderSidebarItem(
