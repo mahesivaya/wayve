@@ -857,6 +857,11 @@
   font-size: var(--text-md);
 }
 
+/* A step of a path that isn't a link (a merge request's repo owner). */
+.github-path .github-path-part {
+  color: var(--color-text-muted);
+}
+
 .github-path .github-path-sep {
   color: var(--color-text-muted);
 }

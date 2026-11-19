@@ -148,6 +148,12 @@ const leaveOff = (fields: Partial<RepoView>) => {
   rememberRepoView(USER, FULL, view(fields));
 };
 
+// The "Merge requests" step of the path above an open merge request.
+const backToList = () =>
+  within(
+    screen.getByRole("navigation", { name: "Merge request path" })
+  ).getByRole("button", { name: "Merge requests" });
+
 describe("Code Repo keeps its place", () => {
   beforeEach(() => {
     sessionStorage.clear();
@@ -181,19 +187,19 @@ describe("Code Repo keeps its place", () => {
     localStorage.setItem("rwayve.github.section", "pulls");
     renderPage();
     fireEvent.click(await screen.findByText("Add the thing"));
-    await screen.findByText("← Back to merge requests");
+    await screen.findByRole("navigation", { name: "Merge request path" });
     await waitFor(() => expect(readRepoView(USER, FULL)?.pull).toBe(7));
 
     // Switching tabs unmounts the page.
     cleanup();
     fetchMock.mockClear();
     renderPage();
-    await screen.findByText("← Back to merge requests");
+    await screen.findByRole("navigation", { name: "Merge request path" });
     expect(fetched(`${API}/pulls/7`)).toBe(true);
     expect(readRepoView(USER, FULL)?.pull).toBe(7);
 
     // Going back to the list is remembered too.
-    fireEvent.click(screen.getByText("← Back to merge requests"));
+    fireEvent.click(backToList());
     await waitFor(() => expect(readRepoView(USER, FULL)?.pull).toBeNull());
   });
 
@@ -326,6 +332,38 @@ describe("Code Repo keeps its place", () => {
     expect(screen.getByText("opened.ts")).toBeTruthy();
   });
 
+  it("shows where a merge request sits as a path, each step a way back", async () => {
+    localStorage.setItem("rwayve.github.section", "pulls");
+    leaveOff({ branch: "main", pull: 7 });
+    renderPage();
+    const path = await screen.findByRole("navigation", {
+      name: "Merge request path",
+    });
+    expect(path.textContent).toBe("acme/app/Merge requests/#7");
+    expect(within(path).getByText("#7").getAttribute("aria-current")).toBe(
+      "page"
+    );
+    expect(screen.queryByText(/Back to merge requests/)).toBeNull();
+
+    // "Merge requests" returns to the list.
+    fireEvent.click(backToList());
+    expect(await screen.findByText("Add the thing")).toBeTruthy();
+    expect(
+      screen.queryByRole("navigation", { name: "Merge request path" })
+    ).toBeNull();
+
+    // The repo name leaves merge requests for the repo's description.
+    fireEvent.click(screen.getByText("Add the thing"));
+    fireEvent.click(
+      within(
+        await screen.findByRole("navigation", { name: "Merge request path" })
+      ).getByRole("button", { name: "app" })
+    );
+    expect(
+      await screen.findByRole("main", { name: "Project description" })
+    ).toBeTruthy();
+  });
+
   it("returns to the tab the merge request was left on", async () => {
     localStorage.setItem("rwayve.github.section", "pulls");
     leaveOff({ branch: "main", pull: 7 });
@@ -340,7 +378,7 @@ describe("Code Repo keeps its place", () => {
     renderPage();
     expect(await screen.findByText("opened.ts")).toBeTruthy();
     // Going back to the list and opening it again starts at Overview.
-    fireEvent.click(screen.getByText("← Back to merge requests"));
+    fireEvent.click(backToList());
     fireEvent.click(await screen.findByText("Add the thing"));
     expect(
       (await screen.findByRole("tab", { name: /Overview/ })).getAttribute(

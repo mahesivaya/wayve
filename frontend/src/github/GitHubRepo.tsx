@@ -2648,13 +2648,41 @@ export function GitHubRepoViewer({
             ) : (
               <div className="github-panel">
                 <div className="github-pr-detail-head">
-                  <button
-                    type="button"
-                    className="github-link-btn"
-                    onClick={() => setSelectedPull(null)}
-                  >
-                    ← Back to merge requests
-                  </button>
+                  {/* Where this merge request sits, in place of a back link:
+                      owner / repo / Merge requests / #number. The repo opens
+                      its description and "Merge requests" the list. */}
+                  <nav className="github-path" aria-label="Merge request path">
+                    <span className="github-path-part">{owner}</span>
+                    <span className="github-path-sep" aria-hidden="true">
+                      /
+                    </span>
+                    <button
+                      type="button"
+                      className="github-path-link"
+                      onClick={() => {
+                        setSelectedPull(null);
+                        setActiveSection("description");
+                      }}
+                    >
+                      {repoName}
+                    </button>
+                    <span className="github-path-sep" aria-hidden="true">
+                      /
+                    </span>
+                    <button
+                      type="button"
+                      className="github-path-link"
+                      onClick={() => setSelectedPull(null)}
+                    >
+                      Merge requests
+                    </button>
+                    <span className="github-path-sep" aria-hidden="true">
+                      /
+                    </span>
+                    <span className="github-path-current" aria-current="page">
+                      #{selectedPull}
+                    </span>
+                  </nav>
                 </div>
                 {loadingPullNumbers.has(selectedPull) ? (
                   <div className="github-empty">Loading merge request…</div>

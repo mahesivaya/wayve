@@ -74,7 +74,7 @@ const renderViewer = () =>
   );
 
 // The merge action itself. Matching buttons by "merge" would also find the
-// "Merge Requests" tab and the "Back to merge requests" link.
+// "Merge Requests" tab and the "Merge requests" step of the path.
 const mergeControl = () => document.querySelector(".pr-merge-pill");
 
 describe("pull requests for a non-owner", () => {
