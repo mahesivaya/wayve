@@ -13,7 +13,8 @@ use rsa::{
     pkcs8::{DecodePublicKey, EncodePrivateKey, EncodePublicKey},
 };
 use serde::{Deserialize, Serialize};
-use sha2::{Sha256, Sha512};
+use sha2::{Digest, Sha256, Sha512};
+use std::sync::{Arc, RwLock};
 use zeroize::Zeroize;
 
 const HKDF_INFO: &[u8] = b"rwayve:v1:aes-256-gcm:messages-email-bodies";
@@ -33,16 +34,15 @@ pub fn encrypt(text: &str) -> Result<(String, String)> {
 }
 
 pub fn encrypt_binary(bytes: &[u8]) -> Result<(String, Vec<u8>)> {
-    let key_bytes = get_key().map_err(anyhow::Error::msg)?;
-    let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
-    let cipher = Aes256Gcm::new(key);
+    let keys = derived_keys().map_err(anyhow::Error::msg)?;
 
     let mut nonce_bytes = [0u8; 12];
     thread_rng().fill_bytes(&mut nonce_bytes);
 
     let nonce = Nonce::from_slice(&nonce_bytes);
 
-    let ciphertext = cipher
+    let ciphertext = keys
+        .cipher
         .encrypt(nonce, bytes)
         .map_err(|e| anyhow::anyhow!("encryption failed: {:?}", e))?;
 
@@ -50,7 +50,7 @@ pub fn encrypt_binary(bytes: &[u8]) -> Result<(String, Vec<u8>)> {
 }
 
 pub fn decrypt_binary(nonce_b64: &str, ciphertext: &[u8]) -> Result<Vec<u8>, String> {
-    let key_bytes = get_key()?;
+    let keys = derived_keys()?;
     let nonce = general_purpose::STANDARD
         .decode(nonce_b64)
         .map_err(|e| format!("Nonce decode error: {:?}", e))?;
@@ -66,11 +66,11 @@ pub fn decrypt_binary(nonce_b64: &str, ciphertext: &[u8]) -> Result<Vec<u8>, Str
         return Err("Empty ciphertext".to_string());
     }
 
-    decrypt_with_legacy_fallback(&key_bytes, &nonce, ciphertext)
+    decrypt_with_legacy_fallback(&keys, &nonce, ciphertext)
 }
 
 pub fn decrypt(nonce_b64: &str, cipher_b64: &str) -> Result<String, String> {
-    let key_bytes = get_key()?;
+    let keys = derived_keys()?;
 
     let nonce = general_purpose::STANDARD
         .decode(nonce_b64)
@@ -93,37 +93,116 @@ pub fn decrypt(nonce_b64: &str, cipher_b64: &str) -> Result<String, String> {
         return Err("Empty ciphertext".to_string());
     }
 
-    let decrypted = decrypt_with_legacy_fallback(&key_bytes, &nonce, &ciphertext)?;
+    let decrypted = decrypt_with_legacy_fallback(&keys, &nonce, &ciphertext)?;
 
     let text = String::from_utf8(decrypted).map_err(|e| format!("UTF8 error: {:?}", e))?;
 
     Ok(text)
 }
 
+/// Rows written before HKDF was introduced were encrypted with `AES_KEY` used
+/// directly. They are tried with that key only when the derived key fails,
+/// which is rare, so the direct key is read fresh rather than kept around.
 fn decrypt_with_legacy_fallback(
-    key_bytes: &[u8; 32],
+    keys: &DerivedKeys,
     nonce: &[u8],
     ciphertext: &[u8],
 ) -> Result<Vec<u8>, String> {
-    decrypt_bytes(key_bytes, nonce, ciphertext).or_else(|hkdf_error| {
-        let legacy_key = get_key_material()?;
-
-        if legacy_key == *key_bytes {
-            return Err(hkdf_error);
-        }
-
-        decrypt_bytes(&legacy_key, nonce, ciphertext).map_err(|_| hkdf_error)
-    })
+    keys.cipher
+        .decrypt(Nonce::from_slice(nonce), ciphertext)
+        .map_err(|e| format!("Decrypt error: {:?}", e))
+        .or_else(|hkdf_error| {
+            let mut legacy_key = get_key_material()?;
+            let legacy = decrypt_bytes(&legacy_key, nonce, ciphertext).map_err(|_| hkdf_error);
+            legacy_key.zeroize();
+            legacy
+        })
 }
 
-fn get_key() -> Result<[u8; 32], String> {
-    let key_material = get_key_material()?;
-    derive_hkdf_sha512_key(&key_material)
+/// The keys derived from `AES_KEY`, built once and reused: deriving them (hex
+/// decode, HKDF-SHA512, the AES key schedule, keying the HMAC) used to run on
+/// every encrypt, decrypt and hash.
+struct DerivedKeys {
+    /// SHA-256 of the `AES_KEY` and salt these were derived from. Compared on
+    /// each use so a changed key or salt is picked up instead of the old keys
+    /// being kept for the life of the process; the secret itself is not kept.
+    source: [u8; 32],
+    /// AES-256-GCM with its key schedule already built. Encrypts through `&self`.
+    cipher: Aes256Gcm,
+    /// HMAC-SHA256 already keyed for address and thread hashes; cloned per hash.
+    hash_mac: Hmac<Sha256>,
+}
+
+static DERIVED_KEYS: RwLock<Option<Arc<DerivedKeys>>> = RwLock::new(None);
+
+fn key_source(aes_key: &str, salt: &[u8]) -> [u8; 32] {
+    let mut digest = Sha256::new();
+    digest.update(b"rwayve:derived-keys-source\0");
+    digest.update(aes_key.as_bytes());
+    digest.update(b"\0");
+    digest.update(salt);
+    digest.finalize().into()
+}
+
+/// The derived keys for the current `AES_KEY` and salt. Reading the two settings
+/// is cheap; deriving is not, so it runs only when they differ from what the
+/// cached keys came from. That is once in production, where neither changes
+/// without a restart. A failure (no `AES_KEY`) is returned, never cached.
+fn derived_keys() -> Result<Arc<DerivedKeys>, String> {
+    let aes_key = crate::config::aes_key()
+        .ok_or_else(|| "AES_KEY is not set. Configure a 64-character Hex64 key.".to_string())?;
+    let salt = hkdf_salt();
+    let source = key_source(&aes_key, &salt);
+
+    // A poisoned lock still holds usable keys: nothing can be left half
+    // written, since the slot is only ever replaced whole.
+    if let Some(keys) = DERIVED_KEYS
+        .read()
+        .unwrap_or_else(|poison| poison.into_inner())
+        .as_ref()
+        .filter(|keys| keys.source == source)
+    {
+        return Ok(keys.clone());
+    }
+
+    let mut key_material = parse_key_material(&aes_key)?;
+    let hk = Hkdf::<Sha512>::new(Some(&salt), &key_material);
+    key_material.zeroize();
+
+    let mut aes_key_bytes = [0u8; 32];
+    let mut mac_key = [0u8; 32];
+    let built = hk
+        .expand(HKDF_INFO, &mut aes_key_bytes)
+        .and_then(|()| hk.expand(HKDF_INFO_ADDR_HASH, &mut mac_key))
+        .map_err(|_| "HKDF-SHA512 key derivation failed".to_string())
+        .and_then(|()| {
+            let hash_mac = <Hmac<Sha256> as Mac>::new_from_slice(&mac_key)
+                .map_err(|e| format!("hmac init failed: {e:?}"))?;
+            Ok(DerivedKeys {
+                source,
+                cipher: Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&aes_key_bytes)),
+                hash_mac,
+            })
+        });
+    aes_key_bytes.zeroize();
+    mac_key.zeroize();
+
+    let keys = Arc::new(built?);
+    // Two threads deriving at once both store the same keys; either is right.
+    *DERIVED_KEYS
+        .write()
+        .unwrap_or_else(|poison| poison.into_inner()) = Some(keys.clone());
+    Ok(keys)
 }
 
 fn get_key_material() -> Result<[u8; 32], String> {
     let key = crate::config::aes_key()
         .ok_or_else(|| "AES_KEY is not set. Configure a 64-character Hex64 key.".to_string())?;
+    parse_key_material(&key)
+}
+
+/// `AES_KEY` as 32 bytes: 64 hex characters, or (legacy) 32 raw characters.
+fn parse_key_material(key: &str) -> Result<[u8; 32], String> {
     let trimmed = key.trim();
 
     if trimmed.len() == 64 && trimmed.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -134,29 +213,6 @@ fn get_key_material() -> Result<[u8; 32], String> {
         .as_bytes()
         .try_into()
         .map_err(|_| "AES_KEY must be Hex64 (64 hex chars for 32 bytes)".to_string())
-}
-
-fn derive_hkdf_sha512_key(input_key_material: &[u8; 32]) -> Result<[u8; 32], String> {
-    let salt = hkdf_salt();
-    let hk = Hkdf::<Sha512>::new(Some(&salt), input_key_material);
-    let mut output_key_material = [0u8; 32];
-
-    hk.expand(HKDF_INFO, &mut output_key_material)
-        .map_err(|_| "HKDF-SHA512 key derivation failed".to_string())?;
-
-    Ok(output_key_material)
-}
-
-fn derive_address_hmac_key() -> Result<[u8; 32], String> {
-    // Same root key material, separate HKDF context: a leaked HMAC key cannot
-    // decrypt AES-GCM messages, and vice versa.
-    let key_material = get_key_material()?;
-    let salt = hkdf_salt();
-    let hk = Hkdf::<Sha512>::new(Some(&salt), &key_material);
-    let mut out = [0u8; 32];
-    hk.expand(HKDF_INFO_ADDR_HASH, &mut out)
-        .map_err(|_| "HKDF expand for address HMAC failed".to_string())?;
-    Ok(out)
 }
 
 /// Lowercase and trim for deterministic hashing. Dots in gmail-style locals are
@@ -176,9 +232,7 @@ pub fn compute_address_hash(addr: &str) -> Result<Option<String>, String> {
     if normalized.is_empty() {
         return Ok(None);
     }
-    let key = derive_address_hmac_key()?;
-    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&key)
-        .map_err(|e| format!("hmac init failed: {e:?}"))?;
+    let mut mac = derived_keys()?.hash_mac.clone();
     Mac::update(&mut mac, normalized.as_bytes());
     let out = mac.finalize().into_bytes();
     Ok(Some(hex_encode(&out)))
@@ -194,9 +248,7 @@ pub fn compute_thread_key_hash(kind: &str, value: &str) -> Result<Option<String>
     if value.is_empty() {
         return Ok(None);
     }
-    let key = derive_address_hmac_key()?;
-    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&key)
-        .map_err(|e| format!("hmac init failed: {e:?}"))?;
+    let mut mac = derived_keys()?.hash_mac.clone();
     Mac::update(&mut mac, b"thread-key\0");
     Mac::update(&mut mac, kind.as_bytes());
     Mac::update(&mut mac, b"\0");
