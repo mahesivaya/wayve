@@ -3143,6 +3143,49 @@
   font-weight: 600;
   color: var(--color-text-primary);
 }
+/* Changes tab: a switch above the diffs shows the changed files as a tree in a
+   column beside them, which stays in view while the diffs scroll. */
+.pr-changes-diffs {
+  min-width: 0;
+}
+
+.pr-changes-side-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.github-pr-block-body.has-changes-tree {
+  display: grid;
+  grid-template-columns: minmax(180px, 280px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.github-pr-block-body.has-changes-tree .pr-changes-side {
+  position: sticky;
+  top: 8px;
+  max-height: calc(100vh - 160px);
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+
+/* A changed file's +/− counts, at the end of its row in the tree. */
+.github-tree-stats {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 6px;
+  margin-left: auto;
+  padding-left: 8px;
+  font-size: var(--text-xs);
+}
+
 /* The tabs at the top of a merge request: Overview / Commits / Pipelines /
    Changes, each with a count. The open one is underlined. */
 .pr-tabs {

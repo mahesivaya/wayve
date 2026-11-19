@@ -8,7 +8,8 @@ import { getAuthToken } from "../auth/token";
 import RepoAccessPanel from "./RepoAccessPanel";
 import ReadmeView from "./ReadmeView";
 import { FileTypeIcon, FolderIcon } from "./FileTypeIcon";
-import { useFileTreePref } from "./fileTreePref";
+import { ChangedFilesTree } from "./ChangedFilesTree";
+import { useChangesTreePref, useFileTreePref } from "./fileTreePref";
 import { RepoFileTree } from "./RepoFileTree";
 import { PrTabs } from "./PrTabs";
 import { isPrTab, type PrTab } from "./prTabList";
@@ -856,6 +857,9 @@ export function GitHubRepoViewer({
   // downward and the branch names can be themed.
   const [treeItems, setTreeItems] = useState<DirectoryCache>({});
   const [fileTreeShown, setFileTreeShown] = useFileTreePref();
+  const [changesTreeShown, setChangesTreeShown] = useChangesTreePref();
+  // The Changes tab's diffs, for the tree to find a file's diff in.
+  const pullFilesRef = useRef<HTMLDivElement | null>(null);
   // The folder being listed, unless a file is open over it.
   const [currentDir, setCurrentDir] = useState("");
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
@@ -2889,117 +2893,197 @@ export function GitHubRepoViewer({
                                 )}
                               </button>
                               {!isCollapsed("files") && (
-                                <div className="github-pr-block-body">
-                                  {bundle.files.length === 0 ? (
-                                    <div className="github-empty">
-                                      No file changes to show.
-                                    </div>
-                                  ) : (
-                                    bundle.files.map((file) => {
-                                      const fileKey = `pr-${selectedPull}::${file.filename}`;
-                                      const fileOpen =
-                                        !diffs.collapsedFiles.has(fileKey);
-                                      return (
-                                        <article
-                                          key={file.filename}
-                                          className={`github-commit-file status-${file.status} ${fileOpen ? "is-open" : "is-collapsed"}`}
-                                        >
-                                          <button
-                                            type="button"
-                                            className="github-commit-file-head"
-                                            onClick={() =>
-                                              diffs.toggleFile(fileKey)
-                                            }
-                                            aria-expanded={fileOpen}
-                                          >
-                                            <span
-                                              className={`github-tree-toggle ${fileOpen ? "open" : ""}`}
-                                              aria-hidden="true"
-                                            >
-                                              <ChevronIcon />
-                                            </span>
-                                            <DiffFileName
-                                              filename={file.filename}
-                                              previousFilename={
-                                                file.previous_filename
-                                              }
-                                            />
-                                            <span className="github-commit-file-meta">
-                                              <em
-                                                className={`github-commit-status status-${file.status}`}
-                                              >
-                                                {file.status}
-                                              </em>
-                                              <span className="github-commit-stat is-add">
-                                                +{file.additions}
-                                              </span>
-                                              <span className="github-commit-stat is-del">
-                                                −{file.deletions}
-                                              </span>
-                                            </span>
-                                          </button>
-                                          {fileOpen &&
-                                            (file.patch ? (
-                                              <CommitSplitPatch
-                                                key={`${fileKey}@${bundle.detail.head.sha}`}
-                                                patch={file.patch}
-                                                filename={file.filename}
-                                                loadLines={
-                                                  canExpandFile(file.status)
-                                                    ? () =>
-                                                        diffs.loadFileLines(
-                                                          bundle.detail.head
-                                                            .sha,
-                                                          file.filename
-                                                        )
-                                                    : undefined
-                                                }
-                                                lineComments={pullLineComments(
-                                                  selectedPull,
-                                                  bundle.detail.head.sha,
-                                                  file.filename,
-                                                  bundle.lineComments
-                                                )}
-                                              />
-                                            ) : (
-                                              <div className="github-commit-nopatch">
-                                                Binary file or diff not
-                                                available — open on GitHub to
-                                                view.
-                                              </div>
-                                            ))}
-                                        </article>
-                                      );
-                                    })
-                                  )}
-                                  {(hasMissingPatch || rawDiff) && (
-                                    <div className="github-commit-fulldiff">
-                                      {!rawDiff && (
+                                <div
+                                  className={`github-pr-block-body${
+                                    changesTreeShown && bundle.files.length > 0
+                                      ? " has-changes-tree"
+                                      : ""
+                                  }`}
+                                >
+                                  {bundle.files.length > 0 && (
+                                    <aside
+                                      className="pr-changes-side"
+                                      aria-label="Changed files"
+                                    >
+                                      <div className="pr-changes-side-head">
                                         <button
                                           type="button"
-                                          className="github-commit-fulldiff-btn"
-                                          onClick={() =>
-                                            void loadPullFullDiff(selectedPull)
+                                          className={`github-tree-switch${changesTreeShown ? " is-on" : ""}`}
+                                          aria-pressed={changesTreeShown}
+                                          aria-label={
+                                            changesTreeShown
+                                              ? "Hide changed files tree"
+                                              : "Show changed files tree"
                                           }
-                                          disabled={pullFullDiffLoading.has(
-                                            selectedPull
-                                          )}
+                                          data-tooltip={
+                                            changesTreeShown
+                                              ? "Hide changed files tree"
+                                              : "Show changed files tree"
+                                          }
+                                          onClick={() =>
+                                            setChangesTreeShown(
+                                              !changesTreeShown
+                                            )
+                                          }
                                         >
-                                          {pullFullDiffLoading.has(selectedPull)
-                                            ? "Loading full diff…"
-                                            : "Load full diff"}
+                                          <FileTreeIcon size={16} />
                                         </button>
+                                        {changesTreeShown && (
+                                          <span>
+                                            Files{" "}
+                                            <span className="github-pr-block-count">
+                                              {bundle.files.length}
+                                            </span>
+                                          </span>
+                                        )}
+                                      </div>
+                                      {changesTreeShown && (
+                                        <ChangedFilesTree
+                                          files={bundle.files}
+                                          onSelect={(file) => {
+                                            const fileKey = `pr-${selectedPull}::${file.filename}`;
+                                            if (
+                                              diffs.collapsedFiles.has(fileKey)
+                                            ) {
+                                              diffs.toggleFile(fileKey);
+                                            }
+                                            const target = Array.from(
+                                              pullFilesRef.current?.querySelectorAll<HTMLElement>(
+                                                "article[data-file]"
+                                              ) ?? []
+                                            ).find(
+                                              (el) =>
+                                                el.dataset.file ===
+                                                file.filename
+                                            );
+                                            target?.scrollIntoView?.({
+                                              block: "start",
+                                            });
+                                          }}
+                                        />
                                       )}
-                                      {pullFullDiffError[selectedPull] && (
-                                        <div className="github-banner">
-                                          {pullFullDiffError[selectedPull]}
-                                        </div>
-                                      )}
-                                      {rawDiff && (
-                                        <RawUnifiedDiff text={rawDiff} />
-                                      )}
-                                    </div>
+                                    </aside>
                                   )}
+                                  <div
+                                    className="pr-changes-diffs"
+                                    ref={pullFilesRef}
+                                  >
+                                    {bundle.files.length === 0 ? (
+                                      <div className="github-empty">
+                                        No file changes to show.
+                                      </div>
+                                    ) : (
+                                      bundle.files.map((file) => {
+                                        const fileKey = `pr-${selectedPull}::${file.filename}`;
+                                        const fileOpen =
+                                          !diffs.collapsedFiles.has(fileKey);
+                                        return (
+                                          <article
+                                            key={file.filename}
+                                            data-file={file.filename}
+                                            className={`github-commit-file status-${file.status} ${fileOpen ? "is-open" : "is-collapsed"}`}
+                                          >
+                                            <button
+                                              type="button"
+                                              className="github-commit-file-head"
+                                              onClick={() =>
+                                                diffs.toggleFile(fileKey)
+                                              }
+                                              aria-expanded={fileOpen}
+                                            >
+                                              <span
+                                                className={`github-tree-toggle ${fileOpen ? "open" : ""}`}
+                                                aria-hidden="true"
+                                              >
+                                                <ChevronIcon />
+                                              </span>
+                                              <DiffFileName
+                                                filename={file.filename}
+                                                previousFilename={
+                                                  file.previous_filename
+                                                }
+                                              />
+                                              <span className="github-commit-file-meta">
+                                                <em
+                                                  className={`github-commit-status status-${file.status}`}
+                                                >
+                                                  {file.status}
+                                                </em>
+                                                <span className="github-commit-stat is-add">
+                                                  +{file.additions}
+                                                </span>
+                                                <span className="github-commit-stat is-del">
+                                                  −{file.deletions}
+                                                </span>
+                                              </span>
+                                            </button>
+                                            {fileOpen &&
+                                              (file.patch ? (
+                                                <CommitSplitPatch
+                                                  key={`${fileKey}@${bundle.detail.head.sha}`}
+                                                  patch={file.patch}
+                                                  filename={file.filename}
+                                                  loadLines={
+                                                    canExpandFile(file.status)
+                                                      ? () =>
+                                                          diffs.loadFileLines(
+                                                            bundle.detail.head
+                                                              .sha,
+                                                            file.filename
+                                                          )
+                                                      : undefined
+                                                  }
+                                                  lineComments={pullLineComments(
+                                                    selectedPull,
+                                                    bundle.detail.head.sha,
+                                                    file.filename,
+                                                    bundle.lineComments
+                                                  )}
+                                                />
+                                              ) : (
+                                                <div className="github-commit-nopatch">
+                                                  Binary file or diff not
+                                                  available — open on GitHub to
+                                                  view.
+                                                </div>
+                                              ))}
+                                          </article>
+                                        );
+                                      })
+                                    )}
+                                    {(hasMissingPatch || rawDiff) && (
+                                      <div className="github-commit-fulldiff">
+                                        {!rawDiff && (
+                                          <button
+                                            type="button"
+                                            className="github-commit-fulldiff-btn"
+                                            onClick={() =>
+                                              void loadPullFullDiff(
+                                                selectedPull
+                                              )
+                                            }
+                                            disabled={pullFullDiffLoading.has(
+                                              selectedPull
+                                            )}
+                                          >
+                                            {pullFullDiffLoading.has(
+                                              selectedPull
+                                            )
+                                              ? "Loading full diff…"
+                                              : "Load full diff"}
+                                          </button>
+                                        )}
+                                        {pullFullDiffError[selectedPull] && (
+                                          <div className="github-banner">
+                                            {pullFullDiffError[selectedPull]}
+                                          </div>
+                                        )}
+                                        {rawDiff && (
+                                          <RawUnifiedDiff text={rawDiff} />
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               )}
                             </section>

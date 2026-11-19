@@ -8,6 +8,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
@@ -247,6 +248,37 @@ describe("Code Repo keeps its place", () => {
     const rows = screen.getAllByRole("listitem").map((li) => li.textContent);
     expect(rows[0]).toContain("Failedlint");
     expect(rows[1]).toContain("Passedbuild");
+  });
+
+  it("shows the changed files as a tree on request, and opens a file from it", async () => {
+    localStorage.setItem("rwayve.github.section", "pulls");
+    leaveOff({ branch: "main", pull: 7, pullTab: "changes" });
+    renderPage();
+    await screen.findByText("opened.ts");
+    expect(screen.queryByRole("tree", { name: "Changed files" })).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show changed files tree" })
+    );
+    const tree = screen.getByRole("tree", { name: "Changed files" });
+    expect(localStorage.getItem("rwayve.github.changesTree.v1")).toBe("on");
+
+    // A merge request's files start folded; choosing one in the tree opens it.
+    const diffHead = () =>
+      screen
+        .getAllByText("closed.ts")
+        .map((el) => el.closest("button.github-commit-file-head"))
+        .find(Boolean);
+    expect(diffHead()?.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(within(tree).getByRole("button", { name: /closed\.ts/ }));
+    await waitFor(() =>
+      expect(diffHead()?.getAttribute("aria-expanded")).toBe("true")
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Hide changed files tree" })
+    );
+    expect(screen.queryByRole("tree", { name: "Changed files" })).toBeNull();
   });
 
   it("returns to the tab the merge request was left on", async () => {
