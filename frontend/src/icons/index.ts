@@ -128,6 +128,8 @@ export {
   ArrowUp as SendCommentIcon,
   Ellipsis as CommentOptionsIcon,
   EllipsisVertical as RowMenuIcon,
+  Link2 as ChannelLinkIcon,
+  Check as LinkCopiedIcon,
   Pencil as EditCommentIcon,
 } from "lucide-react";
 

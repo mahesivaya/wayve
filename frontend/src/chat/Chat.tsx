@@ -12,6 +12,7 @@ import {
   getChannelMessages,
   getChannelThread,
   getChatMessages,
+  getChannelPreview,
   joinChatChannel,
   leaveChatChannel,
   deleteChatChannel,
@@ -132,6 +133,8 @@ export default function Chat() {
   const [channelVisibility, setChannelVisibility] =
     useState<ChannelVisibility>("private");
   const [channelError, setChannelError] = useState("");
+  // Why a followed channel link opened nothing.
+  const [linkNotice, setLinkNotice] = useState("");
 
   // WS messages whose parent_message_id matches `activeThread` are routed to the
   // panel; replies for other parents only bump the main-feed message's reply_count.
@@ -636,6 +639,46 @@ export default function Chat() {
       ? users.find((u) => `dm:${u.id}` === key)
       : undefined;
     if (!channel && !otherUser) {
+      // A link to a channel that isn't listed: a personal account's public
+      // channel, which only its number leads to, or one that is gone or closed
+      // to this account. Found, it joins the list and opens on its join page.
+      if (conversationsLoaded && urlKey === key && key.startsWith("c:")) {
+        deepLinkAppliedRef.current = key;
+        const id = Number(key.slice(2));
+        void (async () => {
+          let found: ChatChannel | null = null;
+          try {
+            found = Number.isInteger(id) ? await getChannelPreview(id) : null;
+          } catch (err) {
+            logger.warn("opening channel link failed", { key, err });
+            return;
+          }
+          if (deepLinkAppliedRef.current !== key) return;
+          if (found) {
+            const linked = found;
+            setChannels((prev) =>
+              prev.some((c) => c.id === linked.id) ? prev : [linked, ...prev]
+            );
+            setLinkNotice("");
+            await loadChannelMessages(linked);
+            return;
+          }
+          restorePendingRef.current = null;
+          forgetOpenChat();
+          setLinkNotice(
+            "This channel link can't be opened. The channel may have been deleted, or it isn't open to your account."
+          );
+          setSearchParams(
+            (prev) => {
+              const next = new URLSearchParams(prev);
+              next.delete("c");
+              return next;
+            },
+            { replace: true }
+          );
+        })();
+        return;
+      }
       // Not in the loaded lists yet. Leave the guard unset so a later load retries.
       if (!conversationsLoaded || restored?.key !== key) return;
 
@@ -950,7 +993,10 @@ export default function Chat() {
 
     try {
       await joinChatChannel(channel.id);
-      await refreshChannels(channel.id);
+      // Open it as it now stands: with its history once joined, or still on the
+      // join page while a request waits for an admin.
+      const joined = (await fetchChannels()).find((c) => c.id === channel.id);
+      if (joined) await loadChannelMessages(joined);
     } catch (err) {
       setSettingsError(
         err instanceof Error ? err.message : "Failed to join channel"
@@ -1284,6 +1330,11 @@ export default function Chat() {
               }${activeThread ? " thread-open" : ""}`}
             >
               <div className="chat-main">
+                {linkNotice && !selectedConversation && (
+                  <div className="chat-link-notice" role="status">
+                    {linkNotice}
+                  </div>
+                )}
                 <MessageThread
                   messages={filteredMessages}
                   selectedChannel={selectedChannel}

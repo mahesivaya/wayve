@@ -48,6 +48,9 @@ vi.mock("../../api/chat", async (original) => ({
   getChannelMessages: api.getChannelMessages,
   getChannelThread: api.getChannelThread,
   findChatUserByEmail: api.findChatUserByEmail,
+  // A channel missing from the list is looked up before it is forgotten; here
+  // the server has no such channel.
+  getChannelPreview: vi.fn(async () => null),
 }));
 vi.mock("../../auth/useAuth", () => ({
   useAuth: () => ({

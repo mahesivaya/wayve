@@ -5,7 +5,7 @@ import type {
 } from "../../api/chat";
 import type { PresenceMap } from "../hooks/usePresence";
 import type { Conversation } from "../types";
-import { presenceNameClass, relativeTime } from "../utils";
+import { channelLink, presenceNameClass, relativeTime } from "../utils";
 import { PersonIcon } from "../../icons";
 import PresenceDot from "./PresenceDot";
 import ConversationRow from "./ConversationRow";
@@ -107,7 +107,11 @@ export default function RecentConversations({
       selectedConversation.channel.id === r.channel.id;
     const time = relativeTime(r.lastAt);
     return (
-      <ConversationRow key={`ch-${r.channel.id}`} label={`#${r.channel.name}`}>
+      <ConversationRow
+        key={`ch-${r.channel.id}`}
+        label={`#${r.channel.name}`}
+        link={channelLink(r.channel.id)}
+      >
         <button
           type="button"
           className={`conversation-item ${active ? "active" : ""}`}
