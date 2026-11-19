@@ -26,9 +26,11 @@
 		4A88651F4E4AEAF89E949FF4 /* TaskRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D1D2B721538532E5FC5D1BD /* TaskRow.swift */; };
 		5A7D934477660823F22B9F34 /* DayTimelineView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D19B84A09966C23C4376C4C2 /* DayTimelineView.swift */; };
 		5E9BF6D3DC7B72BD9C81B32D /* Meeting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D97B1188C9AD10F6E6D0D71 /* Meeting.swift */; };
+		604D86C753B331BF216A1118 /* Dock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F9C817FD9BA7065F1FFD069 /* Dock.swift */; };
 		66979CAE40B01C9CE115F983 /* KeyVault.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3128A66A3D4A88578EDB8678 /* KeyVault.swift */; };
 		73D19A88E176F29E8FC90F4D /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E41182006D4E509E502D709 /* Config.swift */; };
 		80D36CEE8C3D642056B88E15 /* ChatSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFCCD91F82D4B79F46DB4303 /* ChatSocket.swift */; };
+		82269CE9F27EA8A40303D737 /* DockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C07F702FD5E0C9CE6C26C64C /* DockTests.swift */; };
 		8452CDD52614BF85AA467C42 /* EmailListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A806B322552A8E7FF2EFF97B /* EmailListView.swift */; };
 		8774523086F523D96D8CD04E /* ChatStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 040E6BFCDE2A727BDE68850C /* ChatStore.swift */; };
 		8AD7DE320FBF74B36B8B88B2 /* FluxzeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F856A10844A2070DAF393C08 /* FluxzeApp.swift */; };
@@ -108,6 +110,7 @@
 		6A3C7267EBB0F47D337E2AF3 /* DriveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveView.swift; sourceTree = "<group>"; };
 		6C2097708C2E965AFD9D852D /* FluxzeCryptoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxzeCryptoTests.swift; sourceTree = "<group>"; };
 		6D1D2B721538532E5FC5D1BD /* TaskRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskRow.swift; sourceTree = "<group>"; };
+		6F9C817FD9BA7065F1FFD069 /* Dock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Dock.swift; sourceTree = "<group>"; };
 		72C615A41037C75B951C06A1 /* TaskListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskListView.swift; sourceTree = "<group>"; };
 		744CBD373E925EC5B42D1DB6 /* ModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTests.swift; sourceTree = "<group>"; };
 		79780DAC783881C9B59BD76C /* ChatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatTests.swift; sourceTree = "<group>"; };
@@ -129,6 +132,7 @@
 		B45F54C30DE426ACAF23DF0F /* TasksStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksStore.swift; sourceTree = "<group>"; };
 		B971D2516468DCCC5C85754C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		BF10773F318C79C658229FD2 /* EmailTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailTests.swift; sourceTree = "<group>"; };
+		C07F702FD5E0C9CE6C26C64C /* DockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockTests.swift; sourceTree = "<group>"; };
 		C5CDB34F920D4252DC05E8FD /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		D19B84A09966C23C4376C4C2 /* DayTimelineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayTimelineView.swift; sourceTree = "<group>"; };
 		D6C86A862A8B9BF2E002BE73 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -223,6 +227,7 @@
 				56AAA9B20FBD68C3287066A5 /* AuthKeyTests.swift */,
 				79780DAC783881C9B59BD76C /* ChatTests.swift */,
 				0DABFAFBE6D291D082B4E4C1 /* CryptoVectors.swift */,
+				C07F702FD5E0C9CE6C26C64C /* DockTests.swift */,
 				5213878C2E83209B514FF266 /* DriveTests.swift */,
 				BF10773F318C79C658229FD2 /* EmailTests.swift */,
 				6C2097708C2E965AFD9D852D /* FluxzeCryptoTests.swift */,
@@ -270,6 +275,7 @@
 				50906CB2A4F8EFCAE833F769 /* Color+Hex.swift */,
 				A2023DC3671F1C6C4D109EAC /* ComposeView.swift */,
 				D19B84A09966C23C4376C4C2 /* DayTimelineView.swift */,
+				6F9C817FD9BA7065F1FFD069 /* Dock.swift */,
 				6A3C7267EBB0F47D337E2AF3 /* DriveView.swift */,
 				6128E138195982F8D720BD56 /* EmailDetailView.swift */,
 				A806B322552A8E7FF2EFF97B /* EmailListView.swift */,
@@ -434,6 +440,7 @@
 				8FBF015FC9FE3E99C1254917 /* AuthKeyTests.swift in Sources */,
 				8C947177B30B69944AA5F2B3 /* ChatTests.swift in Sources */,
 				DEC178D609D05DE5F5EA753D /* CryptoVectors.swift in Sources */,
+				82269CE9F27EA8A40303D737 /* DockTests.swift in Sources */,
 				B874492DBAC8FB0027C55D94 /* DriveTests.swift in Sources */,
 				EE5A5A0FDDC1BE2D24E9A87D /* EmailTests.swift in Sources */,
 				25E71325152301036EB15441 /* FluxzeCryptoTests.swift in Sources */,
@@ -466,6 +473,7 @@
 				8B1F32F79D35A3B616DAF8BE /* ComposeView.swift in Sources */,
 				73D19A88E176F29E8FC90F4D /* Config.swift in Sources */,
 				5A7D934477660823F22B9F34 /* DayTimelineView.swift in Sources */,
+				604D86C753B331BF216A1118 /* Dock.swift in Sources */,
 				9E186E777CFF1CD604732B6D /* DriveService.swift in Sources */,
 				8EF888B17B1299322D417700 /* DriveView.swift in Sources */,
 				1DA0AD0BCBD890DE1F496CB4 /* Email.swift in Sources */,
