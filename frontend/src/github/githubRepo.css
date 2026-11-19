@@ -3137,6 +3137,35 @@
   cursor: pointer;
   text-align: left;
 }
+/* A heading button with a control beside it (the Changes tab's diff settings).
+   The button keeps to its content so the control sits right after the count. */
+.github-pr-block-headrow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 12px;
+  border-radius: 10px 10px 0 0;
+  background: var(--color-surface-soft, var(--color-surface-hover));
+}
+
+.github-pr-block-headrow .github-pr-block-head {
+  width: auto;
+  padding-right: 8px;
+  border-radius: 10px 0 0;
+  background: transparent;
+}
+
+/* The block must not clip the settings menu that drops from its header. */
+.github-pr-block--menu {
+  overflow: visible;
+}
+
+/* Opens from the gear's left edge, for a gear near the start of a row. */
+.github-diff-menu.is-left {
+  left: 0;
+  right: auto;
+}
+
 .github-pr-block-head h3 {
   margin: 0;
   font-size: var(--text-md);

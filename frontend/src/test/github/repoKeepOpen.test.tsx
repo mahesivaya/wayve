@@ -281,6 +281,42 @@ describe("Code Repo keeps its place", () => {
     expect(screen.queryByRole("tree", { name: "Changed files" })).toBeNull();
   });
 
+  it("lets the Changes tab switch its diffs between side by side and a single block", async () => {
+    localStorage.setItem("rwayve.github.section", "pulls");
+    leaveOff({
+      branch: "main",
+      pull: 7,
+      pullTab: "changes",
+      openPullFiles: ["pr-7::opened.ts"],
+    });
+    const { container } = renderPage();
+    await screen.findByText("opened.ts");
+    await waitFor(() =>
+      expect(
+        container.querySelector(".github-commit-file.is-open")
+      ).not.toBeNull()
+    );
+    expect(container.querySelector(".github-unified")).toBeNull();
+
+    // The gear sits in the heading row, right after the files-changed count.
+    const gear = screen.getByRole("button", { name: "Diff settings" });
+    expect(gear.closest(".github-pr-block-headrow")).not.toBeNull();
+    fireEvent.click(gear);
+    expect(
+      screen
+        .getByRole("menuitemcheckbox", { name: /Side by side/ })
+        .getAttribute("aria-checked")
+    ).toBe("true");
+    fireEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Single block/ })
+    );
+    await waitFor(() =>
+      expect(container.querySelector(".github-unified")).not.toBeNull()
+    );
+    // Using the menu doesn't fold the section it sits on.
+    expect(screen.getByText("opened.ts")).toBeTruthy();
+  });
+
   it("returns to the tab the merge request was left on", async () => {
     localStorage.setItem("rwayve.github.section", "pulls");
     leaveOff({ branch: "main", pull: 7 });

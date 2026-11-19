@@ -2873,25 +2873,34 @@ export function GitHubRepoViewer({
                           </div>
 
                           {pullTab === "changes" && (
-                            <section className="github-pr-block github-pr-full">
-                              <button
-                                type="button"
-                                className="github-pr-block-head"
-                                onClick={() => toggleSection("files")}
-                                aria-expanded={!isCollapsed("files")}
-                              >
-                                <span
-                                  className={`github-pr-chevron ${isCollapsed("files") ? "" : "open"}`}
+                            <section className="github-pr-block github-pr-block--menu github-pr-full">
+                              <div className="github-pr-block-headrow">
+                                <button
+                                  type="button"
+                                  className="github-pr-block-head"
+                                  onClick={() => toggleSection("files")}
+                                  aria-expanded={!isCollapsed("files")}
                                 >
-                                  <ChevronIcon />
-                                </span>
-                                <h3>Files changed</h3>
-                                {bundle.files.length > 0 && (
-                                  <span className="github-pr-block-count">
-                                    {bundle.files.length}
+                                  <span
+                                    className={`github-pr-chevron ${isCollapsed("files") ? "" : "open"}`}
+                                  >
+                                    <ChevronIcon />
                                   </span>
-                                )}
-                              </button>
+                                  <h3>Files changed</h3>
+                                  {bundle.files.length > 0 && (
+                                    <span className="github-pr-block-count">
+                                      {bundle.files.length}
+                                    </span>
+                                  )}
+                                </button>
+                                {/* Beside the count, not inside the heading button: a button
+                                  can't hold another. */}
+                                <DiffSettingsMenu
+                                  prefs={diffPrefs}
+                                  onChange={setDiffPrefs}
+                                  align="left"
+                                />
+                              </div>
                               {!isCollapsed("files") && (
                                 <div
                                   className={`github-pr-block-body${
@@ -3023,6 +3032,7 @@ export function GitHubRepoViewer({
                                                   key={`${fileKey}@${bundle.detail.head.sha}`}
                                                   patch={file.patch}
                                                   filename={file.filename}
+                                                  prefs={diffPrefs}
                                                   loadLines={
                                                     canExpandFile(file.status)
                                                       ? () =>

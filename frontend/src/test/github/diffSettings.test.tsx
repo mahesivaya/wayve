@@ -1,4 +1,4 @@
-// Code Repo › Commits diff settings: the gear menu's Layout (Unified / Split),
+// Code Repo › Commits diff settings: the gear menu's Layout (side by side / single block),
 // Hide whitespace and Compact line height, and how CommitPatch draws each.
 import { describe, expect, it, beforeEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -75,10 +75,12 @@ describe("diff settings", () => {
     const { container, unmount } = render(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: "Diff settings" }));
     expect(
-      screen.getByRole("menuitemcheckbox", { name: /Split/ })
+      screen.getByRole("menuitemcheckbox", { name: /Side by side/ })
     ).toHaveAttribute("aria-checked", "true");
 
-    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /Unified/ }));
+    fireEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Single block/ })
+    );
     fireEvent.click(
       screen.getByRole("menuitemcheckbox", { name: /Compact line height/ })
     );

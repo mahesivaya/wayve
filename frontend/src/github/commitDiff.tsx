@@ -940,11 +940,13 @@ export function CommitPatch({
 export function CommitSplitPatch({
   patch,
   filename,
+  prefs,
   loadLines,
   lineComments,
 }: {
   patch: string;
   filename?: string;
+  prefs?: DiffPrefs;
   loadLines?: () => Promise<string[]>;
   lineComments?: LineComments;
 }) {
@@ -952,6 +954,7 @@ export function CommitSplitPatch({
     <CommitPatch
       patch={patch}
       filename={filename}
+      prefs={prefs}
       loadLines={loadLines}
       lineComments={lineComments}
     />
@@ -969,14 +972,19 @@ function GearIcon() {
   );
 }
 
-// Gear button + menu: Layout (Unified / Split), Hide whitespace, Compact line
-// height. Each choice applies at once and the menu stays open, like GitHub's.
+// Gear button + menu: Layout (side by side / single block), Hide whitespace,
+// Compact line height. Each choice applies at once and the menu stays open,
+// like GitHub's.
 export function DiffSettingsMenu({
   prefs,
   onChange,
+  align = "right",
 }: {
   prefs: DiffPrefs;
   onChange: (next: DiffPrefs) => void;
+  // Which edge of the gear the menu lines up with: "left" where the gear sits
+  // near the start of a row and the menu would otherwise run off the page.
+  align?: "left" | "right";
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLSpanElement>(null);
@@ -1026,15 +1034,18 @@ export function DiffSettingsMenu({
         <GearIcon />
       </button>
       {open && (
-        <div className="github-diff-menu" role="menu">
+        <div
+          className={`github-diff-menu${align === "left" ? " is-left" : ""}`}
+          role="menu"
+        >
           <div className="github-diff-menu-label">Layout</div>
-          {item("Unified", prefs.layout === "unified", {
-            ...prefs,
-            layout: "unified",
-          })}
-          {item("Split", prefs.layout === "split", {
+          {item("Side by side", prefs.layout === "split", {
             ...prefs,
             layout: "split",
+          })}
+          {item("Single block", prefs.layout === "unified", {
+            ...prefs,
+            layout: "unified",
           })}
           <div className="github-diff-menu-sep" />
           {item("Hide whitespace", prefs.hideWhitespace, {
