@@ -1,4 +1,7 @@
 .chat-container {
+  /* Positioned, so the new-channel popup covers the chat and not the whole
+     window. */
+  position: relative;
   display: flex;
   flex: 1;
   width: 100%;
@@ -71,12 +74,11 @@
   border-color: var(--color-border-muted);
 }
 
+/* The new-channel form. It sits in a popup, which supplies the frame and the
+   padding. */
 .channel-form {
-  margin: 12px;
-  padding: 12px;
-  border: 1px solid var(--color-divider-cool-strong);
-  border-radius: var(--radius-md);
-  background: var(--color-pane);
+  margin: 0;
+  text-align: left;
 }
 
 .channel-field {

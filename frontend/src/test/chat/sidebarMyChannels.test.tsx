@@ -32,16 +32,7 @@ const renderSidebar = (channels: ChatChannel[], myChannelsByDefault: boolean) =>
       channels={channels}
       myChannelsByDefault={myChannelsByDefault}
       selectedConversation={null}
-      creatingChannel={false}
-      channelName=""
-      channelVisibility="public"
-      canChooseVisibility={false}
-      channelError=""
       onToggleCreateChannel={vi.fn()}
-      onChannelNameChange={vi.fn()}
-      onChannelVisibilityChange={vi.fn()}
-      onCancelCreateChannel={vi.fn()}
-      onCreateChannel={vi.fn()}
       onSelectChannel={vi.fn()}
       onJoinChannel={vi.fn()}
       onSelectUser={vi.fn()}

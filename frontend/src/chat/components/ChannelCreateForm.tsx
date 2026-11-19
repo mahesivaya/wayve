@@ -40,12 +40,21 @@ export default function ChannelCreateForm({
   onCreate,
 }: Props) {
   return (
-    <div className="channel-form">
+    // A form, so Enter in the name field creates the channel.
+    <form
+      className="channel-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onCreate();
+      }}
+    >
       <label className="channel-field">
         <span>Channel name</span>
         <input
           value={channelName}
           onChange={(e) => onChannelNameChange(e.target.value)}
+          placeholder="e.g. project-updates"
+          autoFocus
         />
       </label>
 
@@ -78,10 +87,10 @@ export default function ChannelCreateForm({
         <button type="button" onClick={onCancel}>
           Cancel
         </button>
-        <button type="button" className="primary" onClick={onCreate}>
+        <button type="submit" className="primary">
           Create
         </button>
       </div>
-    </div>
+    </form>
   );
 }
