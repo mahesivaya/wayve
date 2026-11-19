@@ -3143,6 +3143,128 @@
   font-weight: 600;
   color: var(--color-text-primary);
 }
+/* The tabs at the top of a merge request: Overview / Commits / Pipelines /
+   Changes, each with a count. The open one is underlined. */
+.pr-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 12px 0 14px;
+  border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
+}
+
+.pr-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-bottom: -1px;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pr-tab:hover {
+  color: var(--color-text-primary);
+}
+
+.pr-tab:focus-visible {
+  outline: 2px solid var(--color-primary-action);
+  outline-offset: -2px;
+}
+
+.pr-tab.is-active {
+  border-bottom-color: var(--color-primary-action);
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.pr-tab-count {
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--color-surface-hover);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-align: center;
+}
+
+/* Commits and Pipelines tabs: one row per commit or check. */
+.pr-commit-list,
+.pr-check-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pr-commit-row,
+.pr-check-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+}
+
+.pr-commit-row:last-child,
+.pr-check-row:last-child {
+  border-bottom: 0;
+}
+
+.pr-commit-message,
+.pr-check-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+.pr-commit-meta {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.pr-commit-sha {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  color: var(--color-primary-action);
+  text-decoration: none;
+}
+
+.pr-commit-sha:hover {
+  text-decoration: underline;
+}
+
+.pr-check-state {
+  flex-shrink: 0;
+  min-width: 62px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--color-surface-hover);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-align: center;
+}
+
+.pr-check-state.is-pass {
+  color: var(--color-success, #1a7f37);
+}
+
+.pr-check-state.is-fail {
+  color: var(--color-danger, #cf222e);
+}
+
 .github-pr-block-count {
   font-size: var(--text-xs);
   color: var(--color-text-muted);

@@ -17,6 +17,8 @@ const MAX_SCROLL_PLACES = 50;
 export type RepoView = {
   branch: string | null;
   pull: number | null;
+  // The open pull request's tab (see PrTabs); null is the first one.
+  pullTab?: string | null;
   file: string | null;
   folders: string[];
   commits: string[];
@@ -139,6 +141,7 @@ export function readRepoView(
   return {
     branch: typeof view.branch === "string" ? view.branch : null,
     pull: typeof view.pull === "number" ? view.pull : null,
+    pullTab: typeof view.pullTab === "string" ? view.pullTab : null,
     file: typeof view.file === "string" ? view.file : null,
     folders: strings(view.folders, MAX_RESTORED_FOLDERS),
     commits: strings(view.commits, MAX_RESTORED_COMMITS),
