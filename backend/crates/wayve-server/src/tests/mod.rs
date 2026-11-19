@@ -94,6 +94,7 @@ mod storage_s3_test;
 mod story_attachments_test;
 mod task_statuses_test;
 mod task_suggest_test;
+mod tenant_boundary_test;
 mod webhooks_test;
 mod workspace_number_test;
 mod workspace_reviewer_test;

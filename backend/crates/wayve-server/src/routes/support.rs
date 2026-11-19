@@ -1,6 +1,6 @@
-// In-app support tickets. Any authenticated user can raise one; staff holding
-// `tickets:manage` (the `support` role, plus owner and super_admin) read and
-// resolve them through the admin endpoints. There is deliberately no in-app reply
+// In-app support tickets. Any authenticated user can raise one; platform staff
+// holding `tickets:manage` (the `support` role, plus owner and super_admin)
+// read and resolve them through the admin endpoints. There is deliberately no in-app reply
 // thread — replies go out of band by email to the ticket owner.
 
 use crate::prelude::*;
@@ -12,7 +12,7 @@ use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 use wayve_security::encryption::{decrypt_binary, encrypt_binary};
 use wayve_security::jwt::get_user_id_from_request;
-use wayve_security::rbac::{self, Permission};
+use wayve_security::rbac::{self, Permission, RoleContext, Scope};
 
 const ALLOWED_CATEGORIES: &[&str] = &["bug", "feature", "billing", "account", "other"];
 const ALLOWED_STATUSES: &[&str] = &["open", "in_progress", "resolved", "closed"];
@@ -201,8 +201,23 @@ async fn user_owns_ticket(pool: &PgPool, ticket_id: i32, user_id: i32) -> sqlx::
     Ok(id.is_some())
 }
 
-// Either the ticket owner OR a staff member with TicketsManage may read/write
-// the ticket. Returns `(is_admin, ticket_user_id)` on success.
+/// Support staff are platform staff holding `tickets:manage`. The permission
+/// alone is not enough: the owner of an organization holds it for their own
+/// workspace, and a personal account is the owner of its own scope and so
+/// holds every permission. Neither is support staff, and tickets from every
+/// customer land in this one queue.
+fn is_support_staff(ctx: &RoleContext) -> bool {
+    ctx.scope == Scope::Platform && ctx.has(Permission::TicketsManage)
+}
+
+fn support_staff_only() -> HttpResponse {
+    HttpResponse::Forbidden().json(serde_json::json!({
+        "message": "Support tickets are handled by platform support staff"
+    }))
+}
+
+// Either the ticket owner OR support staff may read/write the ticket. Returns
+// `(is_admin, ticket_user_id)` on success.
 async fn authorize_ticket(
     req: &HttpRequest,
     pool: &PgPool,
@@ -221,11 +236,11 @@ async fn authorize_ticket(
         return Ok((false, owner_id));
     }
 
-    // Not the owner — must hold tickets:manage to proceed.
+    // Not the owner — must be support staff to proceed.
     let ctx = rbac::resolve_role_context_moded(req, pool, user_id)
         .await
         .map_err(|_| AppError::Forbidden)?;
-    if ctx.has(Permission::TicketsManage) {
+    if is_support_staff(&ctx) {
         Ok((true, owner_id))
     } else {
         Err(AppError::Forbidden)
@@ -275,11 +290,11 @@ pub async fn admin_list_tickets(
     pool: web::Data<PgPool>,
     query: web::Query<AdminListQuery>,
 ) -> AppResult {
-    let _ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::TicketsManage).await
-    {
-        Ok(ctx) => ctx,
+    match rbac::require_permission(&req, pool.get_ref(), Permission::TicketsManage).await {
+        Ok(ctx) if is_support_staff(&ctx) => {}
+        Ok(_) => return Ok(support_staff_only()),
         Err(response) => return Ok(response),
-    };
+    }
 
     let status_filter = query
         .status
@@ -338,11 +353,11 @@ pub async fn admin_update_ticket(
     path: web::Path<i32>,
     body: web::Json<UpdateTicketBody>,
 ) -> AppResult {
-    let _ctx = match rbac::require_permission(&req, pool.get_ref(), Permission::TicketsManage).await
-    {
-        Ok(ctx) => ctx,
+    match rbac::require_permission(&req, pool.get_ref(), Permission::TicketsManage).await {
+        Ok(ctx) if is_support_staff(&ctx) => {}
+        Ok(_) => return Ok(support_staff_only()),
         Err(response) => return Ok(response),
-    };
+    }
 
     let ticket_id = path.into_inner();
     let status = validate_status(body.status.trim())?.to_string();

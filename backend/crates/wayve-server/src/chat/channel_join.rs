@@ -26,7 +26,20 @@ pub async fn join_channel(
             EXISTS(
                 SELECT 1 FROM channel_members
                 WHERE channel_id = channels.id AND user_id = $2
-            ) AS is_member
+            ) AS is_member,
+            -- Whether the caller shares a tenant with the channel's creator:
+            -- the same organization, platform staff with platform staff, or
+            -- two personal accounts.
+            COALESCE((
+                SELECT (creator.account_type = 'platform_admin'
+                            AND me.account_type = 'platform_admin')
+                    OR (creator.account_type IN ('organization', 'organization_admin')
+                            AND me.account_type IN ('organization', 'organization_admin')
+                            AND creator.organization_id = me.organization_id)
+                    OR (creator.account_type = 'personal' AND me.account_type = 'personal')
+                FROM users creator, users me
+                WHERE creator.id = channels.created_by AND me.id = $2
+            ), FALSE) AS same_tenant
         FROM channels
         WHERE id = $1
         "#,
@@ -39,6 +52,14 @@ pub async fn join_channel(
 
     if row.get::<bool, _>("is_member") {
         return Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "joined" })));
+    }
+
+    // A channel can be joined, or asked to be joined, only from inside its own
+    // tenant. Organization channels are always public, so without this anyone
+    // who guessed a channel's number could add themselves and read its whole
+    // history. Answered as "not found" so the number reveals nothing.
+    if !row.get::<bool, _>("same_tenant") {
+        return Err(AppError::NotFound("channel"));
     }
 
     if row.get::<String, _>("visibility") == "public" {

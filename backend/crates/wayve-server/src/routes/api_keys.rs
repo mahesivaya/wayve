@@ -166,7 +166,11 @@ pub async fn create_api_key(
     let acting_org: Option<i32> = if act_as == ctx.user_id {
         ctx.organization_id
     } else {
-        if !ctx.has(Permission::MembersManage) {
+        // A key acts as its user everywhere, so issuing one for someone else
+        // is managing that person's account. A personal account is the owner
+        // of its own scope and so holds `members:manage`, but it has no
+        // members: it may only ever issue keys for itself.
+        if ctx.scope == Scope::Personal || !ctx.has(Permission::MembersManage) {
             return Ok(HttpResponse::Forbidden().json(serde_json::json!({
                 "message": "You cannot issue a key acting as another user"
             })));
