@@ -190,7 +190,26 @@ const GITHUB_QUERY: &str = "from:github.com";
 /// Runs the full per-account workload: token refresh, forward sync, backfill,
 /// label backfill, and cache invalidation. Errors are logged and swallowed so
 /// one bad account doesn't abort the rest of the tick.
-pub async fn sync_one_account(pool: &PgPool, account: crate::email::account::EmailAccount) {
+///
+/// Returns the account's `last_message_at` after the sync: the newest value
+/// any upsert stamped during it, or the value it started with when no new mail
+/// landed (or the sync bailed out early). The scheduler uses it to pick the
+/// account's next interval without reading the row back.
+pub async fn sync_one_account(
+    pool: &PgPool,
+    account: crate::email::account::EmailAccount,
+) -> Option<NaiveDateTime> {
+    use crate::email::repo::STAMPED_LAST_MESSAGE;
+    let slot = std::cell::Cell::new((account.id, account.last_message_at));
+    STAMPED_LAST_MESSAGE
+        .scope(slot, async move {
+            run_account_sync(pool, account).await;
+            STAMPED_LAST_MESSAGE.with(|slot| slot.get().1)
+        })
+        .await
+}
+
+async fn run_account_sync(pool: &PgPool, account: crate::email::account::EmailAccount) {
     let Some(refresh_token) = account.usable_refresh_token() else {
         warn!(target: "worker", account_id = account.id, "email account skipped: missing refresh token");
         return;
@@ -361,27 +380,32 @@ pub async fn sync_due_accounts(
         .collect();
     schedule.retain(|id, _| live_ids.contains(id));
 
-    let mut handles = vec![];
+    // At most MAX_EMAIL_CONCURRENCY accounts sync at once. Without the bound a
+    // restart (empty schedule: every account due) started every mailbox's sync
+    // together, draining the Postgres pool the API shares and bursting the
+    // providers' rate limits. A permit is taken before spawning, so the tasks in
+    // flight are bounded too, not just the work inside them.
+    let permits = std::sync::Arc::new(tokio::sync::Semaphore::new(MAX_EMAIL_CONCURRENCY));
+    let mut handles = Vec::with_capacity(due.len());
     for account in due {
+        // The semaphore is never closed, so this only waits for a free permit.
+        let permit = permits.clone().acquire_owned().await.ok();
         let pool = pool.clone();
         let account_id = account.id;
         let pre_sync_last_message = account.last_message_at;
         handles.push(tokio::spawn(async move {
-            sync_one_account(&pool, account).await;
-            (account_id, pre_sync_last_message)
+            let post = sync_one_account(&pool, account).await;
+            drop(permit);
+            (account_id, pre_sync_last_message, post)
         }));
     }
 
     for h in handles {
-        let Ok((account_id, pre)) = h.await else {
+        // A panicked sync is skipped; its old schedule entry is already due, so
+        // the account is retried next tick.
+        let Ok((account_id, pre, post)) = h.await else {
             continue;
         };
-        let post: Option<NaiveDateTime> =
-            sqlx::query_scalar("SELECT last_message_at FROM email_accounts WHERE id = $1")
-                .bind(account_id)
-                .fetch_one(pool)
-                .await
-                .unwrap_or(pre);
 
         // An advanced freshness stamp resets to the hot interval so the next
         // pickup is fast; otherwise the ladder steps up by absolute age.
