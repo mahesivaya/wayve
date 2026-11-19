@@ -147,6 +147,9 @@ export type ChatChannel = {
   can_manage?: boolean;
   is_member: boolean;
   join_status?: "pending";
+  // Only on a link preview (`getChannelPreview`), which leaves the member lists
+  // empty: a non-member is told how many, not who.
+  member_count?: number;
   member_ids: number[];
   member_emails: string[];
   admin_emails?: string[];
@@ -291,6 +294,18 @@ export const getChatMessages = async (
 
 export const getChatChannels = async () =>
   apiFetchJson<ChatChannel[]>("/api/chat/channels");
+
+// The channel behind a link, for someone it isn't listed for: a personal
+// account's public channel, which only its number leads to. Null when there is
+// no such channel or it isn't open to the caller; the server doesn't say which.
+export const getChannelPreview = async (
+  channelId: number
+): Promise<ChatChannel | null> => {
+  const res = await apiFetch(`/api/chat/channels/${channelId}/preview`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error("Failed to open the channel link");
+  return res.json() as Promise<ChatChannel>;
+};
 
 export const createChatChannel = async (
   name: string,

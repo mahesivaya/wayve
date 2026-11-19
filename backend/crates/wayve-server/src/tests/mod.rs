@@ -16,6 +16,7 @@ mod billing_audit_test;
 mod billing_seats_test;
 mod channel_admin_test;
 mod channel_delete_test;
+mod channel_link_test;
 mod channel_scope_test;
 mod chat_logging_test;
 mod chat_multi_session_test;

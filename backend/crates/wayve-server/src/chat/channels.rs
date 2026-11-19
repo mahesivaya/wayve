@@ -1,5 +1,5 @@
 pub use super::channel_create::create_channel;
-pub use super::channel_join::{approve_channel_join_request, join_channel};
+pub use super::channel_join::{approve_channel_join_request, get_channel_preview, join_channel};
 pub use super::channel_members::{
     add_channel_users, leave_channel, remove_channel_user, set_channel_member_role,
 };

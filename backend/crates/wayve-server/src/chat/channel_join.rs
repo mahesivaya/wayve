@@ -8,30 +8,11 @@ use wayve_security::rbac::resolve_role_context_moded;
 use sqlx::Row;
 use tracing::instrument;
 
-#[post("/chat/channels/{channel_id}/join")]
-#[instrument(target = "http", skip(req, pool), fields(channel_id))]
-pub async fn join_channel(
-    req: HttpRequest,
-    pool: web::Data<PgPool>,
-    channel_id: web::Path<i32>,
-) -> AppResult {
-    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
-    let channel_id = channel_id.into_inner();
-
-    let row = sqlx::query(
-        r#"
-        SELECT
-            visibility,
-            name,
-            EXISTS(
-                SELECT 1 FROM channel_members
-                WHERE channel_id = channels.id AND user_id = $2
-            ) AS is_member,
-            -- Whether the caller may reach this channel at all. Inside an
-            -- organization or the platform that is sharing its tenant. Personal
-            -- accounts share no tenant, so being one is not enough: the
-            -- channel's creator must have made it public, or have invited the
-            -- caller's email address.
+/// SQL: whether the caller (`$2`) may reach the `channels` row at all. Inside
+/// an organization or the platform that is sharing its tenant. Personal
+/// accounts share no tenant, so being one is not enough: the channel's creator
+/// must have made it public, or have invited the caller's email address.
+const MAY_REACH: &str = r#"
             COALESCE((
                 SELECT (creator.account_type = 'platform_admin'
                             AND me.account_type = 'platform_admin')
@@ -47,16 +28,40 @@ pub async fn join_channel(
                                        AND lower(ci.email) = lower(me.email))))
                 FROM users creator, users me
                 WHERE creator.id = channels.created_by AND me.id = $2
-            ), FALSE) AS may_reach
+            ), FALSE)"#;
+
+#[post("/chat/channels/{channel_id}/join")]
+#[instrument(target = "http", skip(req, pool), fields(channel_id))]
+pub async fn join_channel(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    channel_id: web::Path<i32>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let channel_id = channel_id.into_inner();
+
+    let sql = r#"
+        SELECT
+            visibility,
+            name,
+            EXISTS(
+                SELECT 1 FROM channel_members
+                WHERE channel_id = channels.id AND user_id = $2
+            ) AS is_member,
+
+        "#
+    .to_string()
+        + MAY_REACH
+        + r#" AS may_reach
         FROM channels
         WHERE id = $1
-        "#,
-    )
-    .bind(channel_id)
-    .bind(user_id)
-    .fetch_optional(pool.get_ref())
-    .await?
-    .ok_or(AppError::NotFound("channel"))?;
+        "#;
+    let row = sqlx::query(&sql)
+        .bind(channel_id)
+        .bind(user_id)
+        .fetch_optional(pool.get_ref())
+        .await?
+        .ok_or(AppError::NotFound("channel"))?;
 
     if row.get::<bool, _>("is_member") {
         return Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "joined" })));
@@ -116,6 +121,74 @@ pub async fn join_channel(
         .await?;
         Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "pending" })))
     }
+}
+
+/// What a channel link shows someone before they join: enough to recognise the
+/// channel and to join it or ask to. Open to exactly the people `join_channel`
+/// would accept, and "not found" to everyone else, so a link (or a guessed
+/// number) tells a stranger nothing. Members' addresses are left out; a
+/// non-member gets the count.
+#[get("/chat/channels/{channel_id}/preview")]
+#[instrument(target = "http", skip(req, pool), fields(channel_id))]
+pub async fn get_channel_preview(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    channel_id: web::Path<i32>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let channel_id = channel_id.into_inner();
+
+    let sql = r#"
+        SELECT
+            id,
+            name,
+            visibility,
+            created_by,
+            created_at,
+            (SELECT COUNT(*) FROM channel_members WHERE channel_id = channels.id) AS member_count,
+            EXISTS(
+                SELECT 1 FROM channel_members
+                WHERE channel_id = channels.id AND user_id = $2
+            ) AS is_member,
+            EXISTS(
+                SELECT 1 FROM channel_join_requests
+                WHERE channel_id = channels.id AND user_id = $2 AND status = 'pending'
+            ) AS pending,
+        "#
+    .to_string()
+        + MAY_REACH
+        + r#" AS may_reach
+        FROM channels
+        WHERE id = $1
+        "#;
+    let row = sqlx::query(&sql)
+        .bind(channel_id)
+        .bind(user_id)
+        .fetch_optional(pool.get_ref())
+        .await?
+        .ok_or(AppError::NotFound("channel"))?;
+
+    let is_member: bool = row.get("is_member");
+    if !is_member && !row.get::<bool, _>("may_reach") {
+        return Err(AppError::NotFound("channel"));
+    }
+
+    let created_at = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
+        row.get::<chrono::NaiveDateTime, _>("created_at"),
+        chrono::Utc,
+    );
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "id": row.get::<i32, _>("id"),
+        "name": row.get::<String, _>("name"),
+        "visibility": row.get::<String, _>("visibility"),
+        "created_by": row.get::<Option<i32>, _>("created_by"),
+        "created_at": created_at.to_rfc3339(),
+        "is_member": is_member,
+        "join_status": row.get::<bool, _>("pending").then_some("pending"),
+        "member_count": row.get::<i64, _>("member_count"),
+        "member_ids": Vec::<i32>::new(),
+        "member_emails": Vec::<String>::new(),
+    })))
 }
 
 #[post("/chat/channels/{channel_id}/join-requests/approve")]

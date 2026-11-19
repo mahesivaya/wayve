@@ -101,3 +101,9 @@ export const getChannelUsers = (channel: ChatChannel | null) => [
 
 export const roleFromValue = (value: string): ChannelRole =>
   value === "admin" ? "admin" : "user";
+
+// The address that opens a channel. Anyone the channel is open to can follow
+// it: a member lands in the channel, anyone else on its join page.
+export function channelLink(channelId: number): string {
+  return `${window.location.origin}/chat?c=${channelId}`;
+}

@@ -1,5 +1,6 @@
 import type { ChatChannel } from "../../api/chat";
 import type { Conversation } from "../types";
+import { channelLink } from "../utils";
 import ConversationRow from "./ConversationRow";
 
 type Props = {
@@ -18,7 +19,11 @@ export default function ChannelList({
   return (
     <>
       {channels.map((channel) => (
-        <ConversationRow key={channel.id} label={`#${channel.name}`}>
+        <ConversationRow
+          key={channel.id}
+          label={`#${channel.name}`}
+          link={channelLink(channel.id)}
+        >
           <button
             type="button"
             className={`conversation-item ${
@@ -33,8 +38,8 @@ export default function ChannelList({
             <span className="conversation-main">
               <span className="conversation-name">{channel.name}</span>
               <span className="conversation-meta">
-                {channel.visibility} group · {channel.member_emails.length}{" "}
-                members
+                {channel.visibility} group ·{" "}
+                {channel.member_count ?? channel.member_emails.length} members
                 {channel.invite_emails?.length
                   ? `, ${channel.invite_emails.length} invited`
                   : ""}
