@@ -160,19 +160,19 @@ describe("Code Repo keeps its place", () => {
     localStorage.setItem("rwayve.github.section", "pulls");
     renderPage();
     fireEvent.click(await screen.findByText("Add the thing"));
-    await screen.findByText("← Back to pull requests");
+    await screen.findByText("← Back to merge requests");
     await waitFor(() => expect(readRepoView(USER, FULL)?.pull).toBe(7));
 
     // Switching tabs unmounts the page.
     cleanup();
     fetchMock.mockClear();
     renderPage();
-    await screen.findByText("← Back to pull requests");
+    await screen.findByText("← Back to merge requests");
     expect(fetched(`${API}/pulls/7`)).toBe(true);
     expect(readRepoView(USER, FULL)?.pull).toBe(7);
 
     // Going back to the list is remembered too.
-    fireEvent.click(screen.getByText("← Back to pull requests"));
+    fireEvent.click(screen.getByText("← Back to merge requests"));
     await waitFor(() => expect(readRepoView(USER, FULL)?.pull).toBeNull());
   });
 

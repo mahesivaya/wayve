@@ -1278,7 +1278,7 @@ export function GitHubRepoViewer({
         setPulls([]);
         setPullsHasMore(false);
         setPullsError(
-          err instanceof Error ? err.message : "Pull requests failed to load"
+          err instanceof Error ? err.message : "Merge requests failed to load"
         );
       } finally {
         if (requestId === pullsRequestRef.current) setPullsLoading(false);
@@ -1396,7 +1396,7 @@ export function GitHubRepoViewer({
           [number]:
             err instanceof Error
               ? err.message
-              : "Could not load this pull request",
+              : "Could not load this merge request",
         }));
       } finally {
         setLoadingPullNumbers((current) => {
@@ -1580,7 +1580,7 @@ export function GitHubRepoViewer({
         [prNumber]:
           err instanceof Error
             ? err.message
-            : "Couldn't merge this pull request.",
+            : "Couldn't merge this merge request.",
       }));
     } finally {
       setMergingPull(null);
@@ -2074,7 +2074,7 @@ export function GitHubRepoViewer({
               },
               {
                 id: "pulls",
-                label: "Pull Requests",
+                label: "Merge Requests",
                 icon: <PullRequestIcon size={16} />,
                 // Open PRs, as GitHub counts them, not every PR ever.
                 count:
@@ -2519,7 +2519,7 @@ export function GitHubRepoViewer({
             (selectedPull == null ? (
               <div className="github-panel">
                 <div className="github-panel-head">
-                  <h2>Pull Requests</h2>
+                  <h2>Merge Requests</h2>
                   <span>{pullCounts[pullFilter] ?? filteredPulls.length}</span>
                 </div>
                 <div className="github-pr-filter">
@@ -2547,14 +2547,14 @@ export function GitHubRepoViewer({
                   ))}
                 </div>
                 {pullsLoading ? (
-                  <div className="github-empty">Loading pull requests…</div>
+                  <div className="github-empty">Loading merge requests…</div>
                 ) : pullsError ? (
                   <div className="github-empty">{pullsError}</div>
                 ) : filteredPulls.length === 0 ? (
                   <div className="github-empty">
                     {pullsPage > 1
-                      ? `No more ${pullFilter} pull requests.`
-                      : `No ${pullFilter} pull requests.`}
+                      ? `No more ${pullFilter} merge requests.`
+                      : `No ${pullFilter} merge requests.`}
                   </div>
                 ) : (
                   filteredPulls.map((pr) => {
@@ -2612,18 +2612,18 @@ export function GitHubRepoViewer({
                     className="github-link-btn"
                     onClick={() => setSelectedPull(null)}
                   >
-                    ← Back to pull requests
+                    ← Back to merge requests
                   </button>
                 </div>
                 {loadingPullNumbers.has(selectedPull) ? (
-                  <div className="github-empty">Loading pull request…</div>
+                  <div className="github-empty">Loading merge request…</div>
                 ) : errorByPullNumber[selectedPull] ? (
                   <div className="github-banner">
                     {errorByPullNumber[selectedPull]}
                   </div>
                 ) : !pullBundleByNumber[selectedPull] ? (
                   <div className="github-empty">
-                    Couldn't load this pull request.{" "}
+                    Couldn't load this merge request.{" "}
                     <button
                       type="button"
                       className="github-link-btn"
@@ -3025,7 +3025,7 @@ export function GitHubRepoViewer({
                                     <textarea
                                       className="github-commit-composer-input"
                                       placeholder="Leave a comment…"
-                                      aria-label="Comment on this pull request"
+                                      aria-label="Comment on this merge request"
                                       value={pullCommentDraft[d.number] ?? ""}
                                       onChange={(e) =>
                                         setPullCommentDraft((cur) => ({

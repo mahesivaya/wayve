@@ -90,7 +90,7 @@ const GROUPS: Group[] = [
     items: [
       { keys: ["Enter"], action: "Send a chat or AI chat message" },
       { keys: ["shift", "Enter"], action: "New line in a chat message" },
-      { keys: ["mod", "Enter"], action: "Post a pull request comment" },
+      { keys: ["mod", "Enter"], action: "Post a merge request comment" },
     ],
   },
   {

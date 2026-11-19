@@ -145,7 +145,7 @@ describe("AiFixPanel", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Create PR" }));
     await waitFor(() => expect(api.openPr).toHaveBeenCalledWith(1));
-    expect(await screen.findByText(/View pull request/)).toBeTruthy();
+    expect(await screen.findByText(/View merge request/)).toBeTruthy();
   });
 
   it("does not offer editing once the fix is committed", async () => {
