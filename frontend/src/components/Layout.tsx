@@ -2508,15 +2508,15 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
                 viewBox="0 0 24 24"
                 aria-hidden="true"
               >
-                {/* Shrunk: a three-line menu icon. Open: a plain sidebar-panel
-                    glyph. The desktop app uses the panel glyph for both, so its
-                    toggle looks the same in one fixed spot. The tooltip says which
-                    way it goes. */}
+                {/* Shrunk: the sidebar-panel glyph with an arrow pointing the way
+                    it opens. Open: the plain panel glyph. The desktop app uses
+                    the plain glyph for both, so its toggle looks the same in one
+                    fixed spot. The tooltip says which way it goes. */}
                 {sidebarCollapsed && !desktop ? (
                   <>
-                    <line x1="3" y1="6" x2="21" y2="6" />
-                    <line x1="3" y1="12" x2="21" y2="12" />
-                    <line x1="3" y1="18" x2="21" y2="18" />
+                    <rect x="3" y="5" width="18" height="14" rx="2.2" />
+                    <line x1="9" y1="5" x2="9" y2="19" />
+                    <polyline points="12 9 15 12 12 15" />
                   </>
                 ) : (
                   <>
@@ -2546,15 +2546,15 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
               viewBox="0 0 24 24"
               aria-hidden="true"
             >
-              {/* Shrunk: a three-line menu icon. Open: a plain sidebar-panel
-                  glyph. The desktop app uses the panel glyph for both, so its
-                  toggle looks the same in one fixed spot. The tooltip says which
-                  way it goes. */}
+              {/* Shrunk: the sidebar-panel glyph with an arrow pointing the way
+                  it opens. Open: the plain panel glyph. The desktop app uses
+                  the plain glyph for both, so its toggle looks the same in one
+                  fixed spot. The tooltip says which way it goes. */}
               {sidebarCollapsed && !desktop ? (
                 <>
-                  <line x1="3" y1="6" x2="21" y2="6" />
-                  <line x1="3" y1="12" x2="21" y2="12" />
-                  <line x1="3" y1="18" x2="21" y2="18" />
+                  <rect x="3" y="5" width="18" height="14" rx="2.2" />
+                  <line x1="9" y1="5" x2="9" y2="19" />
+                  <polyline points="12 9 15 12 12 15" />
                 </>
               ) : (
                 <>
