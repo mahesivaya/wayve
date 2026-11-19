@@ -9,6 +9,22 @@ export const EMAILS_SYNCED_EVENT = "rwayve:emails-synced";
 // refresh.
 const SETTLE_MS = 400;
 
+let announceTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Tell mounted badges and the new-mail alert that a mailbox just synced. For a
+ * socket that sees the server's `email:*` frames but isn't the mail page's own:
+ * the app-wide chat socket stays open on every page and in a hidden tab, where
+ * `useEmailLiveRefresh` below is not running.
+ */
+export function announceEmailsSynced(): void {
+  if (announceTimer !== null) return;
+  announceTimer = setTimeout(() => {
+    announceTimer = null;
+    window.dispatchEvent(new CustomEvent(EMAILS_SYNCED_EVENT));
+  }, SETTLE_MS);
+}
+
 /**
  * Refreshes mail the moment the server syncs it.
  *

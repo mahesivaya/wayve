@@ -51,7 +51,7 @@ describe("notification settings", () => {
     vi.unstubAllGlobals();
   });
 
-  it("lists a notification and a sound switch for calls and calendar, all on", () => {
+  it("lists a notification and a sound switch for every kind of alert, all on", () => {
     notificationApi("granted");
     render(<NotificationSettings />);
     for (const name of [
@@ -60,9 +60,25 @@ describe("notification settings", () => {
       "Calls sound",
       "Calendar notifications",
       "Calendar sound",
+      "Emails notifications",
+      "Emails sound",
+      "Chats notifications",
+      "Chats sound",
     ]) {
       expect(toggle(name).checked).toBe(true);
     }
+  });
+
+  it("switches email and chat alerts off on their own", () => {
+    notificationApi("granted");
+    render(<NotificationSettings />);
+    fireEvent.click(toggle("Emails notifications"));
+    fireEvent.click(toggle("Chats sound"));
+    expect(alertEnabled("emails", "notification")).toBe(false);
+    expect(alertEnabled("emails", "sound")).toBe(true);
+    expect(alertEnabled("chats", "sound")).toBe(false);
+    expect(alertEnabled("chats", "notification")).toBe(true);
+    expect(alertEnabled("calls", "sound")).toBe(true);
   });
 
   it("remembers each switch separately", () => {

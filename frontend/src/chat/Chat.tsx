@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { useAuth } from "../auth/useAuth";
+import { alertUnseenChatMessage } from "./chatAlerts";
 import { markChatOpen } from "./chatOpenRegistry";
 import { recipientPublicKeys } from "./outgoing";
 import { normalizeAccountType } from "../auth/accountHome";
@@ -412,6 +413,20 @@ export default function Chat() {
     setComposeError(reason);
   }, []);
 
+  // Any inbound message can change an unread count or recency. With this view
+  // open the app-wide popups stand down, so it also raises the alert for a
+  // message that arrives while nobody is looking at the app.
+  const handleInbound = useCallback(
+    (msg: ChatMessage) => {
+      void refreshSummary();
+      if (!user) return;
+      void alertUnseenChatMessage(msg, user.id, (href) => {
+        if (ownsUrl) setSearchParams(new URLSearchParams(href.split("?")[1]));
+      });
+    },
+    [refreshSummary, user, ownsUrl, setSearchParams]
+  );
+
   const {
     wsRef,
     isConnected: isChatSocketConnected,
@@ -422,8 +437,7 @@ export default function Chat() {
     appendRealtimeMessage,
     resyncSelectedConversation,
     handleStatusUpdate,
-    // Any inbound DM can change an unread count or recency.
-    refreshSummary,
+    handleInbound,
     applyPresenceEvent,
     handleReactionUpdate,
     handleSendFailed

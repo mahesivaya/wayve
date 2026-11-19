@@ -20,6 +20,7 @@ import { encryptTextForSend } from "../chat/outgoing";
 import type { Conversation } from "../chat/types";
 import { CHAT_UNREAD_CHANGED_EVENT } from "../chat/useChatUnreadCount";
 import { logger } from "../utils/logger";
+import { raiseArrivalAlert } from "./messageAlerts";
 import "./chatPopups.css";
 
 // A collapsed card leaves on its own after this long, unless the pointer is on
@@ -242,6 +243,14 @@ export default function ChatPopups() {
     window.dispatchEvent(new Event(CHAT_UNREAD_CHANGED_EVENT));
     void buildPopup(msg, myId).then((card) => {
       if (!card) return;
+      raiseArrivalAlert("chats", {
+        title: card.title,
+        body: [card.subtitle, card.preview ?? "New message"]
+          .filter(Boolean)
+          .join(": "),
+        tag: `chat:${card.key}`,
+        onClick: () => void navigate(card.href),
+      });
       setCards((prev) => {
         const existing = prev.find((c) => c.key === card.key);
         const merged = existing ? { ...card, count: existing.count + 1 } : card;

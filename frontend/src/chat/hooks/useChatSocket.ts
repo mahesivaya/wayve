@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { ChatMessage, ChatStatus, ReactionGroup } from "../../api/chat";
 import { getWsBase } from "../../config/env";
+import { announceEmailsSynced } from "../../emails/useEmailLiveRefresh";
 import { logger } from "../../utils/logger";
 import { applyMyStatus } from "../myStatus";
 import type { Conversation } from "../types";
@@ -115,8 +116,12 @@ export function useChatSocket(
           reactions?: ReactionGroup[];
         } = JSON.parse(event.data);
         // Non-chat broadcasts (such as the Gmail-push nudge) ride the same per-user
-        // fan-out. Ignore them so they are never handled as inbound messages.
-        if (msg.type?.startsWith("email:")) return;
+        // fan-out. They are never handled as inbound messages; the mail badges
+        // and the new-mail alert are told instead.
+        if (msg.type?.startsWith("email:")) {
+          announceEmailsSynced();
+          return;
+        }
         if (msg.type === "presence") {
           if (typeof msg.user_id === "number") {
             // `status` is presence-specific and collides with ChatMessage's

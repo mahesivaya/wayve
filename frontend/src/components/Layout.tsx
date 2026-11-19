@@ -27,6 +27,7 @@ import ChatPopups from "./ChatPopups";
 import NotificationBell from "./NotificationBell";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import { useEmailsUnreadCount } from "../emails/useEmailsUnreadCount";
+import { useNewMailAlerts } from "../emails/useNewMailAlerts";
 import { useChatUnreadCount } from "../chat/useChatUnreadCount";
 import { useTicketsOpenCount } from "../tickets/useTicketsOpenCount";
 import { useUserStoriesCount } from "../userstories/useUserStoriesCount";
@@ -294,6 +295,7 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   // Gated on `user` so the badge fetches don't fire while the session is loading.
   const emailsUnreadCount = useEmailsUnreadCount(Boolean(user));
   const chatUnreadCount = useChatUnreadCount(Boolean(user));
+  useNewMailAlerts(user?.id, () => void navigate("/emails"));
   const ticketsOpenCount = useTicketsOpenCount(Boolean(user));
   const userStoriesCount = useUserStoriesCount(Boolean(user));
 
