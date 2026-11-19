@@ -18,7 +18,6 @@ use sqlx::{FromRow, PgPool, Row};
 use tokio::fs;
 use tracing::{error, instrument};
 use uuid::Uuid;
-use wayve_security::encryption::{decrypt_binary, encrypt_binary};
 use wayve_security::jwt::get_user_id_from_request;
 use wayve_security::rbac::{self, Permission, Scope};
 
@@ -632,8 +631,11 @@ pub async fn upload_documents(
             })));
         }
 
-        let (file_iv, encrypted_bytes) = encrypt_binary(&plaintext)
-            .map_err(|_| actix_web::error::ErrorInternalServerError("Encrypt error"))?;
+        let (file_iv, encrypted_bytes) =
+            crate::storage::encrypt_file(plaintext).await.map_err(|e| {
+                error!(target: "http", error = %e, "document encrypt failed");
+                actix_web::error::ErrorInternalServerError("Encrypt error")
+            })?;
         crate::storage::put(&filepath, encrypted_bytes)
             .await
             .map_err(|e| {
@@ -702,10 +704,12 @@ pub async fn download_document(
     match crate::storage::get(&file_path).await {
         Ok(bytes) => {
             let body = match file_iv.as_deref().filter(|v| !v.is_empty()) {
-                Some(iv) => decrypt_binary(iv, &bytes).map_err(|e| {
-                    error!(target: "http", error = %e, "document decrypt failed");
-                    AppError::internal("document decrypt failed")
-                })?,
+                Some(iv) => crate::storage::decrypt_file(iv.to_owned(), bytes)
+                    .await
+                    .map_err(|e| {
+                        error!(target: "http", error = %e, "document decrypt failed");
+                        AppError::internal("document decrypt failed")
+                    })?,
                 None => bytes,
             };
             Ok(HttpResponse::Ok()
@@ -861,8 +865,9 @@ pub async fn create_document(
     let safe_name = name.replace(['/', '\\'], "");
     let filepath = crate::storage::stored_path(&format!("{disk_id}_{safe_name}"));
 
-    let (file_iv, encrypted_bytes) =
-        encrypt_binary(plaintext).map_err(|_| AppError::internal("Encrypt error"))?;
+    let (file_iv, encrypted_bytes) = crate::storage::encrypt_file(plaintext.to_vec())
+        .await
+        .map_err(|_| AppError::internal("Encrypt error"))?;
     crate::storage::put(&filepath, encrypted_bytes)
         .await
         .map_err(|e| {
@@ -934,10 +939,12 @@ pub async fn get_document_content(
         Err(_) => return Ok(HttpResponse::NotFound().finish()),
     };
     let plaintext = match file_iv.as_deref().filter(|v| !v.is_empty()) {
-        Some(iv) => decrypt_binary(iv, &bytes).map_err(|e| {
-            error!(target: "http", error = %e, "document decrypt failed");
-            AppError::internal("document decrypt failed")
-        })?,
+        Some(iv) => crate::storage::decrypt_file(iv.to_owned(), bytes)
+            .await
+            .map_err(|e| {
+                error!(target: "http", error = %e, "document decrypt failed");
+                AppError::internal("document decrypt failed")
+            })?,
         None => bytes,
     };
     let content = String::from_utf8_lossy(&plaintext).to_string();
@@ -980,8 +987,9 @@ pub async fn update_document_content(
 
     let plaintext = body.content.as_bytes();
     let size = plaintext.len() as i64;
-    let (file_iv, encrypted_bytes) =
-        encrypt_binary(plaintext).map_err(|_| AppError::internal("Encrypt error"))?;
+    let (file_iv, encrypted_bytes) = crate::storage::encrypt_file(plaintext.to_vec())
+        .await
+        .map_err(|_| AppError::internal("Encrypt error"))?;
     crate::storage::put(&file_path, encrypted_bytes)
         .await
         .map_err(|e| {

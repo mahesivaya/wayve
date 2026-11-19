@@ -16,9 +16,9 @@
 //! still serve from the volume while new ones go to the bucket. Once
 //! `aws s3 sync` has copied the backlog up, the fallback simply stops firing.
 //!
-//! Bytes arrive here already encrypted (`encryption::encrypt_binary`) for every
-//! caller except avatars, so S3 never sees plaintext regardless of bucket
-//! settings.
+//! Bytes arrive here already encrypted ([`encrypt_file`], off the request
+//! thread) for every caller except avatars, so S3 never sees plaintext
+//! regardless of bucket settings.
 
 use std::path::{Path, PathBuf};
 use tokio::io::AsyncWriteExt;
@@ -130,6 +130,32 @@ async fn s3_client() -> &'static aws_sdk_s3::Client {
         aws_sdk_s3::Client::from_conf(s3.build())
     })
     .await
+}
+
+/// Encrypts a file's bytes for storage (AES-256-GCM at rest), returning the
+/// base64 nonce and the ciphertext.
+///
+/// Runs on the blocking thread pool. A file can be 50 MB, which is tens of
+/// milliseconds of CPU, and each Actix worker is a single thread: done inline,
+/// it would hold up every other request, WebSocket and database wait on that
+/// worker until it finished. Every upload path uses this instead of calling
+/// `encrypt_binary` directly. The bytes are moved in, not copied.
+pub async fn encrypt_file(plaintext: Vec<u8>) -> std::result::Result<(String, Vec<u8>), String> {
+    tokio::task::spawn_blocking(move || {
+        wayve_security::encryption::encrypt_binary(&plaintext).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| format!("file encrypt task failed: {e}"))?
+}
+
+/// Reverses [`encrypt_file`] for a download, on the blocking thread pool for
+/// the same reason.
+pub async fn decrypt_file(iv: String, ciphertext: Vec<u8>) -> std::result::Result<Vec<u8>, String> {
+    tokio::task::spawn_blocking(move || {
+        wayve_security::encryption::decrypt_binary(&iv, &ciphertext)
+    })
+    .await
+    .map_err(|e| format!("file decrypt task failed: {e}"))?
 }
 
 /// Write `bytes` under `stored_path`. Whole-object write: every caller already
