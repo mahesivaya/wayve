@@ -101,6 +101,20 @@
   margin-bottom: 12px;
 }
 
+/* Phones: a heading, its one-line description and a control don't fit in one
+   row, and the description was squeezed to a word per line. It takes the full
+   width under the heading instead. */
+@media (max-width: 768px) and (pointer: coarse) {
+  .pt-panel-head {
+    flex-wrap: wrap;
+  }
+
+  .pt-panel-head .pt-stat-sub {
+    order: 3;
+    flex: 1 1 100%;
+  }
+}
+
 .pt-panel-head h2 {
   margin: 0;
   font-size: 15px;

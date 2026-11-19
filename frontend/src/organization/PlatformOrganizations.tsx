@@ -136,6 +136,14 @@ export default function PlatformOrganizations() {
 
   return (
     <div className="platform-admin-home u-page-shell">
+      {/* Both sections are permission-gated; with neither, say so rather than
+          leave a blank page. */}
+      {!canManageMembers && !canManageApiKeys && (
+        <p className="platform-no-access">
+          Your role doesn&apos;t have access to organizations. Ask a platform
+          owner.
+        </p>
+      )}
       {canManageMembers && (
         <section className="platform-admin-panel u-panel">
           <div className="platform-admin-section-header">

@@ -60,7 +60,7 @@ export default function AuditLogPage() {
   }, [orgId]);
 
   return (
-    <div style={{ padding: 40, maxWidth: 960 }}>
+    <div style={{ padding: "clamp(16px, 5vw, 40px)", maxWidth: 960 }}>
       <h2>🔍 Org master key — access log</h2>
       <p style={{ color: "#6b7280" }}>
         Every use of the organization master key — bootstraps, escrow fetches,
@@ -83,50 +83,54 @@ export default function AuditLogPage() {
       )}
 
       {state.kind === "ok" && state.entries.length > 0 && (
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            marginTop: 20,
-            fontSize: 14,
-          }}
-        >
-          <thead style={{ background: "#f9fafb" }}>
-            <tr>
-              <th style={cellStyle}>When</th>
-              <th style={cellStyle}>Actor</th>
-              <th style={cellStyle}>Role</th>
-              <th style={cellStyle}>Action</th>
-              <th style={cellStyle}>Target</th>
-              <th style={cellStyle}>IP</th>
-            </tr>
-          </thead>
-          <tbody>
-            {state.entries.map((entry) => (
-              <tr key={entry.id}>
-                <td style={cellStyle}>
-                  {new Date(entry.created_at).toLocaleString()}
-                </td>
-                <td style={cellStyle}>{entry.actor_user_id ?? "—"}</td>
-                <td style={cellStyle}>{entry.actor_role ?? "—"}</td>
-                <td style={{ ...cellStyle, fontWeight: 600 }}>
-                  {formatAction(entry.action)}
-                </td>
-                <td style={cellStyle}>{entry.target_user_id ?? "—"}</td>
-                <td
-                  style={{
-                    ...cellStyle,
-                    fontFamily: "monospace",
-                    fontSize: 12,
-                    color: "#6b7280",
-                  }}
-                >
-                  {entry.ip ?? "—"}
-                </td>
+        // Six columns don't fit a phone; the table scrolls sideways in place
+        // instead of being cut off at the page's edge.
+        <div style={{ overflowX: "auto" }}>
+          <table
+            style={{
+              width: "100%",
+              borderCollapse: "collapse",
+              marginTop: 20,
+              fontSize: 14,
+            }}
+          >
+            <thead style={{ background: "#f9fafb" }}>
+              <tr>
+                <th style={cellStyle}>When</th>
+                <th style={cellStyle}>Actor</th>
+                <th style={cellStyle}>Role</th>
+                <th style={cellStyle}>Action</th>
+                <th style={cellStyle}>Target</th>
+                <th style={cellStyle}>IP</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {state.entries.map((entry) => (
+                <tr key={entry.id}>
+                  <td style={cellStyle}>
+                    {new Date(entry.created_at).toLocaleString()}
+                  </td>
+                  <td style={cellStyle}>{entry.actor_user_id ?? "—"}</td>
+                  <td style={cellStyle}>{entry.actor_role ?? "—"}</td>
+                  <td style={{ ...cellStyle, fontWeight: 600 }}>
+                    {formatAction(entry.action)}
+                  </td>
+                  <td style={cellStyle}>{entry.target_user_id ?? "—"}</td>
+                  <td
+                    style={{
+                      ...cellStyle,
+                      fontFamily: "monospace",
+                      fontSize: 12,
+                      color: "#6b7280",
+                    }}
+                  >
+                    {entry.ip ?? "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

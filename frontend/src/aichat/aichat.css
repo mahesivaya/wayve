@@ -523,3 +523,32 @@
   font-weight: 600;
   color: var(--color-success, #16a34a);
 }
+
+/* Phones: the title, provider badge, model name and "AI settings" don't fit on
+   one line, and each broke in the middle ("AI / Chat", "claude- / opus-4-8").
+   Whole items wrap instead, and a long model name is cut with an ellipsis. */
+@media (max-width: 768px) and (pointer: coarse) {
+  .ai-chat-header {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .ai-chat-title {
+    flex-wrap: wrap;
+    row-gap: 2px;
+    min-width: 0;
+    white-space: nowrap;
+  }
+
+  .ai-chat-model {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ai-chat-settings,
+  .ai-chat-clear {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+}

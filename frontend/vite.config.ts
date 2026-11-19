@@ -42,7 +42,10 @@ export default defineConfig(({ command }) => ({
     },
 
     proxy: {
-      "/api": "http://localhost:8080",
+      // A regex, so only paths under /api/ are proxied. The plain "/api"
+      // prefix also caught the app's own /api-keys page, which then failed to
+      // load on a refresh in dev.
+      "^/api/": "http://localhost:8080",
       "/gmail": "http://localhost:8080",
       "/oauth": "http://localhost:8080",
       "/ws": "ws://localhost:8080",

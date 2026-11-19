@@ -116,8 +116,30 @@
 }
 
 @media (max-width: 640px) {
+  .sso-settings {
+    padding: 0 16px 24px;
+  }
+
+  /* A fieldset refuses to be narrower than its widest child unless told it
+     may, which pushed the whole form past the right edge of a phone. */
   .sso-form fieldset {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    padding: 14px;
+  }
+
+  .sso-form input[type="text"],
+  .sso-form input[type="url"],
+  .sso-form input[type="password"] {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Example URLs in the help text have no spaces to break at. */
+  .sso-form small,
+  .sso-form code {
+    overflow-wrap: anywhere;
   }
 }
 

@@ -653,3 +653,12 @@
   font-size: var(--text-xs, 0.75rem);
   color: var(--color-text-muted);
 }
+
+/* A platform page opened by a role that can see none of it. */
+.platform-no-access {
+  margin: 0;
+  padding: 32px 20px;
+  color: var(--color-text-muted);
+  font-size: var(--text-md);
+  text-align: center;
+}

@@ -206,7 +206,10 @@
 
 .user-audit-input {
   flex: 1;
-  min-width: 240px;
+  /* Never wider than the form it sits in: on a phone the form is narrower
+     than 240px plus this field's padding. */
+  box-sizing: border-box;
+  min-width: min(240px, 100%);
   max-width: 420px;
   border: 1px solid var(--color-border-muted);
   border-radius: var(--radius-sm);

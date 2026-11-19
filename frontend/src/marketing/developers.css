@@ -98,6 +98,9 @@
 }
 
 .dev-hero h1 {
+  /* The banner is dark in both themes; the app-wide heading colour is dark in
+     the light theme, which left the title unreadable on it. */
+  color: #fff;
   font-size: 36px;
   margin: 0 0 12px;
 }
