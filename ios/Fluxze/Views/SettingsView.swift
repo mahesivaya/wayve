@@ -13,6 +13,9 @@ struct SettingsView: View {
                     NavigationLink { AccountSettingsView() } label: {
                         Label("Account", systemImage: "person")
                     }
+                    NavigationLink { NotificationSettingsView() } label: {
+                        Label("Notifications", systemImage: "bell")
+                    }
                     NavigationLink { AppearanceSettingsView() } label: {
                         Label("Appearance", systemImage: "circle.lefthalf.filled")
                     }
@@ -23,7 +26,7 @@ struct SettingsView: View {
 
                 Section("About") {
                     Link(destination: Config.webURL("/")) {
-                        LinkRow(title: "Fluxze on the web", systemImage: "globe")
+                        LinkRow(title: "Hadal on the web", systemImage: "globe")
                     }
                     Link(destination: Config.webURL("/privacy")) {
                         LinkRow(title: "Privacy policy", systemImage: "hand.raised")
@@ -94,7 +97,7 @@ struct AccountSettingsView: View {
                 }
                 .disabled(isDeleting)
             } footer: {
-                Text("Permanently deletes your Fluxze account and its data. Organization accounts are managed by their organization.")
+                Text("Permanently deletes your Hadal account and its data. Organization accounts are managed by their organization.")
             }
 
             if let errorMessage {

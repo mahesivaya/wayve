@@ -14,15 +14,16 @@ struct TaskListView: View {
     var body: some View {
         NavigationStack {
             content
-                .navigationTitle("")
+                // Tasks has no title; the workspace boards say which one this is.
+                .navigationTitle(store.board == .tasks ? "" : store.board.plural.prefix(1).uppercased() + store.board.plural.dropFirst())
                 .navigationBarTitleDisplayMode(.inline)
-                .searchable(text: $search, prompt: "Search tasks")
+                .searchable(text: $search, prompt: "Search \(store.board.plural)")
                 .refreshable { await store.load() }
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) {
                         filterMenu
                         Button { creating = true } label: { Image(systemName: "plus") }
-                            .accessibilityLabel("New task")
+                            .accessibilityLabel("New \(store.board.noun)")
                             .disabled(store.statuses.isEmpty)
                     }
                     // The account button stands apart, in its own glass bubble.
@@ -46,7 +47,7 @@ struct TaskListView: View {
                     SettingsView()
                 }
                 .confirmationDialog(
-                    "Delete this task?",
+                    "Delete this \(store.board.noun)?",
                     isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
                     titleVisibility: .visible,
                     presenting: pendingDelete
@@ -74,7 +75,7 @@ struct TaskListView: View {
             ProgressView()
         } else if store.tasks.isEmpty, let message = store.errorMessage {
             ContentUnavailableView {
-                Label("Couldn't load tasks", systemImage: "wifi.exclamationmark")
+                Label("Couldn't load \(store.board.plural)", systemImage: "wifi.exclamationmark")
             } description: {
                 Text(message)
             } actions: {
@@ -82,9 +83,9 @@ struct TaskListView: View {
             }
         } else if store.tasks.isEmpty {
             ContentUnavailableView {
-                Label("No tasks yet", systemImage: "checklist")
+                Label("No \(store.board.plural) yet", systemImage: store.board.systemImage)
             } description: {
-                Text("Tap + to add your first task.")
+                Text("Tap + to add your first \(store.board.noun).")
             }
         } else {
             List {
@@ -93,7 +94,7 @@ struct TaskListView: View {
 
                 Section("Active (\(active.count))") {
                     if active.isEmpty {
-                        Text(isFiltering ? "No matching tasks" : "Nothing left to do")
+                        Text(isFiltering ? "No matching \(store.board.plural)" : "Nothing left to do")
                             .foregroundStyle(.secondary)
                     }
                     ForEach(active) { row($0) }

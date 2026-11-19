@@ -76,6 +76,16 @@ final class APIClient {
         }
     }
 
+    /// A POST through the GitHub proxy, whose 401 is GitHub's, not this sign-in's.
+    func postKeepingSession<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
+        let data = try await perform("POST", path, body: body, signOutOn401: false)
+        do {
+            return try Self.decoder.decode(T.self, from: data)
+        } catch {
+            throw APIError.decoding(String(describing: error))
+        }
+    }
+
     /// The raw bytes of a GET, such as a file download.
     func download(_ path: String) async throws -> Data {
         try await perform("GET", path, body: Optional<NoBody>.none)
@@ -119,7 +129,7 @@ final class APIClient {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            throw APIError.network("Can't reach Fluxze. Check your connection and try again.")
+            throw APIError.network("Can't reach Hadal. Check your connection and try again.")
         }
         guard let http = response as? HTTPURLResponse else {
             throw APIError.network("No response from the server.")

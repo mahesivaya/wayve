@@ -26,6 +26,8 @@ final class MeetingsStore: ObservableObject {
             let list: [Meeting] = try await api.get("/api/meetings")
             meetings = list
             errorMessage = nil
+            // Created, changed and imported meetings all pass through here.
+            Notifier.scheduleMeetings(list)
         } catch APIError.unauthorized {
             // AppState signs out.
         } catch {
@@ -67,6 +69,7 @@ final class MeetingsStore: ObservableObject {
         meetings.remove(at: index)
         do {
             try await api.delete("/api/meetings/\(meeting.id)")
+            Notifier.scheduleMeetings(meetings)
         } catch {
             meetings.insert(meeting, at: min(index, meetings.count))
             errorMessage = error.localizedDescription

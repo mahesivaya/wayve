@@ -302,7 +302,7 @@ final class ChatStore: ObservableObject {
             switch self {
             case .offline: "Chat isn't connected. Check your connection and try again."
             case .locked: "Unlock your encryption key on this iPhone to send messages."
-            case .noKey(let who): "Can't send: \(who) hasn't set up encryption yet. They just need to open Fluxze once."
+            case .noKey(let who): "Can't send: \(who) hasn't set up encryption yet. They just need to open Hadal once."
             }
         }
     }
@@ -434,6 +434,7 @@ final class ChatStore: ObservableObject {
                 userId: message.senderId, unreadCount: (dm?.unreadCount ?? 0) + 1,
                 lastMessageAt: message.createdAt ?? Date())
             totalUnread += 1
+            Notifier.chatMessage(from: message.senderName ?? names[message.senderId], senderID: message.senderId)
         } else if let channelID = message.channelId,
                   let channel = channels.first(where: { $0.id == channelID }) {
             touch(.channel(channel), at: message.createdAt)

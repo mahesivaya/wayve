@@ -28,7 +28,7 @@ struct UnlockKeyView: View {
                 } header: {
                     Text("Recovery phrase")
                 } footer: {
-                    Text("\(wordCount) of 24 words. Enter the phrase you saved when you set up Fluxze, with spaces between words. It unlocks your encrypted mail on this iPhone and isn't stored.")
+                    Text("\(wordCount) of 24 words. Enter the phrase you saved when you set up Hadal, with spaces between words. It unlocks your encrypted mail on this iPhone and isn't stored.")
                 }
 
                 if let errorMessage {
@@ -68,7 +68,7 @@ struct UnlockKeyView: View {
             do {
                 envelope = try await appState.api.get("/api/me/wrapped-key")
             } catch APIError.server(status: 404, _, _) {
-                errorMessage = "Your account has no recovery copy of its key on Fluxze, so it can only be unlocked in the browser that holds it."
+                errorMessage = "Your account has no recovery copy of its key on Hadal, so it can only be unlocked in the browser that holds it."
                 return
             }
             // 600k PBKDF2 rounds: keep it off the main thread.

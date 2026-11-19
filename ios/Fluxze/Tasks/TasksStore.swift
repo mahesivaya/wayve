@@ -1,5 +1,49 @@
 import Foundation
 
+/// The three boards that share the task shape and screens: your tasks, and
+/// the workspace's user stories and tickets (organization and platform
+/// accounts). Statuses and projects are the same for all three.
+enum Board: String {
+    case tasks, stories, tickets
+
+    /// Where its items are listed, created, changed and deleted.
+    var path: String {
+        switch self {
+        case .tasks: "/api/tasks"
+        case .stories: "/api/user-stories"
+        case .tickets: "/api/workspace-tickets"
+        }
+    }
+
+    /// "task", for the middle of a sentence.
+    var noun: String {
+        switch self {
+        case .tasks: "task"
+        case .stories: "user story"
+        case .tickets: "ticket"
+        }
+    }
+
+    var plural: String {
+        switch self {
+        case .tasks: "tasks"
+        case .stories: "user stories"
+        case .tickets: "tickets"
+        }
+    }
+
+    /// "Task", for the start of one: "Task #12", "Task name".
+    var name: String { noun.prefix(1).uppercased() + noun.dropFirst() }
+
+    var systemImage: String {
+        switch self {
+        case .tasks: "checklist"
+        case .stories: "book"
+        case .tickets: "ticket"
+        }
+    }
+}
+
 @MainActor
 final class TasksStore: ObservableObject {
     @Published private(set) var tasks: [TaskItem] = []
@@ -10,9 +54,11 @@ final class TasksStore: ObservableObject {
     @Published var errorMessage: String?
 
     let api: APIClient
+    let board: Board
 
-    init(api: APIClient) {
+    init(api: APIClient, board: Board = .tasks) {
         self.api = api
+        self.board = board
     }
 
     func load() async {
@@ -20,7 +66,7 @@ final class TasksStore: ObservableObject {
         defer { isLoading = false }
         do {
             async let statusList: [TaskStatus] = api.get("/api/task-statuses")
-            async let taskList: [TaskItem] = api.get("/api/tasks")
+            async let taskList: [TaskItem] = api.get(board.path)
             async let projectList: [Project] = api.get("/api/projects")
             statuses = try await statusList.sorted { ($0.position ?? 0) < ($1.position ?? 0) }
             tasks = try await taskList
@@ -49,12 +95,12 @@ final class TasksStore: ObservableObject {
     }
 
     func create(_ input: TaskInput) async throws {
-        let created: TaskItem = try await api.post("/api/tasks", body: input)
+        let created: TaskItem = try await api.post(board.path, body: input)
         tasks.append(created)
     }
 
     func update(_ task: TaskItem, with input: TaskInput) async throws {
-        let updated: TaskItem = try await api.put("/api/tasks/\(task.id)", body: input)
+        let updated: TaskItem = try await api.put("\(board.path)/\(task.id)", body: input)
         replace(updated)
     }
 
@@ -68,7 +114,7 @@ final class TasksStore: ObservableObject {
         optimistic.status = slug
         replace(optimistic)
         do {
-            let updated: TaskItem = try await api.put("/api/tasks/\(task.id)", body: input)
+            let updated: TaskItem = try await api.put("\(board.path)/\(task.id)", body: input)
             replace(updated)
         } catch {
             replace(task)
@@ -80,7 +126,7 @@ final class TasksStore: ObservableObject {
         guard let index = tasks.firstIndex(where: { $0.id == task.id }) else { return }
         tasks.remove(at: index)
         do {
-            try await api.delete("/api/tasks/\(task.id)")
+            try await api.delete("\(board.path)/\(task.id)")
         } catch {
             tasks.insert(task, at: min(index, tasks.count))
             errorMessage = error.localizedDescription

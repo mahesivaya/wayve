@@ -2,7 +2,8 @@ import SwiftUI
 
 /// The inbox of every mailbox the user connected on the web, newest first.
 struct EmailListView: View {
-    @StateObject var store: EmailsStore
+    /// Owned by MainTabView, which badges the Inbox tab from it.
+    @ObservedObject var store: EmailsStore
     @State private var showingSettings = false
     @State private var searchText = ""
     @State private var composing = false
@@ -173,9 +174,9 @@ struct EmailListView: View {
             ContentUnavailableView {
                 Label("No mailbox connected", systemImage: "envelope")
             } description: {
-                Text("Connect Gmail, Outlook or another mailbox in Fluxze on the web, and its mail shows up here.")
+                Text("Connect Gmail, Outlook or another mailbox in Hadal on the web, and its mail shows up here.")
             } actions: {
-                Link("Open Fluxze", destination: Config.webURL("/emails"))
+                Link("Open Hadal", destination: Config.webURL("/emails"))
             }
         } else if store.emails.isEmpty {
             ContentUnavailableView(
