@@ -4,6 +4,26 @@ import XCTest
 final class DockTests: XCTestCase {
     private let everything = AppArea.allCases
 
+    func testAreasByAccount() {
+        // A personal account: no workspace boards.
+        XCTAssertEqual(AppArea.available(canSeeCode: true, hasWorkspace: false),
+                       [.inbox, .chat, .reviews, .tasks, .calendar, .drive])
+        // An organization guest: the boards, but no Reviews.
+        XCTAssertEqual(AppArea.available(canSeeCode: false, hasWorkspace: true),
+                       [.inbox, .chat, .tasks, .calendar, .drive, .stories, .tickets])
+        // They don't change the default dock.
+        XCTAssertEqual(Dock.areas(stored: "", available: AppArea.available(canSeeCode: true, hasWorkspace: true)),
+                       [.inbox, .chat, .reviews, .tasks])
+    }
+
+    func testBoardsUseTheirOwnEndpoints() {
+        XCTAssertEqual(Board.tasks.path, "/api/tasks")
+        XCTAssertEqual(Board.stories.path, "/api/user-stories")
+        XCTAssertEqual(Board.tickets.path, "/api/workspace-tickets")
+        XCTAssertEqual(Board.stories.name, "User story")
+        XCTAssertEqual(Board.tickets.plural, "tickets")
+    }
+
     func testNothingSavedGivesTheFirstFour() {
         XCTAssertEqual(Dock.areas(stored: "", available: everything), [.inbox, .chat, .reviews, .tasks])
         // A guest has no Reviews, so Calendar moves up.

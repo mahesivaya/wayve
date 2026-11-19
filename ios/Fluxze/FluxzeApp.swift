@@ -56,6 +56,8 @@ struct MainTabView: View {
     let userID: Int?
     /// Guests never see code, so they get no Reviews area.
     let canSeeCode: Bool
+    /// Organization and platform accounts get the workspace's user stories and tickets.
+    let hasWorkspace: Bool
     /// Held here, not in the Chat tab, so the unread badge and the live
     /// connection work before the tab is opened.
     @StateObject private var chat: ChatStore
@@ -82,20 +84,18 @@ struct MainTabView: View {
         userID = me?.id
         let canSeeCode = me?.canSeeCode ?? true
         self.canSeeCode = canSeeCode
+        let hasWorkspace = ["organization", "platform"].contains(me?.resolvedScope ?? "")
+        self.hasWorkspace = hasWorkspace
         _chat = StateObject(wrappedValue: ChatStore(api: api, me: me))
         _emails = StateObject(wrappedValue: EmailsStore(api: api, userID: me?.id))
         // The app opens on the dock's first area (Inbox, unless it was moved).
         let first = Dock.areas(
             stored: UserDefaults.standard.string(forKey: Dock.storageKey) ?? "",
-            available: Self.available(canSeeCode: canSeeCode)).first
+            available: AppArea.available(canSeeCode: canSeeCode, hasWorkspace: hasWorkspace)).first
         _selection = State(initialValue: .area(first ?? .inbox))
     }
 
-    static func available(canSeeCode: Bool) -> [AppArea] {
-        AppArea.allCases.filter { $0 != .reviews || canSeeCode }
-    }
-
-    private var available: [AppArea] { Self.available(canSeeCode: canSeeCode) }
+    private var available: [AppArea] { AppArea.available(canSeeCode: canSeeCode, hasWorkspace: hasWorkspace) }
     private var dock: [AppArea] { Dock.areas(stored: storedDock, available: available) }
     private var overflow: [AppArea] { available.filter { !dock.contains($0) } }
 
@@ -155,6 +155,8 @@ struct MainTabView: View {
         case .tasks: TaskListView(store: TasksStore(api: api))
         case .calendar: CalendarView(store: MeetingsStore(api: api))
         case .drive: DriveView(api: api)
+        case .stories: TaskListView(store: TasksStore(api: api, board: .stories))
+        case .tickets: TaskListView(store: TasksStore(api: api, board: .tickets))
         }
     }
 

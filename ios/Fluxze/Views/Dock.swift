@@ -2,7 +2,8 @@ import SwiftUI
 
 /// An area of the app: a tab in the dock, or a row in the ⋯ menu.
 enum AppArea: String, CaseIterable, Identifiable {
-    case inbox, chat, reviews, tasks, calendar, drive
+    // New areas go at the end: the first four are the default dock.
+    case inbox, chat, reviews, tasks, calendar, drive, stories, tickets
 
     var id: String { rawValue }
 
@@ -14,6 +15,8 @@ enum AppArea: String, CaseIterable, Identifiable {
         case .tasks: "Tasks"
         case .calendar: "Calendar"
         case .drive: "Drive"
+        case .stories: "User stories"
+        case .tickets: "Tickets"
         }
     }
 
@@ -26,6 +29,8 @@ enum AppArea: String, CaseIterable, Identifiable {
         case .tasks: Image(systemName: "checklist")
         case .calendar: Image(systemName: "calendar")
         case .drive: Image(systemName: "folder")
+        case .stories: Image(systemName: Board.stories.systemImage)
+        case .tickets: Image(systemName: Board.tickets.systemImage)
         }
     }
 
@@ -35,6 +40,20 @@ enum AppArea: String, CaseIterable, Identifiable {
 }
 
 /// Which areas sit in the dock; the rest are reached from its ⋯ tab.
+extension AppArea {
+    /// The areas an account has: guests get no Reviews, and the workspace's
+    /// user stories and tickets are for organization and platform accounts.
+    static func available(canSeeCode: Bool, hasWorkspace: Bool) -> [AppArea] {
+        allCases.filter { area in
+            switch area {
+            case .reviews: canSeeCode
+            case .stories, .tickets: hasWorkspace
+            default: true
+            }
+        }
+    }
+}
+
 enum Dock {
     static let storageKey = "dockAreas"
     /// The tab bar holds five: four areas and ⋯.

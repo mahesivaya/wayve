@@ -29,7 +29,7 @@ struct TaskEditView: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Task name", text: $input.name)
+                    TextField("\(store.board.name) name", text: $input.name)
                     TextField("Description", text: $input.description, axis: .vertical)
                         .lineLimit(3...10)
                 }
@@ -74,11 +74,11 @@ struct TaskEditView: View {
 
                 if task != nil {
                     Section {
-                        Button("Delete task", role: .destructive) { confirmDelete = true }
+                        Button("Delete \(store.board.noun)", role: .destructive) { confirmDelete = true }
                     }
                 }
             }
-            .navigationTitle(task == nil ? "New task" : (task?.taskNumber.map { "Task #\($0)" } ?? "Edit task"))
+            .navigationTitle(task == nil ? "New \(store.board.noun)" : (task?.taskNumber.map { "\(store.board.name) #\($0)" } ?? "Edit \(store.board.noun)"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -92,7 +92,7 @@ struct TaskEditView: View {
                     }
                 }
             }
-            .confirmationDialog("Delete this task?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            .confirmationDialog("Delete this \(store.board.noun)?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
                     if let task {
                         Task { await store.delete(task) }
