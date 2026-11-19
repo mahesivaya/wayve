@@ -1,6 +1,6 @@
 use moka::future::Cache as MokaCache;
 use redis::AsyncCommands;
-use redis::aio::MultiplexedConnection;
+use redis::aio::ConnectionManager;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::time::Duration;
@@ -8,7 +8,7 @@ use tracing::{instrument, warn};
 
 #[derive(Clone)]
 pub struct Cache {
-    conn: MultiplexedConnection,
+    conn: ConnectionManager,
     local_json: MokaCache<String, String>,
 }
 
@@ -17,7 +17,21 @@ impl Cache {
     pub async fn connect() -> Result<Self, redis::RedisError> {
         let url = crate::config::redis_url();
         let client = redis::Client::open(url)?;
-        let conn = client.get_multiplexed_async_connection().await?;
+        // A connection manager, not a bare connection: when Redis restarts or
+        // the link drops, the next call reconnects instead of every call failing
+        // until the backend itself is restarted. The first connection is retried
+        // with backoff (about 6s in all), which covers Redis starting a moment
+        // after the backend. Each call gives up after a couple of seconds rather
+        // than hanging a request on a Redis that isn't answering.
+        let conn = ConnectionManager::new_with_backoff_and_timeouts(
+            client,
+            2,
+            100,
+            5,
+            Duration::from_secs(2),
+            Duration::from_secs(2),
+        )
+        .await?;
         Ok(Self {
             conn,
             local_json: local_json_cache(),

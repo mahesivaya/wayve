@@ -1,3 +1,4 @@
+use super::local_rate_limit::FALLBACK;
 use crate::cache::Cache;
 use actix_web::body::EitherBody;
 use actix_web::{
@@ -8,11 +9,16 @@ use actix_web::{
 use futures::future::{LocalBoxFuture, Ready, ok};
 use std::{
     rc::Rc,
+    sync::Once,
     task::{Context, Poll},
 };
-use tracing::{error, warn};
+use tracing::warn;
 
 pub struct RateLimitMiddleware;
+
+/// Said once per process, not once per request: without Redis every limited
+/// request takes the in-memory path, and a line each would bury the log.
+static NO_REDIS_NOTICE: Once = Once::new();
 
 #[derive(Clone, Copy)]
 struct LimitRule {
@@ -104,41 +110,43 @@ where
             });
         };
 
-        let Some(cache_data) = req.app_data::<web::Data<Option<Cache>>>() else {
-            warn!(target: "rate_limit", path = req.path(), "rate limiter missing cache app_data");
-            return Box::pin(async {
-                Ok(req.into_response(
-                    HttpResponse::ServiceUnavailable()
-                        .body("Rate limiter unavailable")
-                        .map_into_right_body(),
-                ))
-            });
-        };
-
-        let Some(cache) = cache_data.get_ref().clone() else {
-            warn!(target: "rate_limit", path = req.path(), "redis unavailable; auth endpoint blocked");
-            return Box::pin(async {
-                Ok(req.into_response(
-                    HttpResponse::ServiceUnavailable()
-                        .body("Rate limiter unavailable")
-                        .map_into_right_body(),
-                ))
-            });
-        };
+        // No Redis handle (it was down at startup, or none was registered) is
+        // not a reason to refuse: the in-memory limiter below takes over.
+        let cache = req
+            .app_data::<web::Data<Option<Cache>>>()
+            .and_then(|data| data.get_ref().clone());
 
         let key = client_key(&req);
         let srv = self.service.clone();
 
         Box::pin(async move {
-            let count = match cache.increment_with_ttl(&key, rule.window_secs).await {
-                Ok(count) => count,
-                Err(e) => {
-                    error!(target: "rate_limit", key, error = ?e, "redis rate limit check failed");
-                    return Ok(req.into_response(
-                        HttpResponse::ServiceUnavailable()
-                            .body("Rate limiter unavailable")
-                            .map_into_right_body(),
-                    ));
+            // Redis counts when it can, so every instance shares one limit. When
+            // it can't (no connection, or this call failed) the same window is
+            // counted in this process instead. Refusing here would make Redis a
+            // hard dependency for signing in; letting the request through
+            // uncounted would switch the limit off exactly when something is
+            // already wrong.
+            let count = match &cache {
+                Some(cache) => match cache.increment_with_ttl(&key, rule.window_secs).await {
+                    Ok(count) => count,
+                    Err(e) => {
+                        warn!(
+                            target: "rate_limit",
+                            key,
+                            error = ?e,
+                            "redis rate limit check failed; counting in memory"
+                        );
+                        FALLBACK.hit(&key, rule.window_secs).await
+                    }
+                },
+                None => {
+                    NO_REDIS_NOTICE.call_once(|| {
+                        warn!(
+                            target: "rate_limit",
+                            "redis unavailable; rate limits are counted in memory, per instance"
+                        );
+                    });
+                    FALLBACK.hit(&key, rule.window_secs).await
                 }
             };
 
@@ -233,20 +241,105 @@ mod tests {
         assert!(auth_limit_rule("POST", "/api/files/upload").is_none());
     }
 
+    /// A documentation-range client that no other test or run shares a bucket
+    /// with: the in-memory limiter is process-wide.
+    fn fresh_peer() -> std::net::SocketAddr {
+        let n = uuid::Uuid::new_v4().as_u128();
+        format!("[2001:db8:f::{:x}:{:x}]:40000", (n >> 16) as u16, n as u16)
+            .parse()
+            .unwrap_or_else(|e| panic!("peer: {e}"))
+    }
+
+    /// POSTs `uri` `requests` times as one fresh client; the statuses in order.
+    macro_rules! statuses {
+        ($app:expr, $uri:expr, $requests:expr) => {{
+            let peer = fresh_peer();
+            let mut out = Vec::new();
+            for _ in 0..$requests {
+                let req = actix_test::TestRequest::post()
+                    .uri($uri)
+                    .peer_addr(peer)
+                    .to_request();
+                out.push(actix_test::call_service(&$app, req).await.status());
+            }
+            out
+        }};
+    }
+
+    /// Redis down at startup leaves the app with `None`. Signing in still works,
+    /// and is still limited.
     #[actix_web::test]
-    async fn auth_endpoint_fails_closed_without_redis_cache() {
+    async fn without_redis_requests_are_served_and_limited_in_memory() {
         let app = actix_test::init_service(
             App::new()
+                .app_data(web::Data::new(None::<Cache>))
                 .wrap(RateLimitMiddleware)
-                .route("/api/login", web::post().to(HttpResponse::Ok)),
+                .route("/api/login", web::post().to(HttpResponse::Ok))
+                .route("/api/register", web::post().to(HttpResponse::Ok)),
         )
         .await;
 
-        let req = actix_test::TestRequest::post()
-            .uri("/api/login")
-            .to_request();
-        let resp = actix_test::call_service(&app, req).await;
+        // /api/login allows 10 a minute.
+        let login = statuses!(app, "/api/login", 12);
+        assert!(
+            login[..10].iter().all(|s| *s == StatusCode::OK),
+            "{login:?}"
+        );
+        assert_eq!(login[10], StatusCode::TOO_MANY_REQUESTS, "{login:?}");
+        assert_eq!(login[11], StatusCode::TOO_MANY_REQUESTS, "{login:?}");
 
-        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+        // Each rule keeps its own limit: /api/register allows 5.
+        let register = statuses!(app, "/api/register", 6);
+        assert!(
+            register[..5].iter().all(|s| *s == StatusCode::OK),
+            "{register:?}"
+        );
+        assert_eq!(register[5], StatusCode::TOO_MANY_REQUESTS, "{register:?}");
+    }
+
+    /// One client being over the limit doesn't touch another.
+    #[actix_web::test]
+    async fn the_in_memory_limit_is_per_client() {
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(None::<Cache>))
+                .wrap(RateLimitMiddleware)
+                .route("/api/register", web::post().to(HttpResponse::Ok)),
+        )
+        .await;
+        let first = statuses!(app, "/api/register", 6);
+        assert_eq!(first[5], StatusCode::TOO_MANY_REQUESTS, "{first:?}");
+        let second = statuses!(app, "/api/register", 1);
+        assert_eq!(second[0], StatusCode::OK, "{second:?}");
+    }
+
+    /// No cache registered at all used to answer 503. It is the same situation
+    /// as no Redis, and gets the same treatment.
+    #[actix_web::test]
+    async fn a_missing_cache_registration_is_limited_not_refused() {
+        let app = actix_test::init_service(
+            App::new()
+                .wrap(RateLimitMiddleware)
+                .route("/api/forgot-password", web::post().to(HttpResponse::Ok)),
+        )
+        .await;
+        // /api/forgot-password allows 5 per 15 minutes.
+        let got = statuses!(app, "/api/forgot-password", 6);
+        assert!(got[..5].iter().all(|s| *s == StatusCode::OK), "{got:?}");
+        assert_eq!(got[5], StatusCode::TOO_MANY_REQUESTS, "{got:?}");
+    }
+
+    /// Routes without a rule are never counted, with or without Redis.
+    #[actix_web::test]
+    async fn unlimited_routes_stay_unlimited_without_redis() {
+        let app = actix_test::init_service(
+            App::new()
+                .app_data(web::Data::new(None::<Cache>))
+                .wrap(RateLimitMiddleware)
+                .route("/api/notes", web::post().to(HttpResponse::Ok)),
+        )
+        .await;
+        let got = statuses!(app, "/api/notes", 40);
+        assert!(got.iter().all(|s| *s == StatusCode::OK), "{got:?}");
     }
 }

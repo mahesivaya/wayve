@@ -45,7 +45,9 @@ tracing-appender = "0.2"
 tracing-actix-web = "0.7"
 log = "0.4.29"
 dotenvy = "0.15.7"
-redis = { version = "0.25", features = ["tokio-comp"] }
+# `connection-manager`: the cache's connection reconnects by itself after Redis
+# restarts, instead of failing every call until the backend is restarted.
+redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
 lettre = { version = "0.11.22", default-features = false, features = ["smtp-transport", "tokio1", "tokio1-rustls-tls", "builder"] }
 moka = { version = "0.12", features = ["future"] }
 mimalloc = { version = "0.1", default-features = false }
