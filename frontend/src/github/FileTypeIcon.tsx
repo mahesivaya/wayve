@@ -118,3 +118,22 @@ export function FileTypeIcon({ path }: { path: string }) {
     </span>
   );
 }
+
+// Inline SVG rather than emoji so icons theme by class and render the same
+// across operating systems.
+export function FolderIcon() {
+  return (
+    <svg
+      className="github-icon github-icon-folder"
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      aria-hidden="true"
+    >
+      <path
+        fill="currentColor"
+        d="M1.75 2.5h4.13l1.5 1.5h6.87a.75.75 0 0 1 .75.75v8a.75.75 0 0 1-.75.75H1.75a.75.75 0 0 1-.75-.75V3.25a.75.75 0 0 1 .75-.75Z"
+      />
+    </svg>
+  );
+}

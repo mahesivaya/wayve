@@ -77,6 +77,8 @@ export {
   Search as SearchIcon,
   SlidersHorizontal as FilterIcon,
   ChevronRight as ChevronIcon,
+  // The Files tab's switch for keeping the folder tree in view.
+  ListTree as FileTreeIcon,
   Plus as PlusIcon,
   // Addable "fake" personal apps (placeholder catalog)
   Palette as CanvasIcon,

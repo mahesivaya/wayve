@@ -7,7 +7,9 @@ import { hasPermission } from "../auth/permissions";
 import { getAuthToken } from "../auth/token";
 import RepoAccessPanel from "./RepoAccessPanel";
 import ReadmeView from "./ReadmeView";
-import { FileTypeIcon } from "./FileTypeIcon";
+import { FileTypeIcon, FolderIcon } from "./FileTypeIcon";
+import { useFileTreePref } from "./fileTreePref";
+import { RepoFileTree } from "./RepoFileTree";
 import ResizeHandle from "../components/ResizeHandle";
 import { useResizableWidth } from "../components/useResizableWidth";
 import PrMergeBox from "./PrMergeBox";
@@ -44,6 +46,7 @@ import {
   CommentOptionsIcon,
   CopyIcon,
   EditCommentIcon,
+  FileTreeIcon,
   GitBranchIcon,
   PullRequestClosedIcon,
   PullRequestDraftIcon,
@@ -583,25 +586,6 @@ function sortContents(items: ContentItem[]): ContentItem[] {
   });
 }
 
-// Inline SVG rather than emoji so icons theme by class and render the same
-// across operating systems.
-function FolderIcon() {
-  return (
-    <svg
-      className="github-icon github-icon-folder"
-      viewBox="0 0 16 16"
-      width="16"
-      height="16"
-      aria-hidden="true"
-    >
-      <path
-        fill="currentColor"
-        d="M1.75 2.5h4.13l1.5 1.5h6.87a.75.75 0 0 1 .75.75v8a.75.75 0 0 1-.75.75H1.75a.75.75 0 0 1-.75-.75V3.25a.75.75 0 0 1 .75-.75Z"
-      />
-    </svg>
-  );
-}
-
 function SearchIcon() {
   return (
     <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
@@ -856,6 +840,7 @@ export function GitHubRepoViewer({
   // A custom dropdown rather than a native <select> so the list reliably opens
   // downward and the branch names can be themed.
   const [treeItems, setTreeItems] = useState<DirectoryCache>({});
+  const [fileTreeShown, setFileTreeShown] = useFileTreePref();
   // The folder being listed, unless a file is open over it.
   const [currentDir, setCurrentDir] = useState("");
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
@@ -2007,6 +1992,23 @@ export function GitHubRepoViewer({
 
   const parentOf = (path: string) => path.split("/").slice(0, -1).join("/");
 
+  const loadTreeFolder = (path: string) => void loadDirectory(path, branch);
+
+  // Shows or hides the folder tree. It sits at the top of the tree while that
+  // is showing, and at the start of the Files header while it is hidden.
+  const fileTreeSwitch = (
+    <button
+      type="button"
+      className={`github-tree-switch${fileTreeShown ? " is-on" : ""}`}
+      aria-pressed={fileTreeShown}
+      aria-label={fileTreeShown ? "Hide file tree" : "Show file tree"}
+      data-tooltip={fileTreeShown ? "Hide file tree" : "Show file tree"}
+      onClick={() => setFileTreeShown(!fileTreeShown)}
+    >
+      <FileTreeIcon size={16} />
+    </button>
+  );
+
   const dirItems = sortContents(treeItems[currentDir] ?? []);
 
   if (loading) {
@@ -2165,12 +2167,32 @@ export function GitHubRepoViewer({
           {activeSection === "files" && (
             // One folder or one file at a time, at full width, like GitHub: a
             // split left too little room to read code beside the app's other pane.
-            <main className="github-grid">
+            // The folder tree can be kept beside it, from the button in the header.
+            <main className={`github-grid${fileTreeShown ? " has-tree" : ""}`}>
+              {fileTreeShown && (
+                <aside className="github-tree-pane" aria-label="Folders">
+                  <div className="github-tree-head">
+                    {fileTreeSwitch}
+                    <span>Folders</span>
+                  </div>
+                  <RepoFileTree
+                    items={treeItems}
+                    loading={loadingPaths}
+                    branch={branch}
+                    activePath={selectedFile?.path ?? currentDir}
+                    activeIsFile={selectedFile !== null}
+                    sort={sortContents}
+                    onLoad={loadTreeFolder}
+                    onOpenFile={(item) => void openFile(item)}
+                  />
+                </aside>
+              )}
               <section
                 className={selectedFile ? "github-preview" : "github-browser"}
                 aria-label={selectedFile ? "File preview" : "Repository files"}
               >
                 <div className="github-panel-head github-files-head">
+                  {!fileTreeShown && fileTreeSwitch}
                   <h2>Files</h2>
                   <RepoPath
                     repoName={repoName}

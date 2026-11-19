@@ -512,6 +512,118 @@
   grid-template-rows: minmax(0, 1fr);
 }
 
+/* Files tab with the folder tree kept in view: the tree in its own column,
+   scrolling by itself, beside the folder list or the open file. */
+.github-grid.has-tree {
+  grid-template-columns: minmax(160px, 260px) minmax(0, 1fr);
+}
+
+.github-tree-pane {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 6px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+
+/* Stays at the top of the tree as it scrolls, holding the show/hide switch. */
+.github-tree-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 -6px 4px;
+  padding: 6px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.github-tree,
+.github-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.github-tree-row {
+  width: 100%;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.github-tree-row:hover {
+  background: var(--color-surface-hover);
+}
+
+.github-tree-row:focus-visible {
+  outline: 2px solid var(--color-primary-action);
+  outline-offset: -2px;
+}
+
+.github-tree-row.is-active {
+  background: var(--color-primary-soft, var(--color-surface-hover));
+  font-weight: 600;
+}
+
+.github-tree-row .github-tree-toggle,
+.github-tree-row .github-file-kind {
+  flex-shrink: 0;
+}
+
+.github-tree-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.github-tree-note {
+  padding: 4px 8px;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* The header button that shows or hides the tree. */
+.github-tree-switch {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.github-tree-switch:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.github-tree-switch.is-on {
+  border-color: var(--color-primary-action);
+  color: var(--color-primary-action);
+}
+
 /* Close button in the file header, beside the size; returns to the folder. */
 .github-panel-head-trail {
   display: inline-flex;
