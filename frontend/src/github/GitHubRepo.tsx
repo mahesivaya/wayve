@@ -7,14 +7,25 @@ import { hasPermission } from "../auth/permissions";
 import { getAuthToken } from "../auth/token";
 import RepoAccessPanel from "./RepoAccessPanel";
 import ReadmeView from "./ReadmeView";
-import { FileTypeIcon } from "./FileTypeIcon";
+import { FileTypeIcon, FolderIcon } from "./FileTypeIcon";
+import { ChangedFilesTree } from "./ChangedFilesTree";
+import { useChangesTreePref, useFileTreePref } from "./fileTreePref";
+import { RepoFileTree } from "./RepoFileTree";
+import { PrCommitList } from "./PrCommitList";
+import { PrTabs } from "./PrTabs";
+import { isPrTab, type PrTab } from "./prTabList";
 import ResizeHandle from "../components/ResizeHandle";
 import { useResizableWidth } from "../components/useResizableWidth";
 import PrMergeBox from "./PrMergeBox";
 import PrDescription from "./PrDescription";
 import { useMergeabilityRecheck } from "./useMergeabilityRecheck";
 import PrMergeButton, { type HeaderMergeMethod } from "./PrMergeButton";
-import type { CheckRun } from "./prMergeSummary";
+import {
+  checkDuration,
+  checkOutcome,
+  sortChecks,
+  type CheckRun,
+} from "./prMergeSummary";
 import { listProjects, linkProjectRepo, type Project } from "../api/workspace";
 import {
   mergePullRequest,
@@ -44,6 +55,7 @@ import {
   CommentOptionsIcon,
   CopyIcon,
   EditCommentIcon,
+  FileTreeIcon,
   GitBranchIcon,
   PullRequestClosedIcon,
   PullRequestDraftIcon,
@@ -189,6 +201,7 @@ type PullBundle = {
   // The head commit's check runs, for the merge box. Null when GitHub didn't
   // return them (e.g. a token without checks access).
   checkRuns: CheckRun[] | null;
+  commits: CommitItem[];
 };
 
 // Comments and reviews merged into one chronological conversation.
@@ -463,6 +476,13 @@ export function DiffComment({
   );
 }
 
+const CHECK_OUTCOME_LABEL = {
+  pass: "Passed",
+  fail: "Failed",
+  pending: "Running",
+  skip: "Skipped",
+} as const;
+
 function formatDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "Unknown" : fmtDateTime(date);
@@ -581,25 +601,6 @@ function sortContents(items: ContentItem[]): ContentItem[] {
     if (aDir !== bDir) return aDir - bDir;
     return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
   });
-}
-
-// Inline SVG rather than emoji so icons theme by class and render the same
-// across operating systems.
-function FolderIcon() {
-  return (
-    <svg
-      className="github-icon github-icon-folder"
-      viewBox="0 0 16 16"
-      width="16"
-      height="16"
-      aria-hidden="true"
-    >
-      <path
-        fill="currentColor"
-        d="M1.75 2.5h4.13l1.5 1.5h6.87a.75.75 0 0 1 .75.75v8a.75.75 0 0 1-.75.75H1.75a.75.75 0 0 1-.75-.75V3.25a.75.75 0 0 1 .75-.75Z"
-      />
-    </svg>
-  );
 }
 
 function SearchIcon() {
@@ -856,6 +857,10 @@ export function GitHubRepoViewer({
   // A custom dropdown rather than a native <select> so the list reliably opens
   // downward and the branch names can be themed.
   const [treeItems, setTreeItems] = useState<DirectoryCache>({});
+  const [fileTreeShown, setFileTreeShown] = useFileTreePref();
+  const [changesTreeShown, setChangesTreeShown] = useChangesTreePref();
+  // The Changes tab's diffs, for the tree to find a file's diff in.
+  const pullFilesRef = useRef<HTMLDivElement | null>(null);
   // The folder being listed, unless a file is open over it.
   const [currentDir, setCurrentDir] = useState("");
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
@@ -901,6 +906,11 @@ export function GitHubRepoViewer({
   // Null means the list view; a number is the opened PR. Each opened PR's
   // bundle is cached by number so re-opening is instant.
   const [selectedPull, setSelectedPull] = useState<number | null>(null);
+  // Which tab of the open pull request is showing; it comes back with the
+  // pull request after leaving the page.
+  const [pullTab, setPullTab] = useState<PrTab>(() =>
+    isPrTab(restoredView?.pullTab) ? restoredView.pullTab : "overview"
+  );
   const [pullBundleByNumber, setPullBundleByNumber] = useState<
     Record<number, PullBundle>
   >({});
@@ -1293,7 +1303,7 @@ export function GitHubRepoViewer({
         setPulls([]);
         setPullsHasMore(false);
         setPullsError(
-          err instanceof Error ? err.message : "Pull requests failed to load"
+          err instanceof Error ? err.message : "Merge requests failed to load"
         );
       } finally {
         if (requestId === pullsRequestRef.current) setPullsLoading(false);
@@ -1355,7 +1365,7 @@ export function GitHubRepoViewer({
         const detail = await githubJson<PullDetail>(
           `${API_BASE}/pulls/${number}`
         );
-        const [files, comments, lineComments, reviews, checkRuns] =
+        const [files, comments, lineComments, reviews, checkRuns, commits] =
           await Promise.all([
             githubJson<CommitFile[]>(
               `${API_BASE}/pulls/${number}/files?per_page=100`
@@ -1374,6 +1384,12 @@ export function GitHubRepoViewer({
             )
               .then((r) => r.check_runs)
               .catch(() => null),
+            githubJson<CommitItem[]>(
+              `${API_BASE}/pulls/${number}/commits?per_page=100`
+            )
+              // Anything but a list (an error body) reads as no commits.
+              .then((list) => (Array.isArray(list) ? list : []))
+              .catch(() => [] as CommitItem[]),
           ]);
         setPullBundleByNumber((current) => ({
           ...current,
@@ -1384,6 +1400,7 @@ export function GitHubRepoViewer({
             lineComments,
             reviews,
             checkRuns,
+            commits,
           },
         }));
         // Collapse this PR's files, except those opened on an earlier visit or
@@ -1411,7 +1428,7 @@ export function GitHubRepoViewer({
           [number]:
             err instanceof Error
               ? err.message
-              : "Could not load this pull request",
+              : "Could not load this merge request",
         }));
       } finally {
         setLoadingPullNumbers((current) => {
@@ -1595,7 +1612,7 @@ export function GitHubRepoViewer({
         [prNumber]:
           err instanceof Error
             ? err.message
-            : "Couldn't merge this pull request.",
+            : "Couldn't merge this merge request.",
       }));
     } finally {
       setMergingPull(null);
@@ -1896,7 +1913,11 @@ export function GitHubRepoViewer({
     fullName,
     place:
       activeSection === "pulls" && selectedPull !== null
-        ? `pulls#${selectedPull}`
+        ? // Each tab keeps its own scroll position; the first keeps the
+          // pull request's original key.
+          pullTab === "overview"
+          ? `pulls#${selectedPull}`
+          : `pulls#${selectedPull}/${pullTab}`
         : activeSection === "files"
           ? `files:${currentDir}`
           : activeSection,
@@ -1962,6 +1983,7 @@ export function GitHubRepoViewer({
     rememberRepoView(user?.id, fullName, {
       branch,
       pull: selectedPull,
+      pullTab: selectedPull === null ? null : pullTab,
       // Still on its way back: leaving now must not lose it.
       file: selectedFile?.path ?? restoringFile.current,
       folders: currentDir ? [currentDir] : [],
@@ -1990,6 +2012,7 @@ export function GitHubRepoViewer({
     fullName,
     pullBundleByNumber,
     pullCommentDraft,
+    pullTab,
     pullsPage,
     repo,
     selectedFile,
@@ -2006,6 +2029,23 @@ export function GitHubRepoViewer({
   }
 
   const parentOf = (path: string) => path.split("/").slice(0, -1).join("/");
+
+  const loadTreeFolder = (path: string) => void loadDirectory(path, branch);
+
+  // Shows or hides the folder tree. It sits at the top of the tree while that
+  // is showing, and at the start of the Files header while it is hidden.
+  const fileTreeSwitch = (
+    <button
+      type="button"
+      className={`github-tree-switch${fileTreeShown ? " is-on" : ""}`}
+      aria-pressed={fileTreeShown}
+      aria-label={fileTreeShown ? "Hide file tree" : "Show file tree"}
+      data-tooltip={fileTreeShown ? "Hide file tree" : "Show file tree"}
+      onClick={() => setFileTreeShown(!fileTreeShown)}
+    >
+      <FileTreeIcon size={16} />
+    </button>
+  );
 
   const dirItems = sortContents(treeItems[currentDir] ?? []);
 
@@ -2072,7 +2112,7 @@ export function GitHubRepoViewer({
               },
               {
                 id: "pulls",
-                label: "Pull Requests",
+                label: "Merge Requests",
                 icon: <PullRequestIcon size={16} />,
                 // Open PRs, as GitHub counts them, not every PR ever.
                 count:
@@ -2165,12 +2205,32 @@ export function GitHubRepoViewer({
           {activeSection === "files" && (
             // One folder or one file at a time, at full width, like GitHub: a
             // split left too little room to read code beside the app's other pane.
-            <main className="github-grid">
+            // The folder tree can be kept beside it, from the button in the header.
+            <main className={`github-grid${fileTreeShown ? " has-tree" : ""}`}>
+              {fileTreeShown && (
+                <aside className="github-tree-pane" aria-label="Folders">
+                  <div className="github-tree-head">
+                    {fileTreeSwitch}
+                    <span>Folders</span>
+                  </div>
+                  <RepoFileTree
+                    items={treeItems}
+                    loading={loadingPaths}
+                    branch={branch}
+                    activePath={selectedFile?.path ?? currentDir}
+                    activeIsFile={selectedFile !== null}
+                    sort={sortContents}
+                    onLoad={loadTreeFolder}
+                    onOpenFile={(item) => void openFile(item)}
+                  />
+                </aside>
+              )}
               <section
                 className={selectedFile ? "github-preview" : "github-browser"}
                 aria-label={selectedFile ? "File preview" : "Repository files"}
               >
                 <div className="github-panel-head github-files-head">
+                  {!fileTreeShown && fileTreeSwitch}
                   <h2>Files</h2>
                   <RepoPath
                     repoName={repoName}
@@ -2497,7 +2557,7 @@ export function GitHubRepoViewer({
             (selectedPull == null ? (
               <div className="github-panel">
                 <div className="github-panel-head">
-                  <h2>Pull Requests</h2>
+                  <h2>Merge Requests</h2>
                   <span>{pullCounts[pullFilter] ?? filteredPulls.length}</span>
                 </div>
                 <div className="github-pr-filter">
@@ -2525,14 +2585,14 @@ export function GitHubRepoViewer({
                   ))}
                 </div>
                 {pullsLoading ? (
-                  <div className="github-empty">Loading pull requests…</div>
+                  <div className="github-empty">Loading merge requests…</div>
                 ) : pullsError ? (
                   <div className="github-empty">{pullsError}</div>
                 ) : filteredPulls.length === 0 ? (
                   <div className="github-empty">
                     {pullsPage > 1
-                      ? `No more ${pullFilter} pull requests.`
-                      : `No ${pullFilter} pull requests.`}
+                      ? `No more ${pullFilter} merge requests.`
+                      : `No ${pullFilter} merge requests.`}
                   </div>
                 ) : (
                   filteredPulls.map((pr) => {
@@ -2547,7 +2607,10 @@ export function GitHubRepoViewer({
                         <button
                           type="button"
                           className="github-pr-main github-pr-open-btn"
-                          onClick={() => openPull(pr.number)}
+                          onClick={() => {
+                            setPullTab("overview");
+                            openPull(pr.number);
+                          }}
                         >
                           <strong className="github-pr-title">
                             {pr.title}
@@ -2585,23 +2648,51 @@ export function GitHubRepoViewer({
             ) : (
               <div className="github-panel">
                 <div className="github-pr-detail-head">
-                  <button
-                    type="button"
-                    className="github-link-btn"
-                    onClick={() => setSelectedPull(null)}
-                  >
-                    ← Back to pull requests
-                  </button>
+                  {/* Where this merge request sits, in place of a back link:
+                      owner / repo / Merge requests / #number. The repo opens
+                      its description and "Merge requests" the list. */}
+                  <nav className="github-path" aria-label="Merge request path">
+                    <span className="github-path-part">{owner}</span>
+                    <span className="github-path-sep" aria-hidden="true">
+                      /
+                    </span>
+                    <button
+                      type="button"
+                      className="github-path-link"
+                      onClick={() => {
+                        setSelectedPull(null);
+                        setActiveSection("description");
+                      }}
+                    >
+                      {repoName}
+                    </button>
+                    <span className="github-path-sep" aria-hidden="true">
+                      /
+                    </span>
+                    <button
+                      type="button"
+                      className="github-path-link"
+                      onClick={() => setSelectedPull(null)}
+                    >
+                      Merge requests
+                    </button>
+                    <span className="github-path-sep" aria-hidden="true">
+                      /
+                    </span>
+                    <span className="github-path-current" aria-current="page">
+                      #{selectedPull}
+                    </span>
+                  </nav>
                 </div>
                 {loadingPullNumbers.has(selectedPull) ? (
-                  <div className="github-empty">Loading pull request…</div>
+                  <div className="github-empty">Loading merge request…</div>
                 ) : errorByPullNumber[selectedPull] ? (
                   <div className="github-banner">
                     {errorByPullNumber[selectedPull]}
                   </div>
                 ) : !pullBundleByNumber[selectedPull] ? (
                   <div className="github-empty">
-                    Couldn't load this pull request.{" "}
+                    Couldn't load this merge request.{" "}
                     <button
                       type="button"
                       className="github-link-btn"
@@ -2714,348 +2805,528 @@ export function GitHubRepoViewer({
                               </span>
                             </div>
 
-                            <dl className="github-pr-detail-meta">
-                              <div className="github-pr-meta-row">
-                                <dt>Status</dt>
-                                <dd>
-                                  <span
-                                    className={`github-pr-status ${status.cls}`}
-                                  >
-                                    {status.label}
-                                  </span>
-                                </dd>
-                              </div>
-                              <div className="github-pr-meta-row">
-                                <dt>Reviewers</dt>
-                                <dd>
-                                  {d.requested_reviewers &&
-                                  d.requested_reviewers.length > 0 ? (
-                                    d.requested_reviewers
-                                      .map((r) => r.login)
-                                      .join(", ")
-                                  ) : (
-                                    <span className="github-pr-meta-muted">
-                                      None requested
-                                    </span>
-                                  )}
-                                </dd>
-                              </div>
-                              <div className="github-pr-meta-row">
-                                <dt>Changes</dt>
-                                <dd>
-                                  <span className="github-commit-stat is-add">
-                                    +{d.additions ?? 0}
-                                  </span>{" "}
-                                  <span className="github-commit-stat is-del">
-                                    −{d.deletions ?? 0}
-                                  </span>
-                                  {d.changed_files != null && (
-                                    <span className="github-pr-meta-muted">
-                                      {" · "}
-                                      {d.changed_files} files
-                                    </span>
-                                  )}
-                                </dd>
-                              </div>
-                              <div className="github-pr-meta-row">
-                                <dt>Opened</dt>
-                                <dd>{formatDate(d.created_at)}</dd>
-                              </div>
-                              <div className="github-pr-meta-row">
-                                <dt>GitHub</dt>
-                                <dd>
-                                  <a
-                                    className="github-pr-link"
-                                    href={d.html_url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                  >
-                                    {repoLabel}#{d.number}
-                                  </a>
-                                </dd>
-                              </div>
-                            </dl>
-
-                            <PrMergeBox
-                              pr={d}
-                              checkRuns={bundle.checkRuns}
-                              reviews={bundle.reviews}
-                              comments={[
-                                ...bundle.comments,
-                                ...bundle.lineComments,
-                              ]}
+                            <PrTabs
+                              active={pullTab}
+                              counts={{
+                                overview: timeline.length,
+                                commits: bundle.commits.length,
+                                pipelines: bundle.checkRuns?.length ?? null,
+                                changes: bundle.files.length,
+                              }}
+                              onChange={setPullTab}
                             />
 
-                            {bodyText.trim() && (
-                              <PrDescription
-                                key={d.number}
-                                body={bodyText}
-                                renderText={renderRichText}
-                              />
+                            {pullTab === "overview" && (
+                              <>
+                                <dl className="github-pr-detail-meta">
+                                  <div className="github-pr-meta-row">
+                                    <dt>Status</dt>
+                                    <dd>
+                                      <span
+                                        className={`github-pr-status ${status.cls}`}
+                                      >
+                                        {status.label}
+                                      </span>
+                                    </dd>
+                                  </div>
+                                  <div className="github-pr-meta-row">
+                                    <dt>Reviewers</dt>
+                                    <dd>
+                                      {d.requested_reviewers &&
+                                      d.requested_reviewers.length > 0 ? (
+                                        d.requested_reviewers
+                                          .map((r) => r.login)
+                                          .join(", ")
+                                      ) : (
+                                        <span className="github-pr-meta-muted">
+                                          None requested
+                                        </span>
+                                      )}
+                                    </dd>
+                                  </div>
+                                  <div className="github-pr-meta-row">
+                                    <dt>Changes</dt>
+                                    <dd>
+                                      <span className="github-commit-stat is-add">
+                                        +{d.additions ?? 0}
+                                      </span>{" "}
+                                      <span className="github-commit-stat is-del">
+                                        −{d.deletions ?? 0}
+                                      </span>
+                                      {d.changed_files != null && (
+                                        <span className="github-pr-meta-muted">
+                                          {" · "}
+                                          {d.changed_files} files
+                                        </span>
+                                      )}
+                                    </dd>
+                                  </div>
+                                  <div className="github-pr-meta-row">
+                                    <dt>Opened</dt>
+                                    <dd>{formatDate(d.created_at)}</dd>
+                                  </div>
+                                  <div className="github-pr-meta-row">
+                                    <dt>GitHub</dt>
+                                    <dd>
+                                      <a
+                                        className="github-pr-link"
+                                        href={d.html_url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                      >
+                                        {repoLabel}#{d.number}
+                                      </a>
+                                    </dd>
+                                  </div>
+                                </dl>
+
+                                <PrMergeBox
+                                  pr={d}
+                                  checkRuns={bundle.checkRuns}
+                                  reviews={bundle.reviews}
+                                  comments={[
+                                    ...bundle.comments,
+                                    ...bundle.lineComments,
+                                  ]}
+                                />
+
+                                {bodyText.trim() && (
+                                  <PrDescription
+                                    key={d.number}
+                                    body={bodyText}
+                                    renderText={renderRichText}
+                                  />
+                                )}
+                              </>
                             )}
                           </div>
 
-                          <section className="github-pr-block github-pr-full">
-                            <button
-                              type="button"
-                              className="github-pr-block-head"
-                              onClick={() => toggleSection("files")}
-                              aria-expanded={!isCollapsed("files")}
-                            >
-                              <span
-                                className={`github-pr-chevron ${isCollapsed("files") ? "" : "open"}`}
-                              >
-                                <ChevronIcon />
-                              </span>
-                              <h3>Files changed</h3>
-                              {bundle.files.length > 0 && (
-                                <span className="github-pr-block-count">
-                                  {bundle.files.length}
-                                </span>
-                              )}
-                            </button>
-                            {!isCollapsed("files") && (
-                              <div className="github-pr-block-body">
-                                {bundle.files.length === 0 ? (
-                                  <div className="github-empty">
-                                    No file changes to show.
-                                  </div>
-                                ) : (
-                                  bundle.files.map((file) => {
-                                    const fileKey = `pr-${selectedPull}::${file.filename}`;
-                                    const fileOpen =
-                                      !diffs.collapsedFiles.has(fileKey);
-                                    return (
-                                      <article
-                                        key={file.filename}
-                                        className={`github-commit-file status-${file.status} ${fileOpen ? "is-open" : "is-collapsed"}`}
-                                      >
+                          {pullTab === "changes" && (
+                            <section className="github-pr-block github-pr-block--menu github-pr-full">
+                              <div className="github-pr-block-headrow">
+                                <button
+                                  type="button"
+                                  className="github-pr-block-head"
+                                  onClick={() => toggleSection("files")}
+                                  aria-expanded={!isCollapsed("files")}
+                                >
+                                  <span
+                                    className={`github-pr-chevron ${isCollapsed("files") ? "" : "open"}`}
+                                  >
+                                    <ChevronIcon />
+                                  </span>
+                                  <h3>Files changed</h3>
+                                  {bundle.files.length > 0 && (
+                                    <span className="github-pr-block-count">
+                                      {bundle.files.length}
+                                    </span>
+                                  )}
+                                </button>
+                                {/* Beside the count, not inside the heading button: a button
+                                  can't hold another. */}
+                                <DiffSettingsMenu
+                                  prefs={diffPrefs}
+                                  onChange={setDiffPrefs}
+                                  align="left"
+                                />
+                              </div>
+                              {!isCollapsed("files") && (
+                                <div
+                                  className={`github-pr-block-body${
+                                    changesTreeShown && bundle.files.length > 0
+                                      ? " has-changes-tree"
+                                      : ""
+                                  }`}
+                                >
+                                  {bundle.files.length > 0 && (
+                                    <aside
+                                      className="pr-changes-side"
+                                      aria-label="Changed files"
+                                    >
+                                      <div className="pr-changes-side-head">
                                         <button
                                           type="button"
-                                          className="github-commit-file-head"
-                                          onClick={() =>
-                                            diffs.toggleFile(fileKey)
+                                          className={`github-tree-switch${changesTreeShown ? " is-on" : ""}`}
+                                          aria-pressed={changesTreeShown}
+                                          aria-label={
+                                            changesTreeShown
+                                              ? "Hide changed files tree"
+                                              : "Show changed files tree"
                                           }
-                                          aria-expanded={fileOpen}
+                                          data-tooltip={
+                                            changesTreeShown
+                                              ? "Hide changed files tree"
+                                              : "Show changed files tree"
+                                          }
+                                          onClick={() =>
+                                            setChangesTreeShown(
+                                              !changesTreeShown
+                                            )
+                                          }
                                         >
-                                          <span
-                                            className={`github-tree-toggle ${fileOpen ? "open" : ""}`}
-                                            aria-hidden="true"
-                                          >
-                                            <ChevronIcon />
-                                          </span>
-                                          <DiffFileName
-                                            filename={file.filename}
-                                            previousFilename={
-                                              file.previous_filename
-                                            }
-                                          />
-                                          <span className="github-commit-file-meta">
-                                            <em
-                                              className={`github-commit-status status-${file.status}`}
-                                            >
-                                              {file.status}
-                                            </em>
-                                            <span className="github-commit-stat is-add">
-                                              +{file.additions}
-                                            </span>
-                                            <span className="github-commit-stat is-del">
-                                              −{file.deletions}
-                                            </span>
-                                          </span>
+                                          <FileTreeIcon size={16} />
                                         </button>
-                                        {fileOpen &&
-                                          (file.patch ? (
-                                            <CommitSplitPatch
-                                              key={`${fileKey}@${bundle.detail.head.sha}`}
-                                              patch={file.patch}
-                                              filename={file.filename}
-                                              loadLines={
-                                                canExpandFile(file.status)
-                                                  ? () =>
-                                                      diffs.loadFileLines(
-                                                        bundle.detail.head.sha,
-                                                        file.filename
-                                                      )
-                                                  : undefined
-                                              }
-                                              lineComments={pullLineComments(
-                                                selectedPull,
-                                                bundle.detail.head.sha,
-                                                file.filename,
-                                                bundle.lineComments
-                                              )}
-                                            />
-                                          ) : (
-                                            <div className="github-commit-nopatch">
-                                              Binary file or diff not available
-                                              — open on GitHub to view.
-                                            </div>
-                                          ))}
-                                      </article>
-                                    );
-                                  })
-                                )}
-                                {(hasMissingPatch || rawDiff) && (
-                                  <div className="github-commit-fulldiff">
-                                    {!rawDiff && (
-                                      <button
-                                        type="button"
-                                        className="github-commit-fulldiff-btn"
-                                        onClick={() =>
-                                          void loadPullFullDiff(selectedPull)
-                                        }
-                                        disabled={pullFullDiffLoading.has(
-                                          selectedPull
+                                        {changesTreeShown && (
+                                          <span>
+                                            Files{" "}
+                                            <span className="github-pr-block-count">
+                                              {bundle.files.length}
+                                            </span>
+                                          </span>
                                         )}
-                                      >
-                                        {pullFullDiffLoading.has(selectedPull)
-                                          ? "Loading full diff…"
-                                          : "Load full diff"}
-                                      </button>
+                                      </div>
+                                      {changesTreeShown && (
+                                        <ChangedFilesTree
+                                          files={bundle.files}
+                                          onSelect={(file) => {
+                                            const fileKey = `pr-${selectedPull}::${file.filename}`;
+                                            if (
+                                              diffs.collapsedFiles.has(fileKey)
+                                            ) {
+                                              diffs.toggleFile(fileKey);
+                                            }
+                                            const target = Array.from(
+                                              pullFilesRef.current?.querySelectorAll<HTMLElement>(
+                                                "article[data-file]"
+                                              ) ?? []
+                                            ).find(
+                                              (el) =>
+                                                el.dataset.file ===
+                                                file.filename
+                                            );
+                                            target?.scrollIntoView?.({
+                                              block: "start",
+                                            });
+                                          }}
+                                        />
+                                      )}
+                                    </aside>
+                                  )}
+                                  <div
+                                    className="pr-changes-diffs"
+                                    ref={pullFilesRef}
+                                  >
+                                    {bundle.files.length === 0 ? (
+                                      <div className="github-empty">
+                                        No file changes to show.
+                                      </div>
+                                    ) : (
+                                      bundle.files.map((file) => {
+                                        const fileKey = `pr-${selectedPull}::${file.filename}`;
+                                        const fileOpen =
+                                          !diffs.collapsedFiles.has(fileKey);
+                                        return (
+                                          <article
+                                            key={file.filename}
+                                            data-file={file.filename}
+                                            className={`github-commit-file status-${file.status} ${fileOpen ? "is-open" : "is-collapsed"}`}
+                                          >
+                                            <button
+                                              type="button"
+                                              className="github-commit-file-head"
+                                              onClick={() =>
+                                                diffs.toggleFile(fileKey)
+                                              }
+                                              aria-expanded={fileOpen}
+                                            >
+                                              <span
+                                                className={`github-tree-toggle ${fileOpen ? "open" : ""}`}
+                                                aria-hidden="true"
+                                              >
+                                                <ChevronIcon />
+                                              </span>
+                                              <DiffFileName
+                                                filename={file.filename}
+                                                previousFilename={
+                                                  file.previous_filename
+                                                }
+                                              />
+                                              <span className="github-commit-file-meta">
+                                                <em
+                                                  className={`github-commit-status status-${file.status}`}
+                                                >
+                                                  {file.status}
+                                                </em>
+                                                <span className="github-commit-stat is-add">
+                                                  +{file.additions}
+                                                </span>
+                                                <span className="github-commit-stat is-del">
+                                                  −{file.deletions}
+                                                </span>
+                                              </span>
+                                            </button>
+                                            {fileOpen &&
+                                              (file.patch ? (
+                                                <CommitSplitPatch
+                                                  key={`${fileKey}@${bundle.detail.head.sha}`}
+                                                  patch={file.patch}
+                                                  filename={file.filename}
+                                                  prefs={diffPrefs}
+                                                  loadLines={
+                                                    canExpandFile(file.status)
+                                                      ? () =>
+                                                          diffs.loadFileLines(
+                                                            bundle.detail.head
+                                                              .sha,
+                                                            file.filename
+                                                          )
+                                                      : undefined
+                                                  }
+                                                  lineComments={pullLineComments(
+                                                    selectedPull,
+                                                    bundle.detail.head.sha,
+                                                    file.filename,
+                                                    bundle.lineComments
+                                                  )}
+                                                />
+                                              ) : (
+                                                <div className="github-commit-nopatch">
+                                                  Binary file or diff not
+                                                  available — open on GitHub to
+                                                  view.
+                                                </div>
+                                              ))}
+                                          </article>
+                                        );
+                                      })
                                     )}
-                                    {pullFullDiffError[selectedPull] && (
-                                      <div className="github-banner">
-                                        {pullFullDiffError[selectedPull]}
+                                    {(hasMissingPatch || rawDiff) && (
+                                      <div className="github-commit-fulldiff">
+                                        {!rawDiff && (
+                                          <button
+                                            type="button"
+                                            className="github-commit-fulldiff-btn"
+                                            onClick={() =>
+                                              void loadPullFullDiff(
+                                                selectedPull
+                                              )
+                                            }
+                                            disabled={pullFullDiffLoading.has(
+                                              selectedPull
+                                            )}
+                                          >
+                                            {pullFullDiffLoading.has(
+                                              selectedPull
+                                            )
+                                              ? "Loading full diff…"
+                                              : "Load full diff"}
+                                          </button>
+                                        )}
+                                        {pullFullDiffError[selectedPull] && (
+                                          <div className="github-banner">
+                                            {pullFullDiffError[selectedPull]}
+                                          </div>
+                                        )}
+                                        {rawDiff && (
+                                          <RawUnifiedDiff text={rawDiff} />
+                                        )}
                                       </div>
                                     )}
-                                    {rawDiff && (
-                                      <RawUnifiedDiff text={rawDiff} />
-                                    )}
                                   </div>
-                                )}
-                              </div>
-                            )}
-                          </section>
-
-                          <section className="github-pr-block github-pr-full">
-                            <button
-                              type="button"
-                              className="github-pr-block-head"
-                              onClick={() => toggleSection("discussion")}
-                              aria-expanded={!isCollapsed("discussion")}
-                            >
-                              <span
-                                className={`github-pr-chevron ${isCollapsed("discussion") ? "" : "open"}`}
-                              >
-                                <ChevronIcon />
-                              </span>
-                              <h3>Discussion</h3>
-                              {timeline.length > 0 && (
-                                <span className="github-pr-block-count">
-                                  {timeline.length}
-                                </span>
+                                </div>
                               )}
-                            </button>
-                            {!isCollapsed("discussion") && (
-                              <div className="github-pr-block-body">
-                                {timeline.length === 0 ? (
-                                  <div className="github-empty">
-                                    No conversation yet.
-                                  </div>
-                                ) : (
-                                  <ul className="github-pr-thread">
-                                    {timeline.map((e) => (
-                                      <li
-                                        key={e.key}
-                                        className="github-pr-comment"
-                                      >
-                                        <PrAvatar name={e.author} />
-                                        <div className="github-pr-comment-main">
-                                          <div className="github-pr-comment-head">
-                                            <strong>{e.author}</strong>
-                                            {e.reviewState && (
-                                              <span
-                                                className={`github-pr-review-badge ${reviewBadge(e.reviewState).cls}`}
-                                              >
-                                                {
-                                                  reviewBadge(e.reviewState)
-                                                    .label
-                                                }
-                                              </span>
-                                            )}
-                                            {e.ts && (
-                                              <small className="github-pr-comment-time">
-                                                {formatDate(e.ts)}
-                                              </small>
+                            </section>
+                          )}
+
+                          {pullTab === "commits" && (
+                            <section
+                              className="github-pr-block github-pr-full pr-tab-panel"
+                              aria-labelledby="pr-tab-commits"
+                            >
+                              {bundle.commits.length === 0 ? (
+                                <div className="github-empty">
+                                  No commits to show.
+                                </div>
+                              ) : (
+                                <PrCommitList
+                                  commits={bundle.commits}
+                                  formatDate={formatDate}
+                                />
+                              )}
+                            </section>
+                          )}
+
+                          {pullTab === "pipelines" && (
+                            <section
+                              className="github-pr-block github-pr-full pr-tab-panel"
+                              aria-labelledby="pr-tab-pipelines"
+                            >
+                              {!bundle.checkRuns ? (
+                                <div className="github-empty">
+                                  Pipelines aren't available for this merge
+                                  request.
+                                </div>
+                              ) : bundle.checkRuns.length === 0 ? (
+                                <div className="github-empty">
+                                  No pipelines ran for this merge request.
+                                </div>
+                              ) : (
+                                <ul className="pr-check-list">
+                                  {sortChecks(bundle.checkRuns).map((run) => {
+                                    const outcome = checkOutcome(run);
+                                    return (
+                                      <li key={run.id} className="pr-check-row">
+                                        <span
+                                          className={`pr-check-state is-${outcome}`}
+                                        >
+                                          {CHECK_OUTCOME_LABEL[outcome]}
+                                        </span>
+                                        <span className="pr-check-name">
+                                          {run.name}
+                                        </span>
+                                        <span className="pr-commit-meta">
+                                          {checkDuration(run) ?? ""}
+                                        </span>
+                                        {run.html_url && (
+                                          <a
+                                            className="pr-commit-sha"
+                                            href={run.html_url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                          >
+                                            Details
+                                          </a>
+                                        )}
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              )}
+                            </section>
+                          )}
+
+                          {pullTab === "overview" && (
+                            <section className="github-pr-block github-pr-full">
+                              <button
+                                type="button"
+                                className="github-pr-block-head"
+                                onClick={() => toggleSection("discussion")}
+                                aria-expanded={!isCollapsed("discussion")}
+                              >
+                                <span
+                                  className={`github-pr-chevron ${isCollapsed("discussion") ? "" : "open"}`}
+                                >
+                                  <ChevronIcon />
+                                </span>
+                                <h3>Discussion</h3>
+                                {timeline.length > 0 && (
+                                  <span className="github-pr-block-count">
+                                    {timeline.length}
+                                  </span>
+                                )}
+                              </button>
+                              {!isCollapsed("discussion") && (
+                                <div className="github-pr-block-body">
+                                  {timeline.length === 0 ? (
+                                    <div className="github-empty">
+                                      No conversation yet.
+                                    </div>
+                                  ) : (
+                                    <ul className="github-pr-thread">
+                                      {timeline.map((e) => (
+                                        <li
+                                          key={e.key}
+                                          className="github-pr-comment"
+                                        >
+                                          <PrAvatar name={e.author} />
+                                          <div className="github-pr-comment-main">
+                                            <div className="github-pr-comment-head">
+                                              <strong>{e.author}</strong>
+                                              {e.reviewState && (
+                                                <span
+                                                  className={`github-pr-review-badge ${reviewBadge(e.reviewState).cls}`}
+                                                >
+                                                  {
+                                                    reviewBadge(e.reviewState)
+                                                      .label
+                                                  }
+                                                </span>
+                                              )}
+                                              {e.ts && (
+                                                <small className="github-pr-comment-time">
+                                                  {formatDate(e.ts)}
+                                                </small>
+                                              )}
+                                            </div>
+                                            {e.body.trim() && (
+                                              <div className="github-pr-comment-text">
+                                                {renderRichText(e.body)}
+                                              </div>
                                             )}
                                           </div>
-                                          {e.body.trim() && (
-                                            <div className="github-pr-comment-text">
-                                              {renderRichText(e.body)}
-                                            </div>
-                                          )}
-                                        </div>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                )}
-                                {/* Text only: GitHub's API has no attachment
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                  {/* Text only: GitHub's API has no attachment
                                     upload. Open, closed and merged PRs all take
                                     comments; only a locked conversation doesn't. */}
-                                {d.locked ? (
-                                  <div className="github-empty">
-                                    This conversation is locked on GitHub, so it
-                                    can&apos;t take new comments.
-                                  </div>
-                                ) : (
-                                  <div className="github-commit-composer">
-                                    <textarea
-                                      className="github-commit-composer-input"
-                                      placeholder="Leave a comment…"
-                                      aria-label="Comment on this pull request"
-                                      value={pullCommentDraft[d.number] ?? ""}
-                                      onChange={(e) =>
-                                        setPullCommentDraft((cur) => ({
-                                          ...cur,
-                                          [d.number]: e.target.value,
-                                        }))
-                                      }
-                                      onKeyDown={(e) => {
-                                        if (
-                                          e.key === "Enter" &&
-                                          (e.metaKey || e.ctrlKey)
-                                        ) {
-                                          e.preventDefault();
-                                          void postPullComment(d.number);
-                                        }
-                                      }}
-                                      rows={3}
-                                      disabled={postingPullComment === d.number}
-                                    />
-                                    {pullCommentError[d.number] && (
-                                      <div className="github-banner">
-                                        {pullCommentError[d.number]}
-                                      </div>
-                                    )}
-                                    <div className="github-commit-composer-foot">
-                                      <span className="github-commit-composer-note">
-                                        Posts to GitHub as the connected
-                                        account. ⌘/Ctrl + Enter to send.
-                                      </span>
-                                      <button
-                                        type="button"
-                                        className="github-commit-composer-send"
-                                        disabled={
-                                          postingPullComment !== null ||
-                                          !(
-                                            pullCommentDraft[d.number] ?? ""
-                                          ).trim()
-                                        }
-                                        onClick={() =>
-                                          void postPullComment(d.number)
-                                        }
-                                      >
-                                        {postingPullComment === d.number
-                                          ? "Posting…"
-                                          : "Comment"}
-                                      </button>
+                                  {d.locked ? (
+                                    <div className="github-empty">
+                                      This conversation is locked on GitHub, so
+                                      it can&apos;t take new comments.
                                     </div>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </section>
+                                  ) : (
+                                    <div className="github-commit-composer">
+                                      <textarea
+                                        className="github-commit-composer-input"
+                                        placeholder="Leave a comment…"
+                                        aria-label="Comment on this merge request"
+                                        value={pullCommentDraft[d.number] ?? ""}
+                                        onChange={(e) =>
+                                          setPullCommentDraft((cur) => ({
+                                            ...cur,
+                                            [d.number]: e.target.value,
+                                          }))
+                                        }
+                                        onKeyDown={(e) => {
+                                          if (
+                                            e.key === "Enter" &&
+                                            (e.metaKey || e.ctrlKey)
+                                          ) {
+                                            e.preventDefault();
+                                            void postPullComment(d.number);
+                                          }
+                                        }}
+                                        rows={3}
+                                        disabled={
+                                          postingPullComment === d.number
+                                        }
+                                      />
+                                      {pullCommentError[d.number] && (
+                                        <div className="github-banner">
+                                          {pullCommentError[d.number]}
+                                        </div>
+                                      )}
+                                      <div className="github-commit-composer-foot">
+                                        <span className="github-commit-composer-note">
+                                          Posts to GitHub as the connected
+                                          account. ⌘/Ctrl + Enter to send.
+                                        </span>
+                                        <button
+                                          type="button"
+                                          className="github-commit-composer-send"
+                                          disabled={
+                                            postingPullComment !== null ||
+                                            !(
+                                              pullCommentDraft[d.number] ?? ""
+                                            ).trim()
+                                          }
+                                          onClick={() =>
+                                            void postPullComment(d.number)
+                                          }
+                                        >
+                                          {postingPullComment === d.number
+                                            ? "Posting…"
+                                            : "Comment"}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </section>
+                          )}
                         </div>
                       </div>
                     );

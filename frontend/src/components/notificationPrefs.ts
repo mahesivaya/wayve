@@ -4,7 +4,7 @@
 // browser's permission is the real opt-in for notifications.
 const STORAGE_KEY = "rwayve.notificationPrefs";
 
-export type NotificationKind = "calls" | "calendar";
+export type NotificationKind = "calls" | "calendar" | "emails" | "chats";
 export type NotificationChannel = "notification" | "sound";
 
 const prefKey = (kind: NotificationKind, channel: NotificationChannel) =>

@@ -27,6 +27,7 @@ import ChatPopups from "./ChatPopups";
 import NotificationBell from "./NotificationBell";
 import { SPLIT_APPS, type AppKey } from "./LayoutConfig";
 import { useEmailsUnreadCount } from "../emails/useEmailsUnreadCount";
+import { useNewMailAlerts } from "../emails/useNewMailAlerts";
 import { useChatUnreadCount } from "../chat/useChatUnreadCount";
 import { useTicketsOpenCount } from "../tickets/useTicketsOpenCount";
 import { useUserStoriesCount } from "../userstories/useUserStoriesCount";
@@ -92,7 +93,7 @@ import { isDesktopApp } from "../utils/desktop";
 import "./Layout.css";
 import {
   HomeIcon,
-  EmailsIcon,
+  InboxIcon,
   ChatIcon,
   SchedulerIcon,
   DriveIcon,
@@ -294,6 +295,7 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   // Gated on `user` so the badge fetches don't fire while the session is loading.
   const emailsUnreadCount = useEmailsUnreadCount(Boolean(user));
   const chatUnreadCount = useChatUnreadCount(Boolean(user));
+  useNewMailAlerts(user?.id, () => void navigate("/emails"));
   const ticketsOpenCount = useTicketsOpenCount(Boolean(user));
   const userStoriesCount = useUserStoriesCount(Boolean(user));
 
@@ -2506,15 +2508,15 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
                 viewBox="0 0 24 24"
                 aria-hidden="true"
               >
-                {/* Shrunk: a three-line menu icon. Open: a plain sidebar-panel
-                    glyph. The desktop app uses the panel glyph for both, so its
-                    toggle looks the same in one fixed spot. The tooltip says which
-                    way it goes. */}
+                {/* Shrunk: the sidebar-panel glyph with an arrow pointing the way
+                    it opens. Open: the plain panel glyph. The desktop app uses
+                    the plain glyph for both, so its toggle looks the same in one
+                    fixed spot. The tooltip says which way it goes. */}
                 {sidebarCollapsed && !desktop ? (
                   <>
-                    <line x1="3" y1="6" x2="21" y2="6" />
-                    <line x1="3" y1="12" x2="21" y2="12" />
-                    <line x1="3" y1="18" x2="21" y2="18" />
+                    <rect x="3" y="5" width="18" height="14" rx="2.2" />
+                    <line x1="9" y1="5" x2="9" y2="19" />
+                    <polyline points="12 9 15 12 12 15" />
                   </>
                 ) : (
                   <>
@@ -2544,15 +2546,15 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
               viewBox="0 0 24 24"
               aria-hidden="true"
             >
-              {/* Shrunk: a three-line menu icon. Open: a plain sidebar-panel
-                  glyph. The desktop app uses the panel glyph for both, so its
-                  toggle looks the same in one fixed spot. The tooltip says which
-                  way it goes. */}
+              {/* Shrunk: the sidebar-panel glyph with an arrow pointing the way
+                  it opens. Open: the plain panel glyph. The desktop app uses
+                  the plain glyph for both, so its toggle looks the same in one
+                  fixed spot. The tooltip says which way it goes. */}
               {sidebarCollapsed && !desktop ? (
                 <>
-                  <line x1="3" y1="6" x2="21" y2="6" />
-                  <line x1="3" y1="12" x2="21" y2="12" />
-                  <line x1="3" y1="18" x2="21" y2="18" />
+                  <rect x="3" y="5" width="18" height="14" rx="2.2" />
+                  <line x1="9" y1="5" x2="9" y2="19" />
+                  <polyline points="12 9 15 12 12 15" />
                 </>
               ) : (
                 <>
@@ -2662,7 +2664,7 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
                       "/emails",
                       "emails",
                       "Inbox",
-                      <EmailsIcon size={18} />,
+                      <InboxIcon size={18} />,
                       emailsUnreadCount
                     )}
                     {renderSidebarItem(

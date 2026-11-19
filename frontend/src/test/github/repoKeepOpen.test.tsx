@@ -8,6 +8,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
@@ -43,6 +44,7 @@ const SHA = "abc1234";
 const view = (fields: Partial<RepoView> = {}): RepoView => ({
   branch: null,
   pull: null,
+  pullTab: null,
   file: null,
   folders: [],
   commits: [],
@@ -88,6 +90,25 @@ const fetchMock = vi.fn((input: RequestInfo | URL) => {
       changes: 1,
       patch: "@@ -1,1 +1,2 @@\n keep\n+added",
     }));
+  else if (url.endsWith(`${API}/pulls/7/commits`))
+    body = [
+      {
+        sha: "1111111aaaa",
+        html_url: "https://github.com/acme/app/commit/1111111aaaa",
+        commit: {
+          message: "Add the thing\n\nLonger text.",
+          author: { name: "Dev", date: "2026-10-01T00:00:00Z" },
+        },
+        author: { login: "dev", avatar_url: "", html_url: "" },
+      },
+    ];
+  else if (url.endsWith(`${API}/commits/${SHA}/check-runs`))
+    body = {
+      check_runs: [
+        { id: 1, name: "build", status: "completed", conclusion: "success" },
+        { id: 2, name: "lint", status: "completed", conclusion: "failure" },
+      ],
+    };
   else if (url.endsWith(`${API}/contents/src/app.ts`))
     body = {
       name: "app.ts",
@@ -127,6 +148,12 @@ const leaveOff = (fields: Partial<RepoView>) => {
   rememberRepoView(USER, FULL, view(fields));
 };
 
+// The "Merge requests" step of the path above an open merge request.
+const backToList = () =>
+  within(
+    screen.getByRole("navigation", { name: "Merge request path" })
+  ).getByRole("button", { name: "Merge requests" });
+
 describe("Code Repo keeps its place", () => {
   beforeEach(() => {
     sessionStorage.clear();
@@ -160,19 +187,19 @@ describe("Code Repo keeps its place", () => {
     localStorage.setItem("rwayve.github.section", "pulls");
     renderPage();
     fireEvent.click(await screen.findByText("Add the thing"));
-    await screen.findByText("← Back to pull requests");
+    await screen.findByRole("navigation", { name: "Merge request path" });
     await waitFor(() => expect(readRepoView(USER, FULL)?.pull).toBe(7));
 
     // Switching tabs unmounts the page.
     cleanup();
     fetchMock.mockClear();
     renderPage();
-    await screen.findByText("← Back to pull requests");
+    await screen.findByRole("navigation", { name: "Merge request path" });
     expect(fetched(`${API}/pulls/7`)).toBe(true);
     expect(readRepoView(USER, FULL)?.pull).toBe(7);
 
     // Going back to the list is remembered too.
-    fireEvent.click(screen.getByText("← Back to pull requests"));
+    fireEvent.click(backToList());
     await waitFor(() => expect(readRepoView(USER, FULL)?.pull).toBeNull());
   });
 
@@ -198,11 +225,174 @@ describe("Code Repo keeps its place", () => {
     ).toBe(false);
   });
 
+  it("shows a merge request's parts under tabs, each with its count", async () => {
+    localStorage.setItem("rwayve.github.section", "pulls");
+    leaveOff({ branch: "main", pull: 7 });
+    renderPage();
+    const tab = (name: RegExp) => screen.findByRole("tab", { name });
+
+    // Overview is first: the conversation, not the files.
+    expect((await tab(/Overview/)).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("Discussion")).toBeTruthy();
+    expect(screen.queryByText("opened.ts")).toBeNull();
+    expect((await tab(/Commits/)).textContent).toBe("Commits1");
+    expect((await tab(/Pipelines/)).textContent).toBe("Pipelines2");
+    expect((await tab(/Changes/)).textContent).toBe("Changes2");
+
+    fireEvent.click(await tab(/Changes/));
+    expect(await screen.findByText("opened.ts")).toBeTruthy();
+    expect(screen.queryByText("Discussion")).toBeNull();
+
+    fireEvent.click(await tab(/Commits/));
+    const commit = await screen.findByRole("button", {
+      name: /Add the thing/,
+    });
+    expect(screen.getByRole("link", { name: "1111111" })).toBeTruthy();
+    // The row holds only the first line; clicking it shows the whole message.
+    expect(screen.queryByText(/Longer text\./)).toBeNull();
+    fireEvent.click(commit);
+    expect(commit.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText(/Longer text\./).textContent).toBe(
+      "Add the thing\n\nLonger text."
+    );
+    fireEvent.click(commit);
+    expect(screen.queryByText(/Longer text\./)).toBeNull();
+
+    fireEvent.click(await tab(/Pipelines/));
+    // Failing checks come first.
+    const rows = screen.getAllByRole("listitem").map((li) => li.textContent);
+    expect(rows[0]).toContain("Failedlint");
+    expect(rows[1]).toContain("Passedbuild");
+  });
+
+  it("shows the changed files as a tree on request, and opens a file from it", async () => {
+    localStorage.setItem("rwayve.github.section", "pulls");
+    leaveOff({ branch: "main", pull: 7, pullTab: "changes" });
+    renderPage();
+    await screen.findByText("opened.ts");
+    expect(screen.queryByRole("tree", { name: "Changed files" })).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show changed files tree" })
+    );
+    const tree = screen.getByRole("tree", { name: "Changed files" });
+    expect(localStorage.getItem("rwayve.github.changesTree.v1")).toBe("on");
+
+    // A merge request's files start folded; choosing one in the tree opens it.
+    const diffHead = () =>
+      screen
+        .getAllByText("closed.ts")
+        .map((el) => el.closest("button.github-commit-file-head"))
+        .find(Boolean);
+    expect(diffHead()?.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(within(tree).getByRole("button", { name: /closed\.ts/ }));
+    await waitFor(() =>
+      expect(diffHead()?.getAttribute("aria-expanded")).toBe("true")
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Hide changed files tree" })
+    );
+    expect(screen.queryByRole("tree", { name: "Changed files" })).toBeNull();
+  });
+
+  it("lets the Changes tab switch its diffs between side by side and a single block", async () => {
+    localStorage.setItem("rwayve.github.section", "pulls");
+    leaveOff({
+      branch: "main",
+      pull: 7,
+      pullTab: "changes",
+      openPullFiles: ["pr-7::opened.ts"],
+    });
+    const { container } = renderPage();
+    await screen.findByText("opened.ts");
+    await waitFor(() =>
+      expect(
+        container.querySelector(".github-commit-file.is-open")
+      ).not.toBeNull()
+    );
+    expect(container.querySelector(".github-unified")).toBeNull();
+
+    // The gear sits in the heading row, right after the files-changed count.
+    const gear = screen.getByRole("button", { name: "Diff settings" });
+    expect(gear.closest(".github-pr-block-headrow")).not.toBeNull();
+    fireEvent.click(gear);
+    expect(
+      screen
+        .getByRole("menuitemcheckbox", { name: /Side by side/ })
+        .getAttribute("aria-checked")
+    ).toBe("true");
+    fireEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Single block/ })
+    );
+    await waitFor(() =>
+      expect(container.querySelector(".github-unified")).not.toBeNull()
+    );
+    // Using the menu doesn't fold the section it sits on.
+    expect(screen.getByText("opened.ts")).toBeTruthy();
+  });
+
+  it("shows where a merge request sits as a path, each step a way back", async () => {
+    localStorage.setItem("rwayve.github.section", "pulls");
+    leaveOff({ branch: "main", pull: 7 });
+    renderPage();
+    const path = await screen.findByRole("navigation", {
+      name: "Merge request path",
+    });
+    expect(path.textContent).toBe("acme/app/Merge requests/#7");
+    expect(within(path).getByText("#7").getAttribute("aria-current")).toBe(
+      "page"
+    );
+    expect(screen.queryByText(/Back to merge requests/)).toBeNull();
+
+    // "Merge requests" returns to the list.
+    fireEvent.click(backToList());
+    expect(await screen.findByText("Add the thing")).toBeTruthy();
+    expect(
+      screen.queryByRole("navigation", { name: "Merge request path" })
+    ).toBeNull();
+
+    // The repo name leaves merge requests for the repo's description.
+    fireEvent.click(screen.getByText("Add the thing"));
+    fireEvent.click(
+      within(
+        await screen.findByRole("navigation", { name: "Merge request path" })
+      ).getByRole("button", { name: "app" })
+    );
+    expect(
+      await screen.findByRole("main", { name: "Project description" })
+    ).toBeTruthy();
+  });
+
+  it("returns to the tab the merge request was left on", async () => {
+    localStorage.setItem("rwayve.github.section", "pulls");
+    leaveOff({ branch: "main", pull: 7 });
+    const first = renderPage();
+    fireEvent.click(await screen.findByRole("tab", { name: /Changes/ }));
+    await screen.findByText("opened.ts");
+    await waitFor(() =>
+      expect(readRepoView(USER, FULL)?.pullTab).toBe("changes")
+    );
+    first.unmount();
+
+    renderPage();
+    expect(await screen.findByText("opened.ts")).toBeTruthy();
+    // Going back to the list and opening it again starts at Overview.
+    fireEvent.click(backToList());
+    fireEvent.click(await screen.findByText("Add the thing"));
+    expect(
+      (await screen.findByRole("tab", { name: /Overview/ })).getAttribute(
+        "aria-selected"
+      )
+    ).toBe("true");
+  });
+
   it("brings back the pull request's opened files and half-written comment", async () => {
     localStorage.setItem("rwayve.github.section", "pulls");
     leaveOff({
       branch: "main",
       pull: 7,
+      pullTab: "changes",
       openPullFiles: ["pr-7::opened.ts"],
       pullDrafts: { "7": "half written" },
     });
@@ -212,12 +402,14 @@ describe("Code Repo keeps its place", () => {
     await screen.findByText("opened.ts");
     expect(expanded("opened.ts")).toBe("true");
     expect(expanded("closed.ts")).toBe("false");
-    expect(screen.getByDisplayValue("half written")).toBeTruthy();
+    // The conversation, and its half-written comment, is on Overview.
+    fireEvent.click(screen.getByRole("tab", { name: /Overview/ }));
+    expect(await screen.findByDisplayValue("half written")).toBeTruthy();
   });
 
   it("keeps a pull request file open when it holds a half-written comment", async () => {
     localStorage.setItem("rwayve.github.section", "pulls");
-    leaveOff({ branch: "main", pull: 7 });
+    leaveOff({ branch: "main", pull: 7, pullTab: "changes" });
     draftStore(USER, `${FULL}|pull:7:${SHA}:closed.ts`).save({
       body: "on a line",
       anchor: { side: "RIGHT", line: 2, position: 2 },

@@ -11,6 +11,9 @@
 export {
   // Sidebar / feature sections
   House as HomeIcon,
+  // The tray the phone app's Inbox tab uses; the envelope stays for actions
+  // on one email (e.g. "Mark as unread").
+  Inbox as InboxIcon,
   Mail as EmailsIcon,
   MessageCircle as ChatIcon,
   MessageCirclePlus as NewChatIcon,
@@ -74,6 +77,8 @@ export {
   Search as SearchIcon,
   SlidersHorizontal as FilterIcon,
   ChevronRight as ChevronIcon,
+  // The Files tab's switch for keeping the folder tree in view.
+  ListTree as FileTreeIcon,
   Plus as PlusIcon,
   // Addable "fake" personal apps (placeholder catalog)
   Palette as CanvasIcon,

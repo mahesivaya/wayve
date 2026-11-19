@@ -2,7 +2,7 @@
 // read its pull requests and comment on them; the approve and merge cards are
 // owner-only (the server enforces that too), so a member doesn't see them.
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 let mockRole = "member";
@@ -73,6 +73,10 @@ const renderViewer = () =>
     </MemoryRouter>
   );
 
+// The merge action itself. Matching buttons by "merge" would also find the
+// "Merge Requests" tab and the "Merge requests" step of the path.
+const mergeControl = () => document.querySelector(".pr-merge-pill");
+
 describe("pull requests for a non-owner", () => {
   beforeEach(() => {
     fetchMock.mockClear();
@@ -91,18 +95,18 @@ describe("pull requests for a non-owner", () => {
     fireEvent.click(await screen.findByText("Open PR for members"));
     expect(
       await screen.findByRole("textbox", {
-        name: "Comment on this pull request",
+        name: "Comment on this merge request",
       })
     ).toBeTruthy();
     expect(screen.queryByText("Owner review")).toBeNull();
-    expect(screen.queryByRole("button", { name: /merge/i })).toBeNull();
+    expect(mergeControl()).toBeNull();
   });
 
   it("shows an owner the merge button, with no approve action", async () => {
     mockRole = "owner";
     renderViewer();
     fireEvent.click(await screen.findByText("Open PR for members"));
-    expect(await screen.findByRole("button", { name: /merge/i })).toBeTruthy();
+    await waitFor(() => expect(mergeControl()).not.toBeNull());
     // Approving was removed: the app's GitHub account opens these PRs, and
     // GitHub won't let an author approve their own.
     expect(screen.queryByText("Owner review")).toBeNull();

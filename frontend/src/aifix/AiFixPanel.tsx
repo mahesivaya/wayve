@@ -103,7 +103,7 @@ export default function AiFixPanel({
       const local = r.runner === "local";
       setMsg(
         local
-          ? "Fix queued for the local runner. If its checks pass, it opens the pull request and the link appears here."
+          ? "Fix queued for the local runner. If its checks pass, it opens the merge request and the link appears here."
           : r.reused_fix_from
             ? `Fix started in CI (reusing the fix from #${r.reused_fix_from}). The diff will appear here to review.`
             : "Fix started in CI. The diff will appear here to review."
@@ -387,7 +387,7 @@ export default function AiFixPanel({
         <>
           <p className="aifix-muted">
             Review Claude’s proposed change — edit any file if you want to
-            adjust it — then commit → push → create the pull request.
+            adjust it — then commit → push → create the merge request.
           </p>
 
           <pre className="aifix-diff">
@@ -520,7 +520,7 @@ export default function AiFixPanel({
                   "pr",
                   async () => ({ pr_url: (await api.openPr(itemId)).pr_url }),
                   "pr_opened",
-                  "Couldn't open the pull request."
+                  "Couldn't open the merge request."
                 )
               }
               disabled={stepBusy !== null || order < 2 || order >= 3}
@@ -547,7 +547,7 @@ export default function AiFixPanel({
           {state?.pr_url && (
             <p className="aifix-muted">
               <a href={state.pr_url} target="_blank" rel="noreferrer">
-                View pull request →
+                View merge request →
               </a>
             </p>
           )}

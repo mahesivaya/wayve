@@ -29,6 +29,8 @@ const ALERT_ROWS: {
     label: "Calendar",
     hint: "Meetings and reminders coming up",
   },
+  { kind: "emails", label: "Emails", hint: "New mail in your inbox" },
+  { kind: "chats", label: "Chats", hint: "New direct and channel messages" },
 ];
 
 function Switch({
