@@ -49,6 +49,7 @@ mod email_star_test;
 mod email_threading_test;
 mod email_trash_test;
 mod embed_tokens_test;
+mod encryption_key_cache_test;
 mod github_write_token_test;
 mod gitlab_test;
 mod instrument_skip_request_test;
