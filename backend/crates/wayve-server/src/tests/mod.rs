@@ -66,6 +66,7 @@ mod platform_billing_feature_access_test;
 mod platform_github_connect_test;
 mod platform_users_test;
 mod profile_password_test;
+mod personal_channel_join_test;
 mod public_channels_test;
 mod pull_comment_test;
 mod quotas_test;

@@ -110,22 +110,19 @@ pub fn normalize_channel_role(role: Option<&str>) -> &'static str {
     }
 }
 
-/// Channels default to public when no recognized visibility is supplied.
-pub fn normalize_channel_visibility(visibility: Option<&str>) -> &'static str {
-    match visibility {
-        Some("private") => "private",
-        _ => "public",
-    }
-}
-
 /// The visibility a channel gets in `scope`. Organization (including
 /// enterprise) and platform channels are always public within their tenant, so
-/// any member can find and join them; only personal accounts may keep one
-/// private.
+/// any member can find and join them.
+///
+/// A personal account chooses. Its public channel can be joined by any other
+/// personal account that has the channel's number, so public has to be asked
+/// for by name: anything else, including no choice at all, is private.
 pub fn channel_visibility_for(scope: Scope, requested: Option<&str>) -> &'static str {
-    if scope == Scope::Personal {
-        normalize_channel_visibility(requested)
-    } else {
-        "public"
+    if scope != Scope::Personal {
+        return "public";
+    }
+    match requested {
+        Some("public") => "public",
+        _ => "private",
     }
 }

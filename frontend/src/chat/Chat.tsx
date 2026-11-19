@@ -124,8 +124,11 @@ export default function Chat() {
 
   const [creatingChannel, setCreatingChannel] = useState(false);
   const [channelName, setChannelName] = useState("");
+  // Private until public is picked: a personal account's public channel is open
+  // to any other personal account. Organizations and the platform have no
+  // choice here; the server makes theirs public whatever is sent.
   const [channelVisibility, setChannelVisibility] =
-    useState<ChannelVisibility>("public");
+    useState<ChannelVisibility>("private");
   const [channelError, setChannelError] = useState("");
 
   // WS messages whose parent_message_id matches `activeThread` are routed to the
@@ -920,7 +923,7 @@ export default function Chat() {
       );
       setChannels((prev) => [channel, ...prev]);
       setChannelName("");
-      setChannelVisibility("public");
+      setChannelVisibility("private");
       setCreatingChannel(false);
       await loadChannelMessages(channel);
     } catch (err) {

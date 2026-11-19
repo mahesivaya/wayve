@@ -10,7 +10,7 @@ mod direct_messages;
 pub(crate) mod dm_details;
 mod dto;
 pub mod handler;
-mod helpers;
+pub(crate) mod helpers;
 pub mod presence;
 pub mod pubsub;
 pub mod reactions;

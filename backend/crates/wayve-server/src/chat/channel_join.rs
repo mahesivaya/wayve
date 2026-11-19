@@ -27,19 +27,27 @@ pub async fn join_channel(
                 SELECT 1 FROM channel_members
                 WHERE channel_id = channels.id AND user_id = $2
             ) AS is_member,
-            -- Whether the caller shares a tenant with the channel's creator:
-            -- the same organization, platform staff with platform staff, or
-            -- two personal accounts.
+            -- Whether the caller may reach this channel at all. Inside an
+            -- organization or the platform that is sharing its tenant. Personal
+            -- accounts share no tenant, so being one is not enough: the
+            -- channel's creator must have made it public, or have invited the
+            -- caller's email address.
             COALESCE((
                 SELECT (creator.account_type = 'platform_admin'
                             AND me.account_type = 'platform_admin')
                     OR (creator.account_type IN ('organization', 'organization_admin')
                             AND me.account_type IN ('organization', 'organization_admin')
                             AND creator.organization_id = me.organization_id)
-                    OR (creator.account_type = 'personal' AND me.account_type = 'personal')
+                    OR (creator.account_type = 'personal'
+                            AND me.account_type = 'personal'
+                            AND (channels.visibility = 'public'
+                                 OR EXISTS (
+                                     SELECT 1 FROM channel_invites ci
+                                     WHERE ci.channel_id = channels.id
+                                       AND lower(ci.email) = lower(me.email))))
                 FROM users creator, users me
                 WHERE creator.id = channels.created_by AND me.id = $2
-            ), FALSE) AS same_tenant
+            ), FALSE) AS may_reach
         FROM channels
         WHERE id = $1
         "#,
@@ -54,11 +62,13 @@ pub async fn join_channel(
         return Ok(HttpResponse::Ok().json(serde_json::json!({ "status": "joined" })));
     }
 
-    // A channel can be joined, or asked to be joined, only from inside its own
-    // tenant. Organization channels are always public, so without this anyone
-    // who guessed a channel's number could add themselves and read its whole
-    // history. Answered as "not found" so the number reveals nothing.
-    if !row.get::<bool, _>("same_tenant") {
+    // A channel can be joined, or asked to be joined, only by someone it is
+    // open to (see `may_reach` above). Organization channels are always public,
+    // so without this anyone who guessed a channel's number could add
+    // themselves and read its whole history; and a personal account's private
+    // channel would take a join request from any stranger, confirming it
+    // exists. Answered as "not found" so the number reveals nothing.
+    if !row.get::<bool, _>("may_reach") {
         return Err(AppError::NotFound("channel"));
     }
 
