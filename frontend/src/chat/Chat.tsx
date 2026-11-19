@@ -33,6 +33,7 @@ import { logger } from "../utils/logger";
 import ChatHeader from "./components/ChatHeader";
 import ChannelSettingsPanel from "./components/ChannelSettingsPanel";
 import DmProfilePanel from "./components/DmProfilePanel";
+import ChannelCreateForm from "./components/ChannelCreateForm";
 import ConversationSidebar from "./components/ConversationSidebar";
 import NewConversation from "./components/NewConversation";
 import MessageComposer, {
@@ -40,6 +41,7 @@ import MessageComposer, {
 } from "./components/MessageComposer";
 import MessageThread from "./components/MessageThread";
 import ThreadPanel from "./components/ThreadPanel";
+import Modal from "../components/Modal";
 import ResizeHandle from "../components/ResizeHandle";
 import { useResizableWidth } from "../components/useResizableWidth";
 import { useChatConversations } from "./hooks/useChatConversations";
@@ -124,8 +126,11 @@ export default function Chat() {
 
   const [creatingChannel, setCreatingChannel] = useState(false);
   const [channelName, setChannelName] = useState("");
+  // Private until public is picked: a personal account's public channel is open
+  // to any other personal account. Organizations and the platform have no
+  // choice here; the server makes theirs public whatever is sent.
   const [channelVisibility, setChannelVisibility] =
-    useState<ChannelVisibility>("public");
+    useState<ChannelVisibility>("private");
   const [channelError, setChannelError] = useState("");
 
   // WS messages whose parent_message_id matches `activeThread` are routed to the
@@ -908,6 +913,15 @@ export default function Chat() {
     setComposeError("");
   };
 
+  // Closing the popup without creating throws the half-filled form away, so
+  // the next one starts clean.
+  const closeCreateChannel = () => {
+    setCreatingChannel(false);
+    setChannelName("");
+    setChannelVisibility("private");
+    setChannelError("");
+  };
+
   const createChannel = async () => {
     setChannelError("");
 
@@ -920,7 +934,7 @@ export default function Chat() {
       );
       setChannels((prev) => [channel, ...prev]);
       setChannelName("");
-      setChannelVisibility("public");
+      setChannelVisibility("private");
       setCreatingChannel(false);
       await loadChannelMessages(channel);
     } catch (err) {
@@ -1164,22 +1178,32 @@ export default function Chat() {
       }`}
       style={{ "--chat-sidebar-w": `${sidebarWidth}px` } as React.CSSProperties}
     >
+      {/* A popup over the chat, like the calendar's new-meeting form, rather
+          than a form pushed into the conversation list. */}
+      <Modal
+        contained
+        isOpen={creatingChannel}
+        onClose={closeCreateChannel}
+        title="Create channel"
+      >
+        <ChannelCreateForm
+          channelName={channelName}
+          visibility={channelVisibility}
+          canChooseVisibility={!channelsAlwaysPublic(user)}
+          error={channelError}
+          onChannelNameChange={setChannelName}
+          onVisibilityChange={setChannelVisibility}
+          onCancel={closeCreateChannel}
+          onCreate={() => void createChannel()}
+        />
+      </Modal>
       <ConversationSidebar
         myUserId={user?.id ?? 0}
         users={visibleUsers}
         channels={visibleChannels}
         myChannelsByDefault={!isPersonalAccount && !normalizedSearchQuery}
         selectedConversation={selectedConversation}
-        creatingChannel={creatingChannel}
-        channelName={channelName}
-        channelVisibility={channelVisibility}
-        canChooseVisibility={!channelsAlwaysPublic(user)}
-        channelError={channelError}
-        onToggleCreateChannel={() => setCreatingChannel((open) => !open)}
-        onChannelNameChange={setChannelName}
-        onChannelVisibilityChange={setChannelVisibility}
-        onCancelCreateChannel={() => setCreatingChannel(false)}
-        onCreateChannel={createChannel}
+        onToggleCreateChannel={() => setCreatingChannel(true)}
         onSelectChannel={(channel) => {
           setComposingNew(false);
           void loadChannelMessages(channel);

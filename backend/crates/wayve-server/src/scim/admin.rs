@@ -15,6 +15,20 @@ pub fn routes(cfg: &mut web::ServiceConfig) {
         .service(revoke_scim_token);
 }
 
+/// Which organizations' SCIM tokens the caller may list or revoke, as the SQL
+/// filter: `None` for every organization, `Some(id)` for one.
+///
+/// A personal account belongs to no organization and has no tokens to manage.
+/// It is the owner of its own scope and so holds `webhooks:manage`; without
+/// this it fell through to the unfiltered case meant for platform staff.
+fn token_reach(ctx: &rbac::RoleContext) -> Result<Option<i32>, AppError> {
+    match (ctx.scope, ctx.organization_id) {
+        (rbac::Scope::Platform, _) => Ok(None),
+        (rbac::Scope::Organization, Some(org_id)) => Ok(Some(org_id)),
+        _ => Err(AppError::Forbidden),
+    }
+}
+
 #[derive(Deserialize)]
 pub struct CreateScimTokenInput {
     pub name: String,
@@ -29,6 +43,7 @@ pub async fn list_scim_tokens(req: HttpRequest, pool: web::Data<PgPool>) -> AppR
         Ok(ctx) => ctx,
         Err(resp) => return Ok(resp),
     };
+    let org_filter = token_reach(&ctx)?;
     let rows = sqlx::query(
         r#"
         SELECT t.id, t.organization_id, o.name AS organization_name, t.name,
@@ -39,12 +54,7 @@ pub async fn list_scim_tokens(req: HttpRequest, pool: web::Data<PgPool>) -> AppR
          ORDER BY t.id DESC
         "#,
     )
-    // Platform-scope sees all orgs; org-scope is restricted to their own org.
-    .bind(if ctx.scope == rbac::Scope::Platform {
-        None::<i32>
-    } else {
-        ctx.organization_id
-    })
+    .bind(org_filter)
     .fetch_all(pool.get_ref())
     .await?;
     let items: Vec<_> = rows
@@ -77,9 +87,12 @@ pub async fn create_scim_token(
         Ok(ctx) => ctx,
         Err(resp) => return Ok(resp),
     };
-    // Org-scope managers can only mint tokens for their own org.
-    if ctx.scope == rbac::Scope::Organization && ctx.organization_id != Some(data.organization_id) {
-        return Err(AppError::Forbidden);
+    // A SCIM token reads and writes an organization's whole member directory.
+    // Organization managers may mint one for their own organization only, and
+    // a personal account for none.
+    match token_reach(&ctx)? {
+        Some(own_org) if own_org != data.organization_id => return Err(AppError::Forbidden),
+        _ => {}
     }
     let name = data.name.trim();
     if name.is_empty() {
@@ -125,6 +138,7 @@ pub async fn revoke_scim_token(
         Err(resp) => return Ok(resp),
     };
     let id = path.into_inner();
+    let org_filter = token_reach(&ctx)?;
     let done = sqlx::query(
         "UPDATE scim_tokens SET revoked_at = NOW() \
          WHERE id = $1 \
@@ -132,11 +146,7 @@ pub async fn revoke_scim_token(
            AND revoked_at IS NULL",
     )
     .bind(id)
-    .bind(if ctx.scope == rbac::Scope::Platform {
-        None::<i32>
-    } else {
-        ctx.organization_id
-    })
+    .bind(org_filter)
     .execute(pool.get_ref())
     .await?;
     if done.rows_affected() == 0 {

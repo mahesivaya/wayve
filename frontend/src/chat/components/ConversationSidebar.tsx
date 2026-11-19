@@ -7,8 +7,7 @@ import type {
 import { NewChatIcon } from "../../icons";
 import { useGlobalSearch } from "../../search/SearchContext";
 import type { PresenceMap } from "../hooks/usePresence";
-import type { ChannelVisibility, Conversation } from "../types";
-import ChannelCreateForm from "./ChannelCreateForm";
+import type { Conversation } from "../types";
 import ChannelList from "./ChannelList";
 import PersonalChatList from "./PersonalChatList";
 import RecentConversations from "./RecentConversations";
@@ -24,16 +23,7 @@ type Props = {
   // channels" reveals the rest to join.
   myChannelsByDefault: boolean;
   selectedConversation: Conversation | null;
-  creatingChannel: boolean;
-  channelName: string;
-  channelVisibility: ChannelVisibility;
-  canChooseVisibility: boolean;
-  channelError: string;
   onToggleCreateChannel: () => void;
-  onChannelNameChange: (value: string) => void;
-  onChannelVisibilityChange: (value: ChannelVisibility) => void;
-  onCancelCreateChannel: () => void;
-  onCreateChannel: () => void;
   onSelectChannel: (channel: ChatChannel) => void;
   onJoinChannel: (channel: ChatChannel) => void;
   onSelectUser: (user: ChatUser) => void;
@@ -72,16 +62,7 @@ export default function ConversationSidebar({
   channels,
   myChannelsByDefault,
   selectedConversation,
-  creatingChannel,
-  channelName,
-  channelVisibility,
-  canChooseVisibility,
-  channelError,
   onToggleCreateChannel,
-  onChannelNameChange,
-  onChannelVisibilityChange,
-  onCancelCreateChannel,
-  onCreateChannel,
   onSelectChannel,
   onJoinChannel,
   onSelectUser,
@@ -191,19 +172,6 @@ export default function ConversationSidebar({
               +
             </button>
           </div>
-
-          {creatingChannel && (
-            <ChannelCreateForm
-              channelName={channelName}
-              visibility={channelVisibility}
-              canChooseVisibility={canChooseVisibility}
-              error={channelError}
-              onChannelNameChange={onChannelNameChange}
-              onVisibilityChange={onChannelVisibilityChange}
-              onCancel={onCancelCreateChannel}
-              onCreate={onCreateChannel}
-            />
-          )}
 
           <ChannelList
             channels={listedChannels}

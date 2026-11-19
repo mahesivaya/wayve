@@ -1,4 +1,7 @@
 .chat-container {
+  /* Positioned, so the new-channel popup covers the chat and not the whole
+     window. */
+  position: relative;
   display: flex;
   flex: 1;
   width: 100%;
@@ -71,12 +74,11 @@
   border-color: var(--color-border-muted);
 }
 
+/* The new-channel form. It sits in a popup, which supplies the frame and the
+   padding. */
 .channel-form {
-  margin: 12px;
-  padding: 12px;
-  border: 1px solid var(--color-divider-cool-strong);
-  border-radius: var(--radius-md);
-  background: var(--color-pane);
+  margin: 0;
+  text-align: left;
 }
 
 .channel-field {
@@ -105,6 +107,49 @@
      sat on the dark surface in dark mode, so typed names were invisible. */
   color: var(--color-text-primary);
   background: var(--color-surface);
+}
+
+/* "Who can join" on the new-channel form: a radio per choice, each with a line
+   saying what it means. */
+.channel-visibility {
+  min-width: 0;
+  margin: 0 0 10px;
+  padding: 0;
+  border: 0;
+}
+
+.channel-visibility legend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--color-text-slate);
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+
+.channel-visibility-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+.channel-visibility-option input {
+  flex-shrink: 0;
+  margin: 3px 0 0;
+}
+
+.channel-visibility-option strong {
+  display: block;
+  color: var(--color-text-primary);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.channel-visibility-option small {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
 }
 
 .channel-field input::placeholder,
