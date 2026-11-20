@@ -7,11 +7,14 @@
 #[cfg(test)]
 mod tests {
     use crate::email::account::{
-        ConnectedEmailAccount, backfill_token_encryption, load_email_account_for_user,
-        load_syncable_email_accounts, store_access_token, upsert_connected_email_account,
+        ConnectedEmailAccount, backfill_token_encryption, cached_access_token,
+        load_email_account_for_user, load_syncable_email_accounts, store_access_token,
+        upsert_connected_email_account,
     };
     use crate::email::imap::encode_secret;
-    use crate::email::provider::{MailProvider, RefreshedEmailToken, persist_refreshed_token};
+    use crate::email::provider::{
+        MailProvider, RefreshedEmailToken, persist_refreshed_token, refresh_and_persist_email_token,
+    };
     use crate::test_support::{delete_user, insert_local_user, random_email, test_pool};
     use sqlx::{PgPool, Row};
     use wayve_security::encryption::{decrypt, encrypt};
@@ -150,6 +153,7 @@ mod tests {
         let refreshed = RefreshedEmailToken {
             access_token: "access-3".into(),
             refresh_token: None,
+            expires_in: 3600,
         };
         persist_refreshed_token(&pool, account_id, &refreshed)
             .await
@@ -162,6 +166,7 @@ mod tests {
         let rotated = RefreshedEmailToken {
             access_token: "access-4".into(),
             refresh_token: Some("refresh-2".into()),
+            expires_in: 3600,
         };
         persist_refreshed_token(&pool, account_id, &rotated)
             .await
@@ -171,7 +176,7 @@ mod tests {
             tokens(Some("access-4"), Some("refresh-2"))
         );
 
-        store_access_token(&pool, account_id, "access-5")
+        store_access_token(&pool, account_id, "access-5", 3600)
             .await
             .unwrap_or_else(|err| panic!("store access: {err}"));
         assert_eq!(
@@ -321,6 +326,71 @@ mod tests {
 
         backfill(&pool).await;
         assert_eq!(stored(&pool, account_id).await, tokens(None, Some(&blob)));
+
+        delete_user(&pool, user_id).await;
+    }
+
+    /// A stored access token with time left is handed back without calling the
+    /// provider; one near or past expiry is not, so the caller refreshes.
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn a_live_access_token_is_reused_instead_of_refreshed() {
+        set_key();
+        let pool = test_pool().await;
+        let user_id = insert_local_user(&pool, &random_email(), "pw-unused").await;
+        let mailbox = random_email();
+        let account_id = upsert_connected_email_account(
+            &pool,
+            ConnectedEmailAccount {
+                email: &mailbox,
+                user_id,
+                provider: MailProvider::Google,
+                access_token: "live-access",
+                refresh_token: Some("refresh-1"),
+                expires_in: 3600,
+            },
+        )
+        .await
+        .unwrap_or_else(|err| panic!("connect: {err}"));
+
+        // The refresh token is junk and no Google client is configured, so a
+        // provider call would fail: success proves the stored token was reused.
+        let token = refresh_and_persist_email_token(
+            &pool,
+            account_id,
+            MailProvider::Google,
+            "not-a-real-refresh-token",
+        )
+        .await
+        .unwrap_or_else(|err| panic!("reuse: {err}"));
+        assert_eq!(token.access_token, "live-access");
+        assert!(
+            token.expires_in > 3000,
+            "remaining lifetime: {}",
+            token.expires_in
+        );
+
+        // Under the reuse margin: the caller has to refresh.
+        store_access_token(&pool, account_id, "short-lived", 60)
+            .await
+            .unwrap_or_else(|err| panic!("store short: {err}"));
+        let cached = cached_access_token(&pool, account_id)
+            .await
+            .unwrap_or_else(|err| panic!("cached short: {err}"));
+        assert!(
+            cached.is_none(),
+            "a token about to expire must not be reused"
+        );
+
+        // Unknown lifetime: never reused, but the row stays "connected".
+        store_access_token(&pool, account_id, "unknown-lifetime", 0)
+            .await
+            .unwrap_or_else(|err| panic!("store unknown: {err}"));
+        let cached = cached_access_token(&pool, account_id)
+            .await
+            .unwrap_or_else(|err| panic!("cached unknown: {err}"));
+        assert!(cached.is_none());
+        assert!(stored(&pool, account_id).await.connected);
 
         delete_user(&pool, user_id).await;
     }

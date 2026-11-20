@@ -444,21 +444,88 @@ pub async fn backfill_token_encryption(pool: &PgPool) -> Result<u64> {
     Ok(moved)
 }
 
-/// Stores a freshly minted access token.
+/// A stored access token is reused only while it has at least this long left,
+/// so a sync pass or attachment download that starts with it can't have it
+/// expire mid-way.
+const ACCESS_TOKEN_REUSE_MARGIN_SECS: i64 = 5 * 60;
+
+/// `token_expiry` for an access token minted now with this lifetime. An unknown
+/// lifetime (0) records "now", which `cached_access_token` never reuses — and
+/// keeps the column non-NULL, which the loaders read as "connected".
+pub fn access_token_expiry(expires_in: i64) -> chrono::NaiveDateTime {
+    (chrono::Utc::now() + chrono::Duration::seconds(expires_in.max(0))).naive_utc()
+}
+
+/// The stored access token and its remaining lifetime in seconds, if it has
+/// more than `ACCESS_TOKEN_REUSE_MARGIN_SECS` left. `None` means the caller
+/// must refresh. Reads the DB directly (not the account cache) so the API and
+/// the worker processes all see the same token.
+#[instrument(target = "db", skip(pool))]
+pub async fn cached_access_token(pool: &PgPool, account_id: i32) -> Result<Option<(String, i64)>> {
+    let row = sqlx::query(
+        "SELECT access_token_iv, access_token_encrypted, token_expiry \
+         FROM email_accounts WHERE id = $1",
+    )
+    .bind(account_id)
+    .fetch_optional(pool)
+    .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let Some(expiry) = row.get::<Option<chrono::NaiveDateTime>, _>("token_expiry") else {
+        return Ok(None);
+    };
+    let remaining = (expiry - chrono::Utc::now().naive_utc()).num_seconds();
+    if remaining <= ACCESS_TOKEN_REUSE_MARGIN_SECS {
+        return Ok(None);
+    }
+    Ok(open_access_token(&row).map(|token| (token, remaining)))
+}
+
+/// Stores a freshly minted access token and when it expires.
 #[instrument(target = "db", skip(pool, access_token))]
-pub async fn store_access_token(pool: &PgPool, account_id: i32, access_token: &str) -> Result<()> {
+pub async fn store_access_token(
+    pool: &PgPool,
+    account_id: i32,
+    access_token: &str,
+    expires_in: i64,
+) -> Result<()> {
     let (iv, ciphertext) = seal_token(access_token)?;
     sqlx::query(
         "UPDATE email_accounts \
-         SET access_token_iv = $1, access_token_encrypted = $2, access_token = NULL \
-         WHERE id = $3",
+         SET access_token_iv = $1, access_token_encrypted = $2, access_token = NULL, \
+             token_expiry = $3 \
+         WHERE id = $4",
     )
     .bind(iv)
     .bind(ciphertext)
+    .bind(access_token_expiry(expires_in))
     .bind(account_id)
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// The stored access token if it's still good, otherwise a fresh Google one
+/// (stored for next time). For callers that talk to Gmail directly rather than
+/// through `refresh_and_persist_email_token`.
+pub async fn google_access_token(
+    pool: &PgPool,
+    account_id: i32,
+    oauth: (&str, &str),
+    refresh_token: &str,
+) -> Result<String> {
+    if let Some((token, _)) = cached_access_token(pool, account_id).await? {
+        return Ok(token);
+    }
+    let fresh = crate::email::oauth::refresh_access_token(oauth.0, oauth.1, refresh_token).await?;
+    // A failed write only costs a refresh next time; the token is still good.
+    if let Err(e) =
+        store_access_token(pool, account_id, &fresh.access_token, fresh.expires_in).await
+    {
+        tracing::warn!(target: "db", account_id, error = ?e, "storing refreshed access token failed");
+    }
+    Ok(fresh.access_token)
 }
 
 #[instrument(

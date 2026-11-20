@@ -200,17 +200,18 @@ pub struct GoogleMailClient {
 #[async_trait]
 impl TokenRefresher for GoogleMailClient {
     async fn refresh_token(&self, refresh_token: &str) -> Result<RefreshedEmailToken> {
-        let access_token = refresh_access_token(
+        let fresh = refresh_access_token(
             &self.oauth.client_id,
             &self.oauth.client_secret,
             refresh_token,
         )
         .await?;
         Ok(RefreshedEmailToken {
-            access_token,
+            access_token: fresh.access_token,
             // Google's refresh endpoint doesn't normally return a rotated
             // refresh token, so callers keep the existing DB value.
             refresh_token: None,
+            expires_in: fresh.expires_in,
         })
     }
 }
@@ -478,6 +479,7 @@ impl TokenRefresher for OutlookMailClient {
             // Graph sometimes rotates the refresh token; pass it through so
             // persist_refreshed_token writes it back.
             refresh_token: tokens.refresh_token,
+            expires_in: tokens.expires_in,
         })
     }
 }
@@ -816,6 +818,8 @@ impl TokenRefresher for ImapMailClient {
         Ok(RefreshedEmailToken {
             access_token: password,
             refresh_token: None,
+            // Never persisted or reused (see refresh_and_persist_email_token).
+            expires_in: 0,
         })
     }
 }
@@ -1065,6 +1069,8 @@ pub fn google_oauth_client() -> Result<GoogleOAuthClient> {
 pub struct RefreshedEmailToken {
     pub access_token: String,
     pub refresh_token: Option<String>,
+    /// Seconds the access token stays valid; 0 when unknown (never reused).
+    pub expires_in: i64,
 }
 
 #[instrument(target = "auth", skip(refresh_token), fields(provider = provider.as_db()))]
@@ -1093,7 +1099,8 @@ pub async fn persist_refreshed_token(
              access_token_iv = $1,
              access_token_encrypted = $2,
              refresh_token_iv = COALESCE($3, refresh_token_iv),
-             refresh_token_encrypted = COALESCE($4, refresh_token_encrypted)
+             refresh_token_encrypted = COALESCE($4, refresh_token_encrypted),
+             token_expiry = $6
          WHERE id = $5",
     )
     .bind(access_iv)
@@ -1101,6 +1108,7 @@ pub async fn persist_refreshed_token(
     .bind(refresh_iv)
     .bind(refresh_ct)
     .bind(account_id)
+    .bind(crate::email::account::access_token_expiry(token.expires_in))
     .execute(pool)
     .await?;
 
@@ -1120,6 +1128,19 @@ pub async fn refresh_and_persist_email_token(
     provider: MailProvider,
     refresh_token: &str,
 ) -> Result<RefreshedEmailToken> {
+    // Access tokens last about an hour; reuse the stored one until shortly
+    // before it expires instead of calling the provider on every sync tick,
+    // push, and mailbox action. IMAP has no access token to reuse.
+    if !matches!(provider, MailProvider::Imap)
+        && let Some((access_token, remaining)) =
+            crate::email::account::cached_access_token(pool, account_id).await?
+    {
+        return Ok(RefreshedEmailToken {
+            access_token,
+            refresh_token: None,
+            expires_in: remaining,
+        });
+    }
     let token = refresh_email_token(provider, refresh_token).await?;
     // For IMAP the "access token" is the plaintext app password, so persisting
     // it would write a plaintext credential into `access_token`. Skip the write:

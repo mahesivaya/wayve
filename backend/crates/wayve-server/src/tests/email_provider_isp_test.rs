@@ -93,6 +93,7 @@ mod tests {
                 Ok(RefreshedEmailToken {
                     access_token: "t".into(),
                     refresh_token: None,
+                    expires_in: 0,
                 })
             }
         }

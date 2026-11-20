@@ -27,12 +27,19 @@ pub fn load_google_secrets() -> serde_json::Value {
     try_load_google_secrets().unwrap_or_else(|e| panic!("{e}"))
 }
 
+/// A freshly minted Google access token. `expires_in` is in seconds; 0 when
+/// Google omitted it, which callers treat as "don't reuse".
+pub struct GoogleAccessToken {
+    pub access_token: String,
+    pub expires_in: i64,
+}
+
 #[instrument(target = "gmail", skip_all)]
 pub async fn refresh_access_token(
     client_id: &str,
     client_secret: &str,
     refresh_token: &str,
-) -> Result<String> {
+) -> Result<GoogleAccessToken> {
     let res: Value = HTTP_CLIENT
         .post(crate::external::google_token_url())
         .form(&[
@@ -53,7 +60,10 @@ pub async fn refresh_access_token(
         return Err(anyhow!("Token refresh failed: {err}"));
     }
 
-    Ok(res["access_token"].as_str().unwrap_or("").to_string())
+    Ok(GoogleAccessToken {
+        access_token: res["access_token"].as_str().unwrap_or("").to_string(),
+        expires_in: res["expires_in"].as_i64().unwrap_or(0),
+    })
 }
 
 pub static HTTP_CLIENT: Lazy<Client> = Lazy::new(|| {

@@ -4,7 +4,7 @@ use crate::cache::TtlCache;
 use crate::email::account::open_refresh_token;
 use crate::email::attachments::save_email_attachments;
 use crate::email::body_worker::seal_body_for_owner;
-use crate::email::oauth::{HTTP_CLIENT, refresh_access_token, try_load_google_secrets};
+use crate::email::oauth::{HTTP_CLIENT, try_load_google_secrets};
 use crate::email::utils::{extract_attachments, extract_body};
 use actix_web::{HttpResponse, get};
 use sqlx::PgPool;
@@ -262,10 +262,17 @@ pub async fn get_email_body(
         }
     };
 
-    let token = match refresh_access_token(&client_id, &client_secret, &refresh_token).await {
+    let token = match crate::email::account::google_access_token(
+        pool.get_ref(),
+        account_id,
+        (&client_id, &client_secret),
+        &refresh_token,
+    )
+    .await
+    {
         Ok(t) => t,
         Err(e) => {
-            error!(target: "gmail", account_id, error = ?e, "refresh_access_token failed");
+            error!(target: "gmail", account_id, error = ?e, "google access token unavailable");
             // The live refresh only adds fresh attachment metadata — if we
             // already have the body stored, serve it rather than failing.
             if let Some(body) = stored_body.as_ref() {
@@ -279,8 +286,6 @@ pub async fn get_email_body(
             })));
         }
     };
-
-    let _ = crate::email::account::store_access_token(pool.get_ref(), account_id, &token).await;
 
     let url = format!(
         "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}?format=full",

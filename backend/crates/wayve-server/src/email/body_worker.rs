@@ -1,7 +1,7 @@
 use crate::prelude::*;
 
 use crate::email::attachments::save_email_attachments;
-use crate::email::oauth::{HTTP_CLIENT, load_google_secrets, refresh_access_token};
+use crate::email::oauth::{HTTP_CLIENT, load_google_secrets};
 use crate::email::utils::{AttachmentMeta, extract_attachments, extract_body};
 use wayve_security::encryption::{decrypt, encrypt, encrypt_to_pubkey};
 
@@ -134,9 +134,13 @@ pub(crate) async fn process_account(
     client_secret: &str,
     refresh_token: &str,
 ) -> Result<usize> {
-    let token = refresh_access_token(client_id, client_secret, refresh_token).await?;
-
-    crate::email::account::store_access_token(pool, account_id, &token).await?;
+    let token = crate::email::account::google_access_token(
+        pool,
+        account_id,
+        (client_id, client_secret),
+        refresh_token,
+    )
+    .await?;
 
     // Same predicate as `run_iteration`. Re-fetching a row that already has a
     // body costs one Gmail call and is the only way to back-fill attachments for
