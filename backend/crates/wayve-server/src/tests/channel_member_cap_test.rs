@@ -195,9 +195,15 @@ mod tests {
         let people = users(&pool, MAX + 1).await;
         let channel_id = channel(&pool, "public", &people[..MAX]).await;
         let outsider = &people[MAX];
+        // A personal channel's link carries its token; the outsider has it.
+        let token: String = sqlx::query_scalar("SELECT link_token FROM channels WHERE id = $1")
+            .bind(channel_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("read link token: {e}"));
 
         let req = actix_test::TestRequest::post()
-            .uri(&format!("/chat/channels/{channel_id}/join"))
+            .uri(&format!("/chat/channels/{channel_id}/join?t={token}"))
             .insert_header(bearer(outsider))
             .to_request();
         assert_eq!(

@@ -187,12 +187,19 @@ mod tests {
                 .configure(crate::chat::routes),
         )
         .await;
-        let join = |account: &Account, channel_id: i32| {
+        let join_with = |account: &Account, channel_id: i32, query: &str| {
             actix_test::TestRequest::post()
-                .uri(&format!("/chat/channels/{channel_id}/join"))
+                .uri(&format!("/chat/channels/{channel_id}/join{query}"))
                 .insert_header(("Authorization", format!("Bearer {}", account.token)))
                 .to_request()
         };
+        let join = |account: &Account, channel_id: i32| join_with(account, channel_id, "");
+        let token: String = sqlx::query_scalar("SELECT link_token FROM channels WHERE id = $1")
+            .bind(public_channel)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or_else(|e| panic!("read link token: {e}"));
+        let with_link = format!("?t={token}");
 
         // Private: a stranger gets "not found", and leaves no trace — not even a
         // join request the creator would have to turn down.
@@ -210,17 +217,31 @@ mod tests {
         );
         assert!(members(&pool, private_channel).await.is_empty());
 
-        // Public, by the creator's choice: another personal account joins.
-        let resp = actix_test::call_service(&app, join(&stranger, public_channel)).await;
+        // Public, by the creator's choice, but only through its link: the
+        // number alone, or a wrong token, is "not found" and leaves no trace.
+        for query in ["", "?t=", "?t=0000"] {
+            let resp =
+                actix_test::call_service(&app, join_with(&stranger, public_channel, query)).await;
+            assert_eq!(resp.status(), StatusCode::NOT_FOUND, "query {query:?}");
+        }
+        assert!(members(&pool, public_channel).await.is_empty());
+        assert!(pending_requests(&pool, public_channel).await.is_empty());
+
+        // With the link, another personal account joins.
+        let resp =
+            actix_test::call_service(&app, join_with(&stranger, public_channel, &with_link)).await;
         assert_eq!(resp.status(), StatusCode::OK);
         assert_eq!(members(&pool, public_channel).await, vec![stranger.id]);
 
         // Public to personal accounts only: an organization's member is still
-        // outside it.
+        // outside it, link or not.
         for channel_id in [public_channel, private_channel] {
             let resp = actix_test::call_service(&app, join(&org_user, channel_id)).await;
             assert_eq!(resp.status(), StatusCode::NOT_FOUND);
         }
+        let resp =
+            actix_test::call_service(&app, join_with(&org_user, public_channel, &with_link)).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
         assert_eq!(members(&pool, public_channel).await, vec![stranger.id]);
 
         cleanup(

@@ -40,6 +40,9 @@ pub async fn get_channels(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
                 )
             ) AS can_manage,
             mine.user_id IS NOT NULL AS is_member,
+            -- The channel's link secret, for members only: they are the ones who
+            -- share it (see `channel_join::MAY_REACH`).
+            CASE WHEN mine.user_id IS NOT NULL THEN c.link_token END AS link_token,
             jr.status AS join_status,
             COALESCE((
                 SELECT array_agg(cm_all.user_id ORDER BY u_all.email)
@@ -134,6 +137,7 @@ pub async fn get_channels(req: HttpRequest, pool: web::Data<PgPool>) -> AppResul
                 "current_user_role": row.get::<Option<String>, _>("current_user_role"),
                 "can_manage": row.get::<bool, _>("can_manage"),
                 "is_member": row.get::<bool, _>("is_member"),
+                "link_token": row.get::<Option<String>, _>("link_token"),
                 "join_status": row.get::<Option<String>, _>("join_status"),
                 "member_ids": row.get::<Vec<i32>, _>("member_ids"),
                 "member_emails": row.get::<Vec<String>, _>("member_emails"),

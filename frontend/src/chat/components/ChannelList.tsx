@@ -22,7 +22,7 @@ export default function ChannelList({
         <ConversationRow
           key={channel.id}
           label={`#${channel.name}`}
-          link={channelLink(channel.id)}
+          link={channelLink(channel)}
         >
           <button
             type="button"

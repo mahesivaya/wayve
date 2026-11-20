@@ -129,24 +129,26 @@ beforeEach(() => {
 describe("following a channel link", () => {
   it("opens an unlisted channel on its join page, and joins from there", async () => {
     api.getChannelPreview.mockResolvedValue(linked);
-    renderAt("/chat?c=77");
+    renderAt("/chat?c=77&t=tok77");
 
     await waitFor(() =>
       expect(screen.getByTestId("title").textContent).toContain("book club")
     );
-    expect(api.getChannelPreview).toHaveBeenCalledWith(77);
+    expect(api.getChannelPreview).toHaveBeenCalledWith(77, "tok77");
     expect(
       screen.getByText("Join this public channel to read and write messages.")
     ).toBeTruthy();
     expect(screen.getByTestId("listed").textContent).toBe("book club");
     // Not a member yet, so its messages were not asked for.
     expect(api.getChannelMessages).not.toHaveBeenCalled();
-    expect(screen.getByTestId("url").textContent).toBe("/chat?c=77");
+    // The token stays in the address while on the join page, so a refresh
+    // still opens it.
+    expect(screen.getByTestId("url").textContent).toBe("/chat?c=77&t=tok77");
 
     h.channels = [{ ...linked, is_member: true, member_ids: [1] }];
     await userEvent.setup().click(screen.getByText("join"));
 
-    expect(api.joinChatChannel).toHaveBeenCalledWith(77);
+    expect(api.joinChatChannel).toHaveBeenCalledWith(77, "tok77");
     await waitFor(() =>
       expect(api.getChannelMessages).toHaveBeenCalledWith(77)
     );
@@ -155,7 +157,7 @@ describe("following a channel link", () => {
 
   it("says so when the link leads nowhere, and drops it from the address", async () => {
     api.getChannelPreview.mockResolvedValue(null);
-    renderAt("/chat?c=404");
+    renderAt("/chat?c=404&t=wrong");
 
     expect(
       await screen.findByText(/This channel link can't be opened/)

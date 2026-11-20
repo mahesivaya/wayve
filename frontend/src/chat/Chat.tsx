@@ -92,6 +92,9 @@ export default function Chat() {
   useEffect(() => markChatOpen(), []);
   const cParam = ownsUrl ? searchParams.get("c") : null;
   const dmParam = ownsUrl ? searchParams.get("dm") : null;
+  // A channel link's token (`&t=`), which opens a personal account's public
+  // channel to a non-member.
+  const tParam = ownsUrl ? searchParams.get("t") : null;
   const urlKey = cParam ? `c:${cParam}` : dmParam ? `dm:${dmParam}` : null;
 
   // The window left open when this page last unmounted. A URL naming another
@@ -652,14 +655,19 @@ export default function Chat() {
         void (async () => {
           let found: ChatChannel | null = null;
           try {
-            found = Number.isInteger(id) ? await getChannelPreview(id) : null;
+            found = Number.isInteger(id)
+              ? await getChannelPreview(id, tParam)
+              : null;
           } catch (err) {
             logger.warn("opening channel link failed", { key, err });
             return;
           }
           if (deepLinkAppliedRef.current !== key) return;
           if (found) {
-            const linked = found;
+            // Keep the token with it: joining needs it too.
+            const linked: ChatChannel = found.is_member
+              ? found
+              : { ...found, link_token: tParam };
             setChannels((prev) =>
               prev.some((c) => c.id === linked.id) ? prev : [linked, ...prev]
             );
@@ -676,6 +684,7 @@ export default function Chat() {
             (prev) => {
               const next = new URLSearchParams(prev);
               next.delete("c");
+              next.delete("t");
               return next;
             },
             { replace: true }
@@ -751,8 +760,13 @@ export default function Chat() {
         const next = new URLSearchParams(prev);
         next.delete("c");
         next.delete("dm");
+        next.delete("t");
         if (selectedConversation?.type === "channel") {
-          next.set("c", String(selectedConversation.channel.id));
+          const ch = selectedConversation.channel;
+          next.set("c", String(ch.id));
+          // Still on the join page of a linked channel: keep its token, so a
+          // refresh can open it again.
+          if (!ch.is_member && ch.link_token) next.set("t", ch.link_token);
         } else if (selectedConversation?.type === "user") {
           next.set("dm", String(selectedConversation.user.id));
         }
@@ -996,7 +1010,10 @@ export default function Chat() {
     setChannelError("");
 
     try {
-      await joinChatChannel(channel.id);
+      await joinChatChannel(
+        channel.id,
+        channel.is_member ? null : channel.link_token
+      );
       // Open it as it now stands: with its history once joined, or still on the
       // join page while a request waits for an admin.
       const joined = (await fetchChannels()).find((c) => c.id === channel.id);
