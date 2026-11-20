@@ -95,10 +95,10 @@
 		1901BA3A71A784EF22796A09 /* APIError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIError.swift; sourceTree = "<group>"; };
 		1A674271AD3D40E66590E5DB /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
 		25AC528395147B038243E758 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		28791880EB1C7EEF9DB7B9FD /* make-crypto-vectors.mjs */ = {isa = PBXFileReference; path = "make-crypto-vectors.mjs"; sourceTree = "<group>"; };
+		28791880EB1C7EEF9DB7B9FD /* make-crypto-vectors.mjs */ = {isa = PBXFileReference; lastKnownFileType = text; path = "make-crypto-vectors.mjs"; sourceTree = "<group>"; };
 		3128A66A3D4A88578EDB8678 /* KeyVault.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyVault.swift; sourceTree = "<group>"; };
 		313FD5F6B7DFFD19AFE52E53 /* ServerDate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerDate.swift; sourceTree = "<group>"; };
-		3A0C3BEE3E1C32ED0F13FC02 /* FluxzeTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = FluxzeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3A0C3BEE3E1C32ED0F13FC02 /* FluxzeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FluxzeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3D97B1188C9AD10F6E6D0D71 /* Meeting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Meeting.swift; sourceTree = "<group>"; };
 		3E41182006D4E509E502D709 /* Config.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Config.swift; sourceTree = "<group>"; };
 		3F4E368C5A7B23425891B961 /* FluxzeCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxzeCrypto.swift; sourceTree = "<group>"; };
@@ -127,7 +127,7 @@
 		92BE301963A31FA5300B627E /* InstallReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallReporter.swift; sourceTree = "<group>"; };
 		943FB94391D408176019B25B /* Notifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifier.swift; sourceTree = "<group>"; };
 		983F4294D15151907CC1482C /* ChatModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatModels.swift; sourceTree = "<group>"; };
-		98649CB7D547514D52F29CBA /* Fluxze.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Fluxze.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		98649CB7D547514D52F29CBA /* Fluxze.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Fluxze.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9F3BFC6A3688FA6F772F1750 /* ReviewsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewsTests.swift; sourceTree = "<group>"; };
 		A2023DC3671F1C6C4D109EAC /* ComposeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposeView.swift; sourceTree = "<group>"; };
 		A2B515DE16CD941B42060F87 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
@@ -136,7 +136,7 @@
 		AA4278D97A395C5D2FC8D873 /* ChatConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatConversationView.swift; sourceTree = "<group>"; };
 		B36CDFCECD5AB5474EB52F92 /* UnlockKeyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnlockKeyView.swift; sourceTree = "<group>"; };
 		B45F54C30DE426ACAF23DF0F /* TasksStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksStore.swift; sourceTree = "<group>"; };
-		B971D2516468DCCC5C85754C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		B971D2516468DCCC5C85754C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		BF10773F318C79C658229FD2 /* EmailTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailTests.swift; sourceTree = "<group>"; };
 		C07F702FD5E0C9CE6C26C64C /* DockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockTests.swift; sourceTree = "<group>"; };
 		C5CDB34F920D4252DC05E8FD /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
@@ -372,9 +372,9 @@
 			productReference = 3A0C3BEE3E1C32ED0F13FC02 /* FluxzeTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		7624AF0AB6AC80D38DDBE29E /* Fluxze */ = {
+		7624AF0AB6AC80D38DDBE29E /* Hadal */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 993DBE385B6F3E9C93515D94 /* Build configuration list for PBXNativeTarget "Fluxze" */;
+			buildConfigurationList = 993DBE385B6F3E9C93515D94 /* Build configuration list for PBXNativeTarget "Hadal" */;
 			buildPhases = (
 				CEC27D339967549401714FFD /* Sources */,
 				54EC0FD285580D7AD7760677 /* Resources */,
@@ -383,7 +383,7 @@
 			);
 			dependencies = (
 			);
-			name = Fluxze;
+			name = Hadal;
 			packageProductDependencies = (
 			);
 			productName = Fluxze;
@@ -397,7 +397,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1430;
+				LastUpgradeCheck = 2650;
 				TargetAttributes = {
 					4D357618D63AFFE1667A4899 = {
 						DevelopmentTeam = XTFKA6B688;
@@ -422,7 +422,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				7624AF0AB6AC80D38DDBE29E /* Fluxze */,
+				7624AF0AB6AC80D38DDBE29E /* Hadal */,
 				4D357618D63AFFE1667A4899 /* FluxzeTests */,
 			);
 		};
@@ -530,7 +530,7 @@
 /* Begin PBXTargetDependency section */
 		09341FAFE2606B10FA4B999E /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 7624AF0AB6AC80D38DDBE29E /* Fluxze */;
+			target = 7624AF0AB6AC80D38DDBE29E /* Hadal */;
 			targetProxy = AC433A72F98CD1D0BC5323F2 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -592,6 +592,7 @@
 				DEVELOPMENT_TEAM = XTFKA6B688;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -607,12 +608,13 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 2.3.0;
+				MARKETING_VERSION = 4.0.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -676,6 +678,7 @@
 				DEVELOPMENT_TEAM = XTFKA6B688;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -685,11 +688,12 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 2.3.0;
+				MARKETING_VERSION = 4.0.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
@@ -743,7 +747,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
-		993DBE385B6F3E9C93515D94 /* Build configuration list for PBXNativeTarget "Fluxze" */ = {
+		993DBE385B6F3E9C93515D94 /* Build configuration list for PBXNativeTarget "Hadal" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				9FA5796F8FFA4C85F4F449B3 /* Debug */,
