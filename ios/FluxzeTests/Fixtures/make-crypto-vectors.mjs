@@ -120,3 +120,10 @@ ${JSON.stringify(v, null, 2)}
 `;
 writeFileSync(join(here, "../CryptoVectors.swift"), swift);
 console.log("wrote CryptoVectors.swift");
+
+// The Android tests open the same vectors, so both apps stay in step.
+writeFileSync(
+  join(repo, "android/app/src/test/resources/crypto-vectors.json"),
+  JSON.stringify(v, null, 2) + "\n"
+);
+console.log("wrote android/app/src/test/resources/crypto-vectors.json");
