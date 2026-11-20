@@ -69,6 +69,80 @@ pub async fn fan_out_user(cache: &Option<Cache>, user_id: i32, payload: String) 
     }
 }
 
+/// Redis pub/sub topic for a channel's realtime frames. `chat::pubsub`
+/// PSUBSCRIBEs `ws:channel:*`, so one PUBLISH reaches every instance.
+pub fn channel_topic(channel_id: i32) -> String {
+    format!("ws:channel:{channel_id}")
+}
+
+/// What travels on a `ws:channel:{id}` topic: the frame plus who may receive it.
+#[derive(Serialize)]
+struct ChannelFrameOut<'a> {
+    to: &'a [i32],
+    frame: &'a str,
+}
+
+#[derive(Deserialize, Debug, PartialEq)]
+pub struct ChannelFrame {
+    pub to: Vec<i32>,
+    pub frame: String,
+}
+
+/// Decode a `ws:channel:{id}` message. None for anything malformed.
+pub fn parse_channel_frame(raw: &str) -> Option<ChannelFrame> {
+    serde_json::from_str(raw).ok()
+}
+
+/// Fan a frame out to a channel's members with ONE Redis PUBLISH, instead of
+/// one `ws:user:{id}` publish per member. `members` is read from the database
+/// by the caller at send time, and each instance delivers only to those ids, so
+/// a user who left the channel never receives it. If the publish fails, every
+/// member's sessions on this instance get it directly; exactly one path runs.
+pub async fn fan_out_channel(
+    cache: &Option<Cache>,
+    channel_id: i32,
+    members: &[i32],
+    payload: &str,
+) {
+    if members.is_empty() {
+        return;
+    }
+    let published = match cache {
+        Some(c) => match serde_json::to_string(&ChannelFrameOut {
+            to: members,
+            frame: payload,
+        }) {
+            Ok(message) => c.publish(&channel_topic(channel_id), &message).await,
+            Err(e) => {
+                warn!(target: "ws", channel_id, error = ?e, "channel frame encode failed");
+                false
+            }
+        },
+        None => false,
+    };
+    if !published {
+        for &user_id in members {
+            deliver_frame_local(user_id, payload);
+        }
+    }
+}
+
+/// Deliver a channel frame received from Redis to the listed users who have a
+/// session on this instance. Users with no session here cost one map lookup.
+pub fn deliver_channel_local(frame: &ChannelFrame) {
+    for &user_id in &frame.to {
+        deliver_frame_local(user_id, &frame.frame);
+    }
+}
+
+/// Like [`deliver_local`] but borrows the payload, cloning it only per live
+/// session rather than per recipient.
+fn deliver_frame_local(user_id: i32, payload: &str) {
+    for addr in SESSIONS.addrs(user_id) {
+        addr.do_send(WsMessage(payload.to_owned()));
+    }
+}
+
 /// Flip every direct message still `sent` for `receiver_id` to `delivered` and
 /// notify each sender. Covers the case the send-time check misses: the recipient
 /// was offline then and only connects now.
@@ -505,17 +579,13 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                     // The sender is included so their other tabs and
                                     // devices see the message too; the sending tab
                                     // matches it to its optimistic copy by client_id.
-                                    let recipients: Vec<i32> = members;
                                     let payload = msg_json.clone();
                                     actix_web::rt::spawn(async move {
-                                        futures::future::join_all(
-                                            recipients.into_iter().map(|member_id| {
-                                                let cache = cache_for_fanout.clone();
-                                                let payload = payload.clone();
-                                                async move {
-                                                    fan_out_user(&cache, member_id, payload).await
-                                                }
-                                            }),
+                                        fan_out_channel(
+                                            &cache_for_fanout,
+                                            channel_id,
+                                            &members,
+                                            &payload,
                                         )
                                         .await;
                                     });

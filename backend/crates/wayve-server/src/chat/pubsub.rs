@@ -1,20 +1,27 @@
 //! Cross-instance realtime fan-out subscriber.
 //!
-//! Chat publishes every outbound frame to `ws:user:{id}`. This task PSUBSCRIBEs
-//! `ws:user:*` and delivers each frame to the matching session on this instance,
-//! so a send received on one instance reaches the recipient's socket wherever it
-//! is held. Spawn once per process.
+//! Two topic families, both PSUBSCRIBEd here, delivered to the matching
+//! sessions on this instance so a frame published by any instance reaches the
+//! recipient's socket wherever it is held. Spawn once per process.
 //!
-//! Best-effort: with Redis down, `fan_out_user` falls back to local delivery, so
-//! single-instance deployments work without this subscriber.
+//! - `ws:user:{id}`: one user's frames (DMs, receipts, presence, reactions on
+//!   DMs). Published by `fan_out_user`.
+//! - `ws:channel:{id}`: one channel's frames, published ONCE per message by
+//!   `fan_out_channel` as `{"to":[ids],"frame":"..."}`. Delivery is limited to
+//!   the `to` list, which the publisher read from `channel_members` at send
+//!   time, so a stale view of membership here can never leak a frame.
+//!
+//! Best-effort: with Redis down, both fan-out functions fall back to local
+//! delivery, so single-instance deployments work without this subscriber.
 
 use futures::StreamExt;
 use std::time::Duration;
 use tracing::{info, warn};
 
-use super::websocket::deliver_local;
+use super::websocket::{deliver_channel_local, deliver_local, parse_channel_frame};
 
-const PATTERN: &str = "ws:user:*";
+const USER_PATTERN: &str = "ws:user:*";
+const CHANNEL_PATTERN: &str = "ws:channel:*";
 
 /// Run forever, reconnecting with a short backoff if the pub/sub connection
 /// drops.
@@ -31,8 +38,13 @@ async fn subscribe_loop() -> redis::RedisResult<()> {
     let url = crate::config::redis_url();
     let client = redis::Client::open(url)?;
     let mut pubsub = client.get_async_pubsub().await?;
-    pubsub.psubscribe(PATTERN).await?;
-    info!(target: "ws", pattern = PATTERN, "ws pubsub subscriber connected");
+    pubsub.psubscribe(USER_PATTERN).await?;
+    pubsub.psubscribe(CHANNEL_PATTERN).await?;
+    info!(
+        target: "ws",
+        patterns = ?[USER_PATTERN, CHANNEL_PATTERN],
+        "ws pubsub subscriber connected"
+    );
 
     let mut stream = pubsub.on_message();
     while let Some(msg) = stream.next().await {
@@ -43,15 +55,23 @@ async fn subscribe_loop() -> redis::RedisResult<()> {
                 continue;
             }
         };
-        let user_id = msg
-            .get_channel_name()
-            .strip_prefix("ws:user:")
-            .and_then(|s| s.parse::<i32>().ok());
-        if let Some(user_id) = user_id {
-            deliver_local(user_id, payload);
-        }
+        route(msg.get_channel_name(), payload);
     }
 
     // The stream ended, so return Ok and let run_subscriber reconnect.
     Ok(())
+}
+
+/// Deliver one pub/sub message by its topic. Unknown topics are ignored.
+fn route(topic: &str, payload: String) {
+    if let Some(id) = topic.strip_prefix("ws:user:") {
+        if let Ok(user_id) = id.parse::<i32>() {
+            deliver_local(user_id, payload);
+        }
+    } else if topic.starts_with("ws:channel:") {
+        match parse_channel_frame(&payload) {
+            Some(frame) => deliver_channel_local(&frame),
+            None => warn!(target: "ws", topic, "malformed channel frame dropped"),
+        }
+    }
 }

@@ -68,17 +68,33 @@ sent during a drop was lost until the user reselected the conversation.
 message only reached recipients connected to the **same** backend instance —
 chat broke with >1 instance and every socket dropped on each deploy.
 
-- **Publish**: `Cache::publish(channel, payload)` (`PUBLISH`). Each fan-out site
-  in `websocket.rs` (DM, channel message, read receipt) calls
+- **Publish, per user**: `Cache::publish(channel, payload)` (`PUBLISH`). DMs,
+  read receipts, presence and DM reactions call
   `fan_out_user(cache, user_id, payload)`, which publishes to `ws:user:{id}`.
+- **Publish, per channel**: channel messages, channel reactions and inbound Slack
+  messages call `fan_out_channel(cache, channel_id, members, payload)`, which
+  publishes **once** to `ws:channel:{id}` with the body
+  `{"to":[member ids],"frame":"<frame>"}`. A message to an N-member channel is
+  one PUBLISH, not N (it used to be one `ws:user:{id}` publish per member, so
+  N commands and N copies of a payload that itself grows with N).
 - **Subscribe**: [chat/pubsub.rs](../../backend/crates/wayve-server/src/chat/pubsub.rs)
   runs one subscriber per process (spawned in `main` when Redis is available),
-  `PSUBSCRIBE ws:user:*`, and delivers each frame to the matching **local**
-  session via `deliver_local`. So whichever instance holds the recipient's
-  socket delivers it.
-- **Graceful degradation**: if `publish` fails (Redis down) `fan_out_user` falls
-  back to local delivery — single-instance keeps working without Redis. Exactly
-  one delivery path runs, so no duplicates.
+  `PSUBSCRIBE ws:user:*` and `ws:channel:*`, and delivers each frame to the
+  matching **local** sessions (`deliver_local` / `deliver_channel_local`). So
+  whichever instance holds the recipient's socket delivers it.
+- **Channel delivery is limited to `to`**: the publisher reads `to` from
+  `channel_members` at send time, and an instance only delivers to those ids.
+  No instance keeps its own view of channel membership, so a user who left or
+  was removed never receives a later frame.
+- **Why a pattern, not per-channel SUBSCRIBE**: every instance receives every
+  channel topic and drops the ids it holds no session for (one map lookup
+  each). SUBSCRIBing only to channels with a local member would save that
+  traffic once there are many instances, but redis 0.25's `aio::PubSub` can't
+  SUBSCRIBE while its message stream is being read; it needs
+  `PubSub::split()` (redis 1.x). The topic name already supports switching to it.
+- **Graceful degradation**: if `publish` fails (Redis down) both fan-out
+  functions fall back to local delivery — single-instance keeps working without
+  Redis. Exactly one delivery path runs, so no duplicates.
 - **Known limitation**: the "delivered" receipt is gated on **local** presence,
   so on a multi-instance deployment it may be missed when the recipient is on
   another instance (message delivery itself is unaffected). A shared presence
@@ -124,6 +140,10 @@ the user's live one.
   correctness + latency and publish throughput against the `ws:user:{id}`
   channel contract. Gated on a reachable Redis (skips otherwise); CI provides a
   `redis` service + `REDIS_URL` so it runs there.
+- `backend/.../tests/channel_fanout_test.rs` — a 500-member channel message is
+  exactly one PUBLISH on `ws:channel:{id}` carrying the full `to` list and the
+  frame, with no `ws:user:*` publish; plus the frame contract and the no-Redis
+  fallback. Same Redis gating.
 - `backend/.../tests/chat_multi_session_test.rs` — real `/ws/chat` server and
   WebSocket clients: every socket of a user receives; closing any one (including
   the older socket after a reconnect) leaves the rest; own sends and reads reach

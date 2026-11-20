@@ -169,9 +169,7 @@ async fn apply_event(
             .fetch_all(pool)
             .await
             .unwrap_or_default();
-    for member_id in members {
-        crate::chat::fan_out_user(cache, member_id, payload.clone()).await;
-    }
+    crate::chat::fan_out_channel(cache, wayve_channel_id, &members, &payload).await;
     Ok(())
 }
 

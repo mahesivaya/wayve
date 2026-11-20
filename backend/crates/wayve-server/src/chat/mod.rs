@@ -15,9 +15,12 @@ pub mod presence;
 pub mod pubsub;
 pub mod reactions;
 mod websocket;
+// Exposed for the channel fan-out tests; `websocket` itself stays private.
+#[cfg(test)]
+pub(crate) use websocket::{ChannelFrame, channel_topic, parse_channel_frame};
 // Re-exported so other features, such as the Slack Events webhook, can push a
 // freshly stored channel message to open clients.
-pub(crate) use websocket::fan_out_user;
+pub(crate) use websocket::{fan_out_channel, fan_out_user};
 
 use actix_web::web;
 
