@@ -1,10 +1,11 @@
-import type { Note } from "../api/notes";
+import type { NoteSummary as Note } from "../api/notes";
 
 export type NoteSortKey = "name" | "created" | "edited";
 export type NoteSortDirection = "asc" | "desc";
 export type NoteSort = { key: NoteSortKey; direction: NoteSortDirection };
 
-// Matches the order the API returns.
+// The API's default order. Each sort is also asked of the API, which pages in
+// that order; sorting here keeps the loaded rows in order after a local save.
 export const DEFAULT_NOTE_SORT: NoteSort = { key: "edited", direction: "desc" };
 
 export const noteName = (note: Note) => note.title?.trim() || "Untitled";
@@ -20,8 +21,8 @@ const nameCollator = new Intl.Collator(undefined, {
   sensitivity: "base",
 });
 
-export function sortNotes(notes: Note[], sort: NoteSort): Note[] {
-  const compare = (a: Note, b: Note) => {
+export function sortNotes<T extends Note>(notes: T[], sort: NoteSort): T[] {
+  const compare = (a: T, b: T) => {
     if (sort.key === "name")
       return nameCollator.compare(noteName(a), noteName(b));
     if (sort.key === "created")

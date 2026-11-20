@@ -453,6 +453,36 @@
   outline-offset: 2px;
 }
 
+/* Ends a list that has more pages. Spans every column of the grid view. */
+.notes-more-btn {
+  grid-column: 1 / -1;
+  justify-self: center;
+  margin: 8px 0;
+  padding: 6px 16px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-md);
+  background: var(--color-pane);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.notes-more-btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+.notes-more-btn:disabled {
+  color: var(--color-text-muted);
+  cursor: default;
+}
+
+.notes-more-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 .note-card-date {
   color: var(--color-text-muted);
   font-size: var(--text-sm);
