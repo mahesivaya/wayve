@@ -497,7 +497,7 @@ function TaskKeyBadge({
 }: {
   value: string | null;
   tooltip: string;
-  // Set on boards where the key, not the name, opens the item.
+  // Makes the key a button that opens the item, like its name.
   onOpen?: () => void;
   openTooltip?: string;
 }) {
@@ -816,7 +816,7 @@ export type TasksConfig = {
     // .workspace-large-text in index.css). On for User Stories and Tickets.
     largeText?: boolean;
     // Each list-view row has a checkbox, and the header one selects them all.
-    // On for User Stories and Tickets.
+    // On for every board (Tasks, User Stories, Tickets).
     rowSelect?: boolean;
     // Keys are written the story way: "SAM004", or "NON004" with no project
     // (see userstories/storyKey.ts). User Stories only; the other boards keep
@@ -861,7 +861,7 @@ const TASKS_CONFIG: TasksConfig = {
     deleteAttachment: deleteTaskAttachment,
     downloadAttachment: downloadTaskAttachment,
   },
-  features: { attachments: true },
+  features: { attachments: true, rowSelect: true },
   storageKey: "tasks",
   labels: {
     title: "Tasks",
@@ -1514,33 +1514,23 @@ export default function Tasks({
     beginEdit(task, "modal");
   };
 
-  // What opens an item from its row or card. Usually the name; on boards with
-  // story keys it is the key badge, and the name is plain text. An item with
-  // no key keeps the link on its name, so it can always be opened.
+  // What opens an item from its row or card: its name, and its key badge
+  // (#1, SAM004) when it has one.
   const openTooltip = `Open ${config.labels.lowerSingular} details`;
-  const keyOpens = (task: Task) =>
-    !!config.features.storyKeys && taskKey(task) !== null;
-  const keyOpenProps = (task: Task) =>
-    keyOpens(task) ? { onOpen: () => openDetail(task), openTooltip } : {};
-  const taskNameEl = (task: Task, className: string) =>
-    keyOpens(task) ? (
-      <span
-        className={
-          className.replace("task-card-title-link", "").trim() || undefined
-        }
-      >
-        {task.name}
-      </span>
-    ) : (
-      <button
-        type="button"
-        className={className}
-        onClick={() => openDetail(task)}
-        data-tooltip={openTooltip}
-      >
-        {task.name}
-      </button>
-    );
+  const keyOpenProps = (task: Task) => ({
+    onOpen: () => openDetail(task),
+    openTooltip,
+  });
+  const taskNameEl = (task: Task, className: string) => (
+    <button
+      type="button"
+      className={className}
+      onClick={() => openDetail(task)}
+      data-tooltip={openTooltip}
+    >
+      {task.name}
+    </button>
+  );
 
   // Clicking the Edit button: the full page when the board has one, else the
   // modal. Never the drawer — Edit is the "open the full editor" affordance.

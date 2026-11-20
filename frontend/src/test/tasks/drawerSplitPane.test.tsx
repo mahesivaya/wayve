@@ -60,12 +60,24 @@ const openDrawer = async (inSplitPane: boolean) => {
       </SplitPaneContext.Provider>
     </MemoryRouter>
   );
-  // A story opens from its key; the name beside it is plain text.
+  // A story opens from its key (and from its name; see below).
   fireEvent.click(await screen.findByRole("button", { name: "NON001" }));
   return screen.getByRole("dialog", { name: "Edit Story" });
 };
 
 describe("User Stories edit drawer", () => {
+  it("opens from the story's name as well as its key", async () => {
+    render(
+      <MemoryRouter>
+        <SplitPaneContext.Provider value={false}>
+          <UserStories />
+        </SplitPaneContext.Provider>
+      </MemoryRouter>
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Story one" }));
+    expect(screen.getByRole("dialog", { name: "Edit Story" })).toBeTruthy();
+  });
+
   it("stays inside the board in a split pane", async () => {
     const drawer = await openDrawer(true);
     expect(drawer.className).toContain("task-drawer--contained");
