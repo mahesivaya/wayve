@@ -2475,114 +2475,6 @@
   );
 }
 
-/* ---------- HOME / OVERVIEW SCREEN ---------- */
-/* Mirrors the real PersonalDashboard: a Meetings + Task row, then a
-   full-width Emails block. Cards read off the dark --hx-* tokens so they
-   match the rest of the mock automatically. */
-.hx-mock-home {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.hx-mock-home-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-}
-.hx-mock-block {
-  border: 1px solid var(--hx-border);
-  border-radius: 12px;
-  background: var(--hx-glass);
-  padding: 12px 14px;
-}
-.hx-mock-block-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 9px;
-  margin-bottom: 9px;
-  border-bottom: 1px solid var(--hx-line);
-}
-.hx-mock-block-title {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--hx-muted);
-}
-.hx-mock-block-action {
-  font-size: 11.5px;
-  color: var(--hx-muted);
-}
-.hx-mock-block-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-.hx-mock-block-row {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 12.5px;
-}
-.hx-mock-row-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #38bdf8;
-  flex: 0 0 auto;
-}
-.hx-mock-row-dot.is-unread {
-  background: #60a5fa;
-}
-.hx-mock-row-check {
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  border: 1.5px solid var(--hx-muted);
-  flex: 0 0 auto;
-}
-.hx-mock-row-time {
-  flex: 0 0 auto;
-  width: 38px;
-  color: var(--hx-muted);
-  font-size: 11.5px;
-}
-.hx-mock-row-title {
-  flex: 1;
-  min-width: 0;
-  color: var(--hx-ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.hx-mock-row-from {
-  flex: 0 0 auto;
-  max-width: 38%;
-  color: var(--hx-ink);
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.hx-mock-row-subject {
-  flex: 1;
-  min-width: 0;
-  color: var(--hx-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.hx-mock-row-meta {
-  flex: 0 0 auto;
-  color: var(--hx-muted);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
 /* ---------- ANIMATED TAB SCREENS ---------- */
 /* Fixed height keeps the window from resizing as screens swap and as the mail
    list gains rows — extra rows pack into the same block (clipped like a real
@@ -3279,6 +3171,406 @@
   border-radius: 9px;
   background: linear-gradient(135deg, #2563eb, #38bdf8);
   flex: 0 0 auto;
+}
+.hx-mock-ai-a b {
+  color: var(--hx-ink);
+  font-weight: 600;
+}
+/* The assistant's confirm-first action cards (move ticket, draft email),
+   side by side so the Home screen fits the fixed-height window. */
+.hx-mock-ai-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  max-width: 88%;
+}
+.hx-mock-ai-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 11px 13px;
+  border-radius: 12px;
+  border: 1px solid var(--hx-border);
+  background: var(--hx-glass);
+  font-size: 12px;
+  min-width: 0;
+}
+.hx-mock-ai-card-head {
+  font-weight: 600;
+  color: var(--hx-mock-strong, #dbeafe);
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--hx-line);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hx-mock-ai-card-row {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+.hx-mock-ai-card-row > span {
+  flex: 0 0 52px;
+  color: var(--hx-muted);
+}
+.hx-mock-ai-card-row > b {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+  color: var(--hx-mock-text, #c9d6ef);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hx-mock-ai-card-btn {
+  align-self: flex-start;
+  margin-top: 3px;
+  padding: 5px 11px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #2563eb, #38bdf8);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+/* Shared bits for the Workspace / Teams / Projects screens. */
+.hx-mock-mini-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(96, 165, 250, 0.28);
+  color: var(--hx-mock-text, #bcd0f5);
+  font-size: 10px;
+  font-weight: 600;
+}
+.hx-mock-list-head,
+.hx-mock-board-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.hx-mock-list-head b,
+.hx-mock-board-head b {
+  font-size: 15px;
+  color: var(--hx-ink);
+}
+.hx-mock-list-action,
+.hx-mock-board-head > span {
+  font-size: 12px;
+  color: var(--hx-muted);
+}
+
+/* Workspace — sub-menu + ticket board. */
+.hx-mock-ws {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 16px;
+  height: 100%;
+}
+.hx-mock-ws-menu {
+  border-right: 1px solid var(--hx-line);
+  padding-right: 12px;
+}
+.hx-mock-ws-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--hx-muted);
+  padding: 2px 8px 10px;
+}
+.hx-mock-ws-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--hx-mock-text, #c9d6ef);
+}
+.hx-mock-ws-item.is-active {
+  background: rgba(56, 189, 248, 0.14);
+  color: var(--hx-mock-strong, #dbeafe);
+}
+.hx-mock-ws-ico {
+  width: 20px;
+  flex: 0 0 auto;
+  text-align: center;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.hx-mock-ws-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hx-mock-ws-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(var(--hx-mock-tint), 0.12);
+  color: var(--hx-mock-strong, #dbeafe);
+}
+.hx-mock-board {
+  min-width: 0;
+}
+.hx-mock-board-cols {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.hx-mock-board-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.hx-mock-board-colhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 9px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.hx-mock-board-colhead > span {
+  font-weight: 500;
+  opacity: 0.8;
+}
+.hx-mock-board-colhead.blue,
+.hx-mock-pill.blue {
+  background: rgba(37, 99, 235, 0.3);
+  color: var(--hx-mock-ev-blue, #dbe7ff);
+}
+.hx-mock-board-colhead.amber,
+.hx-mock-pill.amber {
+  background: rgba(245, 158, 11, 0.24);
+  color: var(--hx-mock-ev-amber, #ffe9c7);
+}
+.hx-mock-board-colhead.purple,
+.hx-mock-pill.purple {
+  background: rgba(167, 139, 250, 0.28);
+  color: var(--hx-mock-ev-purple, #ece6ff);
+}
+.hx-mock-board-colhead.green,
+.hx-mock-pill.green {
+  background: rgba(34, 197, 94, 0.24);
+  color: var(--hx-mock-ev-green, #d7f7e3);
+}
+.hx-mock-ticket {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--hx-border);
+  background: var(--hx-glass);
+}
+.hx-mock-ticket-id {
+  font-size: 10.5px;
+  color: var(--hx-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.hx-mock-ticket-title {
+  font-size: 12.5px;
+  line-height: 1.3;
+  color: var(--hx-ink);
+}
+.hx-mock-ticket-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.hx-mock-tag {
+  font-size: 10.5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--hx-border);
+  color: var(--hx-muted);
+}
+
+/* Teams — one card per team. */
+.hx-mock-teams {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.hx-mock-team {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 11px;
+  row-gap: 10px;
+  padding: 13px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--hx-border);
+  background: var(--hx-glass);
+}
+.hx-mock-team-ico {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(56, 189, 248, 0.14);
+  color: var(--hx-mock-strong, #dbeafe);
+}
+.hx-mock-team-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  grid-column: 2 / 4;
+}
+.hx-mock-team-info b {
+  font-size: 13.5px;
+  color: var(--hx-ink);
+}
+.hx-mock-team-info span,
+.hx-mock-team-count {
+  font-size: 11.5px;
+  color: var(--hx-muted);
+  white-space: nowrap;
+}
+.hx-mock-stack {
+  display: flex;
+  grid-column: 1 / 3;
+}
+.hx-mock-stack .hx-mock-mini-avatar {
+  margin-right: -5px;
+  box-shadow: 0 0 0 2px var(--hx-mock-bg, #0e1d40);
+}
+
+/* Projects — table-style rows with a progress bar and status pill. */
+.hx-mock-proj-cols,
+.hx-mock-proj {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr) 86px 56px;
+  align-items: center;
+  gap: 14px;
+}
+.hx-mock-proj-cols {
+  padding: 0 8px 8px;
+  border-bottom: 1px solid var(--hx-line);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--hx-muted);
+}
+.hx-mock-proj {
+  padding: 11px 8px;
+  border-bottom: 1px solid var(--hx-line);
+}
+.hx-mock-proj-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.hx-mock-proj-name > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.hx-mock-proj-name b {
+  font-size: 13px;
+  color: var(--hx-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hx-mock-proj-name > span:last-child > span {
+  font-size: 11.5px;
+  color: var(--hx-muted);
+}
+.hx-mock-proj-ico {
+  display: flex;
+  color: #38bdf8;
+  flex: 0 0 auto;
+}
+.hx-mock-proj-progress {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.hx-mock-bar-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(var(--hx-mock-tint), 0.1);
+  overflow: hidden;
+}
+.hx-mock-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2563eb, #38bdf8);
+}
+.hx-mock-proj-pct,
+.hx-mock-proj-due {
+  font-size: 11.5px;
+  color: var(--hx-muted);
+  white-space: nowrap;
+}
+.hx-mock-pill {
+  justify-self: start;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* Narrow windows (the mock's own sidebar is already hidden ≤900px). */
+@media (max-width: 720px) {
+  .hx-mock-ws {
+    grid-template-columns: 1fr;
+  }
+  .hx-mock-ws-menu {
+    display: none;
+  }
+  .hx-mock-board-cols {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .hx-mock-ai-cards {
+    grid-template-columns: 1fr;
+    max-width: 100%;
+  }
+  /* One action card, and anchor the thread to the bottom like a chat scrolled
+     to its latest message, so the composer stays in the shorter window. */
+  .hx-mock-ai-card:nth-child(2) {
+    display: none;
+  }
+  .hx-mock-ai {
+    height: 100%;
+    justify-content: flex-end;
+  }
+  .hx-mock-teams {
+    grid-template-columns: 1fr;
+  }
+  .hx-mock-proj-cols,
+  .hx-mock-proj {
+    grid-template-columns: minmax(0, 1fr) 80px;
+  }
+  .hx-mock-proj-cols span:nth-child(2),
+  .hx-mock-proj-cols span:nth-child(4),
+  .hx-mock-proj-progress,
+  .hx-mock-proj-due {
+    display: none;
+  }
 }
 
 /* ---------- CHIPS ---------- */
