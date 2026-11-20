@@ -213,12 +213,59 @@ mod tests {
             read.map(|v| v["user_id"].clone()),
             Some(serde_json::json!(b.id))
         );
+        // One frame names every message the read covered.
+        let receipt = wait_for(&mut b1, ARRIVES, |v| {
+            v["type"] == "status_update_bulk" && v["status"] == "read"
+        })
+        .await;
+        let ids = receipt
+            .as_ref()
+            .and_then(|v| v["message_ids"].as_array().cloned())
+            .unwrap_or_default();
+        assert_eq!(
+            ids.len(),
+            1,
+            "the sender still gets the read tick: {receipt:?}"
+        );
+    }
+
+    #[actix_web::test]
+    #[serial_test::serial]
+    async fn coming_online_marks_everything_waiting_delivered_in_one_frame() {
+        ensure_aes_key();
+        let pool = test_pool().await;
+        let srv = server(&pool);
+        let (a, b) = (user(&pool).await, user(&pool).await);
+
+        // `a` is offline: both messages wait as "sent".
+        let mut b1 = connect!(srv, b);
+        send(&mut b1, dm(&b, &a, "waiting-1")).await;
         assert!(
-            wait_for(&mut b1, ARRIVES, |v| v["type"] == "status_update"
-                && v["status"] == "read")
-            .await
-            .is_some(),
-            "the sender still gets the read tick"
+            wait_for(&mut b1, ARRIVES, |v| is_dm(v, "waiting-1"))
+                .await
+                .is_some()
+        );
+        send(&mut b1, dm(&b, &a, "waiting-2")).await;
+        assert!(
+            wait_for(&mut b1, ARRIVES, |v| is_dm(v, "waiting-2"))
+                .await
+                .is_some()
+        );
+
+        // `a` connects: `b` hears about both in a single frame.
+        let _a1 = connect!(srv, a);
+        let delivered = wait_for(&mut b1, ARRIVES, |v| {
+            v["type"] == "status_update_bulk" && v["status"] == "delivered"
+        })
+        .await;
+        let ids = delivered
+            .as_ref()
+            .and_then(|v| v["message_ids"].as_array().cloned())
+            .unwrap_or_default();
+        assert_eq!(
+            ids.len(),
+            2,
+            "both waiting messages, one frame: {delivered:?}"
         );
     }
 

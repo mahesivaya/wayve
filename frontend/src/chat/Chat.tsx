@@ -378,11 +378,13 @@ export default function Chat() {
 
   // Only ever upgrade the tick: a late 'delivered' must not clobber a 'read'.
   const handleStatusUpdate = useCallback(
-    (messageId: number, status: ChatMessage["status"]) => {
+    (messageIds: number[], status: ChatMessage["status"]) => {
       const rank: Record<string, number> = { sent: 0, delivered: 1, read: 2 };
+      const ids = new Set(messageIds);
       setMessages((prev) =>
         prev.map((m) =>
-          m.message_id === messageId &&
+          m.message_id != null &&
+          ids.has(m.message_id) &&
           (rank[status] ?? 0) > (rank[m.status] ?? 0)
             ? { ...m, status }
             : m

@@ -133,17 +133,10 @@ pub async fn get_messages(
     // that could still roll back, and no row lock is held across the fan-out.
     tx.commit().await?;
 
-    // The sender's ticks, then the caller's own other tabs and devices.
-    for (message_id,) in &read_ids {
-        let payload = serde_json::json!({
-            "type": "status_update",
-            "message_id": message_id,
-            "status": "read"
-        })
-        .to_string();
-        super::websocket::fan_out_user(cache.get_ref(), other_id, payload).await;
-    }
+    // The sender's ticks, in one frame, then the caller's own other tabs and
+    // devices.
     if !read_ids.is_empty() {
+        super::websocket::fan_out_read_receipts(cache.get_ref(), other_id, &read_ids).await;
         super::websocket::notify_conversation_read(cache.get_ref(), caller_id, other_id).await;
     }
 

@@ -15,7 +15,7 @@ use sqlx::{PgPool, Row};
 use std::collections::HashMap;
 use tracing::warn;
 
-use super::websocket::fan_out_user;
+use super::websocket::{fan_out_channel, fan_out_user};
 
 /// Roomy enough for a multi-codepoint ZWJ sequence. The cap is what stops this
 /// plaintext field from smuggling a message body past the E2E check.
@@ -283,6 +283,12 @@ pub async fn handle_react(
     })
     .to_string();
 
+    // A channel reaction goes out as one publish on the channel topic; a DM
+    // reaction has just two recipients, so the per-user topic stays.
+    if let Some(channel_id) = channel_id {
+        fan_out_channel(cache, channel_id, &recipients, &payload).await;
+        return;
+    }
     futures::future::join_all(recipients.into_iter().map(|user_id| {
         let payload = payload.clone();
         async move { fan_out_user(cache, user_id, payload).await }

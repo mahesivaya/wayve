@@ -56,6 +56,29 @@ pub async fn notify_conversation_read(cache: &Option<Cache>, reader: i32, other:
     fan_out_user(cache, reader, payload).await;
 }
 
+/// Tell `sender` that the messages in `read_ids` were read, in ONE frame. A
+/// read marks every unread message in the conversation at once, so one frame
+/// per message meant one awaited Redis PUBLISH each (500 unread, 500 round
+/// trips before the history request could answer), one decode per instance per
+/// message, and a re-render per message in the sender's browser.
+pub async fn fan_out_read_receipts(cache: &Option<Cache>, sender: i32, read_ids: &[(i32,)]) {
+    let ids: Vec<i32> = read_ids.iter().map(|(id,)| *id).collect();
+    fan_out_status_bulk(cache, sender, &ids, "read").await;
+}
+
+/// One `status_update_bulk` frame telling `sender` that `ids` reached
+/// `status`. The web and iOS clients only ever move a tick forward, so a late
+/// frame can't undo a newer one.
+async fn fan_out_status_bulk(cache: &Option<Cache>, sender: i32, ids: &[i32], status: &str) {
+    let payload = serde_json::json!({
+        "type": "status_update_bulk",
+        "message_ids": ids,
+        "status": status
+    })
+    .to_string();
+    fan_out_user(cache, sender, payload).await;
+}
+
 /// Fan a realtime frame out to a user. With Redis we PUBLISH, so whichever
 /// instance holds their socket delivers it; if the publish fails we fall back to
 /// local delivery. Exactly one path runs, so a frame is never duplicated.
@@ -66,6 +89,80 @@ pub async fn fan_out_user(cache: &Option<Cache>, user_id: i32, payload: String) 
     };
     if !published {
         deliver_local(user_id, payload);
+    }
+}
+
+/// Redis pub/sub topic for a channel's realtime frames. `chat::pubsub`
+/// PSUBSCRIBEs `ws:channel:*`, so one PUBLISH reaches every instance.
+pub fn channel_topic(channel_id: i32) -> String {
+    format!("ws:channel:{channel_id}")
+}
+
+/// What travels on a `ws:channel:{id}` topic: the frame plus who may receive it.
+#[derive(Serialize)]
+struct ChannelFrameOut<'a> {
+    to: &'a [i32],
+    frame: &'a str,
+}
+
+#[derive(Deserialize, Debug, PartialEq)]
+pub struct ChannelFrame {
+    pub to: Vec<i32>,
+    pub frame: String,
+}
+
+/// Decode a `ws:channel:{id}` message. None for anything malformed.
+pub fn parse_channel_frame(raw: &str) -> Option<ChannelFrame> {
+    serde_json::from_str(raw).ok()
+}
+
+/// Fan a frame out to a channel's members with ONE Redis PUBLISH, instead of
+/// one `ws:user:{id}` publish per member. `members` is read from the database
+/// by the caller at send time, and each instance delivers only to those ids, so
+/// a user who left the channel never receives it. If the publish fails, every
+/// member's sessions on this instance get it directly; exactly one path runs.
+pub async fn fan_out_channel(
+    cache: &Option<Cache>,
+    channel_id: i32,
+    members: &[i32],
+    payload: &str,
+) {
+    if members.is_empty() {
+        return;
+    }
+    let published = match cache {
+        Some(c) => match serde_json::to_string(&ChannelFrameOut {
+            to: members,
+            frame: payload,
+        }) {
+            Ok(message) => c.publish(&channel_topic(channel_id), &message).await,
+            Err(e) => {
+                warn!(target: "ws", channel_id, error = ?e, "channel frame encode failed");
+                false
+            }
+        },
+        None => false,
+    };
+    if !published {
+        for &user_id in members {
+            deliver_frame_local(user_id, payload);
+        }
+    }
+}
+
+/// Deliver a channel frame received from Redis to the listed users who have a
+/// session on this instance. Users with no session here cost one map lookup.
+pub fn deliver_channel_local(frame: &ChannelFrame) {
+    for &user_id in &frame.to {
+        deliver_frame_local(user_id, &frame.frame);
+    }
+}
+
+/// Like [`deliver_local`] but borrows the payload, cloning it only per live
+/// session rather than per recipient.
+fn deliver_frame_local(user_id: i32, payload: &str) {
+    for addr in SESSIONS.addrs(user_id) {
+        addr.do_send(WsMessage(payload.to_owned()));
     }
 }
 
@@ -93,14 +190,14 @@ async fn mark_delivered_on_connect(pool: &PgPool, cache: &Option<Cache>, receive
         info!(target: "ws", receiver_id, count = rows.len(), "marked messages delivered on connect");
     }
 
+    // One frame per sender, not per message: someone back online after a day
+    // can have hundreds waiting, from only a few people.
+    let mut by_sender: std::collections::BTreeMap<i32, Vec<i32>> = Default::default();
     for (message_id, sender_id) in rows {
-        let payload = serde_json::json!({
-            "type": "status_update",
-            "message_id": message_id,
-            "status": "delivered"
-        })
-        .to_string();
-        fan_out_user(cache, sender_id, payload).await;
+        by_sender.entry(sender_id).or_default().push(message_id);
+    }
+    for (sender_id, ids) in by_sender {
+        fan_out_status_bulk(cache, sender_id, &ids, "delivered").await;
     }
 }
 
@@ -294,17 +391,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                 cache.del(&chat_history_key(reader, other)).await;
                             }
 
-                            for (message_id,) in &read_ids {
-                                let receipt = serde_json::json!({
-                                    "type": "status_update",
-                                    "message_id": message_id,
-                                    "status": "read"
-                                })
-                                .to_string();
-
-                                fan_out_user(&cache, other, receipt).await;
-                            }
                             if !read_ids.is_empty() {
+                                fan_out_read_receipts(&cache, other, &read_ids).await;
                                 notify_conversation_read(&cache, reader, other).await;
                             }
                         });
@@ -505,17 +593,13 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                     // The sender is included so their other tabs and
                                     // devices see the message too; the sending tab
                                     // matches it to its optimistic copy by client_id.
-                                    let recipients: Vec<i32> = members;
                                     let payload = msg_json.clone();
                                     actix_web::rt::spawn(async move {
-                                        futures::future::join_all(
-                                            recipients.into_iter().map(|member_id| {
-                                                let cache = cache_for_fanout.clone();
-                                                let payload = payload.clone();
-                                                async move {
-                                                    fan_out_user(&cache, member_id, payload).await
-                                                }
-                                            }),
+                                        fan_out_channel(
+                                            &cache_for_fanout,
+                                            channel_id,
+                                            &members,
+                                            &payload,
                                         )
                                         .await;
                                     });

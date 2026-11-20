@@ -271,7 +271,8 @@ final class ChatStore: ObservableObject {
             senderId: row.senderId,
             senderName: row.senderName,
             body: ChatCrypto.open(row.content, userID: myID, key: KeyVault.privateKey()),
-            createdAt: row.createdAt
+            createdAt: row.createdAt,
+            delivery: row.senderId == myID ? ChatBubble.Delivery(row.status) : nil
         )
     }
 
@@ -369,6 +370,11 @@ final class ChatStore: ObservableObject {
         let type: String?
         let clientId: String?
         let userId: Int?
+        /// `status_update`: one message's new status.
+        let messageId: Int?
+        /// `status_update_bulk`: every message a read (or delivery) covered.
+        let messageIds: [Int]?
+        let status: String?
     }
 
     func handle(frame data: Data) {
@@ -395,9 +401,43 @@ final class ChatStore: ObservableObject {
                     presence[entry.userId] = entry.presence
                 }
             }
+        case "status_update":
+            if let id = typed.messageId, let status = ChatBubble.Delivery(typed.status) {
+                advance([id], to: status)
+            }
+        case "status_update_bulk":
+            if let ids = typed.messageIds, let status = ChatBubble.Delivery(typed.status) {
+                advance(ids, to: status)
+            }
         default:
-            break  // reactions and read ticks aren't shown yet
+            break  // reactions aren't shown yet
         }
+    }
+
+    /// Moves the ticks on your messages `ids` up to `status`, never back: a
+    /// late "delivered" must not undo a "read". One change to `bubbles` for
+    /// the whole frame, so a conversation read in bulk redraws once.
+    private func advance(_ ids: [Int], to status: ChatBubble.Delivery) {
+        guard let me = myID,
+              let updated = Self.advanced(bubbles, ids: ids, to: status, me: me) else { return }
+        bubbles = updated
+    }
+
+    /// `bubbles` with the ticks on `me`'s messages `ids` moved up to `status`,
+    /// or nil when none moved (so nothing redraws).
+    static func advanced(_ bubbles: [ChatBubble], ids: [Int], to status: ChatBubble.Delivery,
+                         me: Int) -> [ChatBubble]? {
+        let wanted = Set(ids)
+        var updated = bubbles
+        var changed = false
+        for index in updated.indices {
+            guard let id = updated[index].messageId, wanted.contains(id),
+                  updated[index].senderId == me,
+                  (updated[index].delivery ?? .sent) < status else { continue }
+            updated[index].delivery = status
+            changed = true
+        }
+        return changed ? updated : nil
     }
 
     private func receive(_ message: ChatWireMessage) {
@@ -409,10 +449,13 @@ final class ChatStore: ObservableObject {
             if let clientID = message.clientId,
                let index = bubbles.firstIndex(where: { $0.clientId == clientID && $0.messageId == nil }) {
                 // Our own message, confirmed: keep the text we already show.
+                // The echo carries the first tick (sent, or delivered when the
+                // other person is online).
                 let mine = bubbles[index]
                 bubbles[index] = ChatBubble(id: mine.id, messageId: message.messageId, clientId: clientID,
                                             senderId: mine.senderId, senderName: mine.senderName,
-                                            body: mine.body, createdAt: message.createdAt ?? mine.createdAt)
+                                            body: mine.body, createdAt: message.createdAt ?? mine.createdAt,
+                                            delivery: ChatBubble.Delivery(message.status) ?? .sent)
             } else if !bubbles.contains(where: { $0.messageId != nil && $0.messageId == message.messageId }) {
                 bubbles.append(bubble(message))
                 if case .dm(let user) = conversation, message.senderId == user.id {
