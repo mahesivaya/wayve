@@ -110,7 +110,7 @@ export default function RecentConversations({
       <ConversationRow
         key={`ch-${r.channel.id}`}
         label={`#${r.channel.name}`}
-        link={channelLink(r.channel.id)}
+        link={channelLink(r.channel)}
       >
         <button
           type="button"

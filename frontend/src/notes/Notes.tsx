@@ -58,13 +58,18 @@ export default function Notes() {
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [restored] = useState(() => readOpenNote(userId));
   // The saved copy of the open note, text included, fetched when it's opened.
   const [openedNote, setOpenedNote] = useState<Note | null>(null);
-  const [loadingNote, setLoadingNote] = useState(false);
+  // A note restored from the session is loading too until its saved copy
+  // arrives: the session may hold no text for it (it was left while still
+  // opening), and typing over that would save over the real text.
+  const [loadingNote, setLoadingNote] = useState(
+    () => typeof restored?.noteId === "number"
+  );
   // Only the newest list request and the newest open may land.
   const listRequest = useRef(0);
   const openRequest = useRef(0);
-  const [restored] = useState(() => readOpenNote(userId));
   const [selectedId, setSelectedId] = useState<number | "new" | null>(
     restored?.noteId ?? null
   );
@@ -170,39 +175,70 @@ export default function Notes() {
     }
   };
 
-  // A note restored from the session is checked against its saved copy once.
+  // A note restored from the session is checked against its saved copy once,
+  // as an open of its own: opening another note in the meantime supersedes it.
+  // The fields stay read-only until it lands (`loadingNote`), and a failed
+  // fetch retries, since until it lands nothing typed could be saved.
   useEffect(() => {
     const unchecked = uncheckedRef.current;
     if (!unchecked || typeof unchecked.noteId !== "number" || !userId) return;
-    const { noteId, title: oldTitle, content: oldContent } = unchecked;
+    const { noteId } = unchecked;
+    const request = (openRequest.current += 1);
     let cancelled = false;
-    void (async () => {
+    let retry: number | undefined;
+    const stale = () => cancelled || request !== openRequest.current;
+    const attempt = async (delay: number) => {
       try {
         const found = await getNote(noteId);
         const saved = found ? await readable(found) : null;
-        if (cancelled) return;
+        if (stale()) return;
         uncheckedRef.current = null;
-        if (saved) setOpenedNote(saved);
-        // Edits are kept whatever happened to the note; deleted elsewhere, they
-        // become a new note, since there's nothing left to update.
+        setLoadingNote(false);
         if (unchecked.edited) {
-          if (!saved) {
-            setSelectedId((id) => (id === noteId ? "new" : id));
-          }
+          // Edits are kept whatever happened to the note; deleted elsewhere,
+          // they become a new note, since there's nothing left to update.
+          if (saved) setOpenedNote(saved);
+          else setSelectedId((id) => (id === noteId ? "new" : id));
+        } else if (saved) {
+          // Nothing was typed (the fields were read-only): show the saved copy.
+          setOpenedNote(saved);
+          setTitle(saved.title ?? "");
+          setContent(saved.content ?? "");
         } else {
-          // Only if the writer hasn't moved on, or started typing, in the meantime.
-          setSelectedId((id) => (id === noteId && !saved ? null : id));
-          setTitle((t) => (t === oldTitle ? (saved?.title ?? "") : t));
-          setContent((c) => (c === oldContent ? (saved?.content ?? "") : c));
+          setSelectedId((id) => (id === noteId ? null : id));
+          setTitle("");
+          setContent("");
         }
       } catch (err) {
         logger.error(err);
+        if (stale()) return;
+        setStatus("Couldn't open the note. Retrying…");
+        retry = window.setTimeout(
+          () => void attempt(Math.min(delay * 2, 15_000)),
+          delay
+        );
       }
-    })();
+    };
+    void attempt(1_000);
     return () => {
       cancelled = true;
+      window.clearTimeout(retry);
     };
   }, [userId, readable]);
+
+  // Whether leaving the open note has to wait for its restore. A restored note
+  // with edits in it can't save them before its saved copy arrives, so leaving
+  // it then would drop them. One with nothing typed can just be let go.
+  const restoreBlocksLeaving = () => {
+    const unchecked = uncheckedRef.current;
+    if (!unchecked) return false;
+    if (unchecked.edited) {
+      setStatus("Still opening this note…");
+      return true;
+    }
+    uncheckedRef.current = null;
+    return false;
+  };
 
   useEffect(() => {
     if (!status) return;
@@ -211,6 +247,7 @@ export default function Notes() {
   }, [status]);
 
   const openNew = () => {
+    if (restoreBlocksLeaving()) return;
     openRequest.current += 1;
     setOpenedNote(null);
     setLoadingNote(false);
@@ -226,6 +263,7 @@ export default function Notes() {
   // name shows at once; the text follows from the server.
   const openNote = async (note: NoteSummary) => {
     if (note.id === selectedId) return;
+    if (restoreBlocksLeaving()) return;
     if (
       selectedId === "new" &&
       (title.trim() || content.trim()) &&
@@ -383,6 +421,7 @@ export default function Notes() {
 
   // Stays open if the last changes couldn't be saved, rather than losing them.
   const closeNote = async () => {
+    if (restoreBlocksLeaving()) return;
     if (await saveNow()) {
       closeEditor();
     } else {

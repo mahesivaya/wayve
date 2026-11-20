@@ -13,7 +13,10 @@ import { copyText } from "../../utils/clipboard";
 
 function renderRow() {
   return render(
-    <ConversationRow label="#general" link={channelLink(42)}>
+    <ConversationRow
+      label="#general"
+      link={channelLink({ id: 42, link_token: "s3cret" })}
+    >
       <button type="button">general</button>
     </ConversationRow>
   );
@@ -22,8 +25,15 @@ function renderRow() {
 describe("ConversationRow menu", () => {
   afterEach(() => vi.clearAllMocks());
 
-  it("links to the channel by its number", () => {
-    expect(channelLink(42)).toBe(`${window.location.origin}/chat?c=42`);
+  it("links to the channel by its number and token", () => {
+    expect(channelLink({ id: 42, link_token: "s3cret" })).toBe(
+      `${window.location.origin}/chat?c=42&t=s3cret`
+    );
+    // An organization channel a non-member sees has no token; its link is
+    // the number alone, which opens it inside the organization.
+    expect(channelLink({ id: 42, link_token: null })).toBe(
+      `${window.location.origin}/chat?c=42`
+    );
   });
 
   it("copies the channel link from the ⋮ menu", async () => {
@@ -38,7 +48,9 @@ describe("ConversationRow menu", () => {
       screen.getByRole("menuitem", { name: "Copy channel link" })
     );
 
-    expect(copyText).toHaveBeenCalledWith(channelLink(42));
+    expect(copyText).toHaveBeenCalledWith(
+      channelLink({ id: 42, link_token: "s3cret" })
+    );
     expect(await screen.findByText("Link copied")).toBeTruthy();
   });
 

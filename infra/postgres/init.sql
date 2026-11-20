@@ -983,6 +983,13 @@ CREATE TABLE IF NOT EXISTS channels (
 
 ALTER TABLE channels ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'private';
 
+-- The secret in a channel's link (`/chat?c=<id>&t=<link_token>`). A personal
+-- account's public channel is reachable only with it, never by its sequential
+-- id alone (chat::channel_join::MAY_REACH). Volatile default, so every existing
+-- row gets its own token when the column is added. 122 random bits.
+ALTER TABLE channels ADD COLUMN IF NOT EXISTS link_token TEXT NOT NULL
+    DEFAULT replace(gen_random_uuid()::text, '-', '');
+
 CREATE TABLE IF NOT EXISTS channel_members (
     channel_id INT REFERENCES channels(id) ON DELETE CASCADE,
     user_id INT REFERENCES users(id) ON DELETE CASCADE,

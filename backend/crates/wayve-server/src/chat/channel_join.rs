@@ -11,7 +11,11 @@ use tracing::instrument;
 /// SQL: whether the caller (`$2`) may reach the `channels` row at all. Inside
 /// an organization or the platform that is sharing its tenant. Personal
 /// accounts share no tenant, so being one is not enough: the channel's creator
-/// must have made it public, or have invited the caller's email address.
+/// must have invited the caller's email address, or have made it public and the
+/// caller must hold its link, which carries the channel's `link_token` (`$3`).
+/// The token is what makes a public personal channel reachable, not its number:
+/// channel ids are sequential, so without it any personal account could walk
+/// them and join every public personal channel on the instance.
 const MAY_REACH: &str = r#"
             COALESCE((
                 SELECT (creator.account_type = 'platform_admin'
@@ -21,7 +25,9 @@ const MAY_REACH: &str = r#"
                             AND creator.organization_id = me.organization_id)
                     OR (creator.account_type = 'personal'
                             AND me.account_type = 'personal'
-                            AND (channels.visibility = 'public'
+                            AND ((channels.visibility = 'public'
+                                      AND $3::text IS NOT NULL
+                                      AND channels.link_token = $3)
                                  OR EXISTS (
                                      SELECT 1 FROM channel_invites ci
                                      WHERE ci.channel_id = channels.id
@@ -30,12 +36,19 @@ const MAY_REACH: &str = r#"
                 WHERE creator.id = channels.created_by AND me.id = $2
             ), FALSE)"#;
 
+/// `?t=<link_token>` from a channel link (`/chat?c=<id>&t=<token>`).
+#[derive(Debug, Deserialize)]
+pub struct LinkQuery {
+    pub t: Option<String>,
+}
+
 #[post("/chat/channels/{channel_id}/join")]
 #[instrument(target = "http", skip(req, pool), fields(channel_id))]
 pub async fn join_channel(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     channel_id: web::Path<i32>,
+    link: web::Query<LinkQuery>,
 ) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let channel_id = channel_id.into_inner();
@@ -59,6 +72,7 @@ pub async fn join_channel(
     let row = sqlx::query(&sql)
         .bind(channel_id)
         .bind(user_id)
+        .bind(link.t.as_deref())
         .fetch_optional(pool.get_ref())
         .await?
         .ok_or(AppError::NotFound("channel"))?;
@@ -140,6 +154,7 @@ pub async fn get_channel_preview(
     req: HttpRequest,
     pool: web::Data<PgPool>,
     channel_id: web::Path<i32>,
+    link: web::Query<LinkQuery>,
 ) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
     let channel_id = channel_id.into_inner();
@@ -170,6 +185,7 @@ pub async fn get_channel_preview(
     let row = sqlx::query(&sql)
         .bind(channel_id)
         .bind(user_id)
+        .bind(link.t.as_deref())
         .fetch_optional(pool.get_ref())
         .await?
         .ok_or(AppError::NotFound("channel"))?;
@@ -220,6 +236,28 @@ pub async fn approve_channel_join_request(
     // A full channel keeps the request pending, so it can be approved once a
     // seat frees up.
     lock_channel(&mut tx, channel_id).await?;
+
+    // Only someone who actually asked can be approved. A join request is only
+    // ever written by `join_channel`, after `MAY_REACH` let the requester in, so
+    // this is also what keeps an approval inside the channel's tenant: without
+    // it an admin could post any user id, from any organization, and make them
+    // a member.
+    let requested: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS(
+            SELECT 1 FROM channel_join_requests
+            WHERE channel_id = $1 AND user_id = $2 AND status = 'pending'
+        )
+        "#,
+    )
+    .bind(channel_id)
+    .bind(input.user_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if !requested {
+        return Err(AppError::NotFound("join request"));
+    }
+
     if would_exceed_member_cap(&mut tx, channel_id, &[input.user_id]).await? {
         return Ok(channel_full());
     }

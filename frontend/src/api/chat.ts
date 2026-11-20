@@ -146,6 +146,10 @@ export type ChatChannel = {
   // (admin mode) recovering a channel that has no admin left.
   can_manage?: boolean;
   is_member: boolean;
+  // The secret in the channel's link (see `channelLink`); given to members
+  // only. A personal account's public channel opens to a non-member only with
+  // it, never by its number alone.
+  link_token?: string | null;
   join_status?: "pending";
   // Only on a link preview (`getChannelPreview`), which leaves the member lists
   // empty: a non-member is told how many, not who.
@@ -295,13 +299,21 @@ export const getChatMessages = async (
 export const getChatChannels = async () =>
   apiFetchJson<ChatChannel[]>("/api/chat/channels");
 
+// `?t=<token>` for the channel-link endpoints, or nothing.
+const linkQuery = (token?: string | null) =>
+  token ? `?t=${encodeURIComponent(token)}` : "";
+
 // The channel behind a link, for someone it isn't listed for: a personal
-// account's public channel, which only its number leads to. Null when there is
-// no such channel or it isn't open to the caller; the server doesn't say which.
+// account's public channel, which only its link (number and token) leads to.
+// Null when there is no such channel or it isn't open to the caller; the server
+// doesn't say which.
 export const getChannelPreview = async (
-  channelId: number
+  channelId: number,
+  token?: string | null
 ): Promise<ChatChannel | null> => {
-  const res = await apiFetch(`/api/chat/channels/${channelId}/preview`);
+  const res = await apiFetch(
+    `/api/chat/channels/${channelId}/preview${linkQuery(token)}`
+  );
   if (res.status === 404) return null;
   if (!res.ok) throw new Error("Failed to open the channel link");
   return res.json() as Promise<ChatChannel>;
@@ -361,10 +373,14 @@ export const updateChatChannelVisibility = async (
   }
 };
 
-export const joinChatChannel = async (channelId: number) => {
-  const res = await apiFetch(`/api/chat/channels/${channelId}/join`, {
-    method: "POST",
-  });
+export const joinChatChannel = async (
+  channelId: number,
+  token?: string | null
+) => {
+  const res = await apiFetch(
+    `/api/chat/channels/${channelId}/join${linkQuery(token)}`,
+    { method: "POST" }
+  );
 
   if (!res.ok) {
     const data = await res.json().catch(() => null);

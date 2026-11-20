@@ -115,7 +115,15 @@ export const roleFromValue = (value: string): ChannelRole =>
   value === "admin" ? "admin" : "user";
 
 // The address that opens a channel. Anyone the channel is open to can follow
-// it: a member lands in the channel, anyone else on its join page.
-export function channelLink(channelId: number): string {
-  return `${window.location.origin}/chat?c=${channelId}`;
+// it: a member lands in the channel, anyone else on its join page. The token
+// (members are given it) is what opens a personal account's public channel to
+// someone outside it; the number alone does not.
+export function channelLink(channel: {
+  id: number;
+  link_token?: string | null;
+}): string {
+  const base = `${window.location.origin}/chat?c=${channel.id}`;
+  return channel.link_token
+    ? `${base}&t=${encodeURIComponent(channel.link_token)}`
+    : base;
 }
