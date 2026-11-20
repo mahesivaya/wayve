@@ -264,11 +264,6 @@
   margin-bottom: 4px;
 }
 
-.notes-format-hint {
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-
 /* Title and body edit in place: same type and position as the text they
    replace, with no box around them. */
 .note-read .note-title-input {
@@ -481,6 +476,91 @@
 .notes-more-btn:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
+}
+
+/* A card with its ⋮ menu button pinned to the right edge, after Last edited.
+   The button sits beside the card, not in it: a button can't hold one. */
+.note-row {
+  position: relative;
+  min-width: 0;
+}
+
+.note-row > .note-card {
+  height: 100%;
+  padding-right: 44px;
+}
+
+/* The header lines up with the rows, whose right end now holds the button. */
+.notes-list--list .notes-columns {
+  padding-right: 45px;
+}
+
+.note-row-menu-btn {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.note-row-menu-btn:hover,
+.note-row-menu-btn.is-open {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+.note-row-menu-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.note-row-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow:
+    0 10px 25px rgb(0, 0, 0, 0.12),
+    0 4px 6px rgb(0, 0, 0, 0.06);
+}
+
+.note-row-menu-item {
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.note-row-menu-item.is-danger {
+  color: var(--color-danger);
+}
+
+.note-row-menu-item.is-danger:hover,
+.note-row-menu-item.is-danger:focus-visible {
+  background: var(--color-danger);
+  color: var(--color-surface);
+  outline: none;
 }
 
 .note-card-date {

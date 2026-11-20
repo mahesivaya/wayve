@@ -84,3 +84,8 @@ infra/geoip/*.mmdb
 *.xcuserstate
 *.p8
 *.mobileprovision
+
+google_oauth_access.txt
+hadal-org-recovery-key.txt
+hadal-recovery-key.txt
+simpleArch

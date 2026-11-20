@@ -10,6 +10,7 @@ import "./notes.css";
 
 import {
   createNoteApi,
+  deleteNoteApi,
   getNote,
   getNotes,
   NOTES_PAGE_SIZE,
@@ -22,6 +23,7 @@ import { logger } from "../utils/logger";
 import { decryptForSelf } from "../crypto/selfEncrypt";
 import { fmtShortDate } from "../utils/datetime";
 import NoteBody from "./NoteBody";
+import NoteRowMenu from "./NoteRowMenu";
 import { useNoteAutosave } from "./useNoteAutosave";
 import {
   DEFAULT_NOTE_SORT,
@@ -210,7 +212,20 @@ export default function Notes() {
     return () => clearTimeout(t);
   }, [status]);
 
-  const openNew = () => {
+  // The header stays up while a note is open, so this can replace one: the
+  // same guards as switching notes apply.
+  const openNew = async () => {
+    if (selectedId === "new") {
+      if (
+        (title.trim() || content.trim()) &&
+        !confirm("Discard this new note?")
+      ) {
+        return;
+      }
+    } else if (isEditing && dirty && !(await saveNow())) {
+      setStatus("Couldn't save. Check your connection.");
+      return;
+    }
     openRequest.current += 1;
     setOpenedNote(null);
     setLoadingNote(false);
@@ -286,6 +301,22 @@ export default function Notes() {
     setSelectedId(null);
     setTitle("");
     setContent("");
+  };
+
+  // From a row's ⋮ menu. Deleting the open note closes it, unsaved edits and
+  // all, since they'd go with the note anyway.
+  const deleteNote = async (id: number, name: string) => {
+    if (!confirm(`Delete "${name}"? This can't be undone.`)) return;
+    try {
+      await deleteNoteApi(id);
+      setNotes((current) => current.filter((note) => note.id !== id));
+      setTotal((count) => Math.max(0, count - 1));
+      if (selectedId === id) closeEditor();
+      setStatus("Note deleted.");
+    } catch (err) {
+      logger.error(err);
+      setStatus("Couldn't delete. Check your connection.");
+    }
   };
 
   const editBody = () => {
@@ -414,42 +445,43 @@ export default function Notes() {
   return (
     <div className="notes-app">
       <main className="notes-main">
-        {!editorOpen && (
-          <div className="notes-header notes-header--actions-only">
-            <div className="notes-header-actions">
-              <span className="notes-count">{total} total</span>
-              {status && <span className="notes-status">{status}</span>}
-              <div className="view-toggle" role="group" aria-label="View mode">
-                <button
-                  type="button"
-                  className={`view-toggle-btn${view === "list" ? " active" : ""}`}
-                  onClick={() => setView("list")}
-                  aria-pressed={view === "list"}
-                  aria-label="List view"
-                  data-tooltip="List view"
-                >
-                  ☰
-                </button>
-                <button
-                  type="button"
-                  className={`view-toggle-btn${view === "grid" ? " active" : ""}`}
-                  onClick={() => setView("grid")}
-                  aria-pressed={view === "grid"}
-                  aria-label="Grid view"
-                  data-tooltip="Grid view"
-                >
-                  ▦
-                </button>
-              </div>
+        <div className="notes-header notes-header--actions-only">
+          <div className="notes-header-actions">
+            <span className="notes-count">{total} total</span>
+            {/* An open note shows the status in its own header. */}
+            {status && !editorOpen && (
+              <span className="notes-status">{status}</span>
+            )}
+            <div className="view-toggle" role="group" aria-label="View mode">
               <button
-                className="notes-new-btn notes-new-btn--inline"
-                onClick={openNew}
+                type="button"
+                className={`view-toggle-btn${view === "list" ? " active" : ""}`}
+                onClick={() => setView("list")}
+                aria-pressed={view === "list"}
+                aria-label="List view"
+                data-tooltip="List view"
               >
-                Add new notes
+                ☰
+              </button>
+              <button
+                type="button"
+                className={`view-toggle-btn${view === "grid" ? " active" : ""}`}
+                onClick={() => setView("grid")}
+                aria-pressed={view === "grid"}
+                aria-label="Grid view"
+                data-tooltip="Grid view"
+              >
+                ▦
               </button>
             </div>
+            <button
+              className="notes-new-btn notes-new-btn--inline"
+              onClick={() => void openNew()}
+            >
+              Add new notes
+            </button>
           </div>
-        )}
+        </div>
 
         <div className={`notes-workspace${split ? " is-split" : ""}`}>
           {!(editorOpen && visibleNotes.length === 0) && (
@@ -503,24 +535,29 @@ export default function Notes() {
                     const created = fmtShortDate(note.created_at);
                     const edited = fmtShortDate(note.updated_at);
                     return (
-                      <button
-                        key={note.id}
-                        type="button"
-                        className={`note-card${note.id === selectedId ? " is-active" : ""}`}
-                        aria-current={
-                          note.id === selectedId ? "true" : undefined
-                        }
-                        onClick={() => void openNote(note)}
-                        aria-label={`Edit ${name}. Created ${created}. Last edited ${edited}.`}
-                      >
-                        <span className="note-card-title">{name}</span>
-                        {!editorOpen && view === "list" && (
-                          <>
-                            <span className="note-card-date">{created}</span>
-                            <span className="note-card-date">{edited}</span>
-                          </>
-                        )}
-                      </button>
+                      <div key={note.id} className="note-row">
+                        <button
+                          type="button"
+                          className={`note-card${note.id === selectedId ? " is-active" : ""}`}
+                          aria-current={
+                            note.id === selectedId ? "true" : undefined
+                          }
+                          onClick={() => void openNote(note)}
+                          aria-label={`Edit ${name}. Created ${created}. Last edited ${edited}.`}
+                        >
+                          <span className="note-card-title">{name}</span>
+                          {!editorOpen && view === "list" && (
+                            <>
+                              <span className="note-card-date">{created}</span>
+                              <span className="note-card-date">{edited}</span>
+                            </>
+                          )}
+                        </button>
+                        <NoteRowMenu
+                          label={name}
+                          onDelete={() => void deleteNote(note.id, name)}
+                        />
+                      </div>
                     );
                   })}
                   {hasMore && (
@@ -608,26 +645,19 @@ export default function Notes() {
                   Loading…
                 </p>
               ) : showBodyField ? (
-                <>
-                  <textarea
-                    ref={bodyFieldRef}
-                    className="note-body-input"
-                    value={content}
-                    onChange={(event) => setContent(event.target.value)}
-                    onBlur={() => {
-                      setEditing(false);
-                      void saveNow();
-                    }}
-                    placeholder="Start writing…"
-                    aria-label="Note text"
-                    autoFocus={focusBody}
-                  />
-                  <small className="notes-format-hint">
-                    # Heading &nbsp;·&nbsp; ## Smaller heading &nbsp;·&nbsp; -
-                    Bullet (indent to nest) &nbsp;·&nbsp; 1. Numbered
-                    &nbsp;·&nbsp; **bold**
-                  </small>
-                </>
+                <textarea
+                  ref={bodyFieldRef}
+                  className="note-body-input"
+                  value={content}
+                  onChange={(event) => setContent(event.target.value)}
+                  onBlur={() => {
+                    setEditing(false);
+                    void saveNow();
+                  }}
+                  placeholder="Start writing…"
+                  aria-label="Note text"
+                  autoFocus={focusBody}
+                />
               ) : (
                 <div
                   className="note-body-view"

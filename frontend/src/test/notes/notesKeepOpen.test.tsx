@@ -173,15 +173,85 @@ describe("an existing note", () => {
     expect(document.activeElement).toBe(bodyField());
   });
 
-  it("hides the count bar while a note is open", async () => {
+  it("keeps the count bar while a note is open", async () => {
     setStore([saved(5, "Old", "Old body")]);
     render(<Notes />);
     await screen.findByText("1 total");
     fireEvent.click(screen.getByRole("button", { name: /^Edit/ }));
-    expect(screen.queryByText("1 total")).toBeNull();
-    expect(screen.queryByText("Add new notes")).toBeNull();
+    expect(screen.getByText("1 total")).toBeTruthy();
+    expect(screen.getByText("Add new notes")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     await screen.findByText("1 total");
+  });
+
+  describe("the ⋮ menu's Delete", () => {
+    const twoNotes = async () => {
+      setStore([saved(5, "Old", "Old body"), saved(6, "Other", "Other body")]);
+      render(<Notes />);
+      await screen.findByText("2 total");
+    };
+    const deleteFromMenu = (name: string) => {
+      fireEvent.click(
+        screen.getByRole("button", { name: `More options for ${name}` })
+      );
+      fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    };
+
+    it("deletes the note after confirming", async () => {
+      await twoNotes();
+      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+      deleteFromMenu("Old");
+      await screen.findByText("1 total");
+      expect(api.deleteNoteApi).toHaveBeenCalledWith(5);
+      expect(screen.queryByRole("button", { name: /^Edit Old/ })).toBeNull();
+      expect(screen.getByRole("button", { name: /^Edit Other/ })).toBeTruthy();
+      expect(screen.queryByRole("menu")).toBeNull();
+      confirmSpy.mockRestore();
+    });
+
+    it("keeps the note when the confirm is cancelled", async () => {
+      await twoNotes();
+      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+      deleteFromMenu("Old");
+      expect(api.deleteNoteApi).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: /^Edit Old/ })).toBeTruthy();
+      confirmSpy.mockRestore();
+    });
+
+    it("keeps the note when the delete fails", async () => {
+      await twoNotes();
+      api.deleteNoteApi.mockRejectedValue(new Error("offline"));
+      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+      deleteFromMenu("Old");
+      await screen.findByText("Couldn't delete. Check your connection.");
+      expect(screen.getByRole("button", { name: /^Edit Old/ })).toBeTruthy();
+      expect(screen.getByText("2 total")).toBeTruthy();
+      confirmSpy.mockRestore();
+    });
+
+    it("closes the note if it's the open one", async () => {
+      await twoNotes();
+      fireEvent.click(screen.getByRole("button", { name: /^Edit Old/ }));
+      await screen.findByText("Old body");
+      const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+      deleteFromMenu("Old");
+      await screen.findByText("1 total");
+      expect(screen.queryByPlaceholderText("Enter note title")).toBeNull();
+      confirmSpy.mockRestore();
+    });
+  });
+
+  it("asks before Add new notes discards a typed new note", async () => {
+    setStore([]);
+    render(<Notes />);
+    await screen.findByText("Add new notes");
+    fireEvent.click(screen.getByText("Add new notes"));
+    fireEvent.change(titleField(), { target: { value: "Draft" } });
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    fireEvent.click(screen.getByText("Add new notes"));
+    expect(confirmSpy).toHaveBeenCalled();
+    await waitFor(() => expect(titleField().value).toBe("Draft"));
+    confirmSpy.mockRestore();
   });
 
   describe("beside the list", () => {

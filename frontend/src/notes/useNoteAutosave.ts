@@ -5,6 +5,7 @@ import { markOpenNoteSaved } from "./openNoteSession";
 
 const AUTOSAVE_DELAY_MS = 800;
 const RETRY_DELAY_MS = 5000;
+const SAVED_VISIBLE_MS = 1500;
 
 export type AutosaveStatus = "idle" | "saving" | "saved" | "failed";
 
@@ -84,6 +85,19 @@ export function useNoteAutosave({
     const timer = window.setTimeout(() => void saveNow(), AUTOSAVE_DELAY_MS);
     return () => window.clearTimeout(timer);
   }, [ready, noteId, title, content, retryTick, saveNow]);
+
+  // "Saved" is a brief confirmation, not a permanent label.
+  useEffect(() => {
+    if (result.status !== "saved") return;
+    const timer = window.setTimeout(
+      () =>
+        setResult((current) =>
+          current.status === "saved" ? { ...current, status: "idle" } : current
+        ),
+      SAVED_VISIBLE_MS
+    );
+    return () => window.clearTimeout(timer);
+  }, [result]);
 
   // Leaving the page must not drop the last few keystrokes.
   useEffect(
