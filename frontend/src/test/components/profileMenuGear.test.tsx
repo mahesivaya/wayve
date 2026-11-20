@@ -45,10 +45,11 @@ describe("Account menu", () => {
     setChatStatus.mockClear();
   });
 
-  it("shows the email when there is no username", () => {
+  it("shows the email's name part, not the domain, when there is no username", () => {
     renderGear();
     const trigger = screen.getByRole("button", { name: /account menu/i });
-    expect(trigger.textContent).toContain("owner@test.local");
+    expect(trigger.textContent).toContain("owner");
+    expect(trigger.textContent).not.toContain("@test.local");
     expect(trigger.textContent).not.toContain("Settings");
   });
 
