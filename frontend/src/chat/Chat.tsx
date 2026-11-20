@@ -68,10 +68,12 @@ import {
 import type { ChannelRole, ChannelVisibility, Conversation } from "./types";
 import { channelsAlwaysPublic, usesStandardChatEncryption } from "./chatPolicy";
 import {
+  CHANNEL_FULL_MESSAGE,
   getChannelAdmins,
   getChannelUsers,
   getConversationTitle,
   isChannelAdmin,
+  isChannelFull,
   parseEmails,
 } from "./utils";
 import "./chat.css";
@@ -1041,6 +1043,10 @@ export default function Chat() {
   const addUsers = async () => {
     if (!selectedChannel) return;
     setSettingsError("");
+    if (isChannelFull(selectedChannel)) {
+      setSettingsError(CHANNEL_FULL_MESSAGE);
+      return;
+    }
 
     try {
       await addChatChannelUsers(
@@ -1063,6 +1069,10 @@ export default function Chat() {
   const inviteFromHeader = async () => {
     if (!selectedChannel) return;
     setAddMemberError("");
+    if (isChannelFull(selectedChannel)) {
+      setAddMemberError(CHANNEL_FULL_MESSAGE);
+      return;
+    }
 
     try {
       await addChatChannelUsers(

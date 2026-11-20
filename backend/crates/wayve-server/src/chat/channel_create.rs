@@ -2,7 +2,10 @@ use crate::prelude::*;
 use wayve_security::jwt::get_user_id_from_request;
 
 use super::dto::CreateChannelInput;
-use super::helpers::{channel_visibility_for, normalize_channel_role, normalize_invite_emails};
+use super::helpers::{
+    MAX_CHANNEL_MEMBERS, channel_full, channel_visibility_for, is_member_cap_violation,
+    normalize_channel_role, normalize_invite_emails,
+};
 use wayve_security::rbac;
 
 use sqlx::Row;
@@ -49,6 +52,11 @@ pub async fn create_channel(
     member_ids.sort_unstable();
     member_ids.dedup();
 
+    // The creator counts toward the cap.
+    if member_ids.len() as i64 > MAX_CHANNEL_MEMBERS {
+        return Ok(channel_full());
+    }
+
     // A solo channel is allowed; the creator is added as its admin below.
 
     let mut tx = pool.begin().await?;
@@ -89,6 +97,9 @@ pub async fn create_channel(
         .execute(&mut *tx)
         .await
         {
+            if is_member_cap_violation(&e) {
+                return Ok(channel_full());
+            }
             error!(target: "db", error = ?e, channel_id, member_id, "create_channel member insert failed");
             return Ok(HttpResponse::BadRequest().json(serde_json::json!({
                 "error": "One or more members could not be added"

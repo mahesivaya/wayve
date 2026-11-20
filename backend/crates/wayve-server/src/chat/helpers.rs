@@ -8,6 +8,53 @@ use wayve_security::rbac::{Role, RoleContext, Scope};
 // which bypasses these handlers, is covered by the `users` delete trigger in
 // init.sql, which hands admin and creator off to a remaining member.
 
+/// A channel always has fewer than 25 members. Enforced twice: these handler
+/// checks give a clear error, and the `trg_channel_member_cap` trigger in
+/// init.sql rejects any insert past it, whatever path or race it comes from.
+/// Keep the two numbers (and `CHANNEL_MEMBER_CAP_CONSTRAINT`) in sync.
+pub const MAX_CHANNEL_MEMBERS: i64 = 24;
+
+/// The constraint name the trigger raises, so a lost race maps to the same
+/// "channel is full" error as the up-front check.
+pub const CHANNEL_MEMBER_CAP_CONSTRAINT: &str = "channel_members_max_24";
+
+pub const CHANNEL_FULL: &str = "A channel can have at most 24 members.";
+
+/// Whether adding `user_ids` to `channel_id` would take it past
+/// [`MAX_CHANNEL_MEMBERS`]. Ids already in the channel don't count, and
+/// duplicates count once. Call under `lock_channel` so the count can't move.
+pub async fn would_exceed_member_cap(
+    conn: &mut PgConnection,
+    channel_id: i32,
+    user_ids: &[i32],
+) -> Result<bool, sqlx::Error> {
+    let mut ids = user_ids.to_vec();
+    ids.sort_unstable();
+    ids.dedup();
+    let (current, already): (i64, i64) = sqlx::query_as(
+        "SELECT count(*), count(*) FILTER (WHERE user_id = ANY($2)) \
+         FROM channel_members WHERE channel_id = $1",
+    )
+    .bind(channel_id)
+    .bind(&ids)
+    .fetch_one(conn)
+    .await?;
+    Ok(current + (ids.len() as i64 - already) > MAX_CHANNEL_MEMBERS)
+}
+
+/// Whether `e` is the member-cap trigger rejecting an insert.
+pub fn is_member_cap_violation(e: &sqlx::Error) -> bool {
+    matches!(e, sqlx::Error::Database(db) if db.constraint() == Some(CHANNEL_MEMBER_CAP_CONSTRAINT))
+}
+
+/// The response for a full channel.
+pub fn channel_full() -> actix_web::HttpResponse {
+    actix_web::HttpResponse::Conflict().json(serde_json::json!({
+        "error": CHANNEL_FULL,
+        "max_members": MAX_CHANNEL_MEMBERS,
+    }))
+}
+
 /// Whether the caller's effective (mode-downscoped) role may recover channels
 /// in their tenant. Normal mode downscopes to `Member`, so in practice this is
 /// an org or platform owner in admin mode.

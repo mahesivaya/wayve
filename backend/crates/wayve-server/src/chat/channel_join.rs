@@ -2,7 +2,7 @@ use crate::prelude::*;
 use wayve_security::jwt::get_user_id_from_request;
 
 use super::dto::JoinRequestActionInput;
-use super::helpers::can_manage_channel;
+use super::helpers::{can_manage_channel, channel_full, lock_channel, would_exceed_member_cap};
 use wayve_security::rbac::resolve_role_context_moded;
 
 use sqlx::Row;
@@ -78,6 +78,11 @@ pub async fn join_channel(
     }
 
     if row.get::<String, _>("visibility") == "public" {
+        let mut tx = pool.begin().await?;
+        lock_channel(&mut tx, channel_id).await?;
+        if would_exceed_member_cap(&mut tx, channel_id, &[user_id]).await? {
+            return Ok(channel_full());
+        }
         sqlx::query(
             r#"
             INSERT INTO channel_members (channel_id, user_id, role)
@@ -87,8 +92,9 @@ pub async fn join_channel(
         )
         .bind(channel_id)
         .bind(user_id)
-        .execute(pool.get_ref())
+        .execute(&mut *tx)
         .await?;
+        tx.commit().await?;
         let channel_name: String = row.get("name");
         crate::audit::record_action(
             pool.get_ref(),
@@ -210,6 +216,13 @@ pub async fn approve_channel_join_request(
     }
 
     let mut tx = pool.begin().await?;
+
+    // A full channel keeps the request pending, so it can be approved once a
+    // seat frees up.
+    lock_channel(&mut tx, channel_id).await?;
+    if would_exceed_member_cap(&mut tx, channel_id, &[input.user_id]).await? {
+        return Ok(channel_full());
+    }
 
     sqlx::query(
         r#"
