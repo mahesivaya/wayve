@@ -177,7 +177,7 @@
   gap: 8px;
 }
 
-/* Center nav links: Products / Pricing / Support */
+/* Center nav links: Pricing (+ Docs for platform accounts) */
 .public-home-links {
   display: flex;
   align-items: center;
