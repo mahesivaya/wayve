@@ -84,3 +84,7 @@ infra/geoip/*.mmdb
 *.xcuserstate
 *.p8
 *.mobileprovision
+
+# Account recovery keys and OAuth access notes — secrets, never committed
+*recovery-key*.txt
+/google_oauth_access.txt
