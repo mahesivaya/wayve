@@ -252,32 +252,39 @@ fn folder_groups_threads(folder: Option<&str>) -> bool {
 /// `FROM … WHERE <tenant>`: the caller's own mailboxes, shared inboxes they're a
 /// member of, and Wayve-to-Wayve mail addressed to them. The LEFT JOIN on
 /// `email_accounts` keeps Wayve-to-Wayve rows (NULL account_id).
-fn push_scope(qb: &mut QueryBuilder<'_, sqlx::Postgres>, user_id: i32) {
+fn push_scope(qb: &mut QueryBuilder<'_, sqlx::Postgres>, user_id: i32, account_ids: &[i32]) {
     qb.push(
         r#"
         FROM emails e
         LEFT JOIN email_accounts a ON e.account_id = a.id
-        LEFT JOIN shared_inbox_members sm
-               ON sm.account_id = a.id AND sm.user_id =
-        "#,
-    );
-    qb.push_bind(user_id);
-    qb.push(
-        r#"
         LEFT JOIN shared_inbox_email_state s ON s.email_id = e.id
         LEFT JOIN email_snoozes zs ON zs.email_id = e.id AND zs.user_id =
         "#,
     );
     qb.push_bind(user_id);
-    qb.push(
-        r#"
-        WHERE (a.user_id =
-        "#,
-    );
-    qb.push_bind(user_id);
-    qb.push(" OR sm.user_id IS NOT NULL OR (e.source = 'wayve' AND e.recipient_user_id = ");
+    // Resolve mailbox access once per request, then let the account_id index
+    // narrow the email scan. Testing ownership and shared membership through
+    // joined tables here made the OR predicate non-sargable and invited RLS to
+    // repeat the same ownership lookup for every candidate email.
+    qb.push(" WHERE (e.account_id = ANY(");
+    qb.push_bind(account_ids.to_vec());
+    qb.push(") OR (e.account_id IS NULL AND e.source = 'wayve' AND e.recipient_user_id = ");
     qb.push_bind(user_id);
     qb.push("))");
+}
+
+/// Mailboxes owned by the caller or explicitly shared with them. `email_accounts`
+/// is intentionally not RLS-enabled; this small lookup replaces per-email
+/// owner/member joins in the inbox query with an indexed `account_id` filter.
+async fn accessible_account_ids(pool: &PgPool, user_id: i32) -> sqlx::Result<Vec<i32>> {
+    sqlx::query_scalar(
+        "SELECT id FROM email_accounts WHERE user_id = $1 \
+         UNION \
+         SELECT account_id FROM shared_inbox_members WHERE user_id = $1",
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await
 }
 
 fn push_account_and_status(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFilters) {
@@ -610,6 +617,7 @@ pub async fn sidebar_counts(
     user_id: i32,
     account_id: Option<i32>,
 ) -> sqlx::Result<Vec<(String, i64)>> {
+    let account_ids = accessible_account_ids(pool, user_id).await?;
     let mut tx = begin_as_user(pool, user_id).await?;
     let mut counts = Vec::with_capacity(UNREAD_COUNT_FOLDERS.len() + 1);
     for folder in UNREAD_COUNT_FOLDERS.iter().copied().chain(["drafts"]) {
@@ -624,7 +632,7 @@ pub async fn sidebar_counts(
             group_threads: false,
         };
         let mut qb = QueryBuilder::new("SELECT COUNT(*)");
-        push_scope(&mut qb, user_id);
+        push_scope(&mut qb, user_id, &account_ids);
         push_account_and_status(&mut qb, &filters);
         push_folder(&mut qb, &filters, true);
         if folder != "drafts" {
@@ -664,10 +672,11 @@ fn push_search(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFil
 pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<EmailListRow>> {
     // Fetch page_size + 1 so the caller can compute `has_more` without a COUNT.
     let query_limit = (filters.page_size + 1) as i64;
+    let account_ids = accessible_account_ids(pool, filters.user_id).await?;
 
     let mut qb = QueryBuilder::new("");
     if filters.group_threads && folder_groups_threads(filters.folder.as_deref()) {
-        push_grouped_list(&mut qb, &filters, query_limit);
+        push_grouped_list(&mut qb, &filters, &account_ids, query_limit);
     } else {
         // One row per email: the tenant scope, then the filters, then the
         // keyset cursor and page.
@@ -677,7 +686,7 @@ pub async fn list(pool: &PgPool, filters: EmailListFilters) -> sqlx::Result<Vec<
         qb.push("SELECT ");
         qb.push(LIST_COLUMNS);
         qb.push(format!(", {sort} AS sort_at"));
-        push_scope(&mut qb, filters.user_id);
+        push_scope(&mut qb, filters.user_id, &account_ids);
         push_account_and_status(&mut qb, &filters);
         push_folder(&mut qb, &filters, true);
         push_search(&mut qb, &filters);
@@ -732,16 +741,17 @@ async fn begin_as_user(
 /// or conversations when grouped. The cursor and page size are ignored. It
 /// counts synced mail only, so it can grow as older provider mail syncs in.
 pub async fn count(pool: &PgPool, filters: &EmailListFilters) -> sqlx::Result<i64> {
+    let account_ids = accessible_account_ids(pool, filters.user_id).await?;
     let mut qb = QueryBuilder::new("");
     if filters.group_threads && folder_groups_threads(filters.folder.as_deref()) {
         // The same conversations as `push_grouped_list`, each judged by its
         // newest message's snooze, without building the rows themselves.
-        push_conv_heads(&mut qb, filters);
+        push_conv_heads(&mut qb, filters, &account_ids);
         qb.push(" SELECT COUNT(*) FROM head l WHERE TRUE");
         push_latest_snooze(&mut qb, filters);
     } else {
         qb.push("SELECT COUNT(*)");
-        push_scope(&mut qb, filters.user_id);
+        push_scope(&mut qb, filters.user_id, &account_ids);
         push_account_and_status(&mut qb, filters);
         push_folder(&mut qb, filters, true);
         push_search(&mut qb, filters);
@@ -756,7 +766,11 @@ pub async fn count(pool: &PgPool, filters: &EmailListFilters) -> sqlx::Result<i6
 /// `WITH matched AS (…)`: the conversations with at least one email in this
 /// view (step 1 of `push_grouped_list`). Shared with `count`, so the total and
 /// the list can never disagree on which conversations a view holds.
-fn push_matched(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFilters) {
+fn push_matched(
+    qb: &mut QueryBuilder<'_, sqlx::Postgres>,
+    filters: &EmailListFilters,
+    account_ids: &[i32],
+) {
     qb.push("WITH matched AS (");
     if matches!(filters.folder.as_deref(), Some("signal" | "noise")) {
         qb.push("SELECT e.conv_key FROM (SELECT DISTINCT ON (");
@@ -764,7 +778,7 @@ fn push_matched(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFi
         qb.push(") e.*, ");
         qb.push(CONV_KEY);
         qb.push(" AS conv_key");
-        push_scope(qb, filters.user_id);
+        push_scope(qb, filters.user_id, account_ids);
         push_account_and_status(qb, filters);
         push_search(qb, filters);
         qb.push(" AND NOT ('SENT' = ANY(e.labels)) AND ");
@@ -777,7 +791,7 @@ fn push_matched(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFi
         qb.push("SELECT DISTINCT ");
         qb.push(CONV_KEY);
         qb.push(" AS conv_key");
-        push_scope(qb, filters.user_id);
+        push_scope(qb, filters.user_id, account_ids);
         push_account_and_status(qb, filters);
         push_folder(qb, filters, false);
         push_search(qb, filters);
@@ -799,8 +813,12 @@ const CONV_MEMBER: &str = r#"
 /// columns only. Every conversation in the view is judged here, so this pass
 /// stays cheap: no attachment lookups, ciphertexts or arrays, which only the
 /// page's own conversations get (`push_grouped_list`). Shared with `count`.
-fn push_conv_heads(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailListFilters) {
-    push_matched(qb, filters);
+fn push_conv_heads(
+    qb: &mut QueryBuilder<'_, sqlx::Postgres>,
+    filters: &EmailListFilters,
+    account_ids: &[i32],
+) {
+    push_matched(qb, filters, account_ids);
     let order = list_order(filters.folder.as_deref());
     qb.push(", heads AS (SELECT ");
     qb.push(CONV_KEY);
@@ -808,7 +826,7 @@ fn push_conv_heads(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailLis
         " AS conv_key, e.id, e.created_at, zs.snoozed_until, {} AS sort_at",
         order.per_message
     ));
-    push_scope(qb, filters.user_id);
+    push_scope(qb, filters.user_id, account_ids);
     qb.push(" AND ");
     qb.push(CONV_KEY);
     qb.push(" IN (SELECT conv_key FROM matched)");
@@ -842,9 +860,10 @@ fn push_conv_heads(qb: &mut QueryBuilder<'_, sqlx::Postgres>, filters: &EmailLis
 fn push_grouped_list(
     qb: &mut QueryBuilder<'_, sqlx::Postgres>,
     filters: &EmailListFilters,
+    account_ids: &[i32],
     query_limit: i64,
 ) {
-    push_conv_heads(qb, filters);
+    push_conv_heads(qb, filters, account_ids);
     let order = list_order(filters.folder.as_deref());
     let (dir, past) = order.direction();
     qb.push(", page AS (SELECT l.conv_key, l.sort_at FROM head l WHERE TRUE");
@@ -866,7 +885,7 @@ fn push_grouped_list(
     qb.push(", ");
     qb.push(CONV_KEY);
     qb.push(" AS conv_key, e.thread_id, e.sender_hash");
-    push_scope(qb, filters.user_id);
+    push_scope(qb, filters.user_id, account_ids);
     // `CONV_KEY IN page`, spelled so the thread and primary-key indexes find
     // the page's messages instead of a scan of the whole mailbox.
     qb.push(
@@ -1038,9 +1057,10 @@ pub async fn thread_messages(
     email_id: i32,
     user_id: i32,
 ) -> sqlx::Result<Vec<EmailListRow>> {
+    let account_ids = accessible_account_ids(pool, user_id).await?;
     let mut qb = QueryBuilder::new("SELECT ");
     qb.push(LIST_COLUMNS);
-    push_scope(&mut qb, user_id);
+    push_scope(&mut qb, user_id, &account_ids);
     qb.push(" AND (e.id = ");
     qb.push_bind(email_id);
     qb.push(
