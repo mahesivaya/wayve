@@ -177,6 +177,7 @@
 }
 
 .note-read {
+  container: note-read / inline-size;
   max-width: 760px;
   margin: 8px auto 24px;
   padding: 8px 16px;
@@ -265,12 +266,14 @@
 }
 
 /* Title and body edit in place: same type and position as the text they
-   replace, with no box around them. */
+   replace. The title is underlined and the text sits in a box, typing or
+   reading alike, so switching between the two doesn't move anything. */
 .note-read .note-title-input {
   flex: 1;
   min-width: 0;
-  padding: 0;
+  padding: 0 0 6px;
   border: none;
+  border-bottom: 1px solid var(--color-input-border);
   border-radius: 0;
   outline: none;
   background: transparent;
@@ -282,14 +285,33 @@
   line-height: 1.25;
 }
 
-.note-read .note-body-input {
-  display: block;
+.note-read .note-title-input:focus {
+  border-bottom-color: var(--color-primary);
+}
+
+.note-read .note-body-input,
+.note-body-view {
+  box-sizing: border-box;
   width: 100%;
   min-height: 120px;
   margin-top: 20px;
-  padding: 0;
-  border: none;
-  border-radius: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-md);
+}
+
+.note-read .note-body-input:focus {
+  border-color: var(--color-primary);
+}
+
+/* Inside the box its own padding does the spacing. */
+.note-body-view .note-read-body,
+.note-body-view .note-read-empty {
+  margin-top: 0;
+}
+
+.note-read .note-body-input {
+  display: block;
   outline: none;
   background: transparent;
   box-shadow: none;
@@ -303,14 +325,16 @@
 
 /* The spare height gives an empty or short note something to click. */
 .note-body-view {
-  min-height: 120px;
   cursor: text;
-  border-radius: var(--radius-md);
+}
+
+.note-body-view:hover {
+  border-color: var(--color-text-muted);
 }
 
 .note-body-view:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 4px;
+  outline: none;
+  border-color: var(--color-primary);
 }
 
 .note-save-state {
@@ -609,10 +633,11 @@
   padding: 24px;
 }
 
-/* Phones: beside Cancel and Create, the title had room for half its
-   placeholder ("Enter not"). The buttons go on their own line above it, so the
-   title has the full width. */
-@media (max-width: 768px) and (pointer: coarse) {
+/* A narrow note (a phone, a small window, or the split view's note pane):
+   beside Cancel and Create the title had room for half its placeholder
+   ("Enter not"). The buttons go on their own line above it, so the title has
+   the full width. Measured on the note, not the viewport. */
+@container note-read (max-width: 560px) {
   .note-read-header {
     flex-wrap: wrap;
     gap: 10px;

@@ -149,17 +149,6 @@
   font-size: var(--text-sm);
 }
 
-.tasks-count {
-  flex: 0 0 auto;
-  padding: 5px 10px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface);
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-  font-weight: 750;
-}
-
 /* Per-status count strip above the board (workspace boards: Tickets, Stories).
    Wraps to a second line on narrow widths rather than overflowing. */
 .tasks-status-summary {

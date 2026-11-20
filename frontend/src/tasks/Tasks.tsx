@@ -2657,11 +2657,6 @@ export default function Tasks({
                 <p>{config.labels.subtitle}</p>
               </div>
               <div className="tasks-header-actions">
-                {/* Boards with the status strip below show the total there, so the
-                  header pill would just duplicate it. */}
-                {!config.features.statusSummary && (
-                  <span className="tasks-count">{tasks.length} total</span>
-                )}
                 {config.features.findRelated && config.api.findRelated && (
                   <button
                     type="button"

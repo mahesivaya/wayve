@@ -363,7 +363,9 @@ export default function Notes() {
     const field = bodyFieldRef.current;
     if (!field) return;
     field.style.height = "auto";
-    field.style.height = `${field.scrollHeight}px`;
+    // scrollHeight leaves out the box's border; the height includes it.
+    const border = field.offsetHeight - field.clientHeight;
+    field.style.height = `${field.scrollHeight + border}px`;
   }, [showBodyField, content]);
 
   // Clicking formatted text can't map to a spot in the raw text: start at the end.
@@ -596,48 +598,30 @@ export default function Notes() {
                   aria-label="Title"
                   autoFocus={focusTitle}
                 />
-                <div className="notes-form-actions">
-                  {status && (
-                    <span className="note-save-state" role="status">
-                      {status}
-                    </span>
-                  )}
-                  {isEditing ? (
-                    <>
-                      {autosaveStatus !== "idle" && (
-                        <span className="note-save-state" role="status">
-                          {AUTOSAVE_LABELS[autosaveStatus]}
-                        </span>
-                      )}
-                      <button
-                        type="button"
-                        className="note-close-btn"
-                        onClick={() => void closeNote()}
-                        aria-label="Close"
-                        data-tooltip="Close"
-                      >
-                        ✕
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={closeEditor}
-                        disabled={saving}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        className="primary"
-                        disabled={saving}
-                      >
-                        {saving ? "Creating…" : "Create note"}
-                      </button>
-                    </>
-                  )}
-                </div>
+                {/* A new note's Cancel and Create sit below its text instead. */}
+                {isEditing && (
+                  <div className="notes-form-actions">
+                    {status && (
+                      <span className="note-save-state" role="status">
+                        {status}
+                      </span>
+                    )}
+                    {autosaveStatus !== "idle" && (
+                      <span className="note-save-state" role="status">
+                        {AUTOSAVE_LABELS[autosaveStatus]}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="note-close-btn"
+                      onClick={() => void closeNote()}
+                      aria-label="Close"
+                      data-tooltip="Close"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
               </header>
 
               {loadingNote ? (
@@ -680,6 +664,22 @@ export default function Notes() {
                   ) : (
                     <p className="note-read-empty">Click to add text</p>
                   )}
+                </div>
+              )}
+
+              {!isEditing && (
+                <div className="notes-form-actions note-create-actions">
+                  {status && (
+                    <span className="note-save-state" role="status">
+                      {status}
+                    </span>
+                  )}
+                  <button type="button" onClick={closeEditor} disabled={saving}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="primary" disabled={saving}>
+                    {saving ? "Creating…" : "Create note"}
+                  </button>
                 </div>
               )}
             </form>
