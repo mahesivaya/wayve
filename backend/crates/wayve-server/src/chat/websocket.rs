@@ -56,6 +56,22 @@ pub async fn notify_conversation_read(cache: &Option<Cache>, reader: i32, other:
     fan_out_user(cache, reader, payload).await;
 }
 
+/// Tell `sender` that the messages in `read_ids` were read, in ONE frame. A
+/// read marks every unread message in the conversation at once, so one frame
+/// per message meant one awaited Redis PUBLISH each (500 unread, 500 round
+/// trips before the history request could answer), one decode per instance per
+/// message, and a re-render per message in the sender's browser.
+pub async fn fan_out_read_receipts(cache: &Option<Cache>, sender: i32, read_ids: &[(i32,)]) {
+    let ids: Vec<i32> = read_ids.iter().map(|(id,)| *id).collect();
+    let payload = serde_json::json!({
+        "type": "status_update_bulk",
+        "message_ids": ids,
+        "status": "read"
+    })
+    .to_string();
+    fan_out_user(cache, sender, payload).await;
+}
+
 /// Fan a realtime frame out to a user. With Redis we PUBLISH, so whichever
 /// instance holds their socket delivers it; if the publish fails we fall back to
 /// local delivery. Exactly one path runs, so a frame is never duplicated.
@@ -368,17 +384,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ChatSession {
                                 cache.del(&chat_history_key(reader, other)).await;
                             }
 
-                            for (message_id,) in &read_ids {
-                                let receipt = serde_json::json!({
-                                    "type": "status_update",
-                                    "message_id": message_id,
-                                    "status": "read"
-                                })
-                                .to_string();
-
-                                fan_out_user(&cache, other, receipt).await;
-                            }
                             if !read_ids.is_empty() {
+                                fan_out_read_receipts(&cache, other, &read_ids).await;
                                 notify_conversation_read(&cache, reader, other).await;
                             }
                         });

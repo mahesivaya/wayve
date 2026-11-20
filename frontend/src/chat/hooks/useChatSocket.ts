@@ -17,8 +17,13 @@ export function useChatSocket(
   // Fires on every (re)open, so the caller can backfill messages missed while the
   // socket was down.
   onOpen?: () => void,
-  // Advances a sent message's delivery tick (sent → delivered → read).
-  onStatusUpdate?: (messageId: number, status: ChatMessage["status"]) => void,
+  // Advances sent messages' delivery ticks (sent → delivered → read). Called
+  // once per frame with every message it names, so a conversation read in bulk
+  // is one state update, not one per message.
+  onStatusUpdate?: (
+    messageIds: number[],
+    status: ChatMessage["status"]
+  ) => void,
   // Fires for any inbound message from someone else, in any conversation, so the
   // caller can refresh unread counts and recency for the whole list.
   onInbound?: (message: ChatMessage) => void,
@@ -146,7 +151,21 @@ export function useChatSocket(
         }
         if (msg.type === "status_update") {
           if (msg.message_id != null && msg.status) {
-            onStatusUpdateRef.current?.(msg.message_id, msg.status);
+            onStatusUpdateRef.current?.([msg.message_id], msg.status);
+          }
+          return;
+        }
+        // Every message a read covered, in one frame (the server sends this for
+        // read receipts; `status_update` above still carries single updates).
+        if (msg.type === "status_update_bulk") {
+          const ids = (msg as unknown as { message_ids?: unknown }).message_ids;
+          if (Array.isArray(ids) && msg.status) {
+            const messageIds = ids.filter(
+              (id): id is number => typeof id === "number"
+            );
+            if (messageIds.length > 0) {
+              onStatusUpdateRef.current?.(messageIds, msg.status);
+            }
           }
           return;
         }

@@ -72,6 +72,60 @@ describe("chat socket across tabs", () => {
   });
 });
 
+describe("chat socket read receipts", () => {
+  const mount = () => {
+    const onStatusUpdate = vi.fn();
+    renderHook(() =>
+      useChatSocket(
+        { id: 1 },
+        { current: null },
+        vi.fn(),
+        undefined,
+        onStatusUpdate
+      )
+    );
+    act(() => latest().open());
+    return onStatusUpdate;
+  };
+
+  it("hands a bulk receipt over in one call", () => {
+    const onStatusUpdate = mount();
+    act(() =>
+      latest().receive({
+        type: "status_update_bulk",
+        message_ids: [10, 11, 12],
+        status: "read",
+      })
+    );
+    expect(onStatusUpdate).toHaveBeenCalledTimes(1);
+    expect(onStatusUpdate).toHaveBeenCalledWith([10, 11, 12], "read");
+  });
+
+  it("still accepts a single status update", () => {
+    const onStatusUpdate = mount();
+    act(() =>
+      latest().receive({
+        type: "status_update",
+        message_id: 7,
+        status: "delivered",
+      })
+    );
+    expect(onStatusUpdate).toHaveBeenCalledWith([7], "delivered");
+  });
+
+  it("ignores a bulk receipt with no usable ids", () => {
+    const onStatusUpdate = mount();
+    act(() =>
+      latest().receive({
+        type: "status_update_bulk",
+        message_ids: ["x"],
+        status: "read",
+      })
+    );
+    expect(onStatusUpdate).not.toHaveBeenCalled();
+  });
+});
+
 describe("call socket", () => {
   it("reconnects after a drop and keeps handling signals", () => {
     const { result } = renderHook(() => useCallSession(1, "me@x.test"));

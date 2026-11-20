@@ -213,12 +213,19 @@ mod tests {
             read.map(|v| v["user_id"].clone()),
             Some(serde_json::json!(b.id))
         );
-        assert!(
-            wait_for(&mut b1, ARRIVES, |v| v["type"] == "status_update"
-                && v["status"] == "read")
-            .await
-            .is_some(),
-            "the sender still gets the read tick"
+        // One frame names every message the read covered.
+        let receipt = wait_for(&mut b1, ARRIVES, |v| {
+            v["type"] == "status_update_bulk" && v["status"] == "read"
+        })
+        .await;
+        let ids = receipt
+            .as_ref()
+            .and_then(|v| v["message_ids"].as_array().cloned())
+            .unwrap_or_default();
+        assert_eq!(
+            ids.len(),
+            1,
+            "the sender still gets the read tick: {receipt:?}"
         );
     }
 
