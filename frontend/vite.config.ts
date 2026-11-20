@@ -47,6 +47,7 @@ export default defineConfig(({ command }) => ({
       // load on a refresh in dev.
       "^/api/": "http://localhost:8080",
       "/gmail": "http://localhost:8080",
+      "^/outlook/": "http://localhost:8080",
       "/oauth": "http://localhost:8080",
       "/ws": "ws://localhost:8080",
     },

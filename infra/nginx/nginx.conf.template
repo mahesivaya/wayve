@@ -34,6 +34,15 @@ http {
             proxy_redirect off;
         }
 
+        # Microsoft sign-in/sign-up start (`/outlook/login`); same prefix-preserving
+        # proxy as `/gmail/`. The callback is under `/oauth/`.
+        location /outlook/ {
+            proxy_pass http://backend:8080;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_redirect off;
+        }
+
         # ✅ OAuth callback
         location /oauth/ {
             proxy_pass http://backend:8080;

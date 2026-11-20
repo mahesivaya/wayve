@@ -206,6 +206,10 @@ export default function Login() {
     window.location.href = `${getApiBase()}/gmail/login?mode=signup`;
   };
 
+  const handleOutlook = () => {
+    window.location.href = `${getApiBase()}/outlook/login?mode=signup`;
+  };
+
   // The backend resolves the org from the email domain and either redirects to
   // the IdP or returns a 404 we surface inline.
   const handleSsoSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -373,6 +377,14 @@ export default function Login() {
 
             <button type="button" className="google-btn" onClick={handleGoogle}>
               Continue with Gmail
+            </button>
+
+            <button
+              type="button"
+              className="outlook-btn"
+              onClick={handleOutlook}
+            >
+              Continue with Outlook
             </button>
 
             {idleNotice && <p className="login-notice">{idleNotice}</p>}
