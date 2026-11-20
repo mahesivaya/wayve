@@ -10,7 +10,9 @@ import {
 } from "@testing-library/react";
 
 const api = vi.hoisted(() => ({
+  NOTES_PAGE_SIZE: 50,
   getNotes: vi.fn(),
+  getNote: vi.fn(),
   createNoteApi: vi.fn(),
   updateNoteApi: vi.fn(),
   deleteNoteApi: vi.fn(),
@@ -37,6 +39,20 @@ const saved = (id: number, title: string, content: string) => ({
   content,
   updated_at: "2026-11-01T12:00:00Z",
 });
+type Saved = ReturnType<typeof saved>;
+
+// What the server holds: the list gives names only, and a note's text comes
+// from getNote when it's opened.
+const setStore = (rows: Saved[]) => {
+  api.getNotes.mockResolvedValue({
+    notes: rows.map(({ content: _content, ...summary }) => summary),
+    total: rows.length,
+    has_more: false,
+  });
+  api.getNote.mockImplementation((id: number) =>
+    Promise.resolve(rows.find((row) => row.id === id) ?? null)
+  );
+};
 
 const titleField = () =>
   screen.getByPlaceholderText("Enter note title") as HTMLInputElement;
@@ -61,7 +77,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   sessionStorage.clear();
   auth.user = { id: 1 };
-  api.getNotes.mockResolvedValue([]);
+  setStore([]);
   api.createNoteApi.mockResolvedValue(saved(9, "t", "c"));
   api.updateNoteApi.mockResolvedValue(saved(5, "t", "c"));
   api.deleteNoteApi.mockResolvedValue(undefined);
@@ -127,20 +143,26 @@ describe("a new note", () => {
 });
 
 describe("an existing note", () => {
+  // Opening fetches the text; this waits until it's showing.
+  const open = async (button: HTMLElement) => {
+    fireEvent.click(button);
+    await screen.findByRole("button", { name: "Edit note text" });
+  };
+
   const openExisting = async (id = 5) => {
     render(<Notes />);
-    fireEvent.click(await screen.findByRole("button", { name: /^Edit/ }));
+    await open(await screen.findByRole("button", { name: /^Edit/ }));
     fireEvent.click(screen.getByRole("button", { name: "Edit note text" }));
     return id;
   };
 
   const openToRead = async () => {
     render(<Notes />);
-    fireEvent.click(await screen.findByRole("button", { name: /^Edit/ }));
+    await open(await screen.findByRole("button", { name: /^Edit/ }));
   };
 
   it("opens formatted, and clicking the text edits it in place", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Old body")]);
+    setStore([saved(5, "Old", "Old body")]);
     await openToRead();
     expect(titleField().value).toBe("Old");
     expect(screen.getByText("Old body")).toBeTruthy();
@@ -152,7 +174,7 @@ describe("an existing note", () => {
   });
 
   it("hides the count bar while a note is open", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Old body")]);
+    setStore([saved(5, "Old", "Old body")]);
     render(<Notes />);
     await screen.findByText("1 total");
     fireEvent.click(screen.getByRole("button", { name: /^Edit/ }));
@@ -171,10 +193,10 @@ describe("an existing note", () => {
       screen.getByRole("button", { name: new RegExp(`^Edit ${name}\\.`) });
 
     it("keeps the names showing and marks the open one", async () => {
-      api.getNotes.mockResolvedValue(two);
+      setStore(two);
       render(<Notes />);
       await screen.findByText("Second");
-      fireEvent.click(row("First"));
+      await open(row("First"));
       expect(titleField().value).toBe("First");
       expect(row("Second")).toBeTruthy();
       expect(row("First").getAttribute("aria-current")).toBe("true");
@@ -182,10 +204,10 @@ describe("an existing note", () => {
     });
 
     it("switches notes, saving the one left first", async () => {
-      api.getNotes.mockResolvedValue(two);
+      setStore(two);
       render(<Notes />);
       await screen.findByText("Second");
-      fireEvent.click(row("First"));
+      await open(row("First"));
       type(titleField(), "First edited");
       fireEvent.click(row("Second"));
       await waitFor(() => expect(titleField().value).toBe("Second"));
@@ -196,11 +218,11 @@ describe("an existing note", () => {
     });
 
     it("stays on the note if it can't be saved", async () => {
-      api.getNotes.mockResolvedValue(two);
+      setStore(two);
       api.updateNoteApi.mockRejectedValue(new Error("down"));
       render(<Notes />);
       await screen.findByText("Second");
-      fireEvent.click(row("First"));
+      await open(row("First"));
       type(titleField(), "First edited");
       fireEvent.click(row("Second"));
       await screen.findByText("Couldn't save. Check your connection.");
@@ -208,10 +230,10 @@ describe("an existing note", () => {
     });
 
     it("clicking the open note again keeps its unsaved text", async () => {
-      api.getNotes.mockResolvedValue(two);
+      setStore(two);
       render(<Notes />);
       await screen.findByText("Second");
-      fireEvent.click(row("First"));
+      await open(row("First"));
       type(titleField(), "Still typing");
       fireEvent.click(row("First"));
       expect(titleField().value).toBe("Still typing");
@@ -219,13 +241,13 @@ describe("an existing note", () => {
   });
 
   it("doesn't put the cursor in the title just by opening", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Old body")]);
+    setStore([saved(5, "Old", "Old body")]);
     await openToRead();
     expect(document.activeElement).not.toBe(titleField());
   });
 
   it("goes back to formatted when the text loses focus", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Old body")]);
+    setStore([saved(5, "Old", "Old body")]);
     await openExisting();
     type(bodyField(), "Unsaved");
     fireEvent.blur(bodyField());
@@ -234,7 +256,7 @@ describe("an existing note", () => {
   });
 
   it("has no Save button and saves a title edit by itself", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Old body")]);
+    setStore([saved(5, "Old", "Old body")]);
     await openToRead();
     type(titleField(), "New title");
     expect(screen.queryByRole("button", { name: /save/i })).toBeNull();
@@ -250,7 +272,7 @@ describe("an existing note", () => {
   });
 
   it("saves as soon as the text loses focus", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Old body")]);
+    setStore([saved(5, "Old", "Old body")]);
     await openExisting();
     type(bodyField(), "New body");
     fireEvent.blur(bodyField());
@@ -265,7 +287,7 @@ describe("an existing note", () => {
   });
 
   it("doesn't send an unchanged note", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Old body")]);
+    setStore([saved(5, "Old", "Old body")]);
     await openToRead();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     await screen.findByText("Add new notes");
@@ -273,7 +295,7 @@ describe("an existing note", () => {
   });
 
   it("never sends a note emptied of all text", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "")]);
+    setStore([saved(5, "Old", "")]);
     await openToRead();
     type(titleField(), "");
     fireEvent.blur(titleField());
@@ -281,7 +303,7 @@ describe("an existing note", () => {
   });
 
   it("saves edits one at a time, in order", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Old body")]);
+    setStore([saved(5, "Old", "Old body")]);
     let finishFirst: (row: unknown) => void = () => {};
     api.updateNoteApi.mockReturnValueOnce(
       new Promise((resolve) => {
@@ -306,7 +328,7 @@ describe("an existing note", () => {
   });
 
   it("Close waits for the save, and stays open if it fails", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Old body")]);
+    setStore([saved(5, "Old", "Old body")]);
     api.updateNoteApi.mockRejectedValue(new Error("down"));
     await openExisting();
     type(bodyField(), "Precious");
@@ -317,7 +339,7 @@ describe("an existing note", () => {
   });
 
   it("Close saves pending changes before leaving", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Old body")]);
+    setStore([saved(5, "Old", "Old body")]);
     await openExisting();
     type(bodyField(), "Last words");
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
@@ -329,7 +351,7 @@ describe("an existing note", () => {
   });
 
   it("Close from reading returns to the list", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Old body")]);
+    setStore([saved(5, "Old", "Old body")]);
     await openToRead();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     await screen.findByText("Add new notes");
@@ -337,7 +359,7 @@ describe("an existing note", () => {
   });
 
   it("is still being read after leaving and coming back", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Old body")]);
+    setStore([saved(5, "Old", "Old body")]);
     await openToRead();
     await leaveAndReturn();
     await screen.findByText("Old body");
@@ -345,7 +367,7 @@ describe("an existing note", () => {
   });
 
   it("saves the last edit when leaving the page", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Old body")]);
+    setStore([saved(5, "Old", "Old body")]);
     await openExisting();
     type(bodyField(), "Typed just before leaving");
     await leaveAndReturn();
@@ -356,34 +378,34 @@ describe("an existing note", () => {
   });
 
   it("shows the server's copy after a successful save, not the draft", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Old body")]);
+    setStore([saved(5, "Old", "Old body")]);
     await openExisting();
     type(bodyField(), "Mine");
     await waitFor(() => expect(api.updateNoteApi).toHaveBeenCalled(), {
       timeout: 2000,
     });
     await waitFor(() => expect(readOpenNote(1)?.edited).toBe(false));
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Changed elsewhere")]);
+    setStore([saved(5, "Old", "Changed elsewhere")]);
     await leaveAndReturn();
     await waitFor(() => expect(bodyField().value).toBe("Changed elsewhere"));
   });
 
   it("keeps an edit that couldn't be saved over a newer copy", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Old body")]);
+    setStore([saved(5, "Old", "Old body")]);
     api.updateNoteApi.mockRejectedValue(new Error("down"));
     await openExisting();
     type(bodyField(), "My edit");
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Changed elsewhere")]);
+    setStore([saved(5, "Old", "Changed elsewhere")]);
     await leaveAndReturn();
     await waitFor(() => expect(readOpenNote(1)?.edited).toBe(true));
     expect(bodyField().value).toBe("My edit");
   });
 
   it("shows the newer saved copy when nothing was edited", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Old body")]);
+    setStore([saved(5, "Old", "Old body")]);
     await openExisting();
     expect(readOpenNote(1)?.edited).toBe(false);
-    api.getNotes.mockResolvedValue([saved(5, "Newer", "Changed elsewhere")]);
+    setStore([saved(5, "Newer", "Changed elsewhere")]);
     await leaveAndReturn();
     await waitFor(() => expect(bodyField().value).toBe("Changed elsewhere"));
     expect(titleField().value).toBe("Newer");
@@ -392,20 +414,20 @@ describe("an existing note", () => {
     );
   });
 
-  it("doesn't overwrite what's typed while the list is still loading", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Old body")]);
+  it("doesn't overwrite what's typed while the saved copy is still loading", async () => {
+    setStore([saved(5, "Old", "Old body")]);
     await openExisting();
     cleanup();
-    let finish: (rows: unknown[]) => void = () => {};
-    api.getNotes.mockReturnValue(
+    let finish: (row: Saved) => void = () => {};
+    api.getNote.mockReturnValue(
       new Promise((resolve) => {
         finish = resolve;
       })
     );
     render(<Notes />);
     type(bodyField(), "Typed fast");
-    await waitFor(() => expect(api.getNotes).toHaveBeenCalledTimes(2));
-    finish([saved(5, "Old", "Changed elsewhere")]);
+    await waitFor(() => expect(api.getNote).toHaveBeenCalledTimes(2));
+    finish(saved(5, "Old", "Changed elsewhere"));
     await waitFor(
       () =>
         expect(api.updateNoteApi).toHaveBeenCalledWith(5, {
@@ -418,11 +440,11 @@ describe("an existing note", () => {
   });
 
   it("turns edits into a new note if it was deleted elsewhere", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Old body")]);
+    setStore([saved(5, "Old", "Old body")]);
     api.updateNoteApi.mockRejectedValue(new Error("not found"));
     await openExisting();
     type(bodyField(), "Don't lose me");
-    api.getNotes.mockResolvedValue([]);
+    setStore([]);
     await leaveAndReturn();
     const create = await screen.findByRole("button", { name: "Create note" });
     expect(bodyField().value).toBe("Don't lose me");
@@ -431,9 +453,9 @@ describe("an existing note", () => {
   });
 
   it("closes if it was deleted elsewhere with nothing edited", async () => {
-    api.getNotes.mockResolvedValue([saved(5, "Old", "Old body")]);
+    setStore([saved(5, "Old", "Old body")]);
     await openExisting();
-    api.getNotes.mockResolvedValue([]);
+    setStore([]);
     await leaveAndReturn();
     await screen.findByText("Add new notes");
     expect(screen.queryByPlaceholderText("Enter note title")).toBeNull();

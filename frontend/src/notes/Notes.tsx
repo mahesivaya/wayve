@@ -8,7 +8,14 @@ import {
 } from "react";
 import "./notes.css";
 
-import { createNoteApi, getNotes, type Note } from "../api/notes";
+import {
+  createNoteApi,
+  getNote,
+  getNotes,
+  NOTES_PAGE_SIZE,
+  type Note,
+  type NoteSummary,
+} from "../api/notes";
 import { useGlobalSearch } from "../search/SearchContext";
 import { useAuth } from "../auth/useAuth";
 import { logger } from "../utils/logger";
@@ -46,7 +53,17 @@ export default function Notes() {
   const { normalizedSearchQuery } = useGlobalSearch();
   const { user } = useAuth();
   const userId = user?.id ?? null;
-  const [notes, setNotes] = useState<Note[]>([]);
+  // The pages of the list loaded so far: names and dates, no text.
+  const [notes, setNotes] = useState<NoteSummary[]>([]);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  // The saved copy of the open note, text included, fetched when it's opened.
+  const [openedNote, setOpenedNote] = useState<Note | null>(null);
+  const [loadingNote, setLoadingNote] = useState(false);
+  // Only the newest list request and the newest open may land.
+  const listRequest = useRef(0);
+  const openRequest = useRef(0);
   const [restored] = useState(() => readOpenNote(userId));
   const [selectedId, setSelectedId] = useState<number | "new" | null>(
     restored?.noteId ?? null
@@ -76,32 +93,96 @@ export default function Notes() {
     window.localStorage.setItem("wayve.notes.view", view);
   }, [view]);
 
-  const fetchNotes = useCallback(async () => {
-    if (!userId) return;
-    try {
-      const raw = await getNotes();
-      // Notes are stored in the clear. decryptForSelf is kept purely to read
-      // rows written before that change: it passes a non-envelope string
-      // through untouched, so plaintext costs nothing here, and a legacy note
-      // stops being ciphertext the first time it is saved again.
-      const readable = await Promise.all(
-        raw.map(async (note) => ({
-          ...note,
-          title: note.title
-            ? await decryptForSelf(note.title, userId)
-            : note.title,
-          content: note.content
-            ? await decryptForSelf(note.content, userId)
-            : note.content,
-        }))
-      );
-      setNotes(readable);
+  // Notes are stored in the clear. decryptForSelf is kept purely to read rows
+  // written before that change: it passes a non-envelope string through
+  // untouched, so plaintext costs nothing here, and a legacy note stops being
+  // ciphertext the first time it is saved again.
+  const readable = useCallback(
+    async <T extends NoteSummary & { content?: string | null }>(
+      note: T
+    ): Promise<T> => {
+      if (!userId) return note;
+      return {
+        ...note,
+        title: note.title
+          ? await decryptForSelf(note.title, userId)
+          : note.title,
+        ...(note.content
+          ? { content: await decryptForSelf(note.content, userId) }
+          : {}),
+      };
+    },
+    [userId]
+  );
 
-      const unchecked = uncheckedRef.current;
-      uncheckedRef.current = null;
-      if (unchecked) {
-        const { noteId, title: oldTitle, content: oldContent } = unchecked;
-        const saved = readable.find((note) => note.id === noteId);
+  // Loads the page at `offset`; offset 0 starts the list over. Search and sort
+  // run on the server, so changing either reloads from the first page.
+  const fetchNotes = useCallback(
+    async (offset = 0) => {
+      if (!userId) return;
+      const request = (listRequest.current += 1);
+      try {
+        const page = await getNotes({
+          limit: NOTES_PAGE_SIZE,
+          offset,
+          sort: sort.key,
+          dir: sort.direction,
+          q: normalizedSearchQuery || undefined,
+        });
+        const rows = await Promise.all(page.notes.map(readable));
+        if (request !== listRequest.current) return;
+        setNotes((current) =>
+          offset === 0
+            ? rows
+            : [
+                ...current,
+                ...rows.filter((row) => !current.some((n) => n.id === row.id)),
+              ]
+        );
+        setTotal(page.total);
+        setHasMore(page.has_more);
+      } catch (err) {
+        logger.error(err);
+      }
+    },
+    [userId, sort, normalizedSearchQuery, readable]
+  );
+
+  useEffect(() => {
+    // Typing a search waits for a pause rather than asking on every key.
+    const timeout = window.setTimeout(
+      () => {
+        void fetchNotes(0);
+      },
+      normalizedSearchQuery ? 250 : 0
+    );
+
+    return () => window.clearTimeout(timeout);
+  }, [fetchNotes, normalizedSearchQuery]);
+
+  const loadMore = async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    try {
+      await fetchNotes(notes.length);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  // A note restored from the session is checked against its saved copy once.
+  useEffect(() => {
+    const unchecked = uncheckedRef.current;
+    if (!unchecked || typeof unchecked.noteId !== "number" || !userId) return;
+    const { noteId, title: oldTitle, content: oldContent } = unchecked;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const found = await getNote(noteId);
+        const saved = found ? await readable(found) : null;
+        if (cancelled) return;
+        uncheckedRef.current = null;
+        if (saved) setOpenedNote(saved);
         // Edits are kept whatever happened to the note; deleted elsewhere, they
         // become a new note, since there's nothing left to update.
         if (unchecked.edited) {
@@ -114,19 +195,14 @@ export default function Notes() {
           setTitle((t) => (t === oldTitle ? (saved?.title ?? "") : t));
           setContent((c) => (c === oldContent ? (saved?.content ?? "") : c));
         }
+      } catch (err) {
+        logger.error(err);
       }
-    } catch (err) {
-      logger.error(err);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      void fetchNotes();
-    }, 0);
-
-    return () => window.clearTimeout(timeout);
-  }, [fetchNotes]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, readable]);
 
   useEffect(() => {
     if (!status) return;
@@ -135,6 +211,9 @@ export default function Notes() {
   }, [status]);
 
   const openNew = () => {
+    openRequest.current += 1;
+    setOpenedNote(null);
+    setLoadingNote(false);
     setFocusTitle(true);
     setFocusBody(false);
     setEditing(true);
@@ -143,8 +222,9 @@ export default function Notes() {
     setContent("");
   };
 
-  // Opens beside the list, so another note can be picked while one is open.
-  const openNote = async (note: Note) => {
+  // Opens beside the list, so another note can be picked while one is open. The
+  // name shows at once; the text follows from the server.
+  const openNote = async (note: NoteSummary) => {
     if (note.id === selectedId) return;
     if (
       selectedId === "new" &&
@@ -158,15 +238,50 @@ export default function Notes() {
       setStatus("Couldn't save. Check your connection.");
       return;
     }
+    const request = (openRequest.current += 1);
     setFocusTitle(false);
     setFocusBody(false);
     setEditing(false);
     setSelectedId(note.id);
     setTitle(note.title ?? "");
-    setContent(note.content ?? "");
+    setContent("");
+    setOpenedNote(null);
+    setLoadingNote(true);
+    try {
+      const found = await getNote(note.id);
+      const full = found ? await readable(found) : null;
+      if (request !== openRequest.current) return;
+      if (!full) {
+        setNotes((current) => current.filter((n) => n.id !== note.id));
+        setTotal((count) => Math.max(0, count - 1));
+        closeEditor();
+        setStatus("That note was deleted.");
+        return;
+      }
+      setOpenedNote(full);
+      setTitle(full.title ?? "");
+      setContent(full.content ?? "");
+      setNotes((current) =>
+        current.map((n) =>
+          n.id === full.id
+            ? { ...n, title: full.title, updated_at: full.updated_at }
+            : n
+        )
+      );
+    } catch (err) {
+      logger.error(err);
+      if (request !== openRequest.current) return;
+      closeEditor();
+      setStatus("Couldn't open the note. Check your connection.");
+    } finally {
+      if (request === openRequest.current) setLoadingNote(false);
+    }
   };
 
   const closeEditor = () => {
+    openRequest.current += 1;
+    setOpenedNote(null);
+    setLoadingNote(false);
     setEditing(false);
     setSelectedId(null);
     setTitle("");
@@ -192,7 +307,7 @@ export default function Notes() {
       }
       await createNoteApi({ title, content });
       setStatus("Created ✓");
-      await fetchNotes();
+      await fetchNotes(0);
       closeEditor();
     } catch (err) {
       logger.error(err);
@@ -202,17 +317,9 @@ export default function Notes() {
     }
   };
 
-  const visibleNotes = useMemo(() => {
-    const matching = normalizedSearchQuery
-      ? notes.filter((note) =>
-          [note.title ?? "", note.content ?? "", note.updated_at ?? ""]
-            .join(" ")
-            .toLowerCase()
-            .includes(normalizedSearchQuery)
-        )
-      : notes;
-    return sortNotes(matching, sort);
-  }, [normalizedSearchQuery, notes, sort]);
+  // Already searched and ordered by the server; sorting again keeps a note in
+  // place after a save here changes its name or edit time.
+  const visibleNotes = useMemo(() => sortNotes(notes, sort), [notes, sort]);
 
   const editorOpen = selectedId !== null;
   const isEditing = typeof selectedId === "number";
@@ -236,20 +343,29 @@ export default function Notes() {
     }
   }, [showBodyField, focusBody]);
 
-  // Autosave is gated on the fields differing from the note they opened (the copy
-  // in `notes`), so opening a note and closing it can't post a no-op update.
-  // Compared raw: what's in the fields is posted without trimming.
-  const editingNote = isEditing
-    ? notes.find((note) => note.id === selectedId)
-    : undefined;
+  // Autosave is gated on the fields differing from the note they opened (its
+  // saved copy, `openedNote`), so opening a note and closing it can't post a
+  // no-op update, and nothing is sent before that copy has arrived. Compared
+  // raw: what's in the fields is posted without trimming.
+  const editingNote =
+    isEditing && openedNote?.id === selectedId ? openedNote : undefined;
   const dirty =
     editingNote === undefined ||
     title !== (editingNote.title ?? "") ||
     content !== (editingNote.content ?? "");
 
   const onAutosaved = useCallback((id: number, fields: Partial<Note>) => {
+    setOpenedNote((note) => (note?.id === id ? { ...note, ...fields } : note));
     setNotes((current) =>
-      current.map((note) => (note.id === id ? { ...note, ...fields } : note))
+      current.map((note) =>
+        note.id === id
+          ? {
+              ...note,
+              title: fields.title ?? note.title,
+              updated_at: fields.updated_at ?? note.updated_at,
+            }
+          : note
+      )
     );
   }, []);
 
@@ -284,11 +400,16 @@ export default function Notes() {
       noteId: selectedId,
       title,
       content,
-      // Until the list arrives `dirty` can't tell, so the restored answer stands.
-      edited: uncheckedRef.current ? uncheckedRef.current.edited : dirty,
+      // Until the saved copy arrives `dirty` can't tell, so the restored answer
+      // stands. A note still opening has nothing typed in it: kept as unedited,
+      // coming back replaces its empty text with the saved copy instead of
+      // saving it empty.
+      edited: uncheckedRef.current
+        ? uncheckedRef.current.edited
+        : !loadingNote && dirty,
       editing,
     });
-  }, [userId, selectedId, title, content, dirty, editing]);
+  }, [userId, selectedId, title, content, dirty, editing, loadingNote]);
 
   return (
     <div className="notes-app">
@@ -296,7 +417,7 @@ export default function Notes() {
         {!editorOpen && (
           <div className="notes-header notes-header--actions-only">
             <div className="notes-header-actions">
-              <span className="notes-count">{notes.length} total</span>
+              <span className="notes-count">{total} total</span>
               {status && <span className="notes-status">{status}</span>}
               <div className="view-toggle" role="group" aria-label="View mode">
                 <button
@@ -338,12 +459,14 @@ export default function Notes() {
               {visibleNotes.length === 0 ? (
                 <div className="notes-empty">
                   <strong>
-                    {notes.length === 0 ? "No notes yet" : "No matching notes"}
+                    {normalizedSearchQuery
+                      ? "No matching notes"
+                      : "No notes yet"}
                   </strong>
                   <span>
-                    {notes.length === 0
-                      ? "Use Add new notes to add your first note."
-                      : "Try a different search term."}
+                    {normalizedSearchQuery
+                      ? "Try a different search term."
+                      : "Use Add new notes to add your first note."}
                   </span>
                 </div>
               ) : (
@@ -400,6 +523,16 @@ export default function Notes() {
                       </button>
                     );
                   })}
+                  {hasMore && (
+                    <button
+                      type="button"
+                      className="notes-more-btn"
+                      onClick={() => void loadMore()}
+                      disabled={loadingMore}
+                    >
+                      {loadingMore ? "Loading…" : "Show more"}
+                    </button>
+                  )}
                 </>
               )}
             </div>
@@ -420,6 +553,8 @@ export default function Notes() {
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
                   onBlur={() => void saveNow()}
+                  // Edits wait for the saved copy, so they can't be lost to it.
+                  readOnly={loadingNote}
                   placeholder="Enter note title"
                   aria-label="Title"
                   autoFocus={focusTitle}
@@ -468,7 +603,11 @@ export default function Notes() {
                 </div>
               </header>
 
-              {showBodyField ? (
+              {loadingNote ? (
+                <p className="note-read-empty" role="status">
+                  Loading…
+                </p>
+              ) : showBodyField ? (
                 <>
                   <textarea
                     ref={bodyFieldRef}

@@ -17,28 +17,172 @@ fn note_from_row(row: sqlx::postgres::PgRow) -> Note {
     }
 }
 
+/// One page of the list holds this many notes unless the caller asks otherwise.
+pub const DEFAULT_PAGE_SIZE: i64 = 50;
+/// The most a caller can ask for in one page.
+pub const MAX_PAGE_SIZE: i64 = 200;
+/// Longer search text is cut to this many characters.
+const MAX_QUERY_CHARS: usize = 200;
+
+#[derive(Debug, Deserialize)]
+pub struct ListNotesQuery {
+    limit: Option<i64>,
+    offset: Option<i64>,
+    /// `edited` (default), `created` or `name`.
+    sort: Option<String>,
+    /// `desc` (default) or `asc`.
+    dir: Option<String>,
+    /// Matches title or text, ignoring case.
+    q: Option<String>,
+}
+
+/// A row of the list. Bodies can be megabytes each, so the list leaves them
+/// out; `GET /notes/{id}` returns the whole note when it's opened.
+#[derive(Serialize)]
+struct NoteSummary {
+    id: i32,
+    title: Option<String>,
+    created_at: Option<NaiveDateTime>,
+    updated_at: Option<NaiveDateTime>,
+}
+
+/// The ORDER BY for a sort choice. Only these fixed strings reach the SQL, so
+/// the query parameters can't inject anything. `id` breaks ties, so a page
+/// boundary never falls between equal rows in a different order each time.
+fn order_by(sort: Option<&str>, dir: Option<&str>) -> &'static str {
+    let asc = dir == Some("asc");
+    match (sort, asc) {
+        (Some("name"), false) => {
+            "lower(COALESCE(NULLIF(btrim(title), ''), 'Untitled')) DESC, id DESC"
+        }
+        (Some("name"), true) => "lower(COALESCE(NULLIF(btrim(title), ''), 'Untitled')) ASC, id ASC",
+        (Some("created"), false) => "created_at DESC NULLS LAST, id DESC",
+        (Some("created"), true) => "created_at ASC NULLS FIRST, id ASC",
+        (_, true) => "updated_at ASC NULLS FIRST, id ASC",
+        (_, false) => "updated_at DESC NULLS LAST, id DESC",
+    }
+}
+
+/// `q` as an ILIKE pattern that matches it literally anywhere in the text.
+fn contains_pattern(q: &str) -> String {
+    let mut pattern = String::with_capacity(q.len() + 2);
+    pattern.push('%');
+    for ch in q.chars().take(MAX_QUERY_CHARS) {
+        if matches!(ch, '\\' | '%' | '_') {
+            pattern.push('\\');
+        }
+        pattern.push(ch);
+    }
+    pattern.push('%');
+    pattern
+}
+
+/// `GET /notes?limit=&offset=&sort=&dir=&q=`: one page of the caller's notes
+/// as `{ notes, total, has_more }`, without their text. Notes written before
+/// they were stored in the clear hold ciphertext, which search can't match.
 #[get("/notes")]
 #[instrument(target = "http", skip(req, pool))]
-pub async fn list_notes(req: HttpRequest, pool: web::Data<PgPool>) -> AppResult {
+pub async fn list_notes(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    query: web::Query<ListNotesQuery>,
+) -> AppResult {
     let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let query = query.into_inner();
+
+    let limit = query
+        .limit
+        .unwrap_or(DEFAULT_PAGE_SIZE)
+        .clamp(1, MAX_PAGE_SIZE);
+    let offset = query.offset.unwrap_or(0).max(0);
+    let pattern = query
+        .q
+        .as_deref()
+        .map(str::trim)
+        .filter(|q| !q.is_empty())
+        .map(contains_pattern);
+    // One row past the page tells whether another page follows.
+    let sql = format!(
+        "SELECT id, title, created_at, updated_at
+         FROM notes
+         WHERE user_id = $1
+           AND ($2::text IS NULL OR title ILIKE $2 OR content ILIKE $2)
+         ORDER BY {}
+         LIMIT $3 OFFSET $4",
+        order_by(query.sort.as_deref(), query.dir.as_deref())
+    );
 
     // The RLS policy already enforces `user_id = app.user_id`; the explicit
-    // WHERE is defense-in-depth and keeps the query plan unchanged.
-    let rows = crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
-        let rows = sqlx::query(
-            "SELECT id, title, content, created_at, updated_at
-             FROM notes
+    // WHERE is defense-in-depth and lets idx_notes_user_updated serve the
+    // default order.
+    let (rows, total) = crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
+        let rows = sqlx::query(&sql)
+            .bind(user_id)
+            .bind(pattern.as_deref())
+            .bind(limit + 1)
+            .bind(offset)
+            .fetch_all(&mut *tx)
+            .await?;
+        let total: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM notes
              WHERE user_id = $1
-             ORDER BY updated_at DESC",
+               AND ($2::text IS NULL OR title ILIKE $2 OR content ILIKE $2)",
         )
         .bind(user_id)
-        .fetch_all(&mut *tx)
+        .bind(pattern.as_deref())
+        .fetch_one(&mut *tx)
         .await?;
-        Ok((tx, rows))
+        Ok((tx, (rows, total)))
     })
     .await?;
 
-    Ok(HttpResponse::Ok().json(rows.into_iter().map(note_from_row).collect::<Vec<_>>()))
+    let has_more = rows.len() as i64 > limit;
+    let notes: Vec<NoteSummary> = rows
+        .into_iter()
+        .take(limit as usize)
+        .map(|row| NoteSummary {
+            id: row.get("id"),
+            title: row.try_get("title").ok(),
+            created_at: row.try_get("created_at").ok(),
+            updated_at: row.try_get("updated_at").ok(),
+        })
+        .collect();
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "notes": notes,
+        "total": total,
+        "has_more": has_more,
+    })))
+}
+
+/// `GET /notes/{id}`: one of the caller's notes with its text. Someone else's
+/// note is "not found", the same as one that doesn't exist.
+#[get("/notes/{id}")]
+#[instrument(target = "http", skip(req, pool, path))]
+pub async fn get_note(
+    req: HttpRequest,
+    pool: web::Data<PgPool>,
+    path: web::Path<i32>,
+) -> AppResult {
+    let user_id = get_user_id_from_request(&req).ok_or(AppError::Unauthorized)?;
+    let id = path.into_inner();
+
+    let row = crate::db::with_rls_user_tx(pool.get_ref(), user_id, |mut tx| async move {
+        let row = sqlx::query(
+            "SELECT id, title, content, created_at, updated_at
+             FROM notes
+             WHERE id = $1 AND user_id = $2",
+        )
+        .bind(id)
+        .bind(user_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        Ok((tx, row))
+    })
+    .await?
+    .ok_or(AppError::NotFound("note"))?;
+
+    Ok(HttpResponse::Ok().json(note_from_row(row)))
 }
 
 #[post("/notes")]
