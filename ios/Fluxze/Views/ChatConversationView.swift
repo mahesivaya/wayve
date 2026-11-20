@@ -28,7 +28,9 @@ struct ChatConversationView: View {
                             isMine: bubble.senderId == store.myID,
                             // Channels name the sender once per run of messages.
                             showSender: isChannel && previous?.senderId != bubble.senderId,
-                            senderLabel: senderLabel(bubble)
+                            senderLabel: senderLabel(bubble),
+                            // Read ticks are per person, so DMs only.
+                            showsDelivery: !isChannel
                         )
                         .id(bubble.id)
                     }
@@ -165,6 +167,7 @@ private struct MessageBubble: View {
     let isMine: Bool
     let showSender: Bool
     let senderLabel: String
+    let showsDelivery: Bool
 
     var body: some View {
         VStack(alignment: isMine ? .trailing : .leading, spacing: 2) {
@@ -201,10 +204,31 @@ private struct MessageBubble: View {
             Label("Not sent", systemImage: "exclamationmark.circle")
                 .font(.caption2).foregroundStyle(.red).padding(.horizontal, 4)
         case .sent:
-            if let date = bubble.createdAt {
-                Text(date.formatted(date: .omitted, time: .shortened))
-                    .font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 4)
+            HStack(spacing: 3) {
+                if let date = bubble.createdAt {
+                    Text(date.formatted(date: .omitted, time: .shortened))
+                        .foregroundStyle(.secondary)
+                }
+                if isMine, showsDelivery, let delivery = bubble.delivery {
+                    DeliveryTick(delivery: delivery)
+                }
             }
+            .font(.caption2)
+            .padding(.horizontal, 4)
         }
+    }
+}
+
+/// ✓ sent, ✓✓ delivered, ✓✓ in blue once read: the web's ticks.
+private struct DeliveryTick: View {
+    let delivery: ChatBubble.Delivery
+
+    var body: some View {
+        Text(delivery == .sent ? "✓" : "✓✓")
+            .fontWeight(.bold)
+            .kerning(-3)
+            .padding(.trailing, 3)
+            .foregroundStyle(delivery == .read ? Color(red: 0.31, green: 0.76, blue: 0.97) : Color.secondary)
+            .accessibilityLabel(delivery.label)
     }
 }

@@ -231,6 +231,46 @@ mod tests {
 
     #[actix_web::test]
     #[serial_test::serial]
+    async fn coming_online_marks_everything_waiting_delivered_in_one_frame() {
+        ensure_aes_key();
+        let pool = test_pool().await;
+        let srv = server(&pool);
+        let (a, b) = (user(&pool).await, user(&pool).await);
+
+        // `a` is offline: both messages wait as "sent".
+        let mut b1 = connect!(srv, b);
+        send(&mut b1, dm(&b, &a, "waiting-1")).await;
+        assert!(
+            wait_for(&mut b1, ARRIVES, |v| is_dm(v, "waiting-1"))
+                .await
+                .is_some()
+        );
+        send(&mut b1, dm(&b, &a, "waiting-2")).await;
+        assert!(
+            wait_for(&mut b1, ARRIVES, |v| is_dm(v, "waiting-2"))
+                .await
+                .is_some()
+        );
+
+        // `a` connects: `b` hears about both in a single frame.
+        let _a1 = connect!(srv, a);
+        let delivered = wait_for(&mut b1, ARRIVES, |v| {
+            v["type"] == "status_update_bulk" && v["status"] == "delivered"
+        })
+        .await;
+        let ids = delivered
+            .as_ref()
+            .and_then(|v| v["message_ids"].as_array().cloned())
+            .unwrap_or_default();
+        assert_eq!(
+            ids.len(),
+            2,
+            "both waiting messages, one frame: {delivered:?}"
+        );
+    }
+
+    #[actix_web::test]
+    #[serial_test::serial]
     async fn presence_goes_offline_only_with_the_last_tab() {
         ensure_aes_key();
         let pool = test_pool().await;

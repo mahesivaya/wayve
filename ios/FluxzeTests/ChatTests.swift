@@ -144,6 +144,36 @@ final class ChatTests: XCTestCase {
         XCTAssertNotEqual(ConversationRow.timeLabel(lastWeek, now: now, calendar: calendar), "Yesterday")
     }
 
+    func testDeliveryTicksOnlyMoveForward() {
+        func bubble(_ id: Int, from sender: Int, _ delivery: ChatBubble.Delivery?) -> ChatBubble {
+            ChatBubble(id: "m\(id)", messageId: id, clientId: nil, senderId: sender, senderName: nil,
+                       body: .text("x"), createdAt: nil, delivery: delivery)
+        }
+        let bubbles = [bubble(1, from: 1, .sent), bubble(2, from: 1, .delivered),
+                       bubble(3, from: 5, nil), bubble(4, from: 1, .read)]
+
+        // A bulk read marks every one of my messages it names.
+        let read = ChatStore.advanced(bubbles, ids: [1, 2, 3, 4], to: .read, me: 1)
+        XCTAssertEqual(read?.map(\.delivery), [.read, .read, nil, .read])
+
+        // A late "delivered" never undoes a "read", and changes nothing.
+        XCTAssertNil(ChatStore.advanced(bubbles, ids: [4], to: .delivered, me: 1))
+        // Someone else's message gets no tick.
+        XCTAssertNil(ChatStore.advanced(bubbles, ids: [3], to: .read, me: 1))
+
+        XCTAssertEqual(ChatBubble.Delivery("delivered"), .delivered)
+        XCTAssertNil(ChatBubble.Delivery("pending"))
+    }
+
+    func testStatusFramesDecode() {
+        // Frames the store ignores must not crash it, whatever the conversation.
+        let s = store(Me(id: 1, email: "me@x.com", username: nil, accountType: "personal"))
+        s.handle(frame: Data(#"{"type":"status_update_bulk","message_ids":[10,11],"status":"read"}"#.utf8))
+        s.handle(frame: Data(#"{"type":"status_update","message_id":10,"status":"delivered"}"#.utf8))
+        s.handle(frame: Data(#"{"type":"status_update_bulk","message_ids":"x","status":"read"}"#.utf8))
+        XCTAssertTrue(s.bubbles.isEmpty)
+    }
+
     func testSocketURLAndBackoff() {
         XCTAssertEqual(ChatSocket.url(base: URL(string: "https://fluxze.com")!, token: "t")?.absoluteString,
                        "wss://fluxze.com/ws/chat?token=t")

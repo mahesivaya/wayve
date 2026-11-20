@@ -90,8 +90,37 @@ struct ChatBubble: Identifiable, Equatable {
     let body: ChatCrypto.Opened
     let createdAt: Date?
     var state: State = .sent
+    /// How far a message you sent has got: sent, delivered or read (the
+    /// server's `message_status`). Nil for one that isn't yours or that the
+    /// server hasn't confirmed yet.
+    var delivery: Delivery? = nil
 
     enum State: Equatable { case sending, sent, failed }
+
+    /// The tick on a message you sent, as on the web: one for sent, two for
+    /// delivered, two in blue for read. Ordered, so a tick only moves forward.
+    enum Delivery: Int, Comparable {
+        case sent, delivered, read
+
+        init?(_ status: String?) {
+            switch status {
+            case "sent": self = .sent
+            case "delivered": self = .delivered
+            case "read": self = .read
+            default: return nil
+            }
+        }
+
+        static func < (a: Self, b: Self) -> Bool { a.rawValue < b.rawValue }
+
+        var label: String {
+            switch self {
+            case .sent: "Sent"
+            case .delivered: "Delivered"
+            case .read: "Read"
+            }
+        }
+    }
 
     var text: String {
         switch body {

@@ -63,10 +63,17 @@ pub async fn notify_conversation_read(cache: &Option<Cache>, reader: i32, other:
 /// message, and a re-render per message in the sender's browser.
 pub async fn fan_out_read_receipts(cache: &Option<Cache>, sender: i32, read_ids: &[(i32,)]) {
     let ids: Vec<i32> = read_ids.iter().map(|(id,)| *id).collect();
+    fan_out_status_bulk(cache, sender, &ids, "read").await;
+}
+
+/// One `status_update_bulk` frame telling `sender` that `ids` reached
+/// `status`. The web and iOS clients only ever move a tick forward, so a late
+/// frame can't undo a newer one.
+async fn fan_out_status_bulk(cache: &Option<Cache>, sender: i32, ids: &[i32], status: &str) {
     let payload = serde_json::json!({
         "type": "status_update_bulk",
         "message_ids": ids,
-        "status": "read"
+        "status": status
     })
     .to_string();
     fan_out_user(cache, sender, payload).await;
@@ -183,14 +190,14 @@ async fn mark_delivered_on_connect(pool: &PgPool, cache: &Option<Cache>, receive
         info!(target: "ws", receiver_id, count = rows.len(), "marked messages delivered on connect");
     }
 
+    // One frame per sender, not per message: someone back online after a day
+    // can have hundreds waiting, from only a few people.
+    let mut by_sender: std::collections::BTreeMap<i32, Vec<i32>> = Default::default();
     for (message_id, sender_id) in rows {
-        let payload = serde_json::json!({
-            "type": "status_update",
-            "message_id": message_id,
-            "status": "delivered"
-        })
-        .to_string();
-        fan_out_user(cache, sender_id, payload).await;
+        by_sender.entry(sender_id).or_default().push(message_id);
+    }
+    for (sender_id, ids) in by_sender {
+        fan_out_status_bulk(cache, sender_id, &ids, "delivered").await;
     }
 }
 
