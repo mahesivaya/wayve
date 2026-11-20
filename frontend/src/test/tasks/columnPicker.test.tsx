@@ -81,11 +81,11 @@ describe("list-view Columns menu", () => {
       .map((box) => box.closest("label")?.textContent);
     // Personal task board: no ticket-only or team-only columns.
     expect(labels).toEqual([
-      "Created",
       "Key",
       "Project",
       "Priority",
       "Status",
+      "Created",
       "Updated",
       "Description",
     ]);

@@ -105,7 +105,7 @@ export type TableColumnKey =
   | "project"
   | "assignee"
   | "reviewer"
-  | "assigned_by"
+  | "reporter"
   | "priority"
   | "status"
   | "related"
@@ -122,7 +122,6 @@ type TableColumn = {
 };
 
 const TABLE_COLUMNS: TableColumn[] = [
-  { key: "created", label: "Created", width: "124px", defaultOn: true },
   // Wide enough for the copy-link icon and a key such as "SAM004".
   { key: "key", label: "Key", width: "116px", defaultOn: false },
   {
@@ -141,14 +140,12 @@ const TABLE_COLUMNS: TableColumn[] = [
     defaultOn: true,
   },
   { key: "project", label: "Project", width: "160px", defaultOn: false },
+  // Who created the task (its `assigned_by`, set automatically on create).
+  // Keyed "reporter" rather than the old hidden-by-default "assigned_by"
+  // column, so it shows for everyone, including boards with saved choices.
+  { key: "reporter", label: "Reporter", width: "176px", defaultOn: true },
   { key: "assignee", label: "Assignee", width: "176px", defaultOn: true },
   { key: "reviewer", label: "Reviewer", width: "176px", defaultOn: true },
-  {
-    key: "assigned_by",
-    label: "Assigned by",
-    width: "176px",
-    defaultOn: false,
-  },
   {
     key: "priority",
     label: "Priority",
@@ -163,6 +160,7 @@ const TABLE_COLUMNS: TableColumn[] = [
     narrow: "150px",
     defaultOn: true,
   },
+  { key: "created", label: "Created", width: "124px", defaultOn: true },
   { key: "related", label: "Related", width: "150px", defaultOn: false },
   { key: "updated", label: "Updated", width: "124px", defaultOn: false },
   {
@@ -2006,7 +2004,7 @@ export default function Tasks({
       case "related":
         return config.storageKey === "tickets";
       case "assignee":
-      case "assigned_by":
+      case "reporter":
         return showAssignee;
       case "reviewer":
         return showAssignee && !!config.features.reviewer;
@@ -2520,7 +2518,7 @@ export default function Tasks({
             {personPicker(task, "reviewer")}
           </div>
         );
-      case "assigned_by":
+      case "reporter":
         return (
           <div key={key} className={`${cls} task-tcell--person`}>
             {personCell(personInfo(task.assigned_by, null), "—")}
