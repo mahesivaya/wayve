@@ -414,29 +414,115 @@ describe("an existing note", () => {
     );
   });
 
-  it("doesn't overwrite what's typed while the saved copy is still loading", async () => {
+  // A getNote for `id` that waits until the returned function is called.
+  const holdGetNote = (rows: Saved[], id: number) => {
+    let finish: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    api.getNote.mockImplementation(async (wanted: number) => {
+      if (wanted === id) await gate;
+      return rows.find((row) => row.id === wanted) ?? null;
+    });
+    return () => finish();
+  };
+
+  it("keeps a restored note read-only until its saved copy arrives", async () => {
     setStore([saved(5, "Old", "Old body")]);
     await openExisting();
-    cleanup();
-    let finish: (row: Saved) => void = () => {};
-    api.getNote.mockReturnValue(
-      new Promise((resolve) => {
-        finish = resolve;
-      })
-    );
+    const rows = [saved(5, "Old", "Changed elsewhere")];
+    const finish = holdGetNote(rows, 5);
+    await leaveAndReturn();
+    // Nothing can be typed over a copy that hasn't arrived.
+    expect(screen.getByText("Loading…")).toBeTruthy();
+    expect(screen.queryByPlaceholderText("Start writing…")).toBeNull();
+    expect(titleField().readOnly).toBe(true);
+    finish();
+    await waitFor(() => expect(bodyField().value).toBe("Changed elsewhere"));
+    expect(titleField().readOnly).toBe(false);
+    expect(api.updateNoteApi).not.toHaveBeenCalled();
+  });
+
+  it("doesn't save over a note that was left while it was still opening", async () => {
+    const rows = [saved(5, "Old", "The real text")];
+    setStore(rows);
+    const finish = holdGetNote(rows, 5);
     render(<Notes />);
-    type(bodyField(), "Typed fast");
-    await waitFor(() => expect(api.getNote).toHaveBeenCalledTimes(2));
-    finish(saved(5, "Old", "Changed elsewhere"));
+    fireEvent.click(await screen.findByRole("button", { name: /^Edit/ }));
+    await screen.findByText("Loading…");
+    // Left before the text arrived: the session holds no text for it.
+    expect(readOpenNote(1)?.content).toBe("");
+    await leaveAndReturn();
+    expect(screen.getByText("Loading…")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Edit note text" })).toBeNull();
+    finish();
+    await screen.findByText("The real text");
+    fireEvent.click(screen.getByRole("button", { name: "Edit note text" }));
+    expect(bodyField().value).toBe("The real text");
+    expect(api.updateNoteApi).not.toHaveBeenCalled();
+  });
+
+  it("lets another note open while a restore is pending, and keeps it", async () => {
+    const rows = [saved(5, "Five", "Five body"), saved(6, "Six", "Six body")];
+    setStore(rows);
+    render(<Notes />);
+    await open(await screen.findByRole("button", { name: /^Edit Five/ }));
+    const finish = holdGetNote(rows, 5);
+    await leaveAndReturn();
+    await open(await screen.findByRole("button", { name: /^Edit Six/ }));
+    // The restore of note 5 lands late and must not take over note 6.
+    finish();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await screen.findByText("Six body");
+    fireEvent.click(screen.getByRole("button", { name: "Edit note text" }));
+    type(bodyField(), "Edited six");
+    await waitFor(
+      () =>
+        expect(api.updateNoteApi).toHaveBeenCalledWith(6, {
+          title: "Six",
+          content: "Edited six",
+        }),
+      { timeout: 2000 }
+    );
+    expect(api.updateNoteApi).not.toHaveBeenCalledWith(5, expect.anything());
+  });
+
+  it("retries a restore that fails, then opens the note", async () => {
+    const rows = [saved(5, "Old", "Old body")];
+    setStore(rows);
+    await openToRead();
+    api.getNote.mockRejectedValueOnce(new Error("backend restarting"));
+    await leaveAndReturn();
+    expect(
+      await screen.findByText("Couldn't open the note. Retrying…")
+    ).toBeTruthy();
+    expect(screen.getByText("Loading…")).toBeTruthy();
+    await screen.findByText("Old body", undefined, { timeout: 3000 });
+  });
+
+  it("keeps restored edits open until they can be saved", async () => {
+    const rows = [saved(5, "Old", "Old body")];
+    setStore(rows);
+    api.updateNoteApi.mockRejectedValue(new Error("down"));
+    await openExisting();
+    type(bodyField(), "Unsaved edit");
+    await waitFor(() => expect(readOpenNote(1)?.edited).toBe(true));
+    api.updateNoteApi.mockResolvedValue(saved(5, "Old", "Unsaved edit"));
+    const finish = holdGetNote(rows, 5);
+    await leaveAndReturn();
+    // Closing now would drop the edit: it can't be saved before the copy lands.
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(await screen.findByText("Still opening this note…")).toBeTruthy();
+    expect(titleField()).toBeTruthy();
+    finish();
     await waitFor(
       () =>
         expect(api.updateNoteApi).toHaveBeenCalledWith(5, {
           title: "Old",
-          content: "Typed fast",
+          content: "Unsaved edit",
         }),
       { timeout: 2000 }
     );
-    expect(bodyField().value).toBe("Typed fast");
   });
 
   it("turns edits into a new note if it was deleted elsewhere", async () => {
