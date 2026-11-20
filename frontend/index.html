@@ -8,6 +8,10 @@
     <link rel="icon" type="image/png" href="/brand/fluxze-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Hadal</title>
+    <meta
+      name="description"
+      content="Hadal is an end-to-end encrypted workspace that brings email (Gmail and Outlook), chat, calendar, tasks, notes and files together in one place."
+    />
 
     <!--
       Editorial font pair for the marketing surfaces (`.public-home`).
@@ -48,7 +52,24 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <!--
+      Pre-render content: what non-JS crawlers (incl. Google's OAuth branding
+      check, which needs the app name, a description and a privacy-policy link
+      on the home page) see. React replaces it on mount.
+    -->
+    <div id="root">
+      <main style="max-width: 640px; margin: 15vh auto; padding: 0 16px; font-family: system-ui, sans-serif; color: #6b7280; text-align: center">
+        <h1 style="font-size: 20px; color: inherit">Hadal</h1>
+        <p>
+          An end-to-end encrypted workspace: email (Gmail and Outlook), chat,
+          calendar, tasks, notes and files in one place.
+        </p>
+        <p>
+          <a href="/privacy">Privacy Policy</a> ·
+          <a href="mailto:mahesh@hadalspace.com">Contact</a>
+        </p>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
