@@ -76,7 +76,7 @@ describe("Platform pages in the settings menu", () => {
   };
 
   it("lists every Platform page under Administration on Settings", () => {
-    renderAt("/settings");
+    renderAt("/settings/general");
     expect(administrationLabels()).toEqual([
       "Teams",
       "Projects",
@@ -121,7 +121,7 @@ describe("Platform pages in the settings menu", () => {
       scope: "organization",
       effective_role: "owner",
     };
-    renderAt("/settings");
+    renderAt("/settings/general");
     expect(administrationLabels()).not.toContain("Members & roles");
     expect(screen.queryByRole("link", { name: "Secrets" })).toBeNull();
   });
@@ -167,7 +167,7 @@ describe("Organization pages in the settings menu", () => {
   };
 
   it("lists them under Administration on Settings", () => {
-    renderAt("/settings");
+    renderAt("/settings/general");
     expect(administrationLabels()).toEqual(
       expect.arrayContaining([
         "App Logs",
@@ -202,7 +202,7 @@ describe("Organization pages in the settings menu", () => {
 
   it("gives a member who is not the owner none of them", () => {
     authState.user = { ...ORG_OWNER, effective_role: "member" };
-    renderAt("/settings");
+    renderAt("/settings/general");
     expect(administrationLabels()).not.toContain("Audit Logs");
   });
 });

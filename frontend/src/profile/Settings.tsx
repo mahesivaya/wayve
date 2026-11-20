@@ -408,7 +408,7 @@ export default function Settings({
 
   // Platform users have no billing cards, so their Billing page would be empty.
   if (section === "billing" && isPlatformUser) {
-    return <Navigate to="/settings" replace />;
+    return <Navigate to="/settings/general" replace />;
   }
 
   return (

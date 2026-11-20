@@ -310,7 +310,7 @@ export default function App() {
           />
           <Route
             path="/organization/settings"
-            element={<Navigate to="/settings" replace />}
+            element={<Navigate to="/settings/general" replace />}
           />
           <Route
             path="/organization/:slug"
@@ -384,8 +384,18 @@ export default function App() {
             path="/access-requests"
             element={<Navigate to="/requests?tab=review" replace />}
           />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/settings" element={<Settings />} />
+          {/* Settings opens on the account (profile) page. The old /profile
+                URL still resolves for bookmarks and emailed links. */}
+          <Route
+            path="/settings"
+            element={<Navigate to="/settings/account" replace />}
+          />
+          <Route path="/settings/account" element={<Profile />} />
+          <Route path="/settings/general" element={<Settings />} />
+          <Route
+            path="/profile"
+            element={<Navigate to="/settings/account" replace />}
+          />
           <Route
             path="/settings/notifications"
             element={<Settings section="notifications" />}

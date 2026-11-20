@@ -59,11 +59,11 @@ describe("Account menu", () => {
     expect(screen.getByRole("menuitem", { name: "Settings" })).toBeTruthy();
   });
 
-  it("goes to Settings from the menu and closes it", () => {
+  it("opens the user's profile from Settings and closes the menu", () => {
     renderGear();
     fireEvent.click(screen.getByRole("button", { name: /account menu/i }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Settings" }));
-    expect(screen.getByTestId("where").textContent).toBe("/settings");
+    expect(screen.getByTestId("where").textContent).toBe("/settings/account");
     expect(screen.queryByRole("menu")).toBeNull();
   });
 

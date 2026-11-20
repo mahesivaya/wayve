@@ -28,7 +28,7 @@ const APP_TILES: Array<{
   { path: "/notes", icon: "📝", label: "Notes", desc: "Personal notes" },
   { path: "/tasks", icon: "☑", label: "Tasks", desc: "Your to-do list" },
   { path: "/ai-chat", icon: "✨", label: "AI Chat", desc: "Assistant" },
-  { path: "/profile", icon: "👤", label: "Profile", desc: "Account settings" },
+  { path: "/settings/account", icon: "👤", label: "Profile", desc: "Account settings" },
 ];
 
 export default function PlatformWelcome() {

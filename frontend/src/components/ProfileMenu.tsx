@@ -131,7 +131,9 @@ export default function ProfileMenu({
               role="menuitem"
               className="profile-dropdown-item"
               title="Settings"
-              onClick={() => go("/settings")}
+              // Settings opens on the account page; the settings rail it lands
+              // in has General and the rest one click away.
+              onClick={() => go("/settings/account")}
             >
               <span className="profile-dropdown-icon" aria-hidden="true">
                 <SettingsIcon size={18} />
@@ -194,7 +196,7 @@ export default function ProfileMenu({
               title="My Profile"
               onClick={() => {
                 setMenuOpen(false);
-                void navigate("/profile");
+                void navigate("/settings/account");
               }}
             >
               <span className="profile-dropdown-icon">👤</span>
@@ -207,7 +209,7 @@ export default function ProfileMenu({
             title="Settings & Privacy"
             onClick={() => {
               setMenuOpen(false);
-              void navigate("/settings");
+              void navigate("/settings/general");
             }}
           >
             <span className="profile-dropdown-icon">⚙️</span>

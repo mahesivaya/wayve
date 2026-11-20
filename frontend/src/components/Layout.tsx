@@ -2231,11 +2231,11 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     !isNarrow &&
     (location.pathname.startsWith("/settings/repositories/") ||
       [
-        "/settings",
+        "/settings/account",
+        "/settings/general",
         "/settings/notifications",
         "/settings/usage",
         "/settings/billing",
-        "/profile",
         "/integrations",
         "/appearance",
         "/settings/shortcuts",
@@ -2286,7 +2286,7 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     // General carries no icon, by request: its label sits at the left edge,
     // in line with the group headings, with Shortcuts, Repositories and
     // Developers under it.
-    { path: "/settings", label: "General", icon: null },
+    { path: "/settings/general", label: "General", icon: null },
     {
       path: "/settings/shortcuts",
       label: "Shortcuts",
@@ -2324,7 +2324,11 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
     : [];
   // Settings › Personal: the signed-in person's own profile and notifications.
   const personalLinks: SidebarLinkDef[] = [
-    { path: "/profile", label: "My Profile", icon: <PersonIcon size={18} /> },
+    {
+      path: "/settings/account",
+      label: "My Profile",
+      icon: <PersonIcon size={18} />,
+    },
     {
       path: "/settings/notifications",
       label: "Notifications",

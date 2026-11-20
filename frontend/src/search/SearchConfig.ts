@@ -13,8 +13,8 @@ export const SEARCH_LABELS: Record<string, string> = {
   "/notes": "notes",
   "/tasks": "tasks",
   "/ai-chat": "AI chat",
-  "/profile": "profile",
-  "/settings": "settings",
+  "/settings/account": "profile",
+  "/settings/general": "settings",
   "/logs/audit": "security audit logs",
 };
 
