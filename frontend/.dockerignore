@@ -7,3 +7,6 @@ Dockerfile
 docker-compose.yml
 .env*
 ios
+# Stale desktop installers (gitignored); the real ones are on S3, see
+# src/utils/desktop.ts. Keep them out of the image.
+public/download
