@@ -340,103 +340,299 @@ function TasksScreen() {
   );
 }
 
-function AIScreen() {
+/* Home is the AI chat in the real app (Home.tsx renders AIChat), so this
+   screen shows a short conversation ending in the two confirm-first actions
+   the assistant really proposes: moving a ticket and drafting an email. */
+function HomeScreen() {
   return (
     <div className="hx-mock-ai">
-      <div className="hx-mock-ai-q">Summarize my unread mail</div>
+      <div className="hx-mock-ai-q">What's on my plate today?</div>
       <div className="hx-mock-ai-a">
-        You have 3 unread: a Q3 roadmap review due Friday, GitHub PR #482 merged
-        to main, and a $4,820 Stripe payout on the way. Want me to draft
-        replies?
+        Two meetings — <b>Standup</b> at 10:00 and <b>Sprint planning</b> at
+        2:00. Emily needs your Q3 roadmap review before Friday, and{" "}
+        <b>HAD-137</b> is ready for review.
+      </div>
+      <div className="hx-mock-ai-q">
+        Move HAD-137 to Review and send Emily an update
+      </div>
+      <div className="hx-mock-ai-cards">
+        <div className="hx-mock-ai-card">
+          <div className="hx-mock-ai-card-head">
+            <span aria-hidden="true">↪️</span> Move ticket — review and confirm
+          </div>
+          <div className="hx-mock-ai-card-row">
+            <span>Ticket</span>
+            <b>HAD-137 Billing webhook retries</b>
+          </div>
+          <div className="hx-mock-ai-card-row">
+            <span>Status</span>
+            <b>In progress → Review</b>
+          </div>
+          <span className="hx-mock-ai-card-btn">Confirm move</span>
+        </div>
+        <div className="hx-mock-ai-card">
+          <div className="hx-mock-ai-card-head">
+            <span aria-hidden="true">✉️</span> Draft email — confirm to send
+          </div>
+          <div className="hx-mock-ai-card-row">
+            <span>To</span>
+            <b>Emily Carter</b>
+          </div>
+          <div className="hx-mock-ai-card-row">
+            <span>Subject</span>
+            <b>Q3 roadmap — review on track</b>
+          </div>
+          <span className="hx-mock-ai-card-btn">Confirm &amp; send</span>
+        </div>
       </div>
       <div className="hx-mock-ai-bar">
-        <span className="hx-mock-ai-input">Ask anything…</span>
+        <span className="hx-mock-ai-input">Message AI…</span>
         <span className="hx-mock-ai-send" />
       </div>
     </div>
   );
 }
 
-function HomeScreen() {
-  const meetings = [
-    { time: "10:00", title: "Daily standup", meta: "5 ppl" },
-    { time: "2:00", title: "Sprint planning", meta: "8 ppl" },
+/* Workspace: the real sidebar's Workspace group (Library, User stories,
+   Tickets, Code & reviews, Requests) beside the Tickets sprint board. */
+function WorkspaceScreen() {
+  const menu: Array<{
+    icon: string;
+    label: string;
+    badge?: number;
+    active?: boolean;
+  }> = [
+    { icon: "📄", label: "Library" },
+    { icon: "📖", label: "User stories", badge: 7 },
+    { icon: "🎫", label: "Tickets", badge: 5, active: true },
+    { icon: "</>", label: "Code & reviews" },
+    { icon: "⇄", label: "Requests" },
   ];
-  const tasks = [
-    { title: "Draft Q3 roadmap", meta: "In progress" },
-    { title: "Review PR #482", meta: "Today" },
-    { title: "Rotate API keys", meta: "To do" },
-  ];
-  const emails = [
+  type Ticket = { id: string; t: string; tag: string; who: string };
+  const columns: Array<{ name: string; color: string; cards: Ticket[] }> = [
     {
-      from: "Emily Carter",
-      subject: "Q3 roadmap — final review before Friday",
-      time: "9:24",
+      name: "To do",
+      color: "blue",
+      cards: [
+        { id: "HAD-142", t: "Export tickets to CSV", tag: "Feature", who: "M" },
+        {
+          id: "HAD-139",
+          t: "Okta SSO for enterprise",
+          tag: "Feature",
+          who: "Y",
+        },
+      ],
     },
     {
-      from: "GitHub",
-      subject: "[hadal] PR #482 merged into main",
-      time: "8:10",
+      name: "In progress",
+      color: "amber",
+      cards: [
+        { id: "HAD-137", t: "Billing webhook retries", tag: "Bug", who: "D" },
+        { id: "HAD-131", t: "Outlook calendar sync", tag: "Feature", who: "E" },
+      ],
     },
     {
-      from: "Marco Rossi",
-      subject: "Re: Q3 invoice — approved, payment sent",
-      time: "Yest",
+      name: "Review",
+      color: "purple",
+      cards: [
+        { id: "HAD-128", t: "Dark mode for docs", tag: "Design", who: "C" },
+      ],
+    },
+    {
+      name: "Done",
+      color: "green",
+      cards: [
+        { id: "HAD-120", t: "Rotate API keys", tag: "Security", who: "A" },
+        { id: "HAD-118", t: "Invite flow polish", tag: "Design", who: "H" },
+      ],
     },
   ];
   return (
-    <div className="hx-mock-home">
-      <div className="hx-mock-home-row">
-        <section className="hx-mock-block">
-          <header className="hx-mock-block-head">
-            <span className="hx-mock-block-title">Meetings</span>
-            <span className="hx-mock-block-action">Open scheduler →</span>
-          </header>
-          <ul className="hx-mock-block-list">
-            {meetings.map((m) => (
-              <li key={m.title} className="hx-mock-block-row">
-                <span className="hx-mock-row-dot" />
-                <span className="hx-mock-row-time">{m.time}</span>
-                <span className="hx-mock-row-title">{m.title}</span>
-                <span className="hx-mock-row-meta">{m.meta}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="hx-mock-block">
-          <header className="hx-mock-block-head">
-            <span className="hx-mock-block-title">Task</span>
-            <span className="hx-mock-block-action">+ Add task</span>
-          </header>
-          <ul className="hx-mock-block-list">
-            {tasks.map((t) => (
-              <li key={t.title} className="hx-mock-block-row">
-                <span className="hx-mock-row-check" />
-                <span className="hx-mock-row-title">{t.title}</span>
-                <span className="hx-mock-row-meta">{t.meta}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
-
-      <section className="hx-mock-block">
-        <header className="hx-mock-block-head">
-          <span className="hx-mock-block-title">Emails</span>
-          <span className="hx-mock-block-action">Open inbox →</span>
-        </header>
-        <ul className="hx-mock-block-list">
-          {emails.map((e) => (
-            <li key={e.subject} className="hx-mock-block-row">
-              <span className="hx-mock-row-dot is-unread" />
-              <span className="hx-mock-row-from">{e.from}</span>
-              <span className="hx-mock-row-subject">{e.subject}</span>
-              <span className="hx-mock-row-meta">{e.time}</span>
-            </li>
+    <div className="hx-mock-ws">
+      <aside className="hx-mock-ws-menu">
+        <div className="hx-mock-ws-label">Workspace</div>
+        {menu.map((m) => (
+          <div
+            key={m.label}
+            className={`hx-mock-ws-item ${m.active ? "is-active" : ""}`}
+          >
+            <span className="hx-mock-ws-ico">{m.icon}</span>
+            <span className="hx-mock-ws-name">{m.label}</span>
+            {m.badge !== undefined && (
+              <span className="hx-mock-ws-badge">{m.badge}</span>
+            )}
+          </div>
+        ))}
+      </aside>
+      <div className="hx-mock-board">
+        <div className="hx-mock-board-head">
+          <b>Tickets</b>
+          <span>Sprint 14 · 6 days left</span>
+        </div>
+        <div className="hx-mock-board-cols">
+          {columns.map((c) => (
+            <div key={c.name} className="hx-mock-board-col">
+              <div className={`hx-mock-board-colhead ${c.color}`}>
+                {c.name}
+                <span>{c.cards.length}</span>
+              </div>
+              {c.cards.map((k) => (
+                <div key={k.id} className="hx-mock-ticket">
+                  <span className="hx-mock-ticket-id">{k.id}</span>
+                  <span className="hx-mock-ticket-title">{k.t}</span>
+                  <span className="hx-mock-ticket-foot">
+                    <span className="hx-mock-tag">{k.tag}</span>
+                    <span className="hx-mock-mini-avatar">{k.who}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
           ))}
-        </ul>
-      </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TeamsScreen() {
+  const teams = [
+    { name: "Engineering", lead: "Daniel Reed", members: "DEMYA", count: 12 },
+    { name: "Design", lead: "Camille Laurent", members: "CHE", count: 5 },
+    { name: "Marketing", lead: "Emily Carter", members: "EMS", count: 6 },
+    { name: "Finance", lead: "Marco Rossi", members: "MA", count: 4 },
+    { name: "Deployment", lead: "Yuki Tanaka", members: "YDA", count: 3 },
+    { name: "Support", lead: "Aarav Sharma", members: "AHMC", count: 8 },
+  ];
+  return (
+    <div className="hx-mock-list">
+      <div className="hx-mock-list-head">
+        <b>Teams</b>
+        <span className="hx-mock-list-action">+ New team</span>
+      </div>
+      <div className="hx-mock-teams">
+        {teams.map((t) => (
+          <div key={t.name} className="hx-mock-team">
+            <span className="hx-mock-team-ico" aria-hidden="true">
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.3"
+                width="16"
+                height="16"
+              >
+                <circle cx="6" cy="5.5" r="2.3" />
+                <path d="M1.8 13c.5-2.3 2.2-3.6 4.2-3.6s3.7 1.3 4.2 3.6" />
+                <circle cx="11.3" cy="6" r="1.8" />
+                <path d="M11.2 9.5c1.6.1 2.7 1.2 3 3" />
+              </svg>
+            </span>
+            <span className="hx-mock-team-info">
+              <b>{t.name}</b>
+              <span>Lead · {t.lead}</span>
+            </span>
+            <span className="hx-mock-stack">
+              {t.members.split("").map((m, i) => (
+                <span key={i} className="hx-mock-mini-avatar">
+                  {m}
+                </span>
+              ))}
+            </span>
+            <span className="hx-mock-team-count">{t.count} members</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProjectsScreen() {
+  const projects = [
+    {
+      name: "Mobile app 3.0",
+      team: "Engineering",
+      pct: 72,
+      status: "On track",
+      tone: "green",
+      due: "Dec 12",
+    },
+    {
+      name: "Billing revamp",
+      team: "Finance",
+      pct: 48,
+      status: "At risk",
+      tone: "amber",
+      due: "Dec 3",
+    },
+    {
+      name: "Website relaunch",
+      team: "Marketing",
+      pct: 86,
+      status: "On track",
+      tone: "green",
+      due: "Nov 28",
+    },
+    {
+      name: "Design system v2",
+      team: "Design",
+      pct: 35,
+      status: "Planning",
+      tone: "blue",
+      due: "Jan 16",
+    },
+    {
+      name: "Zero-downtime deploys",
+      team: "Deployment",
+      pct: 100,
+      status: "Done",
+      tone: "purple",
+      due: "Nov 14",
+    },
+    {
+      name: "Partner API",
+      team: "Engineering",
+      pct: 60,
+      status: "On track",
+      tone: "green",
+      due: "Dec 20",
+    },
+  ];
+  return (
+    <div className="hx-mock-list">
+      <div className="hx-mock-list-head">
+        <b>Projects</b>
+        <span className="hx-mock-list-action">+ New project</span>
+      </div>
+      <div className="hx-mock-proj-cols">
+        <span>Project</span>
+        <span>Progress</span>
+        <span>Status</span>
+        <span>Due</span>
+      </div>
+      {projects.map((p) => (
+        <div key={p.name} className="hx-mock-proj">
+          <span className="hx-mock-proj-name">
+            <span className="hx-mock-proj-ico" aria-hidden="true">
+              {RepoFolderIcon}
+            </span>
+            <span>
+              <b>{p.name}</b>
+              <span>{p.team}</span>
+            </span>
+          </span>
+          <span className="hx-mock-proj-progress">
+            <span className="hx-mock-bar-track">
+              <span
+                className="hx-mock-bar-fill"
+                style={{ width: `${p.pct}%` }}
+              />
+            </span>
+            <span className="hx-mock-proj-pct">{p.pct}%</span>
+          </span>
+          <span className={`hx-mock-pill ${p.tone}`}>{p.status}</span>
+          <span className="hx-mock-proj-due">{p.due}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -634,14 +830,16 @@ runserver:
 }
 
 const TABS = [
-  { key: "Home", search: `Search ${HEADER_NAME}…`, Screen: HomeScreen },
+  { key: "Home", search: `Ask ${HEADER_NAME} AI…`, Screen: HomeScreen },
   { key: "Mail", search: "Search mail…", Screen: MailScreen },
   { key: "Chat", search: "Search chat…", Screen: ChatScreen },
   { key: "Meet", search: "Search meetings…", Screen: MeetScreen },
   { key: "Drive", search: "Search files…", Screen: DriveScreen },
   { key: "Notes", search: "Search notes…", Screen: NotesScreen },
   { key: "Tasks", search: "Search tasks…", Screen: TasksScreen },
-  { key: "AI", search: `Ask ${HEADER_NAME} AI…`, Screen: AIScreen },
+  { key: "Workspace", search: "Search tickets…", Screen: WorkspaceScreen },
+  { key: "Teams", search: "Search teams…", Screen: TeamsScreen },
+  { key: "Projects", search: "Search projects…", Screen: ProjectsScreen },
   { key: "More", search: "Go to file…", Screen: MoreScreen },
 ] as const;
 
