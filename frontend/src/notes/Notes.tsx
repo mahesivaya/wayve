@@ -647,26 +647,19 @@ export default function Notes() {
                   Loading…
                 </p>
               ) : showBodyField ? (
-                <>
-                  <textarea
-                    ref={bodyFieldRef}
-                    className="note-body-input"
-                    value={content}
-                    onChange={(event) => setContent(event.target.value)}
-                    onBlur={() => {
-                      setEditing(false);
-                      void saveNow();
-                    }}
-                    placeholder="Start writing…"
-                    aria-label="Note text"
-                    autoFocus={focusBody}
-                  />
-                  <small className="notes-format-hint">
-                    # Heading &nbsp;·&nbsp; ## Smaller heading &nbsp;·&nbsp; -
-                    Bullet (indent to nest) &nbsp;·&nbsp; 1. Numbered
-                    &nbsp;·&nbsp; **bold**
-                  </small>
-                </>
+                <textarea
+                  ref={bodyFieldRef}
+                  className="note-body-input"
+                  value={content}
+                  onChange={(event) => setContent(event.target.value)}
+                  onBlur={() => {
+                    setEditing(false);
+                    void saveNow();
+                  }}
+                  placeholder="Start writing…"
+                  aria-label="Note text"
+                  autoFocus={focusBody}
+                />
               ) : (
                 <div
                   className="note-body-view"
