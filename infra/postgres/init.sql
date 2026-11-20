@@ -993,6 +993,31 @@ CREATE TABLE IF NOT EXISTS channel_members (
 
 ALTER TABLE channel_members ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
 
+-- A channel always has fewer than 25 members (at most 24). The handlers check
+-- this first for a clear error (chat::helpers::MAX_CHANNEL_MEMBERS); this
+-- trigger is the guarantee for every other path and for concurrent adds. It
+-- locks the channel row so two inserts can't both see 23, and counts only
+-- OTHER members so re-adding an existing member (ON CONFLICT DO NOTHING) still
+-- passes. SECURITY DEFINER so RLS on the app role can't hide rows from the
+-- count. Rows that already exceed the cap are left alone; they just can't grow.
+CREATE OR REPLACE FUNCTION wayve_channel_member_cap() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+    PERFORM 1 FROM channels WHERE id = NEW.channel_id FOR NO KEY UPDATE;
+    IF (SELECT count(*) FROM channel_members
+         WHERE channel_id = NEW.channel_id AND user_id <> NEW.user_id) >= 24 THEN
+        RAISE EXCEPTION 'channel % is full: a channel can have at most 24 members',
+            NEW.channel_id
+            USING ERRCODE = 'check_violation', CONSTRAINT = 'channel_members_max_24';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE TRIGGER trg_channel_member_cap
+    BEFORE INSERT ON channel_members
+    FOR EACH ROW EXECUTE FUNCTION wayve_channel_member_cap();
+
 UPDATE channel_members cm
 SET role = 'admin'
 FROM channels c

@@ -18,6 +18,7 @@ mod channel_admin_test;
 mod channel_delete_test;
 mod channel_fanout_test;
 mod channel_link_test;
+mod channel_member_cap_test;
 mod channel_scope_test;
 mod chat_logging_test;
 mod chat_multi_session_test;

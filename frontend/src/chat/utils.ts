@@ -18,6 +18,18 @@ export const parseEmails = (value: string) =>
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean);
 
+// A channel always has fewer than 25 members. The server enforces it (handlers
+// plus a database trigger); this mirror only lets the UI say so before a
+// request. Keep in step with MAX_CHANNEL_MEMBERS in chat/helpers.rs.
+export const MAX_CHANNEL_MEMBERS = 24;
+export const CHANNEL_FULL_MESSAGE = `A channel can have at most ${MAX_CHANNEL_MEMBERS} members.`;
+
+// Whether the channel has no seat left. Only the server can tell which invite
+// emails belong to registered users (those become members; the rest become
+// pending invites), so a partial add near the cap is left to it.
+export const isChannelFull = (channel: Pick<ChatChannel, "member_emails">) =>
+  channel.member_emails.length >= MAX_CHANNEL_MEMBERS;
+
 export const formatTime = (dateStr: string) => {
   const d = new Date(dateStr);
   return Number.isNaN(d.getTime())

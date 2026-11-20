@@ -4,8 +4,8 @@ use wayve_security::rbac::resolve_role_context_moded;
 
 use super::dto::{AddChannelUsersInput, RemoveChannelUserInput, SetChannelMemberRoleInput};
 use super::helpers::{
-    can_manage_channel, lock_channel, normalize_channel_role, normalize_invite_emails,
-    strands_channel,
+    can_manage_channel, channel_full, lock_channel, normalize_channel_role,
+    normalize_invite_emails, strands_channel, would_exceed_member_cap,
 };
 
 use actix_web::{delete, patch};
@@ -68,6 +68,12 @@ pub async fn add_channel_users(
         .into_iter()
         .map(|row| (row.get::<i32, _>("id"), row.get::<String, _>("email")))
         .collect::<Vec<_>>();
+
+    // All or nothing: a batch that would overfill the channel adds no one.
+    let new_ids: Vec<i32> = invited_users.iter().map(|(id, _)| *id).collect();
+    if would_exceed_member_cap(&mut tx, channel_id, &new_ids).await? {
+        return Ok(channel_full());
+    }
 
     for (member_id, email) in &invited_users {
         // Adding never changes an existing member's role: re-adding an admin
