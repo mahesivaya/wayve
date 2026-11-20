@@ -85,7 +85,9 @@ export default function ProfileMenu({
   const inSidebar = placement === "sidebar";
 
   // The account row shows the username when there is one, else the email.
-  const displayName = user.username?.trim() || user.email;
+  // Only the part before "@": OAuth sign-ups store the full email as the
+  // username too. The full address stays in the trigger's tooltip.
+  const displayName = (user.username?.trim() || user.email).split("@")[0];
 
   const go = (path: string) => {
     setMenuOpen(false);
@@ -185,7 +187,7 @@ export default function ProfileMenu({
             size={inSidebar ? 22 : 30}
           />
         </AvatarWithStatus>
-        {inSidebar && <span className="sidebar-label">{user.email}</span>}
+        {inSidebar && <span className="sidebar-label">{displayName}</span>}
       </button>
 
       {menuOpen && (

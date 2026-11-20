@@ -117,13 +117,21 @@ describe("row checkboxes on the User Stories list", () => {
 });
 
 describe("the personal Tasks list", () => {
-  it("has no row checkboxes", async () => {
+  it("has row checkboxes and a select-all in the header", async () => {
     render(
       <MemoryRouter>
         <Tasks />
       </MemoryRouter>
     );
     await screen.findByText("Task one");
-    expect(screen.queryByRole("checkbox", { name: /^Select / })).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all tasks" }));
+    expect(screen.getByText(/1 selected/)).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("checkbox", {
+          name: "Select Task one",
+        }) as HTMLInputElement
+      ).checked
+    ).toBe(true);
   });
 });

@@ -264,11 +264,6 @@
   margin-bottom: 4px;
 }
 
-.notes-format-hint {
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-
 /* Title and body edit in place: same type and position as the text they
    replace, with no box around them. */
 .note-read .note-title-input {
