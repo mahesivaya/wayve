@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getJiraConnection } from "../api/jira";
 import { useAuth } from "../auth/useAuth";
@@ -17,6 +17,13 @@ import {
 import SettingsShell from "../profile/SettingsShell";
 import { useIntegrationConnections } from "./useIntegrationConnections";
 import "./integrations.css";
+
+// Bring a service's open panel into view.
+function scrollToPanel(key: IntegrationKey) {
+  document
+    .getElementById(`integration-panel-${key}`)
+    ?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+}
 
 type Status = "enabled" | "available" | "soon" | "enterprise";
 
@@ -59,6 +66,29 @@ export default function Integrations() {
   const [showFigma, setShowFigma] = useState(false);
   const [showGitlab, setShowGitlab] = useState(false);
   const [showGmail, setShowGmail] = useState(false);
+  // The panel just opened, scrolled into view once it renders: panels sit below
+  // the tiles and the MCP card, so on most screens one would open out of sight
+  // and the click would look like it did nothing. `n` repeats a reopen.
+  const [opened, setOpened] = useState<{
+    key: IntegrationKey;
+    n: number;
+  } | null>(null);
+  useEffect(() => {
+    if (opened) scrollToPanel(opened.key);
+  }, [opened]);
+  const reveal = (key: IntegrationKey) =>
+    setOpened((prev) => ({ key, n: (prev?.n ?? 0) + 1 }));
+  // A tile toggles its panel, and brings it into view when opening it.
+  const toggle =
+    (
+      key: IntegrationKey,
+      shown: boolean,
+      set: Dispatch<SetStateAction<boolean>>
+    ) =>
+    () => {
+      set(!shown);
+      if (!shown) reveal(key);
+    };
 
   // A link to /integrations?service=<key> lands with that panel already open
   // instead of on a wall of tiles. Panels are independent toggles, so this only ever opens one
@@ -75,7 +105,17 @@ export default function Integrations() {
       figma: () => setShowFigma(true),
       mcp: () => setShowMcp(true),
     };
-    if (requestedService) openers[requestedService as IntegrationKey]?.();
+    const opener = requestedService
+      ? openers[requestedService as IntegrationKey]
+      : undefined;
+    if (!opener) return;
+    opener();
+    // Once the panel has rendered.
+    const timer = window.setTimeout(
+      () => scrollToPanel(requestedService as IntegrationKey),
+      0
+    );
+    return () => window.clearTimeout(timer);
   }, [requestedService]);
 
   // Per-service copy and behaviour. The name, icon, order, and who may see a
@@ -89,19 +129,19 @@ export default function Integrations() {
       description:
         "Connect your Gmail with OAuth to read, send, and manage all your email from the Fluxze inbox.",
       status: gmailConnected ? "enabled" : "available",
-      onClick: () => setShowGmail((v) => !v),
+      onClick: toggle("gmail", showGmail, setShowGmail),
     },
     jira: {
       description:
         "Sync Jira issues into Tasks and get real-time updates from Jira via webhook.",
       status: jiraConnected ? "enabled" : "available",
-      onClick: () => setShowJira((v) => !v),
+      onClick: toggle("jira", showJira, setShowJira),
     },
     github: {
       description:
         "Browse repositories, commits, diffs, and CI runs from your linked projects.",
       status: githubConnected ? "enabled" : "available",
-      onClick: () => setShowGithub((v) => !v),
+      onClick: toggle("github", showGithub, setShowGithub),
     },
     slack: {
       description: isEnterprise
@@ -112,25 +152,27 @@ export default function Integrations() {
           ? "enabled"
           : "available"
         : "enterprise",
-      onClick: isEnterprise ? () => setShowSlack((v) => !v) : undefined,
+      onClick: isEnterprise
+        ? toggle("slack", showSlack, setShowSlack)
+        : undefined,
     },
     gitlab: {
       description:
         "Connect GitLab (cloud or self-hosted) and import your assigned issues into Tasks.",
       status: gitlabConnected ? "enabled" : "available",
-      onClick: () => setShowGitlab((v) => !v),
+      onClick: toggle("gitlab", showGitlab, setShowGitlab),
     },
     figma: {
       description:
         "Attach designs to tickets and user stories \u2014 paste a Figma link and it shows as a titled, thumbnailed reference.",
       status: figmaConnected ? "enabled" : "available",
-      onClick: () => setShowFigma((v) => !v),
+      onClick: toggle("figma", showFigma, setShowFigma),
     },
     mcp: {
       description:
         "Connect your own MCP server so the AI can read your systems (e.g. your database) through tools you control.",
       status: mcpConnected ? "enabled" : "available",
-      onClick: () => setShowMcp((v) => !v),
+      onClick: toggle("mcp", showMcp, setShowMcp),
     },
   };
 
@@ -227,7 +269,10 @@ export default function Integrations() {
             <button
               type="button"
               className="integrations-info-btn"
-              onClick={() => setShowMcp(true)}
+              onClick={() => {
+                setShowMcp(true);
+                reveal("mcp");
+              }}
             >
               Connect an MCP server
             </button>
@@ -240,14 +285,14 @@ export default function Integrations() {
       </section>
 
       {canConnectMailbox && showGmail && (
-        <section className="settings-card">
+        <section className="settings-card" id="integration-panel-gmail">
           <h2 className="settings-card-title">Gmail</h2>
           <GmailPanel onChange={(value) => setConnected("gmail", value)} />
         </section>
       )}
 
       {showJira && (
-        <section className="settings-card">
+        <section className="settings-card" id="integration-panel-jira">
           <h2 className="settings-card-title">Jira</h2>
           <JiraPanel
             onImported={() =>
@@ -260,35 +305,35 @@ export default function Integrations() {
       )}
 
       {showGithub && (
-        <section className="settings-card">
+        <section className="settings-card" id="integration-panel-github">
           <h2 className="settings-card-title">GitHub</h2>
           <GitHubPanel onChange={(value) => setConnected("github", value)} />
         </section>
       )}
 
       {isEnterprise && showSlack && (
-        <section className="settings-card">
+        <section className="settings-card" id="integration-panel-slack">
           <h2 className="settings-card-title">Slack</h2>
           <SlackPanel />
         </section>
       )}
 
       {showFigma && (
-        <section className="settings-card">
+        <section className="settings-card" id="integration-panel-figma">
           <h2 className="settings-card-title">Figma</h2>
           <FigmaPanel />
         </section>
       )}
 
       {canManageMcp && showMcp && (
-        <section className="settings-card">
+        <section className="settings-card" id="integration-panel-mcp">
           <h2 className="settings-card-title">Connect MCP</h2>
           <McpPanel />
         </section>
       )}
 
       {showGitlab && (
-        <section className="settings-card">
+        <section className="settings-card" id="integration-panel-gitlab">
           <h2 className="settings-card-title">GitLab</h2>
           <GitLabPanel />
         </section>
