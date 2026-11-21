@@ -78,7 +78,7 @@ describe("an organization", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     renderPanel();
 
-    expect(await screen.findByText("acme")).toBeTruthy();
+    expect(await screen.findByText("@acme")).toBeTruthy();
     expect(
       screen
         .getByRole("link", { name: "Choose repositories" })
@@ -95,7 +95,9 @@ describe("an organization", () => {
     renderPanel();
 
     expect(
-      await screen.findByText(/Ask your organization's owner/)
+      await screen.findByText(
+        /Only your organization's owner can connect GitHub/
+      )
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Connect GitHub" })).toBeNull();
   });
@@ -110,7 +112,7 @@ describe("an organization", () => {
 
     expect(
       await screen.findByText(
-        "Connecting GitHub isn't set up on this server yet."
+        /Connecting GitHub isn't set up on this server yet/
       )
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Connect GitHub" })).toBeNull();
