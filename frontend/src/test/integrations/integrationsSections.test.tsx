@@ -73,27 +73,34 @@ it("puts connected services in a card above the rest", async () => {
   expect(card(otherHeading).queryByText("Jira")).toBeNull();
 });
 
-it("opens a service's panel and scrolls to it, since panels sit below the tiles", async () => {
-  const scrolled: string[] = [];
-  const original = Element.prototype.scrollIntoView;
-  Element.prototype.scrollIntoView = function (this: Element) {
-    scrolled.push(this.id);
-  };
-  try {
-    const { default: Integrations } =
-      await import("../../integrations/Integrations");
-    render(
-      <MemoryRouter>
-        <Integrations />
-      </MemoryRouter>
-    );
+it("opens a service in a dialog over the tiles, and closes it", async () => {
+  const { default: Integrations } =
+    await import("../../integrations/Integrations");
+  render(
+    <MemoryRouter>
+      <Integrations />
+    </MemoryRouter>
+  );
 
-    await userEvent.click(
-      await screen.findByRole("button", { name: /GitLab/ })
-    );
-    expect(await screen.findByRole("heading", { name: "GitLab" })).toBeTruthy();
-    expect(scrolled).toContain("integration-panel-gitlab");
-  } finally {
-    Element.prototype.scrollIntoView = original;
-  }
+  await userEvent.click(await screen.findByRole("button", { name: /GitLab/ }));
+  const dialog = await screen.findByRole("dialog");
+  expect(within(dialog).getByRole("heading", { name: "GitLab" })).toBeTruthy();
+
+  await userEvent.click(
+    within(dialog).getByRole("button", { name: "Close modal" })
+  );
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+it("opens the service a link names", async () => {
+  const { default: Integrations } =
+    await import("../../integrations/Integrations");
+  render(
+    <MemoryRouter initialEntries={["/integrations?service=github"]}>
+      <Integrations />
+    </MemoryRouter>
+  );
+
+  const dialog = await screen.findByRole("dialog");
+  expect(within(dialog).getByRole("heading", { name: "GitHub" })).toBeTruthy();
 });
