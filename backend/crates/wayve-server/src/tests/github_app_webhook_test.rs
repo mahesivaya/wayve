@@ -44,6 +44,17 @@ mod tests {
         id
     }
 
+    async fn platform_user(pool: &PgPool, role: &str) -> i32 {
+        let id = insert_local_user(pool, &random_email(), "password123").await;
+        sqlx::query("INSERT INTO platform_members (user_id, role) VALUES ($1, $2)")
+            .bind(id)
+            .bind(role)
+            .execute(pool)
+            .await
+            .unwrap_or_else(|e| panic!("platform member: {e}"));
+        id
+    }
+
     async fn exec(pool: &PgPool, sql: &str, org_id: i32, text: &str) {
         sqlx::query(sql)
             .bind(org_id)
@@ -65,6 +76,8 @@ mod tests {
         let owner = org_user(&pool, org, "owner").await;
         let granted = org_user(&pool, org, "member").await;
         let plain = org_user(&pool, org, "member").await;
+        let platform_owner = platform_user(&pool, "owner").await;
+        let platform_plain = platform_user(&pool, "member").await;
         let (gh_owner, gh_repo) = repo.split_once('/').unwrap_or_default();
         sqlx::query(
             "INSERT INTO projects (organization_id, name, github_owner, github_repo) VALUES ($1, 'api', $2, $3)",
@@ -90,20 +103,37 @@ mod tests {
         )
         .await;
 
-        // Only the owner and the member granted the repo hear about it.
-        let mut to = crate::github_app_webhook::recipients(&pool, org, &repo.to_uppercase())
-            .await
-            .unwrap_or_else(|e| panic!("recipients: {e}"));
-        to.sort_unstable();
-        let mut expected = vec![owner, granted];
+        // Among this test's users (the database may hold other platform staff):
+        let ours = [owner, granted, plain, platform_owner, platform_plain];
+        let heard = |all: Vec<i32>| {
+            let mut mine: Vec<i32> = all.into_iter().filter(|id| ours.contains(id)).collect();
+            mine.sort_unstable();
+            mine
+        };
+        // The org's owner, the member granted the repo, and platform staff who
+        // can open any repo; not a plain member of either.
+        let to = heard(
+            crate::github_app_webhook::recipients(&pool, Some(org), &repo.to_uppercase())
+                .await
+                .unwrap_or_else(|e| panic!("recipients: {e}")),
+        );
+        let mut expected = vec![owner, granted, platform_owner];
         expected.sort_unstable();
         assert_eq!(to, expected);
-        assert!(!to.contains(&plain));
-        // Nobody, for a repo the organization never added.
-        let none = crate::github_app_webhook::recipients(&pool, org, "acme/other")
-            .await
-            .unwrap_or_else(|e| panic!("recipients: {e}"));
-        assert!(none.is_empty());
+        // A repo the organization never added: only platform staff.
+        let other = heard(
+            crate::github_app_webhook::recipients(&pool, Some(org), "acme/other")
+                .await
+                .unwrap_or_else(|e| panic!("recipients: {e}")),
+        );
+        assert_eq!(other, vec![platform_owner]);
+        // An installation no organization connected: still platform staff.
+        let unlinked = heard(
+            crate::github_app_webhook::recipients(&pool, None, &repo)
+                .await
+                .unwrap_or_else(|e| panic!("recipients: {e}")),
+        );
+        assert_eq!(unlinked, vec![platform_owner]);
 
         let app = actix_test::init_service(
             App::new()
@@ -174,7 +204,7 @@ mod tests {
 
         // SAFETY: serialized via #[serial].
         unsafe { std::env::remove_var("GITHUB_APP_WEBHOOK_SECRET") };
-        for id in [owner, granted, plain] {
+        for id in [owner, granted, plain, platform_owner, platform_plain] {
             let _ = sqlx::query("DELETE FROM users WHERE id = $1")
                 .bind(id)
                 .execute(&pool)
