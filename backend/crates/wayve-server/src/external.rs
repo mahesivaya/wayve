@@ -39,6 +39,11 @@ pub fn github_api_base() -> String {
     std::env::var("GITHUB_API_BASE").unwrap_or_else(|_| "https://api.github.com".to_string())
 }
 
+/// github.com itself, where the browser goes to install the GitHub App.
+pub fn github_web_base() -> String {
+    std::env::var("GITHUB_WEB_BASE").unwrap_or_else(|_| "https://github.com".to_string())
+}
+
 /// The browser redirect target for the GitHub OAuth consent screen.
 pub fn github_oauth_authorize_url() -> String {
     std::env::var("GITHUB_OAUTH_AUTHORIZE_URL")

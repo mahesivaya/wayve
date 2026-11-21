@@ -51,12 +51,30 @@ fn user_cache_key(user_id: i32, key: &str) -> String {
     format!("user:{user_id}:{key}")
 }
 
-/// The GitHub path part of a cache key, without any `user:<id>:` scope.
+/// Likewise for a response fetched with an organization's GitHub App
+/// installation token: it holds that organization's private code, so it is
+/// cached for that organization alone.
+fn org_cache_key(org_id: i32, key: &str) -> String {
+    format!("org:{org_id}:{key}")
+}
+
+/// The GitHub path part of a cache key, without any `user:<id>:` or
+/// `org:<id>:` scope.
 fn unscoped_key(key: &str) -> &str {
     key.strip_prefix("user:")
+        .or_else(|| key.strip_prefix("org:"))
         .and_then(|rest| rest.split_once(':'))
-        .filter(|(user_id, _)| !user_id.is_empty() && user_id.bytes().all(|b| b.is_ascii_digit()))
+        .filter(|(id, _)| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()))
         .map_or(key, |(_, path)| path)
+}
+
+/// Forget everything cached for one organization, after its GitHub connection
+/// changes, so the next read uses the new installation (or none).
+pub(crate) async fn invalidate_org_cache(org_id: i32) {
+    let prefix = format!("org:{org_id}:");
+    GITHUB_CACHE
+        .invalidate_where(|key| key.starts_with(&prefix))
+        .await;
 }
 
 /// Whether a cache key is `prefix` itself or sits under it (`prefix/...` or
@@ -115,15 +133,29 @@ fn token() -> Option<String> {
 }
 
 /// The GitHub token to act as for a request. Personal-scope callers who connected
-/// their own GitHub act as themselves; everyone else uses the shared server PAT.
-/// The single branch point for the per-user feature.
+/// their own GitHub act as themselves, and members of an organization that
+/// installed the GitHub App act as that installation; everyone else uses the
+/// shared server PAT. The single branch point for both features.
 pub(crate) async fn effective_github_token(req: &HttpRequest, pool: &PgPool) -> Option<String> {
     if let Some(user_id) = get_user_id_from_request(req)
         && let Ok(ctx) = resolve_role_context_moded(req, pool, user_id).await
-        && ctx.scope == Scope::Personal
-        && let Some(user_token) = crate::github_oauth::stored_token_for(pool, user_id).await
     {
-        return Some(user_token);
+        match ctx.scope {
+            Scope::Personal => {
+                if let Some(user_token) = crate::github_oauth::stored_token_for(pool, user_id).await
+                {
+                    return Some(user_token);
+                }
+            }
+            Scope::Organization => {
+                if let Some(org_id) = ctx.organization_id
+                    && let Some(app_token) = crate::github_app::org_token(pool, org_id).await
+                {
+                    return Some(app_token);
+                }
+            }
+            Scope::Platform => {}
+        }
     }
     token()
 }
@@ -245,6 +277,14 @@ pub(crate) async fn write_github_token(
                 }))
             });
     }
+    // An organization that connected GitHub writes as its installation, which
+    // can reach its private repos (and only what the App was allowed to do).
+    if ctx.scope == Scope::Organization
+        && let Some(org_id) = ctx.organization_id
+        && let Some(app_token) = crate::github_app::org_token(pool, org_id).await
+    {
+        return Ok(app_token);
+    }
     token().ok_or_else(|| {
         warn!(target: "http", "github write denied: GITHUB_TOKEN not configured");
         HttpResponse::ServiceUnavailable().json(serde_json::json!({
@@ -277,6 +317,89 @@ pub async fn list_repos(bearer: Option<&str>) -> Result<Vec<serde_json::Value>, 
         .json::<Vec<serde_json::Value>>()
         .await
         .map_err(|_| ())
+}
+
+/// GitHub's view of one repo, as `bearer`. `None` on any failure.
+async fn fetch_repo(bearer: Option<&str>, owner: &str, repo: &str) -> Option<serde_json::Value> {
+    let url = format!(
+        "{}/repos/{owner}/{repo}",
+        crate::external::github_api_base()
+    );
+    let mut builder = HTTP_CLIENT
+        .get(&url)
+        .timeout(Duration::from_secs(15))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .header("User-Agent", "rwayve-app");
+    if let Some(pat) = bearer {
+        builder = builder.header("Authorization", format!("Bearer {pat}"));
+    }
+    let response = builder.send().await.ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    response.json().await.ok()
+}
+
+/// The repos linked to an organization's projects, in GitHub's repo shape. Each
+/// comes from the organization's GitHub App installation when it shared that
+/// repo, else from GitHub as a public repo, else as a bare name so the project
+/// still shows when GitHub can't be reached.
+async fn org_linked_repos(
+    pool: &PgPool,
+    org_id: i32,
+) -> Result<Vec<serde_json::Value>, sqlx::Error> {
+    let linked = sqlx::query_as::<_, (String, String)>(
+        "SELECT DISTINCT ON (LOWER(github_owner), LOWER(github_repo)) github_owner, github_repo
+           FROM projects
+          WHERE organization_id = $1 AND github_owner IS NOT NULL AND github_repo IS NOT NULL
+          ORDER BY LOWER(github_owner), LOWER(github_repo), created_at DESC",
+    )
+    .bind(org_id)
+    .fetch_all(pool)
+    .await?;
+    if linked.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let app_token = crate::github_app::org_token(pool, org_id).await;
+    let mut shared_by_app: std::collections::HashMap<String, serde_json::Value> = match &app_token {
+        Some(app_token) => crate::github_app::list_installation_repos(app_token)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|r| {
+                let name = r.get("full_name")?.as_str()?.to_lowercase();
+                Some((name, r))
+            })
+            .collect(),
+        None => std::collections::HashMap::new(),
+    };
+
+    let shared_token = token();
+    let mut repos = Vec::with_capacity(linked.len());
+    for (owner, repo) in linked {
+        let full_name = format!("{owner}/{repo}");
+        if let Some(found) = shared_by_app.remove(&full_name.to_lowercase()) {
+            repos.push(found);
+            continue;
+        }
+        let public = fetch_repo(shared_token.as_deref(), &owner, &repo)
+            .await
+            .filter(|r| !r.get("private").and_then(|p| p.as_bool()).unwrap_or(true));
+        repos.push(public.unwrap_or_else(|| {
+            serde_json::json!({
+                "full_name": full_name,
+                "name": repo,
+                "owner": { "login": owner },
+                "html_url": format!("https://github.com/{owner}/{repo}"),
+                "description": null,
+                "private": false,
+                "language": null,
+            })
+        }));
+    }
+    Ok(repos)
 }
 
 /// Extract `(owner, repo)` from a `repos/{owner}/{repo}[/...]` proxy tail. `None`
@@ -577,15 +700,26 @@ pub async fn github_proxy(
     // their private repos open; their responses are cached under their own key
     // so another platform user can't be served them.
     let platform_user = platform_owner_github_token(&req, pool.get_ref()).await;
+    // Likewise an organization that installed the GitHub App reads as that
+    // installation, cached under the organization's own key.
+    let org_app = match platform_user {
+        Some(_) => None,
+        None => crate::github_app::org_token_for_request(&req, pool.get_ref()).await,
+    };
 
     // JSON only: diff/patch responses are large and rarely re-fetched, so caching
     // them would evict hot JSON from the bounded LRU.
     let cache_enabled = media_override.is_none();
     let shared_key = cache_key(&tail, query);
-    let key = match &platform_user {
-        Some((user_id, _)) => user_cache_key(*user_id, &shared_key),
-        None => shared_key,
+    let key = match (&platform_user, &org_app) {
+        (Some((user_id, _)), _) => user_cache_key(*user_id, &shared_key),
+        (None, Some((org_id, _))) => org_cache_key(*org_id, &shared_key),
+        (None, None) => shared_key,
     };
+    let own_token = platform_user
+        .as_ref()
+        .map(|(_, token)| token)
+        .or(org_app.as_ref().map(|(_, token)| token));
 
     if cache_enabled && let Some(cached) = GITHUB_CACHE.get(&key).await {
         let mut builder = HttpResponse::build(
@@ -609,14 +743,17 @@ pub async fn github_proxy(
     };
     let accept_header = media_override.unwrap_or("application/vnd.github+json");
 
-    let upstream = match &platform_user {
-        Some((_, user_token)) => {
+    let upstream = match own_token {
+        Some(user_token) => {
             let mine = match fetch_upstream(&url, accept_header, Some(user_token)).await {
                 Ok(upstream) => upstream,
                 Err(resp) => return resp,
             };
             // A repo only the shared token can see answers 404 (or 401/403) to
-            // the user's token. Fall back so connecting never loses a repo.
+            // the caller's own token, for example a public repo an organization
+            // added by URL but didn't share with the App. Fall back so
+            // connecting never loses a repo; which repos may be read at all was
+            // settled by `authorize_github_access` above.
             if matches!(mine.status, 401 | 403 | 404) {
                 match fetch_upstream(&url, accept_header, token().as_deref()).await {
                     Ok(upstream) => upstream,
@@ -1548,12 +1685,31 @@ pub async fn visible_projects(req: HttpRequest, pool: web::Data<PgPool>) -> Http
         None => true,
     };
 
-    let bearer = effective_github_token(&req, pool.get_ref()).await;
-    let repos = match list_repos(bearer.as_deref()).await {
-        Ok(repos) => repos,
-        Err(()) => {
-            return HttpResponse::BadGateway()
-                .json(serde_json::json!({ "message": "Could not load repositories from GitHub" }));
+    // An organization's projects are the repos it added, never what the shared
+    // server token happens to see (that is the server account's own list).
+    let org_id = ctx
+        .as_ref()
+        .filter(|c| c.scope == Scope::Organization)
+        .and_then(|c| c.organization_id);
+    let repos = match org_id {
+        Some(org_id) => match org_linked_repos(pool.get_ref(), org_id).await {
+            Ok(repos) => repos,
+            Err(e) => {
+                warn!(target: "db", org_id, error = ?e, "visible_projects: linked repo lookup failed");
+                return HttpResponse::InternalServerError()
+                    .json(serde_json::json!({ "message": "Could not load repositories" }));
+            }
+        },
+        None => {
+            let bearer = effective_github_token(&req, pool.get_ref()).await;
+            match list_repos(bearer.as_deref()).await {
+                Ok(repos) => repos,
+                Err(()) => {
+                    return HttpResponse::BadGateway().json(
+                        serde_json::json!({ "message": "Could not load repositories from GitHub" }),
+                    );
+                }
+            }
         }
     };
 
@@ -1592,8 +1748,10 @@ pub async fn visible_projects(req: HttpRequest, pool: web::Data<PgPool>) -> Http
 }
 
 /// List the repositories the "Import all repositories" button can pull in.
-/// Personal callers use their own token and never fall back to the shared token's
-/// repos; organization callers get public repos only, platform callers get all.
+/// Personal callers use their own token and organization callers their GitHub
+/// App installation; neither ever falls back to the shared token's repos, which
+/// belong to the server's account. Unconnected, both get `connected: false` so
+/// the UI prompts to connect. Platform callers get the shared token's repos.
 #[get("/github-importable-repos")]
 #[instrument(target = "http", skip(req, pool))]
 pub async fn github_importable_repos(req: HttpRequest, pool: web::Data<PgPool>) -> impl Responder {
@@ -1628,7 +1786,23 @@ pub async fn github_importable_repos(req: HttpRequest, pool: web::Data<PgPool>) 
         };
     }
 
-    let public_only = ctx.scope != Scope::Platform;
+    if ctx.scope == Scope::Organization {
+        let app_token = match ctx.organization_id {
+            Some(org_id) => crate::github_app::org_token(pool.get_ref(), org_id).await,
+            None => None,
+        };
+        let Some(app_token) = app_token else {
+            return HttpResponse::Ok().json(serde_json::json!({ "connected": false, "repos": [] }));
+        };
+        return match crate::github_app::list_installation_repos(&app_token).await {
+            Ok(repos) => {
+                HttpResponse::Ok().json(serde_json::json!({ "connected": true, "repos": repos }))
+            }
+            Err(()) => HttpResponse::BadGateway()
+                .json(serde_json::json!({ "message": "Couldn't reach GitHub" })),
+        };
+    }
+
     let shared = list_repos(token().as_deref()).await;
     // A platform owner who connected their own GitHub also gets that account's
     // repos, private ones included (`ctx` is already downscoped by mode).
@@ -1649,15 +1823,7 @@ pub async fn github_importable_repos(req: HttpRequest, pool: web::Data<PgPool>) 
             }));
         }
     };
-    let visible: Vec<serde_json::Value> = if public_only {
-        repos
-            .into_iter()
-            .filter(|r| !r.get("private").and_then(|p| p.as_bool()).unwrap_or(false))
-            .collect()
-    } else {
-        repos
-    };
-    HttpResponse::Ok().json(serde_json::json!({ "connected": true, "repos": visible }))
+    HttpResponse::Ok().json(serde_json::json!({ "connected": true, "repos": repos }))
 }
 
 pub fn routes(cfg: &mut web::ServiceConfig) {
