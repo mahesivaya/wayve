@@ -23,6 +23,7 @@ mod feature_access;
 mod figma;
 mod geoip;
 mod github_app;
+mod github_app_webhook;
 mod github_oauth;
 mod github_pr_notify;
 mod github_proxy;

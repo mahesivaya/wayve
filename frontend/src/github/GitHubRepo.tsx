@@ -28,6 +28,7 @@ import {
 } from "./prMergeSummary";
 import { listProjects, linkProjectRepo, type Project } from "../api/workspace";
 import { PROJECTS_CHANGED } from "../api/projectsChanged";
+import { onGithubEvent } from "./githubLiveEvents";
 import {
   mergePullRequest,
   createCommitComment,
@@ -1899,6 +1900,45 @@ export function GitHubRepoViewer({
     void loadPullsTotal("open");
     void loadPullsTotal("closed");
   }, [loadPullsTotal, repo]);
+
+  // Live pull requests: GitHub tells the server through the App's webhook, and
+  // the server pushes `github:pulls` over the shared socket. Reload the list,
+  // the counts and an open PR that changed, once a burst of events settles.
+  useEffect(() => {
+    if (!repo) return;
+    const fullName = `${owner}/${repoName}`.toLowerCase();
+    let timer: number | undefined;
+    const changed = new Set<number>();
+    const stop = onGithubEvent((frame) => {
+      if (frame.type !== "github:pulls") return;
+      if (String(frame.repo ?? "").toLowerCase() !== fullName) return;
+      if (typeof frame.number === "number") changed.add(frame.number);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        void loadPulls(pullFilter, pullsPage);
+        void loadPullsTotal("open");
+        void loadPullsTotal("closed");
+        if (selectedPull !== null && changed.has(selectedPull)) {
+          void loadPullDetail(selectedPull, true);
+        }
+        changed.clear();
+      }, 500);
+    });
+    return () => {
+      stop();
+      window.clearTimeout(timer);
+    };
+  }, [
+    repo,
+    owner,
+    repoName,
+    loadPulls,
+    loadPullsTotal,
+    loadPullDetail,
+    pullFilter,
+    pullsPage,
+    selectedPull,
+  ]);
 
   // Someone who can't manage access can land on "access" from a persisted
   // section or a mid-session role change, so fall back to the overview.

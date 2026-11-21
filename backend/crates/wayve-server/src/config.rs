@@ -427,6 +427,13 @@ pub fn github_app() -> Option<GithubAppConfig> {
     })
 }
 
+/// The secret GitHub signs the GitHub App's webhook deliveries with (set the
+/// same value in the App's settings). Unset, deliveries are refused rather than
+/// trusted unsigned.
+pub fn github_app_webhook_secret() -> Option<String> {
+    var_opt("GITHUB_APP_WEBHOOK_SECRET").filter(|s| !s.trim().is_empty())
+}
+
 /// Slack OAuth app credentials. Replaces asking an admin to create a Slack app
 /// and paste an `xoxb-` bot token: the connect button walks the same authorize →
 /// callback → encrypted-token path every other provider here uses.

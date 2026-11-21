@@ -133,6 +133,11 @@ pub async fn installation_token(installation_id: i64) -> Option<String> {
     Some(token)
 }
 
+/// Drop a cached installation token, after the installation goes away.
+pub async fn forget_installation(installation_id: i64) {
+    INSTALLATION_TOKENS.invalidate(&installation_id).await;
+}
+
 /// The organization's installation: its id and the GitHub account it is on.
 pub async fn org_installation(pool: &PgPool, org_id: i32) -> Option<(i64, String, Option<String>)> {
     sqlx::query_as::<_, (i64, String, Option<String>)>(
@@ -566,7 +571,9 @@ pub async fn github_app_setup(
 pub fn routes(cfg: &mut web::ServiceConfig) {
     cfg.service(github_app_status)
         .service(github_app_install)
-        .service(github_app_disconnect);
+        .service(github_app_disconnect)
+        // Public, signed by GitHub: see github_app_webhook.
+        .service(crate::github_app_webhook::github_app_webhook);
 }
 
 pub fn public_routes(cfg: &mut web::ServiceConfig) {
