@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { fmtDateTime } from "../utils/datetime";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
@@ -3638,10 +3638,13 @@ function AddRepoPanel({
   project,
   onLinked,
   canLink = true,
+  repoSwitcher,
 }: {
   project: Project;
   onLinked: () => void;
   canLink?: boolean;
+  // The repository picker, so another project can be opened from here.
+  repoSwitcher?: ReactNode;
 }) {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -3651,6 +3654,9 @@ function AddRepoPanel({
     return (
       <div className="github-page github-empty-state">
         <div className="github-add-repo">
+          {repoSwitcher && (
+            <div className="github-add-repo-switch">{repoSwitcher}</div>
+          )}
           <h2 className="github-add-repo-title">No repository linked</h2>
           <p className="github-add-repo-help">
             “{project.name}” doesn’t have a repository yet. Ask an organization
@@ -3664,6 +3670,15 @@ function AddRepoPanel({
   const submit = () => {
     const value = url.trim();
     if (!value || busy) return;
+    // github.com/<account> alone is a person or organization, not a repo.
+    const account =
+      /^(?:https?:\/\/)?(?:www\.)?github\.com\/([^/\s]+)\/?$/i.exec(value)?.[1];
+    if (account) {
+      setErr(
+        `That's the GitHub account "${account}", not a repository. Add the repository's name, e.g. https://github.com/${account}/<repository>.`
+      );
+      return;
+    }
     setBusy(true);
     setErr("");
     void linkProjectRepo(project.id, value)
@@ -3677,10 +3692,15 @@ function AddRepoPanel({
   return (
     <div className="github-page github-empty-state">
       <div className="github-add-repo">
+        {repoSwitcher && (
+          <div className="github-add-repo-switch">{repoSwitcher}</div>
+        )}
         <h2 className="github-add-repo-title">Add a repository</h2>
         <p className="github-add-repo-help">
-          Paste a public GitHub repository URL to browse its code, commits and
-          Actions in “{project.name}”.
+          Paste a GitHub repository URL to browse its code, commits and Actions
+          in “{project.name}”. Private repositories work once GitHub is
+          connected in{" "}
+          <Link to="/settings/repositories">Settings → Repositories</Link>.
         </p>
         <div className="github-add-repo-row">
           <input
@@ -3755,7 +3775,12 @@ function GitHubRepoProject({
   }
   if (!project.github_owner || !project.github_repo) {
     return (
-      <AddRepoPanel project={project} onLinked={reload} canLink={canLink} />
+      <AddRepoPanel
+        project={project}
+        onLinked={reload}
+        canLink={canLink}
+        repoSwitcher={repoSwitcher}
+      />
     );
   }
   return (
@@ -3780,17 +3805,21 @@ function repoLabel(p: Project): string {
 // In-page repo manager for personal accounts at the bare `/github` route. The
 // repo selector renders in the viewer's left rail via the `repoSwitcher` prop.
 // The project to show: the current one, else the one left open earlier this
-// session, else the first. Either may have been removed since.
+// session if it still has a repository, else the first with a repository, else
+// the first. Opening on code beats opening on an empty "add a repository" box;
+// a project without one is still a click away in the picker.
 function pickProject(
   rows: Project[],
   current: number | null,
   userId: number | undefined
 ): number | null {
+  const linked = (p: Project) => Boolean(p.github_owner && p.github_repo);
+  if (current !== null && rows.some((r) => r.id === current)) return current;
   const remembered = readOpenRepo(userId);
-  const kept = [current, remembered].find((id) =>
-    rows.some((r) => r.id === id)
-  );
-  return typeof kept === "number" ? kept : (rows[0]?.id ?? null);
+  if (rows.some((r) => r.id === remembered && linked(r))) {
+    return remembered as number;
+  }
+  return (rows.find(linked) ?? rows[0])?.id ?? null;
 }
 
 function PersonalRepoManager() {

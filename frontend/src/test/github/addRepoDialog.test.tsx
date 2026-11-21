@@ -303,3 +303,53 @@ describe("who gets to add", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
+
+describe("a project without a repository", () => {
+  const unlinked = {
+    id: 9,
+    name: "three",
+    github_owner: null,
+    github_repo: null,
+  };
+
+  it("isn't what opens when another project has code", async () => {
+    mockUser = orgUser("owner");
+    // Newest first, as the server lists them.
+    listProjects.mockResolvedValue([unlinked, project(7, "acme", "api")]);
+    renderPage();
+
+    const picker = await screen.findByRole("button", {
+      name: /^Select a repository/,
+    });
+    expect(picker.textContent).toContain("acme/api");
+    expect(screen.queryByText("Add a repository")).toBeNull();
+  });
+
+  it("keeps the repository picker, so another project can be opened", async () => {
+    mockUser = orgUser("owner");
+    listProjects.mockResolvedValue([unlinked]);
+    renderPage();
+
+    expect(await screen.findByText("Add a repository")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /^Select a repository/ })
+    ).toBeTruthy();
+  });
+
+  it("says when a pasted URL is an account, not a repository", async () => {
+    mockUser = orgUser("owner");
+    listProjects.mockResolvedValue([unlinked]);
+    renderPage();
+
+    await userEvent.type(
+      await screen.findByPlaceholderText("https://github.com/owner/repo"),
+      "https://github.com/mahesivaya"
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Add repository" })
+    );
+    expect(
+      await screen.findByText(/That's the GitHub account "mahesivaya"/)
+    ).toBeTruthy();
+  });
+});

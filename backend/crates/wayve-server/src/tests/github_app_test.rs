@@ -228,7 +228,8 @@ mod tests {
                 .service(crate::github_proxy::github_proxy)
                 .service(crate::github_proxy::github_importable_repos)
                 .service(crate::github_proxy::visible_projects)
-                .service(crate::workspace::handler::create_project),
+                .service(crate::workspace::handler::create_project)
+                .service(crate::workspace::handler::link_project_repo),
         )
         .await;
         let get = |uri: String, auth: Option<String>| {
@@ -404,6 +405,33 @@ mod tests {
         )
         .await;
         assert_eq!(created.status(), StatusCode::CREATED, "create project");
+        // A project created without a repo can be linked to it afterwards too.
+        let empty = actix_test::call_service(
+            &app,
+            actix_test::TestRequest::post()
+                .uri("/projects")
+                .insert_header(("Authorization", owner_auth.clone()))
+                .set_json(serde_json::json!({ "name": "three" }))
+                .to_request(),
+        )
+        .await;
+        let empty_id = json_of(empty).await["id"].as_i64().unwrap_or_default();
+        let linked = actix_test::call_service(
+            &app,
+            actix_test::TestRequest::patch()
+                .uri(&format!("/projects/{empty_id}/repo"))
+                .insert_header(("Authorization", owner_auth.clone()))
+                .set_json(
+                    serde_json::json!({ "repo_url": format!("https://github.com/{private_repo}") }),
+                )
+                .to_request(),
+        )
+        .await;
+        assert_eq!(
+            linked.status(),
+            StatusCode::OK,
+            "link private repo to a project"
+        );
         // ...and read through the installation token.
         let read = get(
             format!("/github/repos/{private_repo}"),

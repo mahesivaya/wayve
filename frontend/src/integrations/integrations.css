@@ -167,22 +167,234 @@
   opacity: 0.9;
 }
 
-/* Inline GitHub connect panel (OAuth) on the Integrations page. */
+/* The GitHub connection, in its dialog on the Integrations page. */
 .github-panel {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 18px;
+  text-align: left;
 }
 
-.github-panel-status {
+.github-panel-loading {
   margin: 0;
+  color: var(--color-text-muted);
   font-size: var(--text-sm);
-  color: var(--color-text-secondary);
 }
 
-.github-panel-actions {
+.github-panel-head {
   display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.github-panel-head-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.github-panel-title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.github-panel-subtitle {
+  margin: 2px 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.github-panel-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.github-panel-badge-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+}
+
+.github-panel-badge.is-connected {
+  color: var(--color-success);
+  border-color: var(--color-success);
+  background: var(--color-success-soft);
+}
+
+.github-panel-badge.is-connected .github-panel-badge-dot {
+  background: var(--color-success);
+}
+
+.github-panel-account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 10px);
+}
+
+.github-panel-account-login {
+  font-weight: 600;
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+.github-panel-account-login:hover {
+  text-decoration: underline;
+}
+
+.github-panel-section {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+}
+
+.github-panel-label {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.github-panel-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-text-secondary, var(--color-text-primary));
+}
+
+.github-panel-access {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary, var(--color-text-primary));
+}
+
+.github-panel-access li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.github-panel-access-mark {
+  flex: 0 0 16px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.github-panel-access .is-allowed .github-panel-access-mark {
+  color: var(--color-success);
+}
+
+.github-panel-access .is-denied {
+  color: var(--color-text-muted);
+}
+
+.github-panel-access .is-denied .github-panel-access-mark {
+  color: var(--color-danger);
+}
+
+.github-panel-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md, 10px);
+  background: var(--color-warning-soft);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-text-primary);
+}
+
+.github-panel-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.github-panel-foot-spacer {
+  flex: 1;
+}
+
+.github-panel-foot-note {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+}
+
+.github-panel-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 10px);
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.github-panel-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.github-panel-btn--primary {
+  border-color: var(--color-primary-action);
+  background: var(--color-primary-action);
+  color: #fff;
+}
+
+.github-panel-btn--primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.github-panel-btn--secondary:hover {
+  background: var(--color-surface-hover, rgb(127 127 127 / 0.12));
+}
+
+.github-panel-btn--danger {
+  border-color: transparent;
+  color: var(--color-danger);
+  padding-left: 0;
+}
+
+.github-panel-btn--danger:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.github-panel .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .integrations-info-badge {

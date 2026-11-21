@@ -13,7 +13,10 @@ const connected = vi.hoisted(
   () => (value: boolean) => () => Promise.resolve({ connected: value })
 );
 vi.mock("../../api/jira", () => ({ getJiraConnection: connected(true) }));
-vi.mock("../../api/github", () => ({ getGithubConnection: connected(false) }));
+vi.mock("../../api/github", () => ({
+  getGithubConnection: connected(false),
+  getGithubAppStatus: connected(false),
+}));
 vi.mock("../../api/gitlab", () => ({ getGitlabConnection: connected(true) }));
 vi.mock("../../api/figma", () => ({ getFigmaConnection: connected(false) }));
 const getSlackConnection = vi.hoisted(() => vi.fn());

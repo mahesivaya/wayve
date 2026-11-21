@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getJiraConnection } from "../api/jira";
-import { getGithubConnection } from "../api/github";
+import { getGithubAppStatus, getGithubConnection } from "../api/github";
 import { getGitlabConnection } from "../api/gitlab";
 import { getSlackConnection } from "../api/slack";
 import { getFigmaConnection } from "../api/figma";
@@ -43,6 +43,9 @@ export function useIntegrationConnections(viewer: IntegrationViewer) {
   // manage it; anyone else would get a 403.
   const probeSlack = isEnterpriseViewer(viewer);
   const probeMcp = canManageMcp(viewer);
+  // An organization connects GitHub once for everyone, through the Hadal
+  // GitHub App; everyone else connects their own account.
+  const githubByApp = viewer?.scope === "organization";
 
   useEffect(() => {
     if (!signedIn) return;
@@ -60,7 +63,9 @@ export function useIntegrationConnections(viewer: IntegrationViewer) {
     );
     probe(
       "github",
-      getGithubConnection().then((s) => s.connected)
+      (githubByApp ? getGithubAppStatus() : getGithubConnection()).then(
+        (s) => s.connected
+      )
     );
     probe(
       "gitlab",
@@ -94,7 +99,7 @@ export function useIntegrationConnections(viewer: IntegrationViewer) {
     return () => {
       cancelled = true;
     };
-  }, [signedIn, probeSlack, probeMcp]);
+  }, [signedIn, probeSlack, probeMcp, githubByApp]);
 
   useEffect(() => {
     const onChange = (event: Event) => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getJiraConnection } from "../api/jira";
 import { useAuth } from "../auth/useAuth";
@@ -15,6 +15,7 @@ import {
   type IntegrationKey,
 } from "./catalog";
 import SettingsShell from "../profile/SettingsShell";
+import Modal from "../components/Modal";
 import { useIntegrationConnections } from "./useIntegrationConnections";
 import "./integrations.css";
 
@@ -52,28 +53,24 @@ export default function Integrations() {
     figma: figmaConnected,
     mcp: mcpConnected,
   } = connected;
-  const [showJira, setShowJira] = useState(false);
-  const [showGithub, setShowGithub] = useState(false);
-  const [showSlack, setShowSlack] = useState(false);
-  const [showMcp, setShowMcp] = useState(false);
-  const [showFigma, setShowFigma] = useState(false);
-  const [showGitlab, setShowGitlab] = useState(false);
-  const [showGmail, setShowGmail] = useState(false);
+  // The one service whose panel is open, in a dialog over the tiles (so it
+  // opens where the click was, not below the fold), or null.
+  const [openPanel, setOpenPanel] = useState<IntegrationKey | null>(null);
+  const closePanel = useCallback(() => setOpenPanel(null), []);
 
   // A link to /integrations?service=<key> lands with that panel already open
-  // instead of on a wall of tiles. Panels are independent toggles, so this only ever opens one
-  // — closing it again (or opening others) is left to the tiles.
+  // instead of on a wall of tiles.
   const [searchParams] = useSearchParams();
   const requestedService = searchParams.get("service");
   useEffect(() => {
     const openers: Partial<Record<IntegrationKey, () => void>> = {
-      gmail: () => setShowGmail(true),
-      jira: () => setShowJira(true),
-      github: () => setShowGithub(true),
-      slack: () => setShowSlack(true),
-      gitlab: () => setShowGitlab(true),
-      figma: () => setShowFigma(true),
-      mcp: () => setShowMcp(true),
+      gmail: () => setOpenPanel("gmail"),
+      jira: () => setOpenPanel("jira"),
+      github: () => setOpenPanel("github"),
+      slack: () => setOpenPanel("slack"),
+      gitlab: () => setOpenPanel("gitlab"),
+      figma: () => setOpenPanel("figma"),
+      mcp: () => setOpenPanel("mcp"),
     };
     if (requestedService) openers[requestedService as IntegrationKey]?.();
   }, [requestedService]);
@@ -89,19 +86,19 @@ export default function Integrations() {
       description:
         "Connect your Gmail with OAuth to read, send, and manage all your email from the Fluxze inbox.",
       status: gmailConnected ? "enabled" : "available",
-      onClick: () => setShowGmail((v) => !v),
+      onClick: () => setOpenPanel("gmail"),
     },
     jira: {
       description:
         "Sync Jira issues into Tasks and get real-time updates from Jira via webhook.",
       status: jiraConnected ? "enabled" : "available",
-      onClick: () => setShowJira((v) => !v),
+      onClick: () => setOpenPanel("jira"),
     },
     github: {
       description:
         "Browse repositories, commits, diffs, and CI runs from your linked projects.",
       status: githubConnected ? "enabled" : "available",
-      onClick: () => setShowGithub((v) => !v),
+      onClick: () => setOpenPanel("github"),
     },
     slack: {
       description: isEnterprise
@@ -112,25 +109,25 @@ export default function Integrations() {
           ? "enabled"
           : "available"
         : "enterprise",
-      onClick: isEnterprise ? () => setShowSlack((v) => !v) : undefined,
+      onClick: isEnterprise ? () => setOpenPanel("slack") : undefined,
     },
     gitlab: {
       description:
         "Connect GitLab (cloud or self-hosted) and import your assigned issues into Tasks.",
       status: gitlabConnected ? "enabled" : "available",
-      onClick: () => setShowGitlab((v) => !v),
+      onClick: () => setOpenPanel("gitlab"),
     },
     figma: {
       description:
         "Attach designs to tickets and user stories \u2014 paste a Figma link and it shows as a titled, thumbnailed reference.",
       status: figmaConnected ? "enabled" : "available",
-      onClick: () => setShowFigma((v) => !v),
+      onClick: () => setOpenPanel("figma"),
     },
     mcp: {
       description:
         "Connect your own MCP server so the AI can read your systems (e.g. your database) through tools you control.",
       status: mcpConnected ? "enabled" : "available",
-      onClick: () => setShowMcp((v) => !v),
+      onClick: () => setOpenPanel("mcp"),
     },
   };
 
@@ -183,6 +180,39 @@ export default function Integrations() {
     </button>
   );
 
+  // What each service's dialog holds. A service this account can't use has no
+  // entry, so it never opens.
+  const panels: Partial<
+    Record<IntegrationKey, { title: string; body: ReactNode }>
+  > = {
+    ...(canConnectMailbox && {
+      gmail: {
+        title: "Gmail",
+        body: <GmailPanel onChange={(value) => setConnected("gmail", value)} />,
+      },
+    }),
+    jira: {
+      title: "Jira",
+      body: (
+        <JiraPanel
+          onImported={() =>
+            void getJiraConnection()
+              .then((s) => setConnected("jira", s.connected))
+              .catch(() => {})
+          }
+        />
+      ),
+    },
+    github: {
+      title: "GitHub",
+      body: <GitHubPanel onChange={(value) => setConnected("github", value)} />,
+    },
+    ...(isEnterprise && { slack: { title: "Slack", body: <SlackPanel /> } }),
+    figma: { title: "Figma", body: <FigmaPanel /> },
+    ...(canManageMcp && { mcp: { title: "Connect MCP", body: <McpPanel /> } }),
+    gitlab: { title: "GitLab", body: <GitLabPanel /> },
+  };
+
   return (
     <SettingsShell title="Integrations">
       {connectedServices.length > 0 && (
@@ -227,7 +257,7 @@ export default function Integrations() {
             <button
               type="button"
               className="integrations-info-btn"
-              onClick={() => setShowMcp(true)}
+              onClick={() => setOpenPanel("mcp")}
             >
               Connect an MCP server
             </button>
@@ -239,60 +269,13 @@ export default function Integrations() {
         </div>
       </section>
 
-      {canConnectMailbox && showGmail && (
-        <section className="settings-card">
-          <h2 className="settings-card-title">Gmail</h2>
-          <GmailPanel onChange={(value) => setConnected("gmail", value)} />
-        </section>
-      )}
-
-      {showJira && (
-        <section className="settings-card">
-          <h2 className="settings-card-title">Jira</h2>
-          <JiraPanel
-            onImported={() =>
-              void getJiraConnection()
-                .then((s) => setConnected("jira", s.connected))
-                .catch(() => {})
-            }
-          />
-        </section>
-      )}
-
-      {showGithub && (
-        <section className="settings-card">
-          <h2 className="settings-card-title">GitHub</h2>
-          <GitHubPanel onChange={(value) => setConnected("github", value)} />
-        </section>
-      )}
-
-      {isEnterprise && showSlack && (
-        <section className="settings-card">
-          <h2 className="settings-card-title">Slack</h2>
-          <SlackPanel />
-        </section>
-      )}
-
-      {showFigma && (
-        <section className="settings-card">
-          <h2 className="settings-card-title">Figma</h2>
-          <FigmaPanel />
-        </section>
-      )}
-
-      {canManageMcp && showMcp && (
-        <section className="settings-card">
-          <h2 className="settings-card-title">Connect MCP</h2>
-          <McpPanel />
-        </section>
-      )}
-
-      {showGitlab && (
-        <section className="settings-card">
-          <h2 className="settings-card-title">GitLab</h2>
-          <GitLabPanel />
-        </section>
-      )}
+      <Modal
+        isOpen={openPanel !== null && panels[openPanel] !== undefined}
+        onClose={closePanel}
+        title={openPanel ? panels[openPanel]?.title : undefined}
+      >
+        {openPanel && panels[openPanel]?.body}
+      </Modal>
     </SettingsShell>
   );
 }

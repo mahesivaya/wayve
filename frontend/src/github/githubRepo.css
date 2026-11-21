@@ -2856,6 +2856,12 @@
   text-align: center;
 }
 
+/* The repository picker, so another project can be opened from here. */
+.github-add-repo-switch {
+  margin: -8px -8px 20px;
+  text-align: left;
+}
+
 .github-add-repo-title {
   margin: 0 0 8px;
   font-size: var(--text-xl);

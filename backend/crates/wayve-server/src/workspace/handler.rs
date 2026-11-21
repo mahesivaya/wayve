@@ -244,6 +244,8 @@ fn parse_repo_url(raw: &str) -> Option<(String, String)> {
     Some((owner.to_string(), repo.to_string()))
 }
 
+const NOT_A_REPO_URL: &str = "Not a valid GitHub repository URL";
+
 /// Parse a pasted repo URL and confirm with GitHub that it exists, returning
 /// the canonical owner/name casing. `bearer` is the token to look the repo up
 /// with: a connected personal user's own token, otherwise the shared PAT.
@@ -254,8 +256,7 @@ async fn parse_and_validate_repo(
     bearer: Option<&str>,
     allow_private: bool,
 ) -> Result<(String, String), AppError> {
-    let (owner, repo) = parse_repo_url(raw)
-        .ok_or_else(|| AppError::bad_request("Not a valid GitHub repository URL"))?;
+    let (owner, repo) = parse_repo_url(raw).ok_or_else(|| AppError::bad_request(NOT_A_REPO_URL))?;
 
     let url = format!(
         "{}/repos/{owner}/{repo}",
@@ -311,6 +312,35 @@ async fn parse_and_validate_repo(
         .unwrap_or(&repo)
         .to_string();
     Ok((owner_canon, repo_canon))
+}
+
+/// Validate a repo an organization is adding. An organization that installed
+/// the GitHub App validates with its installation, so the private repos it
+/// shared are accepted (and nothing it didn't share). A public repo the App
+/// wasn't given still adds, as it does without the App, through the shared
+/// token, which stays public-only.
+async fn validate_org_repo(
+    pool: &PgPool,
+    org_id: i32,
+    raw: &str,
+) -> Result<(String, String), AppError> {
+    let shared = github_token();
+    let Some(app_token) = crate::github_app::org_token(pool, org_id).await else {
+        return parse_and_validate_repo(raw, shared.as_deref(), false).await;
+    };
+    match parse_and_validate_repo(raw, Some(&app_token), true).await {
+        Ok(found) => Ok(found),
+        Err(_) => parse_and_validate_repo(raw, shared.as_deref(), false)
+            .await
+            .map_err(|e| match e {
+                // A malformed URL says so; anything else may be a private repo
+                // the App wasn't given.
+                AppError::BadRequest(ref msg) if msg == NOT_A_REPO_URL => e,
+                _ => AppError::bad_request(
+                    "Repository not found. If it's private, give the Hadal GitHub App access to it on GitHub, then try again.",
+                ),
+            }),
+    }
 }
 
 #[get("/projects")]
@@ -438,37 +468,8 @@ pub async fn create_project(
             };
             let (gh_owner, gh_repo) = match input.repo_url.as_deref().map(str::trim) {
                 Some(raw) if !raw.is_empty() => {
-                    // An organization that installed the GitHub App validates
-                    // with its installation, so the private repos it shared are
-                    // accepted (and nothing it didn't share). Otherwise public
-                    // only, via the shared token.
-                    match crate::github_app::org_token(pool.get_ref(), org_id).await {
-                        Some(app_token) => {
-                            match parse_and_validate_repo(raw, Some(&app_token), true).await {
-                                Ok((o, r)) => (Some(o), Some(r)),
-                                // A public repo the App wasn't given still adds,
-                                // the same way as without the App.
-                                Err(_) => {
-                                    let shared = github_token();
-                                    let (o, r) =
-                                        parse_and_validate_repo(raw, shared.as_deref(), false)
-                                            .await
-                                            .map_err(|_| {
-                                                AppError::bad_request(
-                                                    "Repository not found. If it's private, give the Hadal GitHub App access to it on GitHub, then try again.",
-                                                )
-                                            })?;
-                                    (Some(o), Some(r))
-                                }
-                            }
-                        }
-                        None => {
-                            let shared = github_token();
-                            let (o, r) =
-                                parse_and_validate_repo(raw, shared.as_deref(), false).await?;
-                            (Some(o), Some(r))
-                        }
-                    }
+                    let (o, r) = validate_org_repo(pool.get_ref(), org_id, raw).await?;
+                    (Some(o), Some(r))
                 }
                 _ => (None, None),
             };
@@ -624,9 +625,8 @@ pub async fn link_project_repo(
                 return Ok(HttpResponse::BadRequest()
                     .json(serde_json::json!({ "message": "No organization in context" })));
             };
-            let shared = github_token();
             let (owner, repo) =
-                parse_and_validate_repo(input.repo_url.trim(), shared.as_deref(), false).await?;
+                validate_org_repo(pool.get_ref(), org_id, input.repo_url.trim()).await?;
             sqlx::query(
                 "UPDATE projects SET github_owner = $1, github_repo = $2
                  WHERE id = $3 AND organization_id = $4

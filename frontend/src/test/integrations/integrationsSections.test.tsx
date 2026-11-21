@@ -2,6 +2,7 @@
 // card, with everything else below.
 import { expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
 vi.mock("../../auth/useAuth", () => ({
@@ -19,7 +20,11 @@ vi.mock("../../auth/useAuth", () => ({
 const connected = (value: boolean) => () =>
   Promise.resolve({ connected: value });
 vi.mock("../../api/jira", () => ({ getJiraConnection: connected(true) }));
-vi.mock("../../api/github", () => ({ getGithubConnection: connected(true) }));
+vi.mock("../../api/github", () => ({
+  getGithubConnection: connected(false),
+  // An organization: GitHub is connected through the GitHub App.
+  getGithubAppStatus: connected(true),
+}));
 vi.mock("../../api/gitlab", () => ({ getGitlabConnection: connected(false) }));
 vi.mock("../../api/slack", () => ({ getSlackConnection: connected(false) }));
 vi.mock("../../api/figma", () => ({ getFigmaConnection: connected(false) }));
@@ -66,4 +71,36 @@ it("puts connected services in a card above the rest", async () => {
   expect(card(connectedHeading).queryByText("GitLab")).toBeNull();
   expect(card(otherHeading).getByText("GitLab")).toBeTruthy();
   expect(card(otherHeading).queryByText("Jira")).toBeNull();
+});
+
+it("opens a service in a dialog over the tiles, and closes it", async () => {
+  const { default: Integrations } =
+    await import("../../integrations/Integrations");
+  render(
+    <MemoryRouter>
+      <Integrations />
+    </MemoryRouter>
+  );
+
+  await userEvent.click(await screen.findByRole("button", { name: /GitLab/ }));
+  const dialog = await screen.findByRole("dialog");
+  expect(within(dialog).getByRole("heading", { name: "GitLab" })).toBeTruthy();
+
+  await userEvent.click(
+    within(dialog).getByRole("button", { name: "Close modal" })
+  );
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+it("opens the service a link names", async () => {
+  const { default: Integrations } =
+    await import("../../integrations/Integrations");
+  render(
+    <MemoryRouter initialEntries={["/integrations?service=github"]}>
+      <Integrations />
+    </MemoryRouter>
+  );
+
+  const dialog = await screen.findByRole("dialog");
+  expect(within(dialog).getByRole("heading", { name: "GitHub" })).toBeTruthy();
 });
