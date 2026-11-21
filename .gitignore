@@ -88,3 +88,7 @@ infra/geoip/*.mmdb
 # Account recovery keys and OAuth access notes — secrets, never committed
 *recovery-key*.txt
 /google_oauth_access.txt
+
+# Personal architecture sketches — kept out of the public repo
+/simpleArch
+/deepArch
