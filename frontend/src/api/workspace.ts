@@ -1,4 +1,5 @@
 import { apiFetch, apiFetchJson } from "./client";
+import { announceProjectsChanged } from "./projectsChanged";
 
 // Organization-scoped projects and teams. Any org member may list them, but
 // creating and renaming is owner-only, enforced by the backend require_owner
@@ -45,7 +46,9 @@ export const createProject = async (name: string, repoUrl?: string) => {
     const data = await res.json().catch(() => null);
     throw new Error(data?.message ?? "Failed to create project");
   }
-  return res.json() as Promise<Project>;
+  const created = (await res.json()) as Project;
+  announceProjectsChanged();
+  return created;
 };
 
 // The server validates that the URL points at a real, public repo, and its 400
@@ -59,7 +62,9 @@ export const linkProjectRepo = async (id: number, repoUrl: string) => {
     const data = await res.json().catch(() => null);
     throw new Error(data?.message ?? "Failed to link repository");
   }
-  return res.json() as Promise<Project>;
+  const linked = (await res.json()) as Project;
+  announceProjectsChanged();
+  return linked;
 };
 
 export const updateProject = async (id: number, name: string) => {
@@ -71,7 +76,9 @@ export const updateProject = async (id: number, name: string) => {
     const data = await res.json().catch(() => null);
     throw new Error(data?.message ?? "Failed to rename project");
   }
-  return res.json() as Promise<Project>;
+  const renamed = (await res.json()) as Project;
+  announceProjectsChanged();
+  return renamed;
 };
 
 export const deleteProject = async (id: number) => {
@@ -80,6 +87,7 @@ export const deleteProject = async (id: number) => {
     const data = await res.json().catch(() => null);
     throw new Error(data?.message ?? "Failed to delete project");
   }
+  announceProjectsChanged();
 };
 
 export const listTeams = async () => apiFetchJson<Team[]>("/api/teams");

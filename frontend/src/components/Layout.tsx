@@ -87,6 +87,7 @@ import {
   type Project,
 } from "../api/workspace";
 import { getFeatureAccess } from "../api/featureAccess";
+import { PROJECTS_CHANGED } from "../api/projectsChanged";
 import { isWorkspaceAdmin } from "../auth/workspaceAdmin";
 import ConnectedIntegrationLinks from "../integrations/ConnectedIntegrationLinks";
 import { isDesktopApp } from "../utils/desktop";
@@ -507,6 +508,14 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
       cancelled = true;
     };
   }, [projectsOpen, userId, projects, projectsKey]);
+
+  // Any project added, linked, renamed or removed (e.g. a repo imported from
+  // Settings) drops the cached list, so the open Projects section reloads it.
+  useEffect(() => {
+    const onChanged = () => setProjectsLoad(null);
+    window.addEventListener(PROJECTS_CHANGED, onChanged);
+    return () => window.removeEventListener(PROJECTS_CHANGED, onChanged);
+  }, []);
 
   // The team page deletes through the api layer, which announces it here.
   useEffect(() => {

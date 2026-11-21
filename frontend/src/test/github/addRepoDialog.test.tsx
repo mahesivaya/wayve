@@ -353,3 +353,28 @@ describe("a project without a repository", () => {
     ).toBeTruthy();
   });
 });
+
+describe("a repository added elsewhere", () => {
+  it("shows in the open Code & reviews picker without a reload", async () => {
+    mockUser = orgUser("owner");
+    listProjects.mockResolvedValue([project(7, "acme", "api")]);
+    renderPage();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /^Select a repository/ })
+    );
+    expect(screen.queryByText("acme/web")).toBeNull();
+    await userEvent.keyboard("{Escape}");
+
+    // Imported from Settings → Repositories while this page stays open.
+    listProjects.mockResolvedValue([
+      project(8, "acme", "web"),
+      project(7, "acme", "api"),
+    ]);
+    window.dispatchEvent(new CustomEvent("rwayve:projects-changed"));
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Select a repository/ })
+    );
+    expect(await screen.findByText("acme/web")).toBeTruthy();
+  });
+});
