@@ -1,0 +1,200 @@
+HADAL (wayve) — DEEP ARCHITECTURE                                   2026-11-20
+==============================================================================
+
+ 1. CLIENTS → EDGE
+ ─────────────────
+
+  ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────────────┐
+  │  Web SPA         │   │  iOS (SwiftUI)   │   │  Desktop (Electron)      │
+  │  React 18 + TS   │   │  Tasks, Calendar │   │  wraps the web app,      │
+  │  Vite, Router v7 │   │  chat (read      │   │  auto-update feed,       │
+  │  React Compiler  │   │  ticks), /api    │   │  saved login (Keychain)  │
+  │  src/crypto: E2E │   │                  │   │  installers on S3        │
+  └────────┬─────────┘   └────────┬─────────┘   └────────────┬─────────────┘
+           │  HTTPS (cookie JWT / Bearer / X-API-KEY)  WSS ?token=
+           └──────────────────────┼──────────────────────────┘
+                                  ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │  Edge Nginx  (hadalspace.com, fluxze.com alias; TLS, rate limits)       │
+  │                                                                          │
+  │   /assets/*  long-cache ─┐       /api/*        ─┐                        │
+  │   /*  SPA fallback  ─────┼─▶ frontend   /ws/*  (upgrade) ─┐              │
+  │                          │  (nginx +    /gmail/* /outlook/*│              │
+  │                          │   dist/)     /oauth/*  /webhooks/*            │
+  │                          │              /github|slack|figma/oauth/*      │
+  │                          │              =/billing/webhook  ─┼─▶ backend  │
+  └──────────────────────────┴───────────────────────────────────┴──────────┘
+
+
+ 2. RUST BACKEND — ONE IMAGE, THREE RUNTIME ROLES  (RWAYVE_ROLE)
+ ───────────────────────────────────────────────────────────────
+
+  ┌────────────────────────────┐ ┌──────────────────────┐ ┌──────────────────┐
+  │ backend        role=api    │ │ email_sync_worker    │ │ email_body_worker│
+  │ HTTP + WebSocket server    │ │ role=email-sync-     │ │ role=email-body- │
+  │ + light workers:           │ │      worker          │ │      worker      │
+  │  · webhook dispatcher      │ │  · sync_all every 30s│ │  · fetch bodies  │
+  │  · activity writer         │ │    (backoff → 5 min) │ │    where         │
+  │  · log retention pruner    │ │  · Gmail watch       │ │    body_encrypted│
+  │  · chat pub/sub subscriber │ │    renewer (Pub/Sub) │ │    = ''          │
+  │  · presence sweeper        │ │  · token backfill    │ │  · attachments   │
+  └─────────────┬──────────────┘ └──────────┬───────────┘ └────────┬─────────┘
+                │   (role=all in dev also runs sync, body, billing worker)
+                └─────────────────────────┬─┴──────────────────────┘
+                                          ▼
+                                Postgres  +  Redis  +  providers
+
+
+ 3. INSIDE THE API PROCESS (crates/wayve-server)
+ ───────────────────────────────────────────────
+
+   request
+     │
+     ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ Middleware chain                                                         │
+  │  TracingLogger ─▶ CORS (single origin = FRONTEND_URL) ─▶ ApiKeyMiddleware│
+  │                                     (no-op unless X-API-KEY: validate,   │
+  │                                      scope check, per-key rate limit,    │
+  │                                      api_key_audit_log, inject Principal)│
+  └──────────────────────────────────┬───────────────────────────────────────┘
+                                     ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ routing.rs  (routing::wire — the one hub; each feature owns routes())    │
+  └──┬──────────────┬──────────────┬──────────────┬──────────────┬───────────┘
+     ▼              ▼              ▼              ▼              ▼
+  ┌────────┐  ┌──────────┐  ┌───────────┐  ┌────────────┐  ┌──────────────┐
+  │ email  │  │ chat     │  │ call      │  │ workspace  │  │ platform /   │
+  │ Gmail, │  │ DMs,     │  │ /ws/call  │  │ tasks,     │  │ org admin    │
+  │ Outlook│  │ channels │  │ signaling │  │ tickets,   │  │ organization,│
+  │ IMAP,  │  │ (≤24),   │  │ 1-on-1    │  │ stories,   │  │ platform_team│
+  │ shared │  │ presence,│  │ WebRTC    │  │ notes,     │  │ feature_     │
+  │ inboxes│  │ receipts │  │           │  │ documents, │  │ access, scim,│
+  │ snooze │  │          │  │           │  │ drive,     │  │ sso, audit   │
+  └────────┘  └──────────┘  └───────────┘  │ scheduler, │  └──────────────┘
+  ┌────────┐  ┌──────────┐  ┌───────────┐  │ reminders  │  ┌──────────────┐
+  │ ai     │  │ billing  │  │integration│  └────────────┘  │ routes/      │
+  │ aichat,│  │ Stripe   │  │ GitHub,   │                  │ cross-cutting│
+  │ ai-fix │  │ projection│ │ Slack,    │                  │ auth, user,  │
+  │ tickets│  │ plans,   │  │ Figma,    │                  │ account,     │
+  │        │  │ entitle- │  │ MCP,      │                  │ api_keys,    │
+  │        │  │ ments    │  │ webhooks  │                  │ health, /me  │
+  └────────┘  └──────────┘  └───────────┘                  └──────────────┘
+                                     │
+          every handler authenticates and authorizes the same way:
+                                     ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ crates/wayve-security                                                    │
+  │  jwt.rs      get_user_id_from_request — single auth chokepoint           │
+  │              (cookie / Bearer / API-key principal / WS ?token=)          │
+  │  rbac.rs     9 roles × fixed Permission catalog; scope = personal |      │
+  │              organization | platform; resolved from DB per request,      │
+  │              never trusted from the JWT                                  │
+  │  api_key.rs  scope catalog, required_scope(method, path), SHA-256 keys   │
+  │  encryption  AES-256-GCM, key = HKDF-SHA512(AES_KEY); *_iv/*_encrypted   │
+  │  oauth.rs    one-time OAuth state (flow-tagged, replay-safe)             │
+  │  password, sso                                                           │
+  └──────────────────────────────────────────────────────────────────────────┘
+          │                                   │
+          ▼                                   ▼
+  ┌──────────────────────────────┐   ┌──────────────────────────────────────┐
+  │ crates/wayve-db              │   │ Per-user DB access (RLS)             │
+  │ pool + connect-retry forever │   │ BEGIN; set_config('app.user_id');    │
+  │ (verbose once, then dots)    │   │ SET LOCAL ROLE wayve_app;            │
+  └──────────────────────────────┘   │ policies on emails, chat, …          │
+                                     └──────────────────────────────────────┘
+
+
+ 4. DATA
+ ───────
+
+  ┌────────────────────────────────────────┐   ┌──────────────────────────────┐
+  │ PostgreSQL  (schema = infra/postgres/  │   │ Redis 7  (best-effort)       │
+  │  init.sql, idempotent, re-applied)     │   │                              │
+  │                                        │   │  · chat pub/sub fan-out      │
+  │  identity  users, organizations,       │   │    across API instances      │
+  │            *_members (role rows),      │   │    (down → local delivery)   │
+  │            api_keys, audit logs        │   │  · L2 cache under in-process │
+  │  mail      email_accounts (tokens      │   │    moka L1: rbac, accounts   │
+  │            encrypted + token_expiry),  │   └──────────────────────────────┘
+  │            emails (body_encrypted),    │
+  │            shared_inbox_*, snoozes     │   ┌──────────────────────────────┐
+  │  chat      messages (E2E envelope,     │   │ File storage                 │
+  │            AES-GCM at rest),           │   │  S3 (S3_BUCKET) with local   │
+  │            message_recipients          │   │  fallback; encrypt/decrypt   │
+  │  work      tasks, tickets, user_       │   │  off the request thread;     │
+  │            stories, notes, files,      │   │  served only via             │
+  │            meetings (+Zoom/GCal)       │   │  /api/files/{id}/download    │
+  │  billing   plans, subscriptions,       │   └──────────────────────────────┘
+  │            invoices, entitlements,     │
+  │            usage_events                │
+  └────────────────────────────────────────┘
+
+
+ 5. EXTERNAL SERVICES
+ ────────────────────
+
+  Mail & calendar   Gmail API + Google Pub/Sub push (→ /gmail/push)
+                    Microsoft Graph + login.microsoftonline.com (Outlook)
+                    IMAP/SMTP (app passwords)   Google Calendar   Zoom
+  AI                Anthropic Claude (config in DB: platform_ai_config)
+                    Gemini (fallback)
+  Payments          Stripe (test mode in prod) → /billing/webhook
+  Realtime media    Cloudflare TURN (rtc.live.cloudflare.com)
+  Dev integrations  GitHub (OAuth + PAT: PRs, AI-fix), Slack, Figma
+  Outbound email    Gmail SMTP (app password) — Mailpit in dev
+  Storage / dist    S3 (files, desktop installers), ECR (images)
+
+
+ 6. KEY FLOWS
+ ────────────
+
+  a) Authenticated API call
+     client ─▶ nginx /api ─▶ ApiKeyMiddleware ─▶ handler
+       ─▶ get_user_id_from_request ─▶ rbac::require_permission (DB lookup)
+       ─▶ begin_as_user (RLS) ─▶ query ─▶ JSON
+
+  b) Chat message (end-to-end encrypted)
+     browser: encrypt for every participant key → WAYVE_CHAT_E2E_V1 envelope
+       ─▶ WSS /ws/chat ─▶ websocket.rs rejects plaintext
+       ─▶ AES-GCM storage layer ─▶ messages
+       ─▶ Redis PUBLISH ─▶ every API instance ─▶ recipients' sockets
+       ─▶ recipient browser decrypts locally
+     reconnect: heartbeat + since_id resync
+
+  c) Mailbox connect + sync (Gmail / Outlook)
+     POST /api/email-providers/{p}/connect ─▶ consent URL (state stored)
+       ─▶ provider ─▶ /oauth/{…}/callback ─▶ exchange code
+       ─▶ tokens sealed into email_accounts (+ token_expiry)
+       ─▶ initial sync spawned
+     then: sync worker every 30s / Gmail push ─▶ reuse access token until
+           <5 min left, else refresh ─▶ headers into emails
+           ─▶ body worker fills bodies + attachments
+
+  d) 1-on-1 call
+     /ws/call signaling relay (RBAC scope gate) ─▶ SDP/ICE exchange
+       ─▶ peer-to-peer media, Cloudflare TURN when NAT blocks
+
+  e) Service access with an API key
+     X-API-KEY ─▶ hash lookup ─▶ scope for (method, path) ─▶ rate limit
+       ─▶ audit row ─▶ acts as the key's designated user_id everywhere
+
+
+ 7. BUILD & DEPLOY
+ ─────────────────
+
+  git push main
+     │
+     ├─▶ GitHub Actions: smoke (cargo test, tsc + vitest, docker smoke)
+     ├─▶ GitHub Actions: build-images ─▶ ECR (us-east-1, SHA tags)
+     └─▶ v* tag ─▶ release.yml ─▶ GitHub Release
+                          │
+                          ▼
+  EC2 (docker compose, project rwayve_prod, containers hadal_*_prod)
+     scripts/deploy.sh: backup ─▶ hand-apply schema ─▶ pull images
+                        (BUILD_ON_HOST=1 builds on the box instead)
+     ┌──────────┬──────────┬───────────────┬───────────────┬───────┬───────┐
+     │ nginx    │ frontend │ backend (api) │ sync / body   │ pg    │ redis │
+     │ (edge)   │          │               │ workers       │       │       │
+     └──────────┴──────────┴───────────────┴───────────────┴───────┴───────┘
+  Observability: tracing (+ Jaeger in dev), logs/tracing.log, logs/dev.log
