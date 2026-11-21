@@ -89,15 +89,17 @@ const teamRow = (team: Team) => ({
     <Link
       className="settings-secondary-btn repo-settings-open"
       aria-label={`Open ${team.name}`}
-      to={`/teams/${encodeURIComponent(team.slug)}`}
+      to={`/settings/teams/${encodeURIComponent(team.slug)}`}
     >
       Open
     </Link>
   ),
 });
 
-// A project opens its page through its linked repository; one with no
-// repository linked has no page yet.
+// Both open under /settings, so the admin keeps the settings menu (the same
+// pages also live at /teams/… and /projects/… for everyone else). A project
+// opens its page through its linked repository; one with no repository linked
+// has no page yet.
 const projectRow = (project: Project) => ({
   key: project.id,
   name: project.name,
@@ -106,7 +108,7 @@ const projectRow = (project: Project) => ({
       <Link
         className="settings-secondary-btn repo-settings-open"
         aria-label={`Open ${project.name}`}
-        to={`/projects/${encodeURIComponent(
+        to={`/settings/projects/${encodeURIComponent(
           project.github_owner
         )}/${encodeURIComponent(project.github_repo)}`}
       >

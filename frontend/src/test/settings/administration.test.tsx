@@ -38,7 +38,7 @@ it("lists every team with a link to its page", async () => {
     </MemoryRouter>
   );
   const open = await screen.findByRole("link", { name: "Open Design" });
-  expect(open.getAttribute("href")).toBe("/teams/design");
+  expect(open.getAttribute("href")).toBe("/settings/teams/design");
 });
 
 it("lists every project, linking the ones with a repository", async () => {
@@ -48,7 +48,7 @@ it("lists every project, linking the ones with a repository", async () => {
     </MemoryRouter>
   );
   const open = await screen.findByRole("link", { name: "Open Website" });
-  expect(open.getAttribute("href")).toBe("/projects/acme/web");
+  expect(open.getAttribute("href")).toBe("/settings/projects/acme/web");
   expect(screen.getByText("Roadmap")).toBeTruthy();
   expect(screen.getByText("No repository linked")).toBeTruthy();
 });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  useLocation,
   useParams,
   useSearchParams,
   Link,
@@ -36,6 +37,10 @@ type TeamTab = (typeof TEAM_TABS)[number]["key"];
 export default function TeamPage() {
   const { slug = "" } = useParams();
   const { user } = useAuth();
+  // Opened from Settings › Teams (/settings/teams/:slug): leaving the team
+  // returns to that admin list rather than Home.
+  const inSettings = useLocation().pathname.startsWith("/settings/");
+  const exitPath = inSettings ? "/settings/teams" : "/home";
 
   // Kept in the URL so a reload or the back button stays on the same section,
   // and a link to another team starts on its Overview.
@@ -168,7 +173,7 @@ export default function TeamPage() {
     setDeleteError("");
     try {
       await deleteTeam(team.id);
-      void navigate("/home");
+      void navigate(exitPath);
     } catch (err) {
       setDeleteError(
         err instanceof Error ? err.message : "Failed to delete team"
@@ -193,8 +198,8 @@ export default function TeamPage() {
         <div className="team-empty">
           <h2>Team not found</h2>
           <p>No team matches “{slug}”.</p>
-          <Link to="/home" className="team-back-link">
-            ← Back to home
+          <Link to={exitPath} className="team-back-link">
+            {inSettings ? "← Back to teams" : "← Back to home"}
           </Link>
         </div>
       </div>
@@ -203,6 +208,11 @@ export default function TeamPage() {
 
   return (
     <div className="team-page u-page-shell">
+      {inSettings && (
+        <Link to={exitPath} className="team-back-btn">
+          ← Teams
+        </Link>
+      )}
       <h1 className="team-page-title">{team.name}</h1>
       <nav className="team-tabs" aria-label="Team sections">
         {TEAM_TABS.map((t) => (
