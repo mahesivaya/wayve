@@ -281,6 +281,15 @@ function saveRightGroup(group: TabsState | null) {
   }
 }
 
+// Settings detail pages: one repository, team or project opened from its list
+// under Settings. They keep the settings menu in the sidebar, with the list
+// (the prefix without its trailing slash) highlighted.
+const ADMIN_DETAIL_PREFIXES = [
+  "/settings/repositories/",
+  "/settings/teams/",
+  "/settings/projects/",
+];
+
 // Inside a split pane (PathPane) the route tree is rendered again, which mounts
 // Layout again — there it must render only the page, not a second app shell.
 export default function Layout(props: { children?: ReactNode } = {}) {
@@ -2229,7 +2238,9 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
   // normal menu (SettingsShell's own stack covers them).
   const settingsTakeover =
     !isNarrow &&
-    (location.pathname.startsWith("/settings/repositories/") ||
+    (ADMIN_DETAIL_PREFIXES.some((prefix) =>
+      location.pathname.startsWith(prefix)
+    ) ||
       [
         "/settings/account",
         "/settings/general",
@@ -2279,9 +2290,11 @@ function LayoutShell({ children }: { children?: ReactNode } = {}) {
 
   // The settings menu, shown in the main sidebar on settings routes with the
   // sidebar's own link styles (only the menu changes, not the frame).
-  const settingsPath = location.pathname.startsWith("/settings/repositories/")
-    ? "/settings/repositories"
-    : location.pathname;
+  // A detail page (one repository, team or project) highlights its list.
+  const settingsPath =
+    ADMIN_DETAIL_PREFIXES.find((prefix) =>
+      location.pathname.startsWith(prefix)
+    )?.slice(0, -1) ?? location.pathname;
   const settingsLinks: SidebarLinkDef[] = [
     // General carries no icon, by request: its label sits at the left edge,
     // in line with the group headings, with Shortcuts, Repositories and

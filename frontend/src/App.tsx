@@ -562,6 +562,14 @@ export default function App() {
           {/* Settings › Administration. The pages gate on the admin role. */}
           <Route path="/settings/teams" element={<AdminTeams />} />
           <Route path="/settings/projects" element={<AdminProjects />} />
+          {/* A team or project opened from Administration: the same page as
+                /teams/:slug and /projects/:owner/:repo, but under /settings so
+                the admin's settings menu stays in the sidebar. */}
+          <Route path="/settings/teams/:slug" element={<TeamPage />} />
+          <Route
+            path="/settings/projects/:owner/:repo"
+            element={<ProjectDetail />}
+          />
           <Route
             path="/settings/repositories"
             element={<RepositorySettings />}

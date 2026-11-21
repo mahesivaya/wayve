@@ -31,6 +31,12 @@ export default function ProjectDetail() {
     repo: string;
   }>();
 
+  // Opened from Settings › Projects (/settings/projects/…): going back returns
+  // to that admin list rather than the Projects page.
+  const backPath = location.pathname.startsWith("/settings/")
+    ? "/settings/projects"
+    : "/projects";
+
   const preset = (location.state as { repo?: GithubRepo } | null)?.repo ?? null;
   const [repo, setRepo] = useState<GithubRepo | null>(preset);
   // null = still resolving; false = resolved (found or gave up).
@@ -162,7 +168,7 @@ export default function ProjectDetail() {
         <button
           type="button"
           className="projects-back"
-          onClick={() => navigate("/projects")}
+          onClick={() => navigate(backPath)}
         >
           ← Projects
         </button>
@@ -183,6 +189,13 @@ export default function ProjectDetail() {
   return (
     <div className="projects-page u-page-shell project-detail-page">
       <main className="project-detail-main">
+        <button
+          type="button"
+          className="projects-back"
+          onClick={() => navigate(backPath)}
+        >
+          ← Projects
+        </button>
         <div className="project-detail-heading">
           <span className="project-detail-icon" aria-hidden="true">
             ▣
