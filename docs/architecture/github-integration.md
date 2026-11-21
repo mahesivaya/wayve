@@ -153,8 +153,10 @@ deliveries, each checked against GitHub's `X-Hub-Signature-256` HMAC.
 - **Pull request activity** (`pull_request`, `pull_request_review`,
   `pull_request_review_comment`) clears the proxy's cached copy of that repo,
   maps the delivery's installation to its organization, and pushes
-  `{"type":"github:pulls","repo","number","action","event"}` to the members who
-  can see the repo: the owner and admins, or members granted it. The frame
+  `{"type":"github:pulls","repo","number","action","event"}` to everyone who
+  can see the repo: the connected organization's owner and admins, or members
+  granted it, and platform staff (owners and admins, or members granted it),
+  whose Code & reviews can open any repo. The frame
   rides the same per-user WebSocket as chat and email (`chat::fan_out_user`).
 - **On the client**, `useChatSocket` hands `github:` frames to
   `github/githubLiveEvents.ts` instead of treating them as chat messages, and an

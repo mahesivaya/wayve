@@ -97,14 +97,23 @@ fn pull_activity(payload: &Value) -> Option<PullActivity> {
     })
 }
 
-/// Members of `org_id` who can see `repo`: it must be linked to one of the
-/// organization's projects, and they are its owner or an admin, or were granted
-/// that repo. The same rule the Code Repo proxy applies.
-pub(crate) async fn recipients(pool: &PgPool, org_id: i32, repo: &str) -> sqlx::Result<Vec<i32>> {
+/// Who hears about activity in `repo`, by the same rules the Code Repo proxy
+/// applies:
+/// - members of `org_id` (the organization the installation belongs to, if
+///   any), when the repo is linked to one of its projects and they are its
+///   owner or an admin, or were granted that repo;
+/// - platform staff, whose Code & reviews can open any repo: owners and admins,
+///   or members granted that repo.
+pub(crate) async fn recipients(
+    pool: &PgPool,
+    org_id: Option<i32>,
+    repo: &str,
+) -> sqlx::Result<Vec<i32>> {
     sqlx::query_scalar::<_, i32>(
         "SELECT om.user_id
            FROM organization_members om
-          WHERE om.organization_id = $1
+          WHERE $1::int IS NOT NULL
+            AND om.organization_id = $1
             AND EXISTS (
                   SELECT 1 FROM projects p
                    WHERE p.organization_id = $1
@@ -113,7 +122,15 @@ pub(crate) async fn recipients(pool: &PgPool, org_id: i32, repo: &str) -> sqlx::
                  OR EXISTS (
                       SELECT 1 FROM member_project_access g
                        WHERE g.user_id = om.user_id
-                         AND LOWER(g.repo_full_name) = LOWER($2)))",
+                         AND LOWER(g.repo_full_name) = LOWER($2)))
+         UNION
+         SELECT pm.user_id
+           FROM platform_members pm
+          WHERE pm.role IN ('owner', 'super_admin', 'admin')
+             OR EXISTS (
+                  SELECT 1 FROM member_project_access g
+                   WHERE g.user_id = pm.user_id
+                     AND LOWER(g.repo_full_name) = LOWER($2))",
     )
     .bind(org_id)
     .bind(repo)
@@ -134,9 +151,10 @@ async fn on_pull_activity(pool: &PgPool, cache: &Option<Cache>, event: &str, pay
     .bind(activity.installation_id)
     .fetch_optional(pool)
     .await;
+    // No organization when the installation was never connected in Hadal;
+    // platform staff still hear about it.
     let org_id = match org_id {
-        Ok(Some(org_id)) => org_id,
-        Ok(None) => return,
+        Ok(org_id) => org_id,
         Err(e) => {
             warn!(target: "github", error = ?e, "github webhook: installation lookup failed");
             return;
@@ -145,7 +163,7 @@ async fn on_pull_activity(pool: &PgPool, cache: &Option<Cache>, event: &str, pay
     let users = match recipients(pool, org_id, &activity.repo).await {
         Ok(users) => users,
         Err(e) => {
-            warn!(target: "github", org_id, error = ?e, "github webhook: recipient lookup failed");
+            warn!(target: "github", ?org_id, error = ?e, "github webhook: recipient lookup failed");
             return;
         }
     };
@@ -157,7 +175,7 @@ async fn on_pull_activity(pool: &PgPool, cache: &Option<Cache>, event: &str, pay
         "event": event,
     })
     .to_string();
-    info!(target: "github", org_id, repo = %activity.repo, event, action = %activity.action,
+    info!(target: "github", ?org_id, repo = %activity.repo, event, action = %activity.action,
           recipients = users.len(), "github pull activity pushed");
     for user_id in users {
         crate::chat::fan_out_user(cache, user_id, frame.clone()).await;
