@@ -19,7 +19,11 @@ vi.mock("../../auth/useAuth", () => ({
 const connected = (value: boolean) => () =>
   Promise.resolve({ connected: value });
 vi.mock("../../api/jira", () => ({ getJiraConnection: connected(true) }));
-vi.mock("../../api/github", () => ({ getGithubConnection: connected(true) }));
+vi.mock("../../api/github", () => ({
+  getGithubConnection: connected(false),
+  // An organization: GitHub is connected through the GitHub App.
+  getGithubAppStatus: connected(true),
+}));
 vi.mock("../../api/gitlab", () => ({ getGitlabConnection: connected(false) }));
 vi.mock("../../api/slack", () => ({ getSlackConnection: connected(false) }));
 vi.mock("../../api/figma", () => ({ getFigmaConnection: connected(false) }));

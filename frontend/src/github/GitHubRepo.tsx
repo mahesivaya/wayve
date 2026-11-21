@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { fmtDateTime } from "../utils/datetime";
 import { useAuth } from "../auth/useAuth";
 import { hasPermission } from "../auth/permissions";
@@ -3664,6 +3664,15 @@ function AddRepoPanel({
   const submit = () => {
     const value = url.trim();
     if (!value || busy) return;
+    // github.com/<account> alone is a person or organization, not a repo.
+    const account =
+      /^(?:https?:\/\/)?(?:www\.)?github\.com\/([^/\s]+)\/?$/i.exec(value)?.[1];
+    if (account) {
+      setErr(
+        `That's the GitHub account "${account}", not a repository. Add the repository's name, e.g. https://github.com/${account}/<repository>.`
+      );
+      return;
+    }
     setBusy(true);
     setErr("");
     void linkProjectRepo(project.id, value)
@@ -3679,8 +3688,10 @@ function AddRepoPanel({
       <div className="github-add-repo">
         <h2 className="github-add-repo-title">Add a repository</h2>
         <p className="github-add-repo-help">
-          Paste a public GitHub repository URL to browse its code, commits and
-          Actions in “{project.name}”.
+          Paste a GitHub repository URL to browse its code, commits and Actions
+          in “{project.name}”. Private repositories work once GitHub is
+          connected in{" "}
+          <Link to="/settings/repositories">Settings → Repositories</Link>.
         </p>
         <div className="github-add-repo-row">
           <input
