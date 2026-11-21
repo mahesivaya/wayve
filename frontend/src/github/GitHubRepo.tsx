@@ -27,6 +27,7 @@ import {
   type CheckRun,
 } from "./prMergeSummary";
 import { listProjects, linkProjectRepo, type Project } from "../api/workspace";
+import { PROJECTS_CHANGED } from "../api/projectsChanged";
 import {
   mergePullRequest,
   createCommitComment,
@@ -3757,6 +3758,9 @@ function GitHubRepoProject({
 
   useEffect(() => {
     reload();
+    // A repo linked to this project elsewhere shows here without a reload.
+    window.addEventListener(PROJECTS_CHANGED, reload);
+    return () => window.removeEventListener(PROJECTS_CHANGED, reload);
   }, [reload]);
 
   if (loading && project === null) {
@@ -3883,13 +3887,19 @@ function PersonalRepoManager() {
   }, [runImport]);
 
   // No synchronous setState here; it would trip react-hooks/set-state-in-effect.
+  // Reloads when a project changes anywhere in the app, e.g. a repo imported
+  // from Settings while this page stays open in its tab.
   useEffect(() => {
-    void listProjects()
-      .then((rows) => {
-        setProjects(rows);
-        setSelectedId((cur) => pickProject(rows, cur, user?.id));
-      })
-      .catch(() => setProjects([]));
+    const load = () =>
+      void listProjects()
+        .then((rows) => {
+          setProjects(rows);
+          setSelectedId((cur) => pickProject(rows, cur, user?.id));
+        })
+        .catch(() => setProjects([]));
+    load();
+    window.addEventListener(PROJECTS_CHANGED, load);
+    return () => window.removeEventListener(PROJECTS_CHANGED, load);
   }, [user?.id]);
 
   const hasRepos = (projects?.length ?? 0) > 0;
@@ -3976,13 +3986,18 @@ function OrgRepoManager({ canLink }: { canLink: boolean }) {
     if (selectedId !== null) rememberOpenRepo(user?.id, selectedId);
   }, [selectedId, user?.id]);
 
+  // Reloads when a project changes anywhere in the app (see PROJECTS_CHANGED).
   useEffect(() => {
-    void listProjects()
-      .then((rows) => {
-        setProjects(rows);
-        setSelectedId((cur) => pickProject(rows, cur, user?.id));
-      })
-      .catch(() => setProjects([]));
+    const load = () =>
+      void listProjects()
+        .then((rows) => {
+          setProjects(rows);
+          setSelectedId((cur) => pickProject(rows, cur, user?.id));
+        })
+        .catch(() => setProjects([]));
+    load();
+    window.addEventListener(PROJECTS_CHANGED, load);
+    return () => window.removeEventListener(PROJECTS_CHANGED, load);
   }, [user?.id]);
 
   const showAdded = (created: Project[]) => {
