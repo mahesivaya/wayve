@@ -24,6 +24,10 @@ vi.mock("../../api/github", () => ({
   getGithubConnection: () => Promise.resolve({ connected: true, login: "me" }),
   getGithubConnectUrl: vi.fn(),
   disconnectGithub: vi.fn(),
+  getGithubAppStatus: () =>
+    Promise.resolve({ configured: true, connected: false }),
+  getGithubAppInstallUrl: vi.fn(),
+  disconnectGithubApp: vi.fn(),
   getVisibleProjects: () => getVisibleProjects(),
 }));
 

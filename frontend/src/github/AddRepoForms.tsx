@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 
 import {
   disconnectGithub,
+  disconnectGithubApp,
+  getGithubAppInstallUrl,
+  getGithubAppStatus,
   getGithubConnection,
   getGithubConnectUrl,
   listImportableRepos,
@@ -10,6 +13,43 @@ import {
 import { createProject, type Project } from "../api/workspace";
 import { importAllRepos, linkedRepoNames, repoNameFromUrl } from "./repoImport";
 import "../settings/repositorySettings.css";
+
+// Why the GitHub App install came back without connecting, by the reason the
+// server put in `#github_app_error=`.
+const APP_ERRORS: Record<string, string> = {
+  denied: "GitHub didn't finish the install.",
+  not_owner: "Only your organization's owner can connect GitHub.",
+  not_your_installation:
+    "That GitHub installation isn't one your GitHub account can see.",
+  installation_in_use:
+    "That GitHub account is already connected to another Hadal workspace.",
+  missing_code:
+    'GitHub didn\'t confirm who installed the app. Ask your Hadal administrator to turn on "Request user authorization during installation" for the GitHub App.',
+  not_configured: "Connecting GitHub isn't set up on this server yet.",
+};
+
+// The outcome of a GitHub App install, from the URL GitHub returned to.
+function readAppInstallResult(): { notice: string; error: string } {
+  const hash = window.location.hash;
+  const failure = /github_app_error=([^&]+)/.exec(hash)?.[1];
+  const outcome = /github_app=([^&]+)/.exec(hash)?.[1];
+  if (!failure && !outcome) return { notice: "", error: "" };
+  if (failure) {
+    const reason = decodeURIComponent(failure);
+    return {
+      notice: "",
+      error:
+        APP_ERRORS[reason] ?? `Couldn't connect GitHub (${reason}). Try again.`,
+    };
+  }
+  return {
+    notice:
+      outcome === "requested"
+        ? "Request sent. Once the owner of the GitHub account approves it, connect again here."
+        : "",
+    error: "",
+  };
+}
 
 // The two ways to add a repository, shared by Settings > Repositories and the
 // Code Repo page. Both create a linked project; the server decides who may.
@@ -86,7 +126,7 @@ export function RepoUrlForm({
         Paste a GitHub HTTPS or SSH clone URL.{" "}
         {canPrivate
           ? "Private repositories work once your GitHub is connected."
-          : "Organization repositories must be public."}{" "}
+          : "Private repositories work once your organization connects GitHub under Import from GitHub."}{" "}
         The code is read live from GitHub; no copy is stored here.
       </p>
       {error && (
@@ -117,7 +157,22 @@ export function RepoImportList({
   const [importingRepo, setImportingRepo] = useState<string | null>(null);
   const [importingAll, setImportingAll] = useState(false);
   const [importCount, setImportCount] = useState(0);
-  const [error, setError] = useState("");
+  // Organizations: GitHub's page for choosing which repositories are shared.
+  const [manageUrl, setManageUrl] = useState<string | null>(null);
+  const [installResult] = useState(readAppInstallResult);
+  const [notice] = useState(installResult.notice);
+  const [error, setError] = useState(installResult.error);
+
+  // Once read, drop the install result from the URL so a reload doesn't repeat it.
+  useEffect(() => {
+    if (/github_app(_error)?=/.test(window.location.hash)) {
+      history.replaceState(
+        null,
+        "",
+        window.location.pathname + window.location.search
+      );
+    }
+  }, []);
 
   useEffect(() => {
     void listImportableRepos()
@@ -134,25 +189,43 @@ export function RepoImportList({
       void getGithubConnection()
         .then((conn) => setLogin(conn.login))
         .catch(() => {});
+    } else {
+      void getGithubAppStatus()
+        .then((status) => {
+          setLogin(status.account_login);
+          setManageUrl(status.manage_url ?? null);
+        })
+        .catch(() => {});
     }
   }, [isPersonal]);
 
   const connect = async () => {
     setError("");
     try {
-      window.location.href = await getGithubConnectUrl();
+      window.location.href = isPersonal
+        ? await getGithubConnectUrl()
+        : await getGithubAppInstallUrl();
     } catch (err) {
       setError(messageOf(err, "Couldn't start the GitHub connect flow."));
     }
   };
 
   const disconnect = async () => {
+    if (
+      !isPersonal &&
+      !window.confirm(
+        "Disconnect GitHub for your organization? Private repositories stop opening here until you connect again. The app stays installed on GitHub until you remove it there."
+      )
+    ) {
+      return;
+    }
     setError("");
     try {
-      await disconnectGithub();
+      await (isPersonal ? disconnectGithub() : disconnectGithubApp());
       setConnected(false);
       setRepos([]);
       setLogin(undefined);
+      setManageUrl(null);
     } catch (err) {
       setError(messageOf(err, "Couldn't disconnect GitHub."));
     }
@@ -201,9 +274,25 @@ export function RepoImportList({
 
   return (
     <>
+      {notice && <p className="repo-settings-hint">{notice}</p>}
       {login && connected && (
         <p className="repo-settings-hint">
-          Connected as @{login}
+          {isPersonal
+            ? `Connected as @${login}`
+            : `Connected to GitHub as @${login}`}
+          {manageUrl && (
+            <>
+              {" · "}
+              <a
+                className="repo-settings-link"
+                href={manageUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Choose repositories
+              </a>
+            </>
+          )}
           {" · "}
           <button
             type="button"
@@ -220,8 +309,9 @@ export function RepoImportList({
       ) : !connected ? (
         <>
           <p className="repo-settings-hint">
-            Connect your GitHub account to pick from your repositories, private
-            ones included.
+            {isPersonal
+              ? "Connect your GitHub account to pick from your repositories, private ones included."
+              : "Connect your organization's GitHub: install the Hadal GitHub App and choose which repositories to share, private ones included."}
           </p>
           <button
             type="button"

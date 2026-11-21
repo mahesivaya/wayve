@@ -438,10 +438,37 @@ pub async fn create_project(
             };
             let (gh_owner, gh_repo) = match input.repo_url.as_deref().map(str::trim) {
                 Some(raw) if !raw.is_empty() => {
-                    // Org projects stay public-only via the shared token.
-                    let shared = github_token();
-                    let (o, r) = parse_and_validate_repo(raw, shared.as_deref(), false).await?;
-                    (Some(o), Some(r))
+                    // An organization that installed the GitHub App validates
+                    // with its installation, so the private repos it shared are
+                    // accepted (and nothing it didn't share). Otherwise public
+                    // only, via the shared token.
+                    match crate::github_app::org_token(pool.get_ref(), org_id).await {
+                        Some(app_token) => {
+                            match parse_and_validate_repo(raw, Some(&app_token), true).await {
+                                Ok((o, r)) => (Some(o), Some(r)),
+                                // A public repo the App wasn't given still adds,
+                                // the same way as without the App.
+                                Err(_) => {
+                                    let shared = github_token();
+                                    let (o, r) =
+                                        parse_and_validate_repo(raw, shared.as_deref(), false)
+                                            .await
+                                            .map_err(|_| {
+                                                AppError::bad_request(
+                                                    "Repository not found. If it's private, give the Hadal GitHub App access to it on GitHub, then try again.",
+                                                )
+                                            })?;
+                                    (Some(o), Some(r))
+                                }
+                            }
+                        }
+                        None => {
+                            let shared = github_token();
+                            let (o, r) =
+                                parse_and_validate_repo(raw, shared.as_deref(), false).await?;
+                            (Some(o), Some(r))
+                        }
+                    }
                 }
                 _ => (None, None),
             };

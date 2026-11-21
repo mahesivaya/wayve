@@ -23,9 +23,10 @@ export const listGithubRepos = () =>
     { preserve401: true }
   );
 
-// A personal caller gets their own repos when connected, else `connected: false`
-// so the UI prompts to connect. Org and platform callers see shared-token repos
-// and are always `connected: true`.
+// A personal caller gets their own repos and an organization the repos it
+// shared with the Hadal GitHub App; unconnected, either gets `connected: false`
+// so the UI prompts to connect. Platform callers see shared-token repos and are
+// always `connected: true`.
 export type ImportableReposResult = {
   connected: boolean;
   repos: GithubRepo[];
@@ -52,6 +53,32 @@ export const getGithubConnection = () =>
 
 export const disconnectGithub = () =>
   apiFetchJson<{ disconnected: boolean }>("/api/github-oauth/connect", {
+    method: "DELETE",
+  });
+
+// Organizations connect GitHub by installing the Hadal GitHub App on their
+// GitHub account and choosing which repositories to share. `manage_url` (owner
+// only) is GitHub's page for changing that choice or uninstalling.
+export type GithubAppStatus = {
+  configured: boolean;
+  connected: boolean;
+  account_login?: string;
+  manage_url?: string | null;
+};
+export const getGithubAppStatus = () =>
+  apiFetchJson<GithubAppStatus>("/api/github-app/status", {
+    preserve401: true,
+  });
+
+export const getGithubAppInstallUrl = async () => {
+  const data = await apiFetchJson<{ url: string }>("/api/github-app/install", {
+    method: "POST",
+  });
+  return data.url;
+};
+
+export const disconnectGithubApp = () =>
+  apiFetchJson<{ disconnected: boolean }>("/api/github-app/install", {
     method: "DELETE",
   });
 

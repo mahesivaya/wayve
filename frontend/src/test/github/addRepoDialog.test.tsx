@@ -277,12 +277,14 @@ describe("with no repositories yet", () => {
 });
 
 describe("who gets to add", () => {
-  it("lets an organization owner, limited to public repositories", async () => {
+  it("lets an organization owner, with private repos once GitHub is connected", async () => {
     mockUser = orgUser("owner");
     listProjects.mockResolvedValue([]);
     renderPage();
     expect(
-      await screen.findByText(/Organization repositories must be public/)
+      await screen.findByText(
+        /Private repositories work once your organization connects GitHub/
+      )
     ).toBeTruthy();
     expect(
       screen.getByRole("tab", { name: "Import from GitHub" })

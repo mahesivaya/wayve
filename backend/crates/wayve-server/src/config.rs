@@ -397,6 +397,36 @@ pub fn github_oauth() -> GithubOAuthConfig {
     }
 }
 
+/// The Hadal GitHub App, which organizations install on their own GitHub account
+/// to share repositories (private ones included) with their workspace. The
+/// private key signs the App's JWT; the client id and secret verify, during the
+/// install, that the person installing can really see the installation.
+pub struct GithubAppConfig {
+    pub app_id: String,
+    pub slug: String,
+    pub private_key: String,
+    pub client_id: String,
+    pub client_secret: String,
+}
+
+/// `None` unless every value is set. The key comes from
+/// `GITHUB_APP_PRIVATE_KEY` (one line, with literal `\n` escapes, since Docker
+/// `env_file` can't hold a multi-line value) or from the file named by
+/// `GITHUB_APP_PRIVATE_KEY_PATH`.
+pub fn github_app() -> Option<GithubAppConfig> {
+    let private_key = match var_opt("GITHUB_APP_PRIVATE_KEY") {
+        Some(inline) => inline.replace("\\n", "\n"),
+        None => std::fs::read_to_string(var_opt("GITHUB_APP_PRIVATE_KEY_PATH")?).ok()?,
+    };
+    Some(GithubAppConfig {
+        app_id: var_opt("GITHUB_APP_ID")?,
+        slug: var_opt("GITHUB_APP_SLUG")?,
+        private_key,
+        client_id: var_opt("GITHUB_APP_CLIENT_ID")?,
+        client_secret: var_opt("GITHUB_APP_CLIENT_SECRET")?,
+    })
+}
+
 /// Slack OAuth app credentials. Replaces asking an admin to create a Slack app
 /// and paste an `xoxb-` bot token: the connect button walks the same authorize →
 /// callback → encrypted-token path every other provider here uses.
@@ -471,6 +501,7 @@ pub fn validate() {
     feature("zoom (scheduler)", zoom().is_ok());
     feature("google oauth", google_oauth().client_id.is_some());
     feature("github oauth", github_oauth().client_id.is_some());
+    feature("github app (org repos)", github_app().is_some());
     feature("slack oauth", slack_oauth().client_id.is_some());
     feature("figma oauth", figma_oauth().client_id.is_some());
     feature("outlook oauth", outlook_oauth().client_id.is_some());

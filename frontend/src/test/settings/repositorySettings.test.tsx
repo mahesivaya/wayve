@@ -24,11 +24,17 @@ const listImportableRepos = vi.fn();
 const getGithubConnection = vi.fn();
 const getGithubConnectUrl = vi.fn();
 const getVisibleProjects = vi.fn();
+const getGithubAppStatus = vi.fn();
+const getGithubAppInstallUrl = vi.fn();
+const disconnectGithubApp = vi.fn();
 vi.mock("../../api/github", () => ({
   listImportableRepos: () => listImportableRepos(),
   getGithubConnection: () => getGithubConnection(),
   getGithubConnectUrl: () => getGithubConnectUrl(),
   getVisibleProjects: () => getVisibleProjects(),
+  getGithubAppStatus: () => getGithubAppStatus(),
+  getGithubAppInstallUrl: () => getGithubAppInstallUrl(),
+  disconnectGithubApp: () => disconnectGithubApp(),
 }));
 
 import RepositorySettings from "../../settings/RepositorySettings";
@@ -60,8 +66,19 @@ beforeEach(() => {
   listProjects.mockResolvedValue([]);
   listImportableRepos.mockResolvedValue({ connected: true, repos: [] });
   getGithubConnection.mockResolvedValue({ connected: true, login: "me" });
+  getGithubAppStatus.mockResolvedValue({ configured: true, connected: false });
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  history.replaceState(null, "", "/");
+});
+
+const orgOwner = {
+  id: 2,
+  account_type: "organization_admin",
+  scope: "organization",
+  effective_role: "owner",
+};
 
 describe("adding by URL", () => {
   it("links a clone URL and lists it with a way into Code Repo", async () => {
@@ -173,6 +190,96 @@ describe("importing from GitHub", () => {
   });
 });
 
+describe("an organization's GitHub", () => {
+  beforeEach(() => {
+    mockAuth.user = orgOwner;
+  });
+
+  it("is connected by installing the GitHub App, not a personal sign-in", async () => {
+    listImportableRepos.mockResolvedValue({ connected: false, repos: [] });
+    getGithubAppInstallUrl.mockResolvedValue("#installing");
+    renderPage();
+
+    expect(
+      await screen.findByText(/install the Hadal GitHub App/)
+    ).toBeTruthy();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub" })
+    );
+    expect(getGithubAppInstallUrl).toHaveBeenCalledTimes(1);
+    expect(getGithubConnectUrl).not.toHaveBeenCalled();
+    expect(getGithubConnection).not.toHaveBeenCalled();
+  });
+
+  it("lists the shared repositories, private ones included, once connected", async () => {
+    listImportableRepos.mockResolvedValue({
+      connected: true,
+      repos: [repo("acme/secret", true)],
+    });
+    getGithubAppStatus.mockResolvedValue({
+      configured: true,
+      connected: true,
+      account_login: "acme",
+      manage_url:
+        "https://github.com/organizations/acme/settings/installations/7",
+    });
+    renderPage();
+
+    expect(
+      await screen.findByText(/Connected to GitHub as @acme/)
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Choose repositories" })
+        .getAttribute("href")
+    ).toBe("https://github.com/organizations/acme/settings/installations/7");
+    const row = (await screen.findByText("acme/secret")).closest("li")!;
+    expect(within(row).getByText("Private")).toBeTruthy();
+  });
+
+  it("asks before disconnecting, then disconnects the organization", async () => {
+    listImportableRepos.mockResolvedValue({
+      connected: true,
+      repos: [repo("acme/secret", true)],
+    });
+    getGithubAppStatus.mockResolvedValue({
+      configured: true,
+      connected: true,
+      account_login: "acme",
+    });
+    disconnectGithubApp.mockResolvedValue({ disconnected: true });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderPage();
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Disconnect" })
+    );
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(disconnectGithubApp).toHaveBeenCalledTimes(1);
+    expect(
+      await screen.findByRole("button", { name: "Connect GitHub" })
+    ).toBeTruthy();
+    confirm.mockRestore();
+  });
+
+  it("explains a failed install and cleans up the address", async () => {
+    history.replaceState(
+      null,
+      "",
+      "/settings/repositories#github_app_error=not_your_installation"
+    );
+    listImportableRepos.mockResolvedValue({ connected: false, repos: [] });
+    renderPage();
+
+    expect(
+      await screen.findByText(
+        "That GitHub installation isn't one your GitHub account can see."
+      )
+    ).toBeTruthy();
+    expect(window.location.hash).toBe("");
+  });
+});
+
 describe("removing", () => {
   it("asks first, then removes", async () => {
     listProjects.mockResolvedValue([project(7, "acme", "api")]);
@@ -227,12 +334,7 @@ describe("the code settings", () => {
 
 describe("who gets what", () => {
   it("lets an organization owner add", async () => {
-    mockAuth.user = {
-      id: 2,
-      account_type: "organization_admin",
-      scope: "organization",
-      effective_role: "owner",
-    };
+    mockAuth.user = orgOwner;
     renderPage();
     expect(await screen.findByLabelText("Repository URL")).toBeTruthy();
     expect(getGithubConnection).not.toHaveBeenCalled();

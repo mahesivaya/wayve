@@ -394,6 +394,21 @@ CREATE TABLE IF NOT EXISTS github_accounts (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- An organization's GitHub App installation: the org owner installs the Hadal
+-- GitHub App on their GitHub account and picks the repositories to share. No
+-- token is stored; the server mints a one-hour installation token from the
+-- App's private key when it needs one. An installation serves one organization,
+-- so two workspaces can never share each other's repositories.
+CREATE TABLE IF NOT EXISTS github_installations (
+    organization_id INTEGER PRIMARY KEY REFERENCES organizations(id) ON DELETE CASCADE,
+    installation_id BIGINT NOT NULL UNIQUE,
+    account_login TEXT NOT NULL,
+    account_type TEXT,
+    installed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    installed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Per-user Figma OAuth connection, same shape and the same at-rest encryption as
 -- github_accounts. Figma access is per person rather than per org: the token is
 -- only ever used to read metadata for files that user can already see, so one
