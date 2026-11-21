@@ -378,3 +378,38 @@ describe("a repository added elsewhere", () => {
     expect(await screen.findByText("acme/web")).toBeTruthy();
   });
 });
+
+describe("live pull requests", () => {
+  const pullListCalls = () =>
+    (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter(
+      ([url]) => String(url).includes("/pulls?state=")
+    ).length;
+
+  it("reloads the open repo's pull requests on a github:pulls event", async () => {
+    mockUser = orgUser("owner");
+    listProjects.mockResolvedValue([project(7, "acme", "api")]);
+    renderPage();
+    await screen.findByRole("button", { name: /^Select a repository/ });
+    await vi.waitFor(() => expect(pullListCalls()).toBeGreaterThan(0));
+    const before = pullListCalls();
+
+    // Another repo's activity changes nothing.
+    window.dispatchEvent(
+      new CustomEvent("rwayve:github-event", {
+        detail: { type: "github:pulls", repo: "acme/web", number: 1 },
+      })
+    );
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    expect(pullListCalls()).toBe(before);
+
+    // This repo's (any case): the list and the open/closed counts reload.
+    window.dispatchEvent(
+      new CustomEvent("rwayve:github-event", {
+        detail: { type: "github:pulls", repo: "ACME/api", number: 3 },
+      })
+    );
+    await vi.waitFor(() => expect(pullListCalls()).toBe(before + 3), {
+      timeout: 2000,
+    });
+  });
+});

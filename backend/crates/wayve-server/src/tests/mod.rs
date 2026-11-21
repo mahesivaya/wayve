@@ -55,6 +55,7 @@ mod embed_tokens_test;
 mod encryption_key_cache_test;
 mod file_crypto_test;
 mod github_app_test;
+mod github_app_webhook_test;
 mod github_write_token_test;
 mod gitlab_test;
 mod instrument_skip_request_test;

@@ -46,8 +46,9 @@ GitHub → Settings → Developer settings → **GitHub Apps → New GitHub App*
 | Request user authorization (OAuth) during installation | **On.** Required: the server uses it to check that the person installing can see the installation. |
 | Expire user authorization tokens | Either; the token is used once and thrown away. |
 | Setup URL | Leave empty (GitHub disables it when the option above is on). |
-| Webhook | Off. |
+| Webhook | **Active**. URL `https://hadalspace.com/api/github-app/webhook`, secret = `GITHUB_APP_WEBHOOK_SECRET` (see below). |
 | Repository permissions | **Contents: Read-only**, **Metadata: Read-only**, **Pull requests: Read and write** (approve, merge and comment from the app; Read-only if you don't want that), **Actions: Read-only**, **Commit statuses / Checks: Read-only** |
+| Subscribe to events | **Pull request**, **Pull request review**, **Pull request review comment** (installation events are always sent) |
 | Where can this GitHub App be installed? | **Any account** |
 
 Then, on the App's page:
@@ -65,6 +66,16 @@ GITHUB_APP_CLIENT_ID=<client id, Iv1.… or Iv23…>
 GITHUB_APP_CLIENT_SECRET=<client secret>
 GITHUB_APP_PRIVATE_KEY=<the PEM on one line, with literal \n>
 ```
+
+For live pull requests, also set the webhook secret, the same random value as
+in the App's Webhook section (`openssl rand -hex 32`):
+
+```
+GITHUB_APP_WEBHOOK_SECRET=<webhook secret>
+```
+
+Without it the webhook endpoint refuses every delivery (503); it never trusts
+an unsigned one.
 
 Docker `env_file` can't hold a multi-line value, so either put the key on one
 line (`awk 'NF{printf "%s\\n",$0}' app.pem`) or mount the file and set
@@ -134,10 +145,27 @@ must have Code Repo enabled, and restricted roles need a per-repo grant.
 - **Frontend.** `github/AddRepoForms.tsx` switches the connect, disconnect and
   "Choose repositories" controls between personal OAuth and the App.
 
+## Live pull requests (webhook)
+
+`POST /api/github-app/webhook` (`github_app_webhook.rs`) receives the App's
+deliveries, each checked against GitHub's `X-Hub-Signature-256` HMAC.
+
+- **Pull request activity** (`pull_request`, `pull_request_review`,
+  `pull_request_review_comment`) clears the proxy's cached copy of that repo,
+  maps the delivery's installation to its organization, and pushes
+  `{"type":"github:pulls","repo","number","action","event"}` to the members who
+  can see the repo: the owner and admins, or members granted it. The frame
+  rides the same per-user WebSocket as chat and email (`chat::fan_out_user`).
+- **On the client**, `useChatSocket` hands `github:` frames to
+  `github/githubLiveEvents.ts` instead of treating them as chat messages, and an
+  open Code & reviews page reloads its pull requests (list, counts, and the open
+  PR if it changed) half a second after a burst settles.
+- **An uninstall on GitHub** (`installation` `deleted`) removes the
+  organization's `github_installations` row, so it shows as not connected.
+
 ## Limitations
 
 - An installation serves one Hadal organization.
-- If the App is uninstalled on GitHub, the installation row stays until an owner
-  disconnects or reconnects; meanwhile private repos stop opening (token minting
-  fails) and public ones fall back to the shared token.
-- No webhooks: changes on GitHub show up when the app next reads them.
+- Only pull request activity is pushed live; other changes on GitHub (commits,
+  CI runs) show up when the app next reads them, within the proxy's 60-second
+  cache.

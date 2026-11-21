@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { useChatSocket } from "../../chat/hooks/useChatSocket";
 import { useCallSession } from "../../call/useCallSession";
+import { onGithubEvent } from "../../github/githubLiveEvents";
 
 // A minimal WebSocket stand-in the tests drive by hand.
 class FakeSocket {
@@ -166,5 +167,41 @@ describe("call socket", () => {
       vi.advanceTimersByTime(20000);
     });
     expect(FakeSocket.instances).toHaveLength(1);
+  });
+});
+
+describe("chat socket shared with GitHub updates", () => {
+  it("hands github: frames to GitHub listeners, never to chat", () => {
+    const onMessage = vi.fn();
+    const onInbound = vi.fn();
+    const github = vi.fn();
+    const stop = onGithubEvent(github);
+    renderHook(() =>
+      useChatSocket(
+        { id: 1 },
+        { current: null },
+        onMessage,
+        undefined,
+        undefined,
+        onInbound
+      )
+    );
+    act(() => latest().open());
+    act(() =>
+      latest().receive({ type: "github:pulls", repo: "acme/api", number: 7 })
+    );
+
+    expect(onMessage).not.toHaveBeenCalled();
+    expect(onInbound).not.toHaveBeenCalled();
+    expect(github).toHaveBeenCalledWith({
+      type: "github:pulls",
+      repo: "acme/api",
+      number: 7,
+    });
+
+    // Listeners can stop listening.
+    stop();
+    act(() => latest().receive({ type: "github:pulls", repo: "acme/api" }));
+    expect(github).toHaveBeenCalledTimes(1);
   });
 });

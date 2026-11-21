@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import type { ChatMessage, ChatStatus, ReactionGroup } from "../../api/chat";
 import { getWsBase } from "../../config/env";
 import { announceEmailsSynced } from "../../emails/useEmailLiveRefresh";
+import { announceGithubEvent } from "../../github/githubLiveEvents";
 import { logger } from "../../utils/logger";
 import { applyMyStatus } from "../myStatus";
 import type { Conversation } from "../types";
@@ -125,6 +126,13 @@ export function useChatSocket(
         // and the new-mail alert are told instead.
         if (msg.type?.startsWith("email:")) {
           announceEmailsSynced();
+          return;
+        }
+        // GitHub updates (`github:pulls`, …) share this connection too. Handed
+        // to whoever listens (see githubLiveEvents); never an inbound message,
+        // or they would raise bogus unread counts and popups on every page.
+        if (msg.type?.startsWith("github:")) {
+          announceGithubEvent(msg as unknown as { type: string });
           return;
         }
         if (msg.type === "presence") {

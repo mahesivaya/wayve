@@ -89,7 +89,7 @@ fn key_under(key: &str, prefix: &str) -> bool {
 /// Forget cached GETs under `prefix` after a write through this proxy, so the
 /// page's refetch sees the change instead of a copy up to CACHE_TTL_SECS old.
 /// Covers the shared copies and every user's own.
-async fn invalidate_cached(prefix: &str) {
+pub(crate) async fn invalidate_cached(prefix: &str) {
     GITHUB_CACHE
         .invalidate_where(|key| key_under(unscoped_key(key), prefix))
         .await;
